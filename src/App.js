@@ -423,9 +423,14 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
 
       {(workout.warmups || []).length > 0 && (
         <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-          <div style={{ padding: '10px 16px', background: THEME.card,
-border: `1px solid ${THEME.border}`,
-color: THEME.text, border: `1px solid ${THEME.border}`, fontWeight: 700, fontSize: 14, color: '#ffffff' }}>Warming-up</div>
+        <div style={{
+  padding: '8px 16px',
+  fontSize: 16,
+  fontWeight: 700,
+  color: THEME.text
+}}>
+  Warming-up
+</div>
           {workout.warmups.map((w, i) => (
             <SetRow
   key={i}
@@ -443,11 +448,15 @@ color: THEME.text, border: `1px solid ${THEME.border}`, fontWeight: 700, fontSiz
       )}
 
       <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-      <div style={{ padding: '10px 16px', background: THEME.card,
-border: `1px solid ${THEME.border}`,
-color: THEME.text, border: `1px solid ${THEME.border}`, fontWeight: 600, fontSize: 14, color: THEME.muted }}>
-        {workout.lift}
-      </div>  {workout.sets.map((set, i) => {
+      <div style={{
+  padding: '8px 16px',
+  fontSize: 16,
+  fontWeight: 700,
+  color: THEME.text
+}}>
+  {workout.lift}
+</div>
+      {workout.sets.map((set, i) => {
   const allWarmupsDone = (workout.warmups || []).every(w => w.done);
   const firstIncomplete = workout.sets.findIndex(s => !s.done);
 
@@ -469,9 +478,6 @@ color: THEME.text, border: `1px solid ${THEME.border}`, fontWeight: 600, fontSiz
 
       {(workout.accessories || []).length > 0 && (
         <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-          <div style={{ padding: '10px 16px', background: THEME.card,
-border: `1px solid ${THEME.border}`,
-color: THEME.text, border: `1px solid ${THEME.border}`, fontWeight: 500, fontSize: 14 }}>Accessoires</div>
           {workout.accessories.map((acc, ai) => (
             <div key={ai}>
 <div style={{
@@ -482,14 +488,10 @@ color: THEME.text, border: `1px solid ${THEME.border}`, fontWeight: 500, fontSiz
   justifyContent: 'space-between',
   alignItems: 'center'
 }}>
-  <span style={{ fontWeight: 500, fontSize: 14, color: '#ffffff' }}>
-    {acc.useAlternative ? acc.alternative.name : acc.name}
-  </span>                {acc.alternative && (
-                  <button onClick={() => onToggleAlternative(ai)} style={{ background: 'none', border: `1px solid ${THEME.border}`, borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer', color: THEME.text }}>
-                    ⇄ {acc.useAlternative ? acc.name : acc.alternative.name}
-                  </button>
-                )}
-              </div>
+<span style={{ fontWeight: 800, color: THEME.text }}>
+  {acc.name}
+</span>
+                </div>
               {acc.done.map((done, si) => {
   const allMainSetsDone = (workout.sets || []).every(s => s.done);
   const firstIncompleteAccessoryGroup = (workout.accessories || []).findIndex(a =>
@@ -1168,28 +1170,6 @@ function handleStartNewCycle() {
   );
 }
 
-function toggleAlternative(accIndex) {
-  setWorkouts(prev =>
-    prev.map((w, wi) => {
-      if (wi !== selectedIndex) return w;
-
-      return {
-        ...w,
-        accessories: w.accessories.map((a, ai) => {
-          if (ai !== accIndex) return a;
-
-          return {
-            ...a,
-            useAlternative: !a.useAlternative,
-            weights: Array(a.sets).fill(!a.useAlternative ? a.alternativeWeight : a.weight),
-            done: Array(a.sets).fill(false),
-          };
-        }),
-      };
-    })
-  );
-}
-
 function changeWeight(type, index, val) {
   setWorkouts(prev =>
     prev.map((w, wi) => {
@@ -1397,7 +1377,6 @@ const strengthRatio = latestBodyWeight
           onToggleAccessorySet={toggleAccessorySet}
           onWeightChange={changeWeight}
           onAccessoryWeightChange={changeAccessoryWeight}
-          onToggleAlternative={toggleAlternative}
           onComplete={completeWorkout}
           onViewAll={() => setScreen('all')}
           showNewCycle={showNewCycle}
