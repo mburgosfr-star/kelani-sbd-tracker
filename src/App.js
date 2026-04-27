@@ -1279,7 +1279,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   if (workout.accessories) {
     workout.accessories.forEach(acc => {
       const bestWeight = Math.max(...acc.weights);
-      const name = acc.useAlternative ? acc.alternative.name : acc.name;
+      const name = acc.name;
 
       setAccessoryPRs(prev => {
         const current = prev[name] || 0;
