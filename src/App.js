@@ -142,21 +142,26 @@ function generateProgram(s, b, d) {
     const warmups = generateWarmups(firstWorkWeight);
 
     const accessories = ACCESSORIES[day.lift].map(a => {
-      const baseMap = { squat: s, bench: b, deadlift: d };
-      const baseWeight = a.lift ? round25(baseMap[a.lift] * a.pct) : 0;
-      const altLift = a.alternative?.lift || a.lift;
-      const altPct = a.alternative?.pct || a.pct;
-      const altBaseWeight = altLift ? round25(baseMap[altLift] * altPct) : 0;
+  const baseMap = { squat: s, bench: b, deadlift: d };
 
-      return {
-        ...a,
-        weight: baseWeight,
-        done: Array(a.sets).fill(false),
-        weights: Array(a.sets).fill(baseWeight),
-        useAlternative: false,
-        alternativeWeight: a.alternative ? altBaseWeight : 0,
-      };
-    });
+  const mainReps = day.blocks[0].reps;
+
+  const intensityFactor =
+    mainReps <= 3 ? 0.9 :
+    mainReps >= 10 ? 1.1 :
+    1.0;
+
+  const baseWeight = a.lift
+    ? round25(baseMap[a.lift] * a.pct * intensityFactor)
+    : 0;
+
+  return {
+    ...a,
+    weight: baseWeight,
+    done: Array(a.sets).fill(false),
+    weights: Array(a.sets).fill(baseWeight),
+  };
+});
 
     workouts.push({
       number: num++,
