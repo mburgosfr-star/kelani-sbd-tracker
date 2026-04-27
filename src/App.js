@@ -245,7 +245,7 @@ function RestTimer({ seconds, onDismiss }) {
         </div>
       </div>
       <button onClick={onDismiss} style={{ padding: '8px 20px', fontSize: 14, background: isDone ? '#27ae60' : 'transparent', color: isDone ? 'white' : '#666', border: `1px solid ${isDone ? '#27ae60' : '#ccc'}`, borderRadius: 4, cursor: 'pointer', fontWeight: isDone ? 600 : 400 }}>
-        {isDone ? 'Doorgaan' : 'Overslaan'}
+        {isDone ? 'Doorgaan' : 'Annuleren'}
       </button>
     </div>
   );
@@ -331,13 +331,12 @@ function BodyWeightModal({ onSave, onSkip }) {
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
       <div style={{ background: THEME.card, borderRadius: 12, padding: 24, maxWidth: 340, width: '90%' }}>
-        <h3 style={{ margin: '0 0 8px' }}>Workout voltooid! 💪</h3>
-        <p style={{ color: THEME.muted, fontSize: 14, margin: '0 0 20px' }}>Wil je je lichaamsgewicht invoeren?</p>
+        <h3 style={{ margin: '0 0 16px', color: THEME.text }}>Lichaamsgewicht bijwerken</h3>
         <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, fontSize: 14 }}>Lichaamsgewicht (kg)</label>
         <input type="number" value={weight} onChange={e => setWeight(e.target.value)} placeholder="bijv. 85.5" autoFocus
-          style={{ width: '100%', padding: 10, fontSize: 16, borderRadius: 4, border: '1px solid #ccc', boxSizing: 'border-box', marginBottom: 16 }} />
+          style={{ width: '100%', padding: 10, fontSize: 16, borderRadius: 4, background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.border}`, boxSizing: 'border-box', marginBottom: 16 }} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onSkip} style={{ flex: 1, padding: 10, fontSize: 14, background: 'transparent', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: THEME.muted }}>Overslaan</button>
+          <button onClick={onSkip} style={{ flex: 1, padding: 10, fontSize: 14, background: 'transparent', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: THEME.muted }}>Annuleren</button>
           <button onClick={() => { const v = parseFloat(weight); if (!isNaN(v) && v > 0) onSave(v); else onSkip(); }}
             style={{ flex: 1, padding: 10, fontSize: 14, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.border}`, color: 'white', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>Opslaan</button>
         </div>
@@ -973,6 +972,7 @@ export default function App() {
   const [completedSummary, setCompletedSummary] = useState(null);
   const [currentCycle, setCurrentCycle] = useState(1);
   const [bodyWeightToday, setBodyWeightToday] = useState(null);
+  const [showBodyWeightModal, setShowBodyWeightModal] = useState(false);
     const currentIndex = history.filter(
     h => h.lift && h.workoutNumber > 0
   ).length;
@@ -1052,36 +1052,8 @@ useEffect(() => {
     return;
   }
 
-  const val = prompt('Wat is je lichaamsgewicht vandaag (kg)?');
+  setShowBodyWeightModal(true);
   localStorage.setItem('bodyweight_prompt_date', today);
-
-  if (!val) return;
-
-  const bw = parseFloat(val.replace(',', '.'));
-  if (isNaN(bw)) return;
-
-  setBodyWeightToday(bw);
-
-  setHistory(prev => {
-  const existingIndex = prev.findIndex(
-    h => h.lift === null && h.date === today
-  );
-
-  const entry = {
-    workoutNumber: 0,
-    lift: null,
-    bodyWeight: bw,
-    date: today,
-  };
-
-  if (existingIndex !== -1) {
-    const updated = [...prev];
-    updated[existingIndex] = entry;
-    return updated;
-  }
-
-return [...prev, entry];
-});
 }, [screen, workouts.length, history]);
 
 function handleStart(s, b, d) {
@@ -1313,19 +1285,12 @@ if (screen === 'onboarding') return <Onboarding onStart={handleStart} />;
 }
 const workout = workouts[currentIndex];
 
-
-function updateBodyWeight() {
-  const val = prompt('Voer je lichaamsgewicht in (kg)');
-  if (!val) return;
-
-  const bw = parseFloat(val.replace(',', '.'));
-  if (isNaN(bw)) return;
+function saveBodyWeight(bw) {
+  const today = new Date().toLocaleDateString('nl-NL');
 
   setBodyWeightToday(bw);
 
   setHistory(prev => {
-    const today = new Date().toLocaleDateString('nl-NL');
-
     const existingIndex = prev.findIndex(
       h => h.date === today && h.lift === null
     );
@@ -1345,6 +1310,16 @@ function updateBodyWeight() {
 
     return [...prev, entry];
   });
+
+  setShowBodyWeightModal(false);
+}
+
+function skipBodyWeight() {
+  setShowBodyWeightModal(false);
+}
+
+function updateBodyWeight() {
+  setShowBodyWeightModal(true);
 }
 
 const best1RMs = {
@@ -1671,7 +1646,12 @@ style={{
     </div>
   </div>
 )}
-
+    {showBodyWeightModal && (
+  <BodyWeightModal
+    onSave={saveBodyWeight}
+    onSkip={skipBodyWeight}
+  />
+)}
       <BottomNav screen={screen} onChange={setScreen} />
     </div>
   );
