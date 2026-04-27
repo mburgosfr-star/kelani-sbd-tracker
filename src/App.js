@@ -69,51 +69,51 @@ function generateProgram(s, b, d) {
   };
 
   const program = [
-    { day: 1, lift: 'Deadlift', blocks: [{ sets: 5, reps: 2, pct: 0.80 }] },
-    { day: 3, lift: 'Bench', blocks: [{ sets: 3, reps: 12, pct: 0.70 }] },
-    { day: 5, lift: 'Squat', blocks: [{ sets: 8, reps: 3, pct: 0.65 }] },
+    { lift: 'Deadlift', blocks: [{ sets: 5, reps: 2, pct: 0.80 }] },
+    { lift: 'Bench', blocks: [{ sets: 3, reps: 12, pct: 0.70 }] },
+    { lift: 'Squat', blocks: [{ sets: 8, reps: 3, pct: 0.65 }] },
 
-    { day: 8, lift: 'Deadlift', blocks: [{ sets: 8, reps: 3, pct: 0.65 }] },
-    { day: 10, lift: 'Bench', blocks: [{ sets: 5, reps: 2, pct: 0.80 }] },
-    { day: 12, lift: 'Squat', blocks: [{ sets: 3, reps: 12, pct: 0.70 }] },
+    { lift: 'Deadlift', blocks: [{ sets: 8, reps: 3, pct: 0.65 }] },
+    { lift: 'Bench', blocks: [{ sets: 5, reps: 2, pct: 0.80 }] },
+    { lift: 'Squat', blocks: [{ sets: 3, reps: 12, pct: 0.70 }] },
 
-    { day: 15, lift: 'Deadlift', blocks: [{ sets: 3, reps: 12, pct: 0.70 }] },
-    { day: 17, lift: 'Bench', blocks: [{ sets: 8, reps: 3, pct: 0.65 }] },
-    { day: 19, lift: 'Squat', blocks: [{ sets: 5, reps: 2, pct: 0.80 }] },
+    { lift: 'Deadlift', blocks: [{ sets: 3, reps: 12, pct: 0.70 }] },
+    { lift: 'Bench', blocks: [{ sets: 8, reps: 3, pct: 0.65 }] },
+    { lift: 'Squat', blocks: [{ sets: 5, reps: 2, pct: 0.80 }] },
 
-    { day: 22, lift: 'Deadlift', blocks: [{ sets: 3, reps: 2, pct: 0.85 }] },
-    { day: 24, lift: 'Bench', blocks: [{ sets: 3, reps: 8, pct: 0.80 }] },
-    { day: 26, lift: 'Squat', blocks: [{ sets: 6, reps: 2, pct: 0.70 }] },
+    { lift: 'Deadlift', blocks: [{ sets: 3, reps: 2, pct: 0.85 }] },
+    { lift: 'Bench', blocks: [{ sets: 3, reps: 8, pct: 0.80 }] },
+    { lift: 'Squat', blocks: [{ sets: 6, reps: 2, pct: 0.70 }] },
 
-    { day: 29, lift: 'Deadlift', blocks: [{ sets: 6, reps: 2, pct: 0.70 }] },
-    { day: 31, lift: 'Bench', blocks: [{ sets: 3, reps: 2, pct: 0.85 }] },
-    { day: 33, lift: 'Squat', blocks: [{ sets: 3, reps: 8, pct: 0.80 }] },
+    { lift: 'Deadlift', blocks: [{ sets: 6, reps: 2, pct: 0.70 }] },
+    { lift: 'Bench', blocks: [{ sets: 3, reps: 2, pct: 0.85 }] },
+    { lift: 'Squat', blocks: [{ sets: 3, reps: 8, pct: 0.80 }] },
 
-    { day: 36, lift: 'Deadlift', blocks: [{ sets: 3, reps: 8, pct: 0.80 }] },
-    { day: 38, lift: 'Bench', blocks: [{ sets: 6, reps: 2, pct: 0.70 }] },
-    { day: 40, lift: 'Squat', blocks: [{ sets: 3, reps: 2, pct: 0.85 }] },
+    { lift: 'Deadlift', blocks: [{ sets: 3, reps: 8, pct: 0.80 }] },
+    { lift: 'Bench', blocks: [{ sets: 6, reps: 2, pct: 0.70 }] },
+    { lift: 'Squat', blocks: [{ sets: 3, reps: 2, pct: 0.85 }] },
 
-    { day: 43, lift: 'Deadlift', blocks: [
+    { lift: 'Deadlift', blocks: [
       { sets: 1, reps: 2, pct: 0.90 },
       { sets: 1, reps: 1, pct: 0.925 },
       { sets: 1, reps: 1, pct: 0.95 },
       { sets: 1, reps: 'AMRAP', pct: 0.80 },
     ]},
-    { day: 45, lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.85 }] },
-    { day: 47, lift: 'Squat', blocks: [{ sets: 5, reps: 2, pct: 0.75 }] },
+    { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.85 }] },
+    { lift: 'Squat', blocks: [{ sets: 5, reps: 2, pct: 0.75 }] },
 
-    { day: 50, lift: 'Deadlift', blocks: [{ sets: 5, reps: 2, pct: 0.75 }] },
-    { day: 52, lift: 'Bench', blocks: [
+    { lift: 'Deadlift', blocks: [{ sets: 5, reps: 2, pct: 0.75 }] },
+    { lift: 'Bench', blocks: [
       { sets: 1, reps: 2, pct: 0.90 },
       { sets: 1, reps: 1, pct: 0.925 },
       { sets: 1, reps: 1, pct: 0.95 },
       { sets: 1, reps: 'AMRAP', pct: 0.80 },
     ]},
-    { day: 54, lift: 'Squat', blocks: [{ sets: 3, reps: 5, pct: 0.85 }] },
+    { lift: 'Squat', blocks: [{ sets: 3, reps: 5, pct: 0.85 }] },
 
-    { day: 57, lift: 'Deadlift', blocks: [{ sets: 3, reps: 5, pct: 0.85 }] },
-    { day: 59, lift: 'Bench', blocks: [{ sets: 5, reps: 2, pct: 0.75 }] },
-    { day: 61, lift: 'Squat', blocks: [
+    { lift: 'Deadlift', blocks: [{ sets: 3, reps: 5, pct: 0.85 }] },
+    { lift: 'Bench', blocks: [{ sets: 5, reps: 2, pct: 0.75 }] },
+    { lift: 'Squat', blocks: [
       { sets: 1, reps: 2, pct: 0.90 },
       { sets: 1, reps: 1, pct: 0.925 },
       { sets: 1, reps: 1, pct: 0.95 },
