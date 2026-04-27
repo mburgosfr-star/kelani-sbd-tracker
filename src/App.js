@@ -21,17 +21,14 @@ const THEME = {
 const dash = v => (v ? v : '—');
 
 const ACCESSORIES = {
-  Squat: [
-    { name: 'Romanian Deadlift', sets: 3, reps: 10, pct: 0.40, lift: 'squat', alternative: null },
-    { name: 'Leg Press', sets: 3, reps: 12, pct: 0.50, lift: 'squat', alternative: { name: 'Bulgarian Split Squat', pct: 0.30, lift: 'squat' } },
+  Deadlift: [
+    { name: 'Pause Bench', sets: 3, reps: 5, pct: 0.60, lift: 'bench', alternative: null },
   ],
   Bench: [
-    { name: 'Triceps Pushdown', sets: 3, reps: 12, pct: 0.30, lift: 'bench', alternative: { name: 'Skull Crushers', pct: 0.20, lift: 'bench' } },
-    { name: 'Dumbbell Row', sets: 3, reps: 10, pct: 0.35, lift: 'bench', alternative: { name: 'Barbell Row', pct: 0.35, lift: 'bench' } },
+    { name: 'Romanian Deadlift', sets: 3, reps: 8, pct: 0.50, lift: 'deadlift', alternative: null },
   ],
-  Deadlift: [
-    { name: 'Good Morning', sets: 3, reps: 10, pct: 0.25, lift: 'deadlift', alternative: null },
-    { name: 'Pull-ups', sets: 3, reps: 8, pct: 0, lift: null, alternative: { name: 'Barbell Row', pct: 0.30, lift: 'deadlift' } },
+  Squat: [
+    { name: 'Pause Bench', sets: 3, reps: 5, pct: 0.60, lift: 'bench', alternative: null },
   ],
 };
 
