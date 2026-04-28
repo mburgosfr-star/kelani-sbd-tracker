@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { translations } from './translations';
 
 const show = v => (v === null || v === undefined ? '—' : v);
-const APP_BUILD = '0.5.4-storage-fix';
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
 const THEME = {
   bg: '#18110d',
@@ -190,7 +190,7 @@ const MODE_LABEL = { heavy: 'Zwaar', explosive: 'Explosief', rep: 'Repetitie', p
 const MODE_COLOR = { heavy: '#e67e22', explosive: '#27ae60', rep: '#2980b9', peak: '#8e44ad' };
 const HEADER_COLOR = { 1: '#2c3e50', 2: '#1a5276', 3: '#154360', peak: '#8e44ad', rest: '#95a5a6' };
 
-function RestTimer({ seconds, onDismiss }) {
+function RestTimer({ seconds, onDismiss, t }) {
   const [remaining, setRemaining] = useState(seconds);
   const intervalRef = useRef(null);
   const hasBeepedRef = useRef(false);
@@ -228,30 +228,76 @@ function RestTimer({ seconds, onDismiss }) {
   const circumference = 2 * Math.PI * radius;
   const isDone = remaining <= 0;
   return (
-    <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: THEME.card, borderTop: `1px solid ${THEME.border}`, padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 -2px 12px rgba(0,0,0,0.1)', zIndex: 100 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <svg width="60" height="60" style={{ transform: 'rotate(-90deg)' }}>
-          <circle cx="30" cy="30" r={radius * 0.9} fill="none" stroke="#eee" strokeWidth="5" />
-          <circle cx="30" cy="30" r={radius * 0.9} fill="none" stroke={isDone ? '#27ae60' : '#e74c3c'} strokeWidth="5"
-            strokeDasharray={`${circumference * 0.9} ${circumference * 0.9}`}
-            strokeDashoffset={(circumference * 0.9) * (1 - pct)}
-            style={{ transition: 'stroke-dashoffset 1s linear' }} />
-        </svg>
-        <div>
-          <div style={{ fontSize: isDone ? 16 : 28, fontWeight: 700, color: isDone ? '#27ae60' : '#222', fontFamily: 'monospace' }}>
-            {isDone ? 'Klaar voor volgende set!' : `${mins}:${String(secs).padStart(2, '0')}`}
-          </div>
-          {!isDone && <div style={{ fontSize: 12, color: THEME.text }}>Rusttijd</div>}
+  <div style={{
+    position: 'fixed',
+    bottom: 76,
+    left: 12,
+    right: 12,
+    background: THEME.card,
+    border: `1px solid ${THEME.border}`,
+    borderRadius: 12,
+    padding: '14px 16px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    boxShadow: '0 -4px 20px rgba(0,0,0,0.45)',
+    zIndex: 9999,
+    color: '#ffffff'
+  }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+      <svg width="54" height="54" style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx="27" cy="27" r="24" fill="none" stroke={THEME.border} strokeWidth="5" />
+        <circle
+          cx="27"
+          cy="27"
+          r="24"
+          fill="none"
+          stroke={isDone ? '#27ae60' : THEME.primary}
+          strokeWidth="5"
+          strokeDasharray={`${2 * Math.PI * 24} ${2 * Math.PI * 24}`}
+          strokeDashoffset={(2 * Math.PI * 24) * (1 - pct)}
+          style={{ transition: 'stroke-dashoffset 1s linear' }}
+        />
+      </svg>
+
+      <div>
+        <div style={{
+          fontSize: isDone ? 16 : 28,
+          fontWeight: 700,
+          color: isDone ? '#27ae60' : '#ffffff',
+          fontFamily: 'monospace'
+        }}>
+          {isDone ? t.readyNextSet : `${mins}:${String(secs).padStart(2, '0')}`}
         </div>
+
+        {!isDone && (
+          <div style={{ fontSize: 12, color: '#ffffff', opacity: 0.85 }}>
+            {t.restTime}
+          </div>
+        )}
       </div>
-      <button onClick={onDismiss} style={{ padding: '8px 20px', fontSize: 14, background: isDone ? '#27ae60' : 'transparent', color: isDone ? 'white' : '#666', border: `1px solid ${isDone ? '#27ae60' : '#ccc'}`, borderRadius: 4, cursor: 'pointer', fontWeight: isDone ? 600 : 400 }}>
-        {isDone ? 'Doorgaan' : 'Annuleren'}
-      </button>
     </div>
-  );
+
+    <button
+      onClick={onDismiss}
+      style={{
+        padding: '8px 16px',
+        fontSize: 14,
+        background: isDone ? '#27ae60' : 'transparent',
+        color: '#ffffff',
+        border: `1px solid ${isDone ? '#27ae60' : THEME.border}`,
+        borderRadius: 8,
+        cursor: 'pointer',
+        fontWeight: 600
+      }}
+    >
+      {isDone ? t.continue : t.cancel}
+    </button>
+  </div>
+);
 }
 
-function SetRow({ set, index, label, onToggle, onWeightChange, isWarmup, isActive, isReadOnly }) {
+function SetRow({ set, index, label, onToggle, onWeightChange, isWarmup, isActive, isReadOnly, t }) {
 const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(set.weight));
   const inputRef = useRef(null);
@@ -301,9 +347,9 @@ const [editing, setEditing] = useState(false);
         {set.done && <span style={{ color: 'white', fontSize: 14 }}>✓</span>}
       </div>
       <div onClick={onToggle} style={{ flex: 1, cursor: 'pointer' }}>
-        <span style={{ fontWeight: 500, color: '#ffffff', textDecoration: set.done ? 'line-through' : 'none' }}>{label}</span>
-        <span style={{ color: THEME.muted, fontSize: 18, fontWeight: 700, marginLeft: 12 }}>
-  {set.reps} reps
+        <span style={{ fontWeight: 500, color: THEME.text, textDecoration: set.done ? 'line-through' : 'none' }}>{label}</span>
+<span style={{ color: THEME.text, fontSize: 16, fontWeight: 700, marginLeft: 12 }}>
+{set.reps} {t.reps}
 </span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -326,19 +372,19 @@ const [editing, setEditing] = useState(false);
   );
 }
 
-function BodyWeightModal({ onSave, onSkip }) {
+function BodyWeightModal({ onSave, onSkip, t }) {
   const [weight, setWeight] = useState('');
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
       <div style={{ background: THEME.card, borderRadius: 12, padding: 24, maxWidth: 340, width: '90%' }}>
-        <h3 style={{ margin: '0 0 16px', color: THEME.text }}>Lichaamsgewicht bijwerken</h3>
-        <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, fontSize: 14 }}>Lichaamsgewicht (kg)</label>
-        <input type="number" value={weight} onChange={e => setWeight(e.target.value)} placeholder="bijv. 85.5" autoFocus
+        <h3 style={{ margin: '0 0 16px', color: THEME.text }}>{t.updateBodyweight}</h3>
+        <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, fontSize: 14 }}>{t.bodyweight} (kg)</label>
+        <input type="number" value={weight} onChange={e => setWeight(e.target.value)} placeholder={t.exampleWeight} autoFocus
           style={{ width: '100%', padding: 10, fontSize: 16, borderRadius: 4, background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.border}`, boxSizing: 'border-box', marginBottom: 16 }} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onSkip} style={{ flex: 1, padding: 10, fontSize: 14, background: 'transparent', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: THEME.muted }}>Annuleren</button>
+          <button onClick={onSkip} style={{ flex: 1, padding: 10, fontSize: 14, background: 'transparent', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: THEME.muted }}>{t.cancel}</button>
           <button onClick={() => { const v = parseFloat(weight); if (!isNaN(v) && v > 0) onSave(v); else onSkip(); }}
-            style={{ flex: 1, padding: 10, fontSize: 14, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.border}`, color: 'white', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>Opslaan</button>
+            style={{ flex: 1, padding: 10, fontSize: 14, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.border}`, color: 'white', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>{t.save}</button>
         </div>
       </div>
     </div>
@@ -370,8 +416,7 @@ color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
   );
 }
 
-function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessorySet, onWeightChange, onAccessoryWeightChange, onToggleAlternative, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly }) {
-  const [timer, setTimer] = useState(null);
+function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessorySet, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer }) {
   const [showBodyWeight, setShowBodyWeight] = useState(false);
 
   if (workout.type === 'rest') {
@@ -379,18 +424,18 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
       <div style={{ maxWidth: 500, margin: '60px auto', padding: 24, fontFamily: 'sans-serif', textAlign: 'center' }}>
      <h1 style={{ 
         textAlign: 'center', 
-        marginTop: 40, 
+        marginTop: 80, 
         marginBottom: 24 
       }}>
-        Kel Powerlifting
+        Kelani SBD Tracker
       </h1>        
       <div style={{ background: THEME.card, padding: 40, borderRadius: 8 }}>
           <div style={{ fontSize: 48 }}>🎉</div>
-          <h2>Deload week</h2>
-          <p style={{ color: THEME.muted }}>Rust en herstel. Je bent klaar voor de volgende cyclus!</p>
+          <h2>{t.deload}</h2>
+          <p style={{ color: THEME.muted }}>{t.restReadyNextCycle}</p>
         </div>
         <button onClick={onStartNewCycle} style={{ marginTop: 16, width: '100%', padding: 14, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.border}`, color: 'white', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
-          Nieuwe cyclus starten 🚀
+          {t.startNewCycle}
         </button>
       </div>
     );
@@ -405,12 +450,17 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
     setTimer(getRestTime(reps));
     fn();
   }
-
   return (
     <div style={{ maxWidth: 500, margin: '0 auto', padding: '8px 12px 12px', paddingBottom: timer !== null ? 100 : 16, fontFamily: 'sans-serif' }}>
   
     <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
-  Workout {workout.number} — {workout.lift}
+
+{t.workout} {workout.number} — {
+  workout.lift === 'Squat' ? t.squat :
+  workout.lift === 'Bench' ? t.bench :
+  t.deadlift
+}
+
   {isReadOnly && (
     <span style={{
       marginLeft: 8,
@@ -420,7 +470,7 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
       padding: '2px 6px',
       borderRadius: 4
     }}>
-      Preview
+      {t.preview}
     </span>
   )}
 </h2>
@@ -433,19 +483,20 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
   fontWeight: 700,
   color: THEME.text
 }}>
-  Warming-up
+  {t.warmup}
 </div>
           {workout.warmups.map((w, i) => (
             <SetRow
   key={i}
   set={w}
   index={i}
-  label={`Warm-up ${i + 1}`}
+  label={`${t.warmup} ${i + 1}`}
   isWarmup={true}
   isActive={!isReadOnly && i === workout.warmups.findIndex(wu => !wu.done)}
   isReadOnly={isReadOnly}
   onToggle={() => handleToggle(() => onToggleWarmup(i), w.reps)}
   onWeightChange={val => onWeightChange('warmup', i, val)}
+  t={t}
 />
           ))}
         </div>
@@ -469,12 +520,13 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
       key={i}
       set={set}
       index={i}
-      label={set.label || `Set ${i + 1}`}
+      label={set.label || `${t.set} ${i + 1}`}
       isWarmup={false}
       isActive={!isReadOnly && allWarmupsDone && i === firstIncomplete}
       isReadOnly={isReadOnly}
       onToggle={() => handleToggle(() => onToggleSet(i), set.reps)}
       onWeightChange={val => onWeightChange('set', i, val)}
+      t={t}
     />
   );
 })}
@@ -508,7 +560,7 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
       key={si}
       set={{ done, weight: acc.weights[si], reps: acc.reps }}
       index={si}
-      label={`Set ${si + 1}`}
+      label={`${t.set} ${si + 1}`}
       isWarmup={false}
       isActive={
         !isReadOnly &&
@@ -519,6 +571,7 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
       isReadOnly={isReadOnly}
       onToggle={() => handleToggle(() => onToggleAccessorySet(ai, si), acc.reps)}
       onWeightChange={val => onAccessoryWeightChange(ai, si, val)}
+      t={t}
     />
   );
   })}
@@ -549,19 +602,18 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
   }}
 >
   {isReadOnly
-    ? 'Preview (niet voltooibaar)'
+    ? t.previewNotCompletable
     : allDone
-    ? 'Workout voltooien ✓'
-    : 'Workout voltooien'}
+    ? `${t.completeWorkout} ✓`
+    : t.completeWorkout}
 </button>
 
-      {timer !== null && <RestTimer key={timer} seconds={timer} onDismiss={() => setTimer(null)} />}
       {showNewCycle && <NewCycleModal prs={newCyclePRs} onStart={onStartNewCycle} />}
     </div>
   );
 }
 
-function StatsScreen({ history, onBack }) {
+function StatsScreen({ history, onBack, t }) {
   const [activescreen, setActivescreen] = useState('lifts');
   const liftData = {};
   const totalData = [];
@@ -663,6 +715,13 @@ if (latestBodyWeight) {
           <YAxis stroke={THEME.text} />
           <Tooltip
   labelFormatter={(value) => `W${value}`}
+  formatter={(value, name) => {
+    if (name === 'gewicht') return [value, t.bodyweight];
+    if (name === 'strength') return [value, t.strength];
+    if (name === 'oneRM') return [value, '1RM'];
+    if (name === 'e1rm') return [value, 'e1RM'];
+    return [value, name];
+  }}
   contentStyle={{
     backgroundColor: THEME.card,
     border: `1px solid ${THEME.border}`,
@@ -681,7 +740,13 @@ if (latestBodyWeight) {
   strokeWidth={2}
   dot={{ r: 3, fill: colors[i] || THEME.primary, stroke: colors[i] || THEME.primary }}
   activeDot={{ r: 5, fill: colors[i] || THEME.primary, stroke: '#ffffff' }}
-  name={key === 'oneRM' ? '1RM' : key === 'e1rm' ? 'e1RM' : key}
+  name={
+    key === 'oneRM' ? '1RM' : 
+    key === 'e1rm' ? 'e1RM' : 
+    key === 'gewicht' ? t.weight :
+    key === 'strength' ? t.strength :
+    key
+  }
 />
 ))}
         </LineChart>
@@ -692,7 +757,7 @@ if (latestBodyWeight) {
   return (
     <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
-        <h2 style={{ margin: 0 }}>Statistieken</h2>
+        <h2 style={{ margin: 0 }}>{t.stats}</h2>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
@@ -716,46 +781,65 @@ if (latestBodyWeight) {
 }}
 >
     {screen === 'lifts'
-      ? 'Lifts'
+      ? t.lifts
       : screen === 'totaal'
-      ? 'Totaal'
+      ? t.total
       : screen === 'lichaam'
-      ? 'Lichaam'
-      : 'Kracht'}
+      ? t.body
+      : t.strength}
   </button>
 ))}   
 </div>
 
       {activescreen === 'lifts' && (
   <div>
-    {['Deadlift', 'Bench', 'Squat'].map(lift => (
-      <div
-        key={lift}
-        style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 16 }}
-      >
-        <h3 style={{ margin: '0 0 12px', color: COLORS[lift] }}>{lift}</h3>
-      {renderChart(liftData[lift] || [], ['oneRM', 'e1rm'], [THEME.muted, COLORS[lift]])}
-      </div>
-    ))}
+    {['Deadlift', 'Bench', 'Squat'].map(lift => {
+  const liftLabel =
+    lift === 'Deadlift' ? t.deadlift :
+    lift === 'Bench' ? t.bench :
+    t.squat;
+
+  return (
+    <div
+      key={lift}
+      style={{
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 8,
+        padding: 16,
+        marginBottom: 16
+      }}
+    >
+      <h3 style={{ margin: '0 0 12px', color: COLORS[lift] }}>
+        {liftLabel}
+      </h3>
+      {renderChart(
+        liftData[lift] || [],
+        ['oneRM', 'e1rm'],
+        [THEME.muted, COLORS[lift]]
+      )}
+    </div>
+  );
+})}
   </div>
 )}
 
       {activescreen === 'totaal' && (
         <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
-          <h3 style={{ margin: '0 0 12px' }}>Totaal (SBD)</h3>
+          <h3 style={{ margin: '0 0 12px' }}>{t.totalSBD}</h3>
           {renderChart(totalData, ['oneRM', 'e1rm'], [THEME.muted, THEME.primary])}
         </div>
       )}
 
       {activescreen === 'lichaam' && (
         <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
-          <h3 style={{ margin: '0 0 12px' }}>Lichaamsgewicht</h3>
+          <h3 style={{ margin: '0 0 12px' }}>{t.bodyweight}</h3>
           {renderChart(bodyData, ['gewicht'], [THEME.yellow])}
         </div>
       )}
       {activescreen === 'kracht' && (
   <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
-    <h3 style={{ margin: '0 0 12px' }}>Kracht (totaal / BW)</h3>
+    <h3 style={{ margin: '0 0 12px' }}>{t.strengthTotalBodyweight}</h3>
     {renderChart(strengthData, ['strength'], [THEME.primary])}
   </div>
 )}
@@ -763,11 +847,11 @@ if (latestBodyWeight) {
   );
 }
 
-function AllWorkouts({ workouts, currentIndex, onSelect, onBack, onStats }) {
+function AllWorkouts({ workouts, currentIndex, onSelect, onBack, onStats, t }) {
   return (
     <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
-        <h2 style={{ margin: 0, flex: 1 }}>Programma</h2>
+        <h2 style={{ margin: 0, flex: 1 }}>{t.program}</h2>
       </div>
     {workouts.map((workout, idx) => {
   const isCurrent = idx === currentIndex;
@@ -809,7 +893,7 @@ function AllWorkouts({ workouts, currentIndex, onSelect, onBack, onStats }) {
 
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: isCurrent ? 700 : 500, color: isCurrent ? THEME.primary : '#ffffff' }}>
-          {workout.type === 'rest' ? 'Deload' : workout.lift}
+          {workout.type === 'rest' ? t.deload : workout.lift}
           {isCurrent && (
             <span style={{
               fontSize: 11,
@@ -819,13 +903,13 @@ function AllWorkouts({ workouts, currentIndex, onSelect, onBack, onStats }) {
               borderRadius: 3,
               marginLeft: 8
             }}>
-              NU
+              {t.now}
             </span>
           )}
         </div>
 
         <div style={{ fontSize: 12, color: THEME.muted, marginTop: 2 }}>
-          {workout.type === 'rest' ? 'Rust & herstel' : `Workout ${workout.number}`}
+          {workout.type === 'rest' ? t.restAndRecovery : `${t.workout} ${workout.number}`}
         </div>
       </div>
 
@@ -837,7 +921,7 @@ function AllWorkouts({ workouts, currentIndex, onSelect, onBack, onStats }) {
   );
 }
 
-function Onboarding({ onStart }) {
+function Onboarding({ onStart, t }) {
   const [squat, setSquat] = useState('');
   const [bench, setBench] = useState('');
   const [deadlift, setDeadlift] = useState('');
@@ -858,7 +942,7 @@ function Onboarding({ onStart }) {
     color: THEME.text
   }}>
     <h1 style={{ textAlign: 'center', marginTop: 0, marginBottom: 24 }}>
-      Kel Powerlifting
+      Kelani SBD
     </h1>
 
     <div style={{
@@ -868,10 +952,10 @@ function Onboarding({ onStart }) {
       border: `1px solid ${THEME.border}`
     }}>
       <h2 style={{ marginTop: 0, color: THEME.text }}>
-        Voer je 1RM in
+        {t.enter1RM}
       </h2>
 
-      {[['Squat', squat, setSquat], ['Bench Press', bench, setBench], ['Deadlift', deadlift, setDeadlift]].map(([label, val, setter]) => (
+      {[[t.squat, squat, setSquat], [t.bench, bench, setBench], [t.deadlift, deadlift, setDeadlift]].map(([label, val, setter]) => (
         <div key={label} style={{ marginBottom: 16 }}>
           <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
             {label}
@@ -881,7 +965,7 @@ function Onboarding({ onStart }) {
             type="number"
             value={val}
             onChange={e => setter(e.target.value)}
-            placeholder="kg"
+            placeholder={t.kg}
             style={{
               width: '100%',
               padding: 10,
@@ -911,21 +995,21 @@ function Onboarding({ onStart }) {
           fontWeight: 600
         }}
       >
-        Start programma
+        {t.startProgram}
       </button>
     </div>
   </div>
 );
 }
 
-function BottomNav({ screen, onChange }) {
-  const items = [
-    { key: 'dashboard', label: 'Dashboard' },
-    { key: 'all', label: 'Programma' },
-    { key: 'current', label: 'Workout' },
-    { key: 'stats', label: 'Vooruitgang' },
-    { key: 'settings', label: 'Instellingen' },
-  ];
+function BottomNav({ screen, onChange, t }) {
+const items = [
+  { key: 'dashboard', label: t.dashboard },
+  { key: 'all', label: t.program },
+  { key: 'current', label: t.workout },
+  { key: 'stats', label: t.progress },
+  { key: 'settings', label: t.settings },
+];
 
   return (
     <div style={{
@@ -960,6 +1044,17 @@ function BottomNav({ screen, onChange }) {
 }
 
 export default function App() {
+  const [language, setLanguage] = useState(() => {
+  return localStorage.getItem('language') || 'nl';
+});
+
+const [timer, setTimer] = useState(null);
+
+useEffect(() => {
+  localStorage.setItem('language', language);
+}, [language]);
+
+const t = translations[language];
   const [screen, setScreen] = useState('onboarding');
   const [workouts, setWorkouts] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -1279,9 +1374,9 @@ function selectWorkout(idx) {
   setSelectedIndex(idx);
   setScreen('current');
 }
-if (screen === 'onboarding') return <Onboarding onStart={handleStart} />;
+if (screen === 'onboarding') return <Onboarding onStart={handleStart} t={t}/>;
   if (screen !== 'onboarding' && (!workouts.length || !workouts[currentIndex])) {
-  return <Onboarding onStart={handleStart} />;
+  return <Onboarding onStart={handleStart} t={t}/>;
 }
 const workout = workouts[currentIndex];
 
@@ -1327,7 +1422,6 @@ const best1RMs = {
   Bench: Math.max(0, ...history.filter(h => h.lift === 'Bench' && h.topReps === 1).map(h => h.topWeight || 0)),
   Deadlift: Math.max(0, ...history.filter(h => h.lift === 'Deadlift' && h.topReps === 1).map(h => h.topWeight || 0)),
 };
-
 const total1RM = best1RMs.Squat + best1RMs.Bench + best1RMs.Deadlift;
 const totalE1RM = (prs.Squat || 0) + (prs.Bench || 0) + (prs.Deadlift || 0);
 
@@ -1362,22 +1456,22 @@ const strengthRatio = latestBodyWeight
           showNewCycle={showNewCycle}
           newCyclePRs={prs}
           onStartNewCycle={handleStartNewCycle}
+          t={t}
+          timer={timer}
+          setTimer={setTimer}
         />
       )}
 
       {screen === 'dashboard' && (
   <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, background: THEME.bg, minHeight: '100vh', color: THEME.text }}>
-    <h2 style={{ marginTop: 0, textAlign: 'center' }}>Dashboard</h2>
-    <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 12, marginBottom: 12 }}>
-  Build {APP_BUILD}
-</div>
+    <h2 style={{ marginTop: 0, textAlign: 'center' }}>{t.dashboard}</h2>
     <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 12 }}>
       {[
-        ['Squat', THEME.red, best1RMs.Squat, prs.Squat],
-        ['Bench', THEME.yellow, best1RMs.Bench, prs.Bench],
-        ['Deadlift', THEME.primary, best1RMs.Deadlift, prs.Deadlift],
+        [t.squat, THEME.red, best1RMs.Squat, prs.Squat],
+  [t.bench, THEME.yellow, best1RMs.Bench, prs.Bench],
+  [t.deadlift, THEME.primary, best1RMs.Deadlift, prs.Deadlift],
       ].map(([lift, color, oneRM, e1RM]) => (
-        <div key={lift} style={{ marginBottom: lift === 'Deadlift' ? 0 : 12 }}>
+        <div key={lift} style={{ marginBottom: lift === t.deadlift ? 0 : 12 }}>
           <div style={{ marginBottom: 6 }}>
             <strong style={{ color }}>{lift}</strong>
           </div>
@@ -1395,22 +1489,22 @@ const strengthRatio = latestBodyWeight
 
     <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ color: THEME.text, fontWeight: 700 }}>Totaal 1RM:</span>
+        <span style={{ color: THEME.text, fontWeight: 700 }}>{t.total1rm}</span>
         <strong>{total1RM ? `${total1RM} kg` : '—'}</strong>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ color: THEME.text, fontWeight: 700 }}>Totaal e1RM:</span>
+        <span style={{ color: THEME.text, fontWeight: 700 }}>{t.totalE1rm}</span>
         <strong style={{ color: THEME.primary }}>{totalE1RM ? `${totalE1RM} kg` : '—'}</strong>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ color: THEME.text, fontWeight: 700 }}>Kracht:</span>
+        <span style={{ color: THEME.text, fontWeight: 700 }}>{t.strength}</span>
         <strong style={{ color: THEME.yellow }}>{strengthRatio || '—'}</strong>
       </div>
     </div>
 
     <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ color: THEME.text, fontWeight: 700 }}>Lichaamsgewicht:</span>
+        <span style={{ color: THEME.text, fontWeight: 700 }}>{t.bodyweight}</span>
         <strong>{latestBodyWeight ? `${latestBodyWeight} kg` : '—'}</strong>
       </div>
     </div>
@@ -1427,31 +1521,33 @@ const strengthRatio = latestBodyWeight
           }}
           onBack={() => setScreen('current')}
           onStats={() => setScreen('stats')}
+          t={t}
         />
       )}
 
       {screen === 'stats' && (
-        <StatsScreen
-          history={history}
-          onBack={() => setScreen('all')}
-        />
-      )}
+      <StatsScreen
+        history={history}
+        onBack={() => setScreen('all')}
+        t={t}
+/>
+)}
 
       {screen === 'settings' && (
        <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
-  <h2 style={{ marginTop: 0 }}>Instellingen</h2>
+  <h2 style={{ marginTop: 0 }}>{t.settings}</h2>
 
   <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginTop: 4, marginBottom: 16 }}>
     <div style={{ color: '#ffffff', display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-      <span>Squat 1RM (ingevoerd)</span>
+      <span>Squat 1RM ({t.entered1rm})</span>
       <strong>{prs.Squat || '—'} kg</strong>
     </div>
     <div style={{ color: '#ffffff', display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-      <span>Bench 1RM (ingevoerd)</span>
+      <span>Bench 1RM ({t.entered1rm})</span>
       <strong>{prs.Bench || '—'} kg</strong>
     </div>
     <div style={{ color: '#ffffff', display: 'flex', justifyContent: 'space-between' }}>
-      <span>Deadlift 1RM (ingevoerd)</span>
+      <span>Deadlift 1RM ({t.entered1rm})</span>
       <strong>{prs.Deadlift || '—'} kg</strong>
     </div>
   </div>
@@ -1471,7 +1567,7 @@ const strengthRatio = latestBodyWeight
     marginBottom: 12
   }}
 >
-  Lichaamsgewicht bijwerken
+  {t.updateBodyweight}
 </button>
 
   <button
@@ -1488,8 +1584,32 @@ const strengthRatio = latestBodyWeight
       cursor: 'pointer'
     }}
   >
-    Opnieuw beginnen
+    {t.restart}
   </button>
+  <div style={{ marginTop: 16, marginBottom: 8, fontWeight: 700 }}>
+  {t.language}
+</div>
+<div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+  {['nl','en','ca'].map(l => (
+    <button
+      key={l}
+      onClick={() => setLanguage(l)}
+      style={{
+        flex: 1,
+        padding: 10,
+        fontSize: 14,
+        fontWeight: 600,
+        borderRadius: 8,
+        cursor: 'pointer',
+        border: `1px solid ${language === l ? THEME.primary : THEME.border}`,
+        background: language === l ? THEME.primary : THEME.card,
+        color: '#ffffff'
+      }}
+    >
+      {l.toUpperCase()}
+    </button>
+  ))}
+</div>
 </div> 
       )}
     {screen === 'completed' && (
@@ -1547,7 +1667,7 @@ color: THEME.text, borderRadius: 8, padding: 16, marginBottom: 20, textAlign: 'l
   </div>
 
   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-    <span style={{ color: THEME.text, fontWeight: 700 }}>Workout</span>
+    <span style={{ color: THEME.text, fontWeight: 700 }}>{t.workout}</span>
     <strong>{completedWorkout?.number || '—'}</strong>
   </div>
 
@@ -1575,7 +1695,7 @@ color: THEME.text, borderRadius: 8, padding: 16, marginBottom: 20, textAlign: 'l
   }}
 >
   <span style={{ color: '#ffffff', fontWeight: isTopSet ? 700 : 500 }}>
-    {set.label || `Set ${i + 1}`} — {set.reps} reps
+    {set.label || `${t.set} ${i + 1}`} — {set.reps} {t.reps}
   </span>
 
   <strong style={{ color: '#ffffff' }}>
@@ -1602,7 +1722,7 @@ color: THEME.text, borderRadius: 8, padding: 16, marginBottom: 20, textAlign: 'l
           marginBottom: 10
         }}
       >
-        Verder naar Programma
+        Verder naar {t.program}
       </button>
 
       <button
@@ -1650,9 +1770,18 @@ style={{
   <BodyWeightModal
     onSave={saveBodyWeight}
     onSkip={skipBodyWeight}
+    t={t}
   />
 )}
-      <BottomNav screen={screen} onChange={setScreen} />
+{timer !== null && (
+  <RestTimer
+    key={timer}
+    seconds={timer}
+    onDismiss={() => setTimer(null)}
+    t={t}
+  />
+)}
+      <BottomNav screen={screen} onChange={setScreen} t={t} />
     </div>
   );
 }
