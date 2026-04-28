@@ -942,7 +942,7 @@ function Onboarding({ onStart, t }) {
     color: THEME.text
   }}>
     <h1 style={{ textAlign: 'center', marginTop: 0, marginBottom: 24 }}>
-      Kelani SBD
+      Kelani SBD Tracker
     </h1>
 
     <div style={{
