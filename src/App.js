@@ -297,7 +297,7 @@ function RestTimer({ seconds, onDismiss, t }) {
 );
 }
 
-function SetRow({ set, index, label, onToggle, onWeightChange, isWarmup, isActive, isReadOnly, t }) {
+function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, isActive, isReadOnly, t }) {
 const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(set.weight));
   const inputRef = useRef(null);
@@ -357,14 +357,44 @@ const [editing, setEditing] = useState(false);
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <input ref={inputRef} type="number" value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={handleKeyDown}
               style={{ width: 70, padding: '4px 8px', fontSize: 16, fontWeight: 700, borderRadius: 4, border: '2px solid #e74c3c', textAlign: 'right' }} />
-            <span style={{ fontSize: 13, color: THEME.text }}>kg</span>
-            <button onClick={handleConfirm} style={{ padding: '4px 10px', fontSize: 13, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.border}`, color: 'white', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer' }}>✓</button>
+            <span style={{ fontSize: 16, color: THEME.text }}>kg</span>
+            {!isWarmup && (
+  <button
+    onClick={handleEditClick}
+    style={{
+      background: 'none',
+      border: `1px solid ${THEME.primary}`,
+      cursor: 'pointer',
+      fontSize: 16,
+      padding: '2px 4px',
+      color: '#ffffff',
+      lineHeight: 1
+    }}
+  >
+    ✎
+  </button>
+)}
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontWeight: 700, fontSize: 18, color: '#ffffff' }}>{set.weight} kg</span>
             {set.pct && <span style={{ color: '#ffffff', fontSize: 12 }}>{Math.round(set.pct * 100)}%</span>}
-            <button onClick={handleEditClick} style={{ background: 'none', border: `1px solid ${THEME.primary}`, cursor: 'pointer', fontSize: 16, padding: '2px 4px', color: '#ffffff', lineHeight: 1 }}>✎</button>
+            {!isWarmup && (
+  <button
+    onClick={handleEditClick}
+    style={{
+      background: 'none',
+      border: `1px solid ${THEME.primary}`,
+      cursor: 'pointer',
+      fontSize: 16,
+      padding: '2px 4px',
+      color: '#ffffff',
+      lineHeight: 1
+    }}
+  >
+    ✎
+  </button>
+)}
           </div>
         )}
       </div>
@@ -396,7 +426,7 @@ function NewCycleModal({ prs, onStart }) {
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
       <div style={{ background: THEME.card, borderRadius: 12, padding: 24, maxWidth: 340, width: '90%' }}>
         <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 10 }}>🏆</div>
-        <h3 style={{ margin: '0 0 8px', textAlign: 'center' }}>Cyclus voltooid!</h3>
+        <h3 style={{ margin: '0 0 8px', textAlign: 'center' }}>t.cycleCompleted</h3>
         <p style={{ color: THEME.muted, fontSize: 14, margin: '0 0 20px', textAlign: 'center' }}>Nieuwe gewichten berekend op basis van je beste prestaties.</p>
         <div style={{ background: THEME.card,
 border: `1px solid ${THEME.border}`,
@@ -409,7 +439,7 @@ color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
           ))}
         </div>
         <button onClick={onStart} style={{ width: '100%', padding: 14, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.border}`, color: 'white', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
-          Nieuwe cyclus starten 🚀
+          t.startNewCycle 🚀
         </button>
       </div>
     </div>
@@ -495,7 +525,6 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
   isActive={!isReadOnly && i === workout.warmups.findIndex(wu => !wu.done)}
   isReadOnly={isReadOnly}
   onToggle={() => handleToggle(() => onToggleWarmup(i), w.reps)}
-  onWeightChange={val => onWeightChange('warmup', i, val)}
   t={t}
 />
           ))}
@@ -637,9 +666,10 @@ history.forEach(entry => {
   if (entry.lift && ['Deadlift', 'Bench', 'Squat'].includes(entry.lift)) {
     if (!liftData[entry.lift]) liftData[entry.lift] = [];
 
-    if (entry.workoutNumber === 0) {
-      bestStats[entry.lift].oneRM = Math.max(bestStats[entry.lift].oneRM, entry.e1rm || 0);
-    }
+    bestStats[entry.lift].oneRM = Math.max(
+  bestStats[entry.lift].oneRM,
+  entry.topWeight || 0
+);
 
     bestStats[entry.lift].e1rm = Math.max(bestStats[entry.lift].e1rm, entry.e1rm || 0);
 
@@ -655,23 +685,32 @@ history.forEach(entry => {
   }
 });
 
-const baselineSquat = history.find(h => h.workoutNumber === 0 && h.lift === 'Squat')?.e1rm || 0;
-const baselineBench = history.find(h => h.workoutNumber === 0 && h.lift === 'Bench')?.e1rm || 0;
-const baselineDeadlift = history.find(h => h.workoutNumber === 0 && h.lift === 'Deadlift')?.e1rm || 0;
-const baselineTotal = baselineSquat + baselineBench + baselineDeadlift;
-
 const bestPerLift = {};
+
 history.forEach(entry => {
   if (!entry.lift || !['Squat', 'Bench', 'Deadlift'].includes(entry.lift)) return;
 
-  if (!bestPerLift[entry.lift] || entry.e1rm > bestPerLift[entry.lift].e1rm) {
-    bestPerLift[entry.lift] = { e1rm: entry.e1rm };
+  if (!bestPerLift[entry.lift]) {
+    bestPerLift[entry.lift] = { oneRM: 0, e1rm: 0 };
   }
+
+  bestPerLift[entry.lift].oneRM = Math.max(
+    bestPerLift[entry.lift].oneRM,
+    entry.topWeight || 0
+  );
+
+  bestPerLift[entry.lift].e1rm = Math.max(
+    bestPerLift[entry.lift].e1rm,
+    entry.e1rm || 0
+  );
 
   if (bestPerLift.Squat && bestPerLift.Bench && bestPerLift.Deadlift) {
     totalData.push({
       label: `W${entry.workoutNumber}`,
-      oneRM: baselineTotal,
+      oneRM:
+        bestPerLift.Squat.oneRM +
+        bestPerLift.Bench.oneRM +
+        bestPerLift.Deadlift.oneRM,
       e1rm:
         bestPerLift.Squat.e1rm +
         bestPerLift.Bench.e1rm +
@@ -768,7 +807,7 @@ if (latestBodyWeight) {
     style={{
   flex: 1,
   padding: '8px 0',
-  fontSize: 13,
+  fontSize: 16,
   background: THEME.card,
   color: activescreen === screen ? THEME.primary : THEME.text,
   border: `1px solid ${THEME.border}`,
@@ -884,7 +923,7 @@ function AllWorkouts({ workouts, currentIndex, onSelect, onBack, onStats, t }) {
         justifyContent: 'center',
         color: '#ffffff',
         fontWeight: 700,
-        fontSize: 13,
+        fontSize: 16,
         marginRight: 14,
         flexShrink: 0
       }}>
@@ -1071,7 +1110,7 @@ const t = translations[language];
     const currentIndex = history.filter(
     h => h.lift && h.workoutNumber > 0
   ).length;
-  const APP_VERSION = '0.5.3';
+  const APP_VERSION = '0.6.1';
   const PROGRAM_VERSION = 'cube-27-v1';
 
 useEffect(() => {
@@ -1289,28 +1328,54 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   function completeWorkout() {  const workout = workouts[selectedIndex];
   
   if (workout.type === 'training' && ['Deadlift', 'Bench', 'Squat'].includes(workout.lift)) {
-    const topSet = workout.sets.reduce(
-      (best, s) => epley(s.weight, s.reps) > epley(best.weight, best.reps) ? s : best,
-      workout.sets[0]
-    );
+    const sets = workout.sets || [];
 
-    const newE1rm = epley(topSet.weight, topSet.reps);
-    const previousPR = prs[workout.lift] || 0;
-    const isPR = newE1rm > previousPR;
+const topSet = sets.reduce(
+  (best, s) => epley(s.weight, s.reps) > epley(best.weight, best.reps) ? s : best,
+  sets[0]
+);
 
-    setCompletedSummary({
-      lift: workout.lift,
-      e1rm: newE1rm,
-      previousPR,
-      isPR,
-      topSet,
-      bodyWeight: bodyWeightToday,
-    });
+const oneRMToday = sets.length
+  ? Math.max(...sets.map(s => Number(s.weight) || 0))
+  : 0;
 
-    setPrs(prev => {
-      const current = prev[workout.lift] || 0;
-      return newE1rm > current ? { ...prev, [workout.lift]: newE1rm } : prev;
-    });
+const e1RMToday = sets.length
+  ? Math.round(Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0))))
+  : 0;
+
+const previousBestE1RM = prs[workout.lift] || 0;
+
+const previousBest1RM = Math.max(
+  0,
+  ...history
+    .filter(h => h.lift === workout.lift)
+    .map(h => Number(h.topWeight) || 0)
+);
+
+const is1RMPR = oneRMToday > previousBest1RM;
+const isE1RMPR = e1RMToday > previousBestE1RM;
+
+const best1RM = Math.max(previousBest1RM, oneRMToday);
+const bestE1RM = Math.max(previousBestE1RM, e1RMToday);
+
+setCompletedSummary({
+  lift: workout.lift,
+  oneRMToday,
+  e1RMToday,
+  previousBest1RM,
+  previousBestE1RM,
+  best1RM,
+  bestE1RM,
+  is1RMPR,
+  isE1RMPR,
+  topSet,
+  bodyWeight: bodyWeightToday,
+});
+
+  setPrs(prev => {
+  const current = prev[workout.lift] || 0;
+  return e1RMToday > current ? { ...prev, [workout.lift]: e1RMToday } : prev;
+});
 
     setHistory(prev => {
   const existingIndex = prev.findIndex(
@@ -1320,9 +1385,9 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   const newEntry = {
     workoutNumber: workout.number,
     lift: workout.lift,
-    topWeight: topSet.weight,
-    topReps: topSet.reps,
-    e1rm: newE1rm,
+    topWeight: oneRMToday,
+    topReps: sets.find(s => Number(s.weight) === oneRMToday)?.reps || topSet.reps,
+    e1rm: e1RMToday,
     bodyWeight: bodyWeightToday,
     date: new Date().toLocaleDateString('nl-NL'),
   };
@@ -1418,12 +1483,28 @@ function updateBodyWeight() {
 }
 
 const best1RMs = {
-  Squat: Math.max(0, ...history.filter(h => h.lift === 'Squat' && h.topReps === 1).map(h => h.topWeight || 0)),
-  Bench: Math.max(0, ...history.filter(h => h.lift === 'Bench' && h.topReps === 1).map(h => h.topWeight || 0)),
-  Deadlift: Math.max(0, ...history.filter(h => h.lift === 'Deadlift' && h.topReps === 1).map(h => h.topWeight || 0)),
+  Squat: Math.max(
+    0,
+    ...history.filter(h => h.lift === 'Squat').map(h => h.topWeight || 0)
+  ),
+  Bench: Math.max(
+    0,
+    ...history.filter(h => h.lift === 'Bench').map(h => h.topWeight || 0)
+  ),
+  Deadlift: Math.max(
+    0,
+    ...history.filter(h => h.lift === 'Deadlift').map(h => h.topWeight || 0)
+  ),
 };
+
+const bestE1RMs = {
+  Squat: Math.max(prs.Squat || 0, ...history.filter(h => h.lift === 'Squat').map(h => h.e1rm || 0)),
+  Bench: Math.max(prs.Bench || 0, ...history.filter(h => h.lift === 'Bench').map(h => h.e1rm || 0)),
+  Deadlift: Math.max(prs.Deadlift || 0, ...history.filter(h => h.lift === 'Deadlift').map(h => h.e1rm || 0)),
+};
+
 const total1RM = best1RMs.Squat + best1RMs.Bench + best1RMs.Deadlift;
-const totalE1RM = (prs.Squat || 0) + (prs.Bench || 0) + (prs.Deadlift || 0);
+const totalE1RM = bestE1RMs.Squat + bestE1RMs.Bench + bestE1RMs.Deadlift;
 
 const latestBodyWeightEntry = [...history]
   .filter(h => h.bodyWeight)
@@ -1467,9 +1548,9 @@ const strengthRatio = latestBodyWeight
     <h2 style={{ marginTop: 0, textAlign: 'center' }}>{t.dashboard}</h2>
     <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 12 }}>
       {[
-        [t.squat, THEME.red, best1RMs.Squat, prs.Squat],
-  [t.bench, THEME.yellow, best1RMs.Bench, prs.Bench],
-  [t.deadlift, THEME.primary, best1RMs.Deadlift, prs.Deadlift],
+        [t.squat, THEME.red, best1RMs.Squat, bestE1RMs.Squat],
+        [t.bench, THEME.yellow, best1RMs.Bench, bestE1RMs.Bench],
+        [t.deadlift, THEME.primary, best1RMs.Deadlift, bestE1RMs.Deadlift],
       ].map(([lift, color, oneRM, e1RM]) => (
         <div key={lift} style={{ marginBottom: lift === t.deadlift ? 0 : 12 }}>
           <div style={{ marginBottom: 6 }}>
@@ -1536,22 +1617,7 @@ const strengthRatio = latestBodyWeight
       {screen === 'settings' && (
        <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
   <h2 style={{ marginTop: 0 }}>{t.settings}</h2>
-
-  <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginTop: 4, marginBottom: 16 }}>
-    <div style={{ color: '#ffffff', display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-      <span>Squat 1RM ({t.entered1rm})</span>
-      <strong>{prs.Squat || '—'} kg</strong>
-    </div>
-    <div style={{ color: '#ffffff', display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-      <span>Bench 1RM ({t.entered1rm})</span>
-      <strong>{prs.Bench || '—'} kg</strong>
-    </div>
-    <div style={{ color: '#ffffff', display: 'flex', justifyContent: 'space-between' }}>
-      <span>Deadlift 1RM ({t.entered1rm})</span>
-      <strong>{prs.Deadlift || '—'} kg</strong>
-    </div>
-  </div>
-
+        <div>{process.env.REACT_APP_VERSION}</div>
   <button
   onClick={updateBodyWeight}
   style={{
@@ -1561,7 +1627,7 @@ const strengthRatio = latestBodyWeight
     fontWeight: 600,
     background: THEME.card,
     color: '#ffffff',
-    border: `none`,
+    border: `1px solid ${THEME.border}`,
     borderRadius: 8,
     cursor: 'pointer',
     marginBottom: 12
@@ -1625,37 +1691,57 @@ const strengthRatio = latestBodyWeight
     <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 12, padding: 24, textAlign: 'center' }}>
       <div style={{ fontSize: 40, marginBottom: 10 }}>🎉</div>
 
-      <h2 style={{ margin: '0 0 8px', color: THEME.text }}>Workout voltooid</h2>
+      <h2 style={{ margin: '0 0 8px', color: THEME.text }}>{t.workoutCompleted}</h2>
 
 <p style={{ color: THEME.muted, margin: '0 0 12px' }}>
-  Goed gedaan. Je workout is opgeslagen.
+  {t.goodJobSaved}
 </p>
 
 <div style={{
   background: THEME.card,
-border: `1px solid ${THEME.border}`,
-color: THEME.text,
   border: `1px solid ${THEME.border}`,
+  color: THEME.text,
   borderRadius: 8,
   padding: 12,
   marginBottom: 20,
-  textAlign: 'center'
+  textAlign: 'left'
 }}>
-<span style={{ color: THEME.text, fontWeight: 700 }}>
   {(() => {
-    const topSet = (completedWorkout?.sets || []).reduce((best, s) =>
-      (s.weight * (1 + s.reps / 30)) > (best.weight * (1 + best.reps / 30)) ? s : best,
-      completedWorkout?.sets?.[0] || { weight: 0, reps: 1 }
+    const sets = completedWorkout?.sets || [];
+    const lift = completedWorkout?.lift;
+
+    const oneRMToday = sets.length
+      ? Math.max(...sets.map(s => Number(s.weight) || 0))
+      : 0;
+
+    const e1RMToday = sets.length
+      ? Math.round(Math.max(...sets.map(s => (Number(s.weight) || 0) * (1 + (Number(s.reps) || 0) / 30))))
+      : 0;
+
+    const best1RM = completedSummary?.best1RM || oneRMToday;
+    const bestE1RM = completedSummary?.bestE1RM || completedSummary?.e1rm || e1RMToday;
+
+    const is1RMPR = oneRMToday >= best1RM && oneRMToday > 0;
+    const isE1RMPR = e1RMToday >= bestE1RM && e1RMToday > 0;
+
+    const row = (label, value, isPR) => (
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ color: THEME.text }}>{label}</span>
+        <strong style={{ color: '#ffffff' }}>
+          {value} kg {isPR ? '🚀' : ''}
+        </strong>
+      </div>
     );
 
-    const e1rm = Math.round(topSet.weight * (1 + topSet.reps / 30));
-    const previous = prs[completedWorkout?.lift] || 0;
-    const isPR = e1rm > previous;
-
-return completedSummary?.isPR
-  ? `${completedSummary?.lift} e1RM PR: ${completedSummary?.e1rm} kg 🚀`
-  : `${completedSummary?.lift} e1RM (vandaag): ${completedSummary?.e1rm} kg`;  })()}
-</span>
+    return (
+      <>
+        {row('1RM today', oneRMToday, is1RMPR)}
+        {row('e1RM today', e1RMToday, isE1RMPR)}
+        {row('Best 1RM', Math.max(best1RM, oneRMToday), is1RMPR)}
+        {row('Best e1RM', Math.max(bestE1RM, e1RMToday), isE1RMPR)}
+      </>
+    );
+  })()}
 </div>
 
 <div style={{ background: THEME.card,
@@ -1672,11 +1758,11 @@ color: THEME.text, borderRadius: 8, padding: 16, marginBottom: 20, textAlign: 'l
   </div>
 
   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-    <span style={{ color: THEME.text, fontWeight: 700 }}>Cyclus</span>
+    <span style={{ color: THEME.text, fontWeight: 700 }}>{t.cycle}</span>
     <strong>{currentCycle}</strong>
   </div>
 
-<div style={{ fontSize: 13, fontWeight: 700, color: THEME.muted, marginBottom: 10 }}>
+<div style={{ fontSize: 16, fontWeight: 700, color: THEME.muted, marginBottom: 10 }}>
   {completedWorkout?.lift || '—'}
 </div>
 
@@ -1722,7 +1808,7 @@ color: THEME.text, borderRadius: 8, padding: 16, marginBottom: 20, textAlign: 'l
           marginBottom: 10
         }}
       >
-        Verder naar {t.program}
+        {t.continueToProgram}
       </button>
 
       <button
@@ -1740,7 +1826,7 @@ color: THEME.text, borderRadius: 8, padding: 16, marginBottom: 20, textAlign: 'l
   marginBottom: 10
 }}
 >
-        Bekijk Vooruitgang
+        {t.viewProgress}
       </button>
 
       <button
@@ -1761,7 +1847,7 @@ style={{
   cursor: 'pointer'
 }}
 >
-        Terug naar Workout
+        {t.backToWorkout}
       </button>
     </div>
   </div>

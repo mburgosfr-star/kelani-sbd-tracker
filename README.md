@@ -19,7 +19,9 @@ https://github.com/mburgosfr-star/kelani-sbd-tracker/releases
 
 ## Screenshots
 
-(Add screenshots here)
+![Dashboard](screenshots/dashboard.png)
+![Workout](screenshots/workout.png)
+![Stats](screenshots/stats.png)
 
 ## Notes
 

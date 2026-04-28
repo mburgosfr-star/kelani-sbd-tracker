@@ -67,6 +67,11 @@ restReadyNextCycle: 'Rust en herstel. Je bent klaar voor de volgende cyclus!',
 startNewCycle: 'Nieuwe cyclus starten',
 weight: 'Gewicht',
 strength: 'Kracht',
+cycle: 'Cyclus',
+today: 'vandaag',
+continueToProgram: 'Verder naar Programma',
+cycleCompleted: 'Cyclus voltooid!',
+startNewCycle: 'Nieuwe cyclus starten',
   },
 
   en: {
@@ -137,7 +142,11 @@ restReadyNextCycle: 'Rest and recover. You are ready for the next cycle!',
 startNewCycle: 'Start new cycle',
 weight: 'Weight',
 strength: 'Strength',
-
+cycle: 'Cycle',
+today: 'today',
+continueToProgram: 'Continue to Program',
+cycleCompleted: 'Cycle completed!',
+startNewCycle: 'Start new cycle',
   },
 
   ca: {
@@ -208,5 +217,10 @@ restReadyNextCycle: 'Descansa i recupera. Ja estàs a punt per al següent cicle
 startNewCycle: 'Començar nou cicle',
 weight: 'Pes',
 strength: 'Força',
+cycle: 'Cicle',
+today: 'avui',
+continueToProgram: 'Continuar al programa',
+cycleCompleted: 'Cicle completat!',
+startNewCycle: 'Començar nou cicle',
 }
 };
