@@ -1110,7 +1110,6 @@ const t = translations[language];
     const currentIndex = history.filter(
     h => h.lift && h.workoutNumber > 0
   ).length;
-  const APP_VERSION = '0.6.1';
   const PROGRAM_VERSION = 'cube-27-v1';
 
 useEffect(() => {
@@ -1571,15 +1570,15 @@ const strengthRatio = latestBodyWeight
     <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ color: THEME.text, fontWeight: 700 }}>{t.total1rm}</span>
-        <strong>{total1RM ? `${total1RM} kg` : '—'}</strong>
+        <strong style={{ color: THEME.red }}>{total1RM ? `${total1RM} kg` : '—'}</strong>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ color: THEME.text, fontWeight: 700 }}>{t.totalE1rm}</span>
-        <strong style={{ color: THEME.primary }}>{totalE1RM ? `${totalE1RM} kg` : '—'}</strong>
+        <strong style={{ color: THEME.yellow }}>{totalE1RM ? `${totalE1RM} kg` : '—'}</strong>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <span style={{ color: THEME.text, fontWeight: 700 }}>{t.strength}</span>
-        <strong style={{ color: THEME.yellow }}>{strengthRatio || '—'}</strong>
+        <strong style={{ color: THEME.primary }}>{strengthRatio || '—'}</strong>
       </div>
     </div>
 
@@ -1617,7 +1616,6 @@ const strengthRatio = latestBodyWeight
       {screen === 'settings' && (
        <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
   <h2 style={{ marginTop: 0 }}>{t.settings}</h2>
-        <div>{process.env.REACT_APP_VERSION}</div>
   <button
   onClick={updateBodyWeight}
   style={{
@@ -1656,7 +1654,7 @@ const strengthRatio = latestBodyWeight
   {t.language}
 </div>
 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-  {['nl','en','ca'].map(l => (
+  {['ca','en','nl'].map(l => (
     <button
       key={l}
       onClick={() => setLanguage(l)}
@@ -1676,8 +1674,19 @@ const strengthRatio = latestBodyWeight
     </button>
   ))}
 </div>
-</div> 
+<div style={{
+  marginTop: 32,
+  paddingTop: 12,
+  borderTop: `1px solid ${THEME.border}`,
+  textAlign: 'center',
+  color: THEME.muted,
+  fontSize: 12
+}}>
+  Kelani SBD Tracker · v{process.env.REACT_APP_VERSION ?? 'dev'}
+</div>
+</div>
       )}
+      
     {screen === 'completed' && (
   <div style={{
     maxWidth: 500,
@@ -1735,10 +1744,10 @@ const strengthRatio = latestBodyWeight
 
     return (
       <>
-        {row('1RM today', oneRMToday, is1RMPR)}
-        {row('e1RM today', e1RMToday, isE1RMPR)}
-        {row('Best 1RM', Math.max(best1RM, oneRMToday), is1RMPR)}
-        {row('Best e1RM', Math.max(bestE1RM, e1RMToday), isE1RMPR)}
+        {row(t.oneRMToday, oneRMToday, is1RMPR)}
+        {row(t.e1RMToday, e1RMToday, isE1RMPR)}
+        {row(t.best1RM, Math.max(best1RM, oneRMToday), is1RMPR)}
+        {row(t.bestE1RM, Math.max(bestE1RM, e1RMToday), isE1RMPR)}
       </>
     );
   })()}
@@ -1748,7 +1757,7 @@ const strengthRatio = latestBodyWeight
 border: `1px solid ${THEME.border}`,
 color: THEME.text, borderRadius: 8, padding: 16, marginBottom: 20, textAlign: 'left' }}>
   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-    <span style={{ color: THEME.text, fontWeight: 700 }}>Lift</span>
+    <span style={{ color: THEME.text, fontWeight: 700 }}>{t.lift}</span>
     <strong>{completedWorkout?.lift || '—'}</strong>
   </div>
 
