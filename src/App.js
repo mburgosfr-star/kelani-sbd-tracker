@@ -25,8 +25,8 @@ const ACCESSORIES = {
     { name: 'Pause Bench', sets: 3, reps: 5, pct: 0.60, lift: 'bench', alternative: null },
   ],
   Bench: [
-    { name: 'Romanian Deadlift', sets: 3, reps: 8, pct: 0.50, lift: 'deadlift', alternative: null },
-  ],
+  { name: 'Pause Squat', sets: 3, reps: 5, pct: 0.60, lift: 'squat', alternative: null },
+],
   Squat: [
     { name: 'Pause Bench', sets: 3, reps: 5, pct: 0.60, lift: 'bench', alternative: null },
   ],
@@ -1197,25 +1197,31 @@ function handleStart(s, b, d) {
   setSelectedIndex(0);
 
   setHistory([
-    {
-      workoutNumber: 0,
-      lift: 'Squat',
-      e1rm: s,
-      date: new Date().toLocaleDateString('nl-NL'),
-    },
-    {
-      workoutNumber: 0,
-      lift: 'Bench',
-      e1rm: b,
-      date: new Date().toLocaleDateString('nl-NL'),
-    },
-    {
-      workoutNumber: 0,
-      lift: 'Deadlift',
-      e1rm: d,
-      date: new Date().toLocaleDateString('nl-NL'),
-    }
-  ]);
+  {
+    workoutNumber: 0,
+    lift: 'Squat',
+    topWeight: s,
+    topReps: 1,
+    e1rm: s,
+    date: new Date().toLocaleDateString('nl-NL'),
+  },
+  {
+    workoutNumber: 0,
+    lift: 'Bench',
+    topWeight: b,
+    topReps: 1,
+    e1rm: b,
+    date: new Date().toLocaleDateString('nl-NL'),
+  },
+  {
+    workoutNumber: 0,
+    lift: 'Deadlift',
+    topWeight: d,
+    topReps: 1,
+    e1rm: d,
+    date: new Date().toLocaleDateString('nl-NL'),
+  }
+]);
 
   setPrs({ Squat: s, Bench: b, Deadlift: d });
   setAccessoryPRs({});
