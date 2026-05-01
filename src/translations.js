@@ -47,7 +47,6 @@ export const translations = {
     goodJobSaved: 'Goed gedaan. Je workout is opgeslagen.',
     viewProgress: 'Bekijk vooruitgang',
     backToWorkout: 'Terug naar workout',
-    continueToProgram: 'Verder naar programma',
 
     preview: 'Voorbeeld',
     previewNotCompletable: 'Voorbeeld (niet voltooibaar)',
@@ -119,7 +118,6 @@ export const translations = {
     goodJobSaved: 'Good job. Your workout has been saved.',
     viewProgress: 'View progress',
     backToWorkout: 'Back to workout',
-    continueToProgram: 'Continue to Program',
 
     preview: 'Preview',
     previewNotCompletable: 'Preview (not completable)',
@@ -191,7 +189,6 @@ export const translations = {
     goodJobSaved: "Ben fet. S'ha desat l'entrenament.",
     viewProgress: 'Mostra el progrés',
     backToWorkout: "Torna a l'entrenament",
-    continueToProgram: 'Ves al programa',
 
     preview: 'Previsualització',
     previewNotCompletable: 'Previsualització (no es pot fer encara)',

@@ -446,7 +446,7 @@ color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
   );
 }
 
-function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessorySet, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer }) {
+function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessorySet, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
   const [showBodyWeight, setShowBodyWeight] = useState(false);
 
   if (workout.type === 'rest') {
@@ -475,11 +475,11 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
   const allAccessoriesDone = (workout.accessories || []).every(a => (a.done || []).every(d => d));
   const headerBg = workout.type === 'peak' ? HEADER_COLOR.peak : HEADER_COLOR[workout.cycle];
 
-  function handleToggle(fn, reps) {
-    if (isReadOnly) return;
-    setTimer(getRestTime(reps));
-    fn();
-  }
+function handleToggle(fn) {
+  if (isReadOnly) return;
+  fn();
+}
+
   return (
     <div style={{ maxWidth: 500, margin: '0 auto', padding: '8px 12px 12px', paddingBottom: timer !== null ? 100 : 16, fontFamily: 'sans-serif' }}>
   
@@ -524,8 +524,7 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
   isWarmup={true}
   isActive={!isReadOnly && i === workout.warmups.findIndex(wu => !wu.done)}
   isReadOnly={isReadOnly}
-  onToggle={() => handleToggle(() => onToggleWarmup(i), w.reps)}
-  t={t}
+  onToggle={() => handleToggle(() => onToggleWarmup(i))}  t={t}
 />
           ))}
         </div>
@@ -553,7 +552,7 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
       isWarmup={false}
       isActive={!isReadOnly && allWarmupsDone && i === firstIncomplete}
       isReadOnly={isReadOnly}
-      onToggle={() => handleToggle(() => onToggleSet(i), set.reps)}
+      onToggle={() => handleToggle(() => onToggleSet(i))}      
       onWeightChange={val => onWeightChange('set', i, val)}
       t={t}
     />
@@ -598,7 +597,7 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
         si === firstIncompleteAccessorySet
       }
       isReadOnly={isReadOnly}
-      onToggle={() => handleToggle(() => onToggleAccessorySet(ai, si), acc.reps)}
+      onToggle={() => handleToggle(() => onToggleAccessorySet(ai, si))}      
       onWeightChange={val => onAccessoryWeightChange(ai, si, val)}
       t={t}
     />
@@ -1064,7 +1063,10 @@ const items = [
       {items.map(item => (
         <button
           key={item.key}
-          onClick={() => onChange(item.key)}
+          onClick={() => {
+            onChange(item.key);
+            window.scrollTo({ top: 0, behavior: 'auto' });
+          }}
           style={{
             flex: 1,
             padding: '12px 0',
@@ -1088,6 +1090,13 @@ export default function App() {
 });
 
 const [timer, setTimer] = useState(null);
+
+function startTimer(seconds) {
+  setTimer({
+    id: Date.now(),
+    seconds,
+  });
+}
 
 useEffect(() => {
   localStorage.setItem('language', language);
@@ -1259,14 +1268,101 @@ function handleStartNewCycle() {
   setScreen('all');
 }
 
-  function toggleWarmup(wIndex) {
-    setWorkouts(prev => prev.map((w, wi) => wi !== selectedIndex ? w : { ...w, warmups: w.warmups.map((wu, i) => i === wIndex ? { ...wu, done: !wu.done } : wu) }));
-  }
-  function toggleSet(setIndex) {
-    setWorkouts(prev => prev.map((w, wi) => wi !== selectedIndex ? w : { ...w, sets: w.sets.map((s, si) => si === setIndex ? { ...s, done: !s.done } : s) }));
+function shouldStartRestTimerAfterToggle(workout, type, index, accIndex = null) {
+  const warmups = workout.warmups || [];
+  const sets = workout.sets || [];
+  const accessories = workout.accessories || [];
+
+  if (type === 'warmup') {
+    const current = warmups[index];
+    if (!current || current.done) return false;
+
+    const isLastWarmup = index === warmups.length - 1;
+    return isLastWarmup && sets.length > 0;
   }
 
-  function toggleAccessorySet(accIndex, setIndex) {
+  if (type === 'main') {
+    const current = sets[index];
+    if (!current || current.done) return false;
+
+    const hasMoreMainSets = index < sets.length - 1;
+    const hasAccessories = accessories.some(a => (a.done || []).some(d => !d));
+
+    return hasMoreMainSets || hasAccessories;
+  }
+
+  if (type === 'accessory') {
+    const acc = accessories[accIndex];
+    if (!acc) return false;
+
+    const currentDone = acc.done[index];
+    if (currentDone) return false;
+
+    const hasMoreAccessorySets =
+      accessories.some((a, ai) =>
+        (a.done || []).some((d, si) => {
+          if (ai < accIndex) return false;
+          if (ai === accIndex && si <= index) return false;
+          return !d;
+        })
+      );
+
+    return hasMoreAccessorySets;
+  }
+
+  return false;
+}
+
+function toggleWarmup(wIndex) {
+  const workout = workouts[selectedIndex];
+  if (shouldStartRestTimerAfterToggle(workout, 'warmup', wIndex)) {
+    startTimer(getRestTime((workout.sets || [])[0]?.reps || 3));
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) =>
+      wi !== selectedIndex
+        ? w
+        : {
+            ...w,
+            warmups: w.warmups.map((wu, i) =>
+              i === wIndex ? { ...wu, done: !wu.done } : wu
+            ),
+          }
+    )
+  );
+}
+
+function toggleSet(setIndex) {
+  const workout = workouts[selectedIndex];
+  const set = workout.sets?.[setIndex];
+
+  if (shouldStartRestTimerAfterToggle(workout, 'main', setIndex)) {
+    startTimer(getRestTime(set.reps));
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) =>
+      wi !== selectedIndex
+        ? w
+        : {
+            ...w,
+            sets: w.sets.map((s, si) =>
+              si === setIndex ? { ...s, done: !s.done } : s
+            ),
+          }
+    )
+  );
+}
+
+function toggleAccessorySet(accIndex, setIndex) {
+  const workout = workouts[selectedIndex];
+  const acc = workout.accessories?.[accIndex];
+
+  if (shouldStartRestTimerAfterToggle(workout, 'accessory', setIndex, accIndex)) {
+    startTimer(getRestTime(acc.reps));
+  }
+
   setWorkouts(prev =>
     prev.map((w, wi) => {
       if (wi !== selectedIndex) return w;
@@ -1278,7 +1374,7 @@ function handleStartNewCycle() {
 
           return {
             ...a,
-            done: a.done.map((d, di) => di === setIndex ? !d : d),
+            done: a.done.map((d, di) => (di === setIndex ? !d : d)),
           };
         }),
       };
@@ -1330,9 +1426,13 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   );
 }
 
-  function completeWorkout() {  const workout = workouts[selectedIndex];
+  function completeWorkout() {  
+    
+    setTimer(null);
+    
+    const workout = workouts[selectedIndex];
   
-  if (workout.type === 'training' && ['Deadlift', 'Bench', 'Squat'].includes(workout.lift)) {
+    if (workout.type === 'training' && ['Deadlift', 'Bench', 'Squat'].includes(workout.lift)) {
     const sets = workout.sets || [];
 
 const topSet = sets.reduce(
@@ -1808,25 +1908,6 @@ color: THEME.text, borderRadius: 8, padding: 16, marginBottom: 20, textAlign: 'l
 </div>
 
       <button
-        onClick={() => setScreen('all')}
-        style={{
-          width: '100%',
-          padding: 14,
-          fontSize: 16,
-          fontWeight: 600,
-          marginTop: 4,
-          background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.border}`,
-          color: 'white',
-          border: `1px solid ${THEME.primary}`,
-          borderRadius: 8,
-          cursor: 'pointer',
-          marginBottom: 10
-        }}
-      >
-        {t.continueToProgram}
-      </button>
-
-      <button
         onClick={() => setScreen('stats')}
         style={{
   width: '100%',
@@ -1874,14 +1955,16 @@ style={{
     t={t}
   />
 )}
+
 {timer !== null && (
   <RestTimer
-    key={timer}
-    seconds={timer}
+    key={timer.id}
+    seconds={timer.seconds}
     onDismiss={() => setTimer(null)}
     t={t}
   />
 )}
+
       <BottomNav screen={screen} onChange={setScreen} t={t} />
     </div>
   );
