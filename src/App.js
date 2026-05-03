@@ -32,10 +32,8 @@ const ACCESSORIES = {
   ],
 };
 
-function getRestTime(reps) {
-  if (reps <= 5) return 300;
-  if (reps <= 10) return 180;
-  return 90;
+function getRestTime() {
+  return 300;
 }
 
 function epley(weight, reps) {
@@ -194,7 +192,16 @@ function RestTimer({ seconds, onDismiss, t }) {
   const [remaining, setRemaining] = useState(seconds);
   const intervalRef = useRef(null);
   const hasBeepedRef = useRef(false);
-  useEffect(() => { setRemaining(seconds); hasBeepedRef.current = false; }, [seconds]);
+
+  useEffect(() => {
+  setRemaining(seconds);
+  hasBeepedRef.current = false;
+
+  return () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+  };
+}, [seconds]);
+
   useEffect(() => {
     if (remaining <= 0) {
       clearInterval(intervalRef.current);
@@ -1175,28 +1182,6 @@ useEffect(() => {
     bodyWeightToday
   }));
 }, [history, prs, accessoryPRs, currentCycle, bodyWeightToday]);
-
-useEffect(() => {
-  if (screen === 'onboarding') return;
-  if (workouts.length === 0) return;
-
-  const today = new Date().toLocaleDateString('nl-NL');
-  const lastPromptDate = localStorage.getItem('bodyweight_prompt_date');
-
-  if (lastPromptDate === today) return;
-
-  const hasTodayWeight = history.some(
-    h => h.bodyWeight && h.date === today
-  );
-
-  if (hasTodayWeight) {
-    localStorage.setItem('bodyweight_prompt_date', today);
-    return;
-  }
-
-  setShowBodyWeightModal(true);
-  localStorage.setItem('bodyweight_prompt_date', today);
-}, [screen, workouts.length, history]);
 
 function handleStart(s, b, d) {
   localStorage.removeItem('kel-powerlifting');
