@@ -41,6 +41,61 @@ function epley(weight, reps) {
   return Math.round(weight * (1 + reps / 30));
 }
 
+function normalizeBodyWeights(data) {
+  const entries = [];
+
+  (data.bodyWeights || []).forEach((entry, index) => {
+    const bodyWeight = Number(entry.bodyWeight || entry.weight);
+    if (!bodyWeight) return;
+
+    entries.push({
+      workoutNumber: Number.isFinite(Number(entry.workoutNumber))
+        ? Number(entry.workoutNumber)
+        : index,
+      date: entry.date || new Date().toLocaleDateString('nl-NL'),
+      timestamp: entry.timestamp || new Date().toISOString(),
+      bodyWeight,
+    });
+  });
+
+  (data.history || []).forEach(entry => {
+    const bodyWeight = Number(entry.bodyWeight || entry.bodyWeightToday);
+    if (!bodyWeight) return;
+
+    entries.push({
+      workoutNumber: Number.isFinite(Number(entry.workoutNumber))
+        ? Number(entry.workoutNumber)
+        : 0,
+      date: entry.date || new Date().toLocaleDateString('nl-NL'),
+      timestamp: entry.timestamp || new Date().toISOString(),
+      bodyWeight,
+    });
+  });
+
+  if (data.bodyWeightToday) {
+    const completedWorkouts = (data.history || []).filter(
+      h => h.lift && h.workoutNumber > 0
+    ).length;
+
+    entries.push({
+      workoutNumber: completedWorkouts,
+      date: new Date().toLocaleDateString('nl-NL'),
+      timestamp: new Date().toISOString(),
+      bodyWeight: Number(data.bodyWeightToday),
+    });
+  }
+
+  const byWorkout = {};
+
+  entries.forEach(entry => {
+    byWorkout[entry.workoutNumber] = entry;
+  });
+
+  return Object.values(byWorkout).sort(
+    (a, b) => a.workoutNumber - b.workoutNumber
+  );
+}
+
 function generateWarmups(firstWorkWeight) {
   const warmups = [];
   let w = 20;
@@ -648,8 +703,8 @@ function handleToggle(fn) {
   );
 }
 
-function StatsScreen({ history, onBack, t }) {
-  const [activescreen, setActivescreen] = useState('lifts');
+function StatsScreen({ history, bodyWeights, onBack, t }) {
+const [activescreen, setActivescreen] = useState('lifts');
   const liftData = {};
   const totalData = [];
   const bodyData = [];
@@ -686,9 +741,6 @@ history.forEach(entry => {
     });
   }
 
-  if (entry.bodyWeight) {
-    bodyData.push({ label, gewicht: entry.bodyWeight });
-  }
 });
 
 const bestPerLift = {};
@@ -713,6 +765,8 @@ history.forEach(entry => {
   if (bestPerLift.Squat && bestPerLift.Bench && bestPerLift.Deadlift) {
     totalData.push({
       label: `W${entry.workoutNumber}`,
+      workoutNumber: entry.workoutNumber,
+      date: entry.date,
       oneRM:
         bestPerLift.Squat.oneRM +
         bestPerLift.Bench.oneRM +
@@ -725,20 +779,46 @@ history.forEach(entry => {
   }
 });
 
-const latestBodyWeightEntry = [...history]
-  .filter(h => h.bodyWeight)
-  .slice(-1)[0];
-
-const latestBodyWeight = latestBodyWeightEntry?.bodyWeight || null;
-
-if (latestBodyWeight) {
-  totalData.forEach(entry => {
-    strengthData.push({
-      label: entry.label,
-      strength: Math.round((entry.e1rm / latestBodyWeight) * 100) / 100,
-    });
+bodyWeights.forEach(entry => {
+  bodyData.push({
+    label: entry.date,
+    workoutNumber: entry.workoutNumber ?? 0,
+    gewicht: entry.bodyWeight,
   });
+});
+
+function parseDate(date) {
+  const [day, month, year] = String(date).split(/[-/]/).map(Number);
+  if (!day || !month || !year) return 0;
+  return new Date(year, month - 1, day).getTime();
 }
+
+const sortedBodyWeights = [...bodyWeights].sort(
+  (a, b) => (a.workoutNumber ?? 0) - (b.workoutNumber ?? 0)
+);
+
+function getBodyWeightForWorkout(workoutNumber) {
+  let latest = null;
+
+  sortedBodyWeights.forEach(entry => {
+    if ((entry.workoutNumber ?? 0) <= workoutNumber) {
+      latest = entry;
+    }
+  });
+
+  return latest?.bodyWeight || null;
+}
+
+totalData.forEach(entry => {
+  const bodyWeightForWorkout = getBodyWeightForWorkout(entry.workoutNumber);
+
+  if (!bodyWeightForWorkout) return;
+
+  strengthData.push({
+    label: entry.label,
+    strength: Math.round((entry.e1rm / bodyWeightForWorkout) * 100) / 100,
+  });
+});
 
   function renderChart(data, dataKeys, colors) {
     if (!data || data.length === 0) {
@@ -1121,7 +1201,7 @@ const t = translations[language];
   const [completedWorkoutIndex, setCompletedWorkoutIndex] = useState(null);
   const [completedSummary, setCompletedSummary] = useState(null);
   const [currentCycle, setCurrentCycle] = useState(1);
-  const [bodyWeightToday, setBodyWeightToday] = useState(null);
+  const [bodyWeights, setBodyWeights] = useState([]);
   const [showBodyWeightModal, setShowBodyWeightModal] = useState(false);
     const currentIndex = history.filter(
     h => h.lift && h.workoutNumber > 0
@@ -1154,7 +1234,7 @@ useEffect(() => {
     setPrs(savedPrs);
     setAccessoryPRs(data.accessoryPRs || {});
     setCurrentCycle(data.currentCycle || 1);
-    setBodyWeightToday(data.bodyWeightToday || null);
+    setBodyWeights(normalizeBodyWeights(data));
 
     setSelectedIndex(
     (data.history || []).filter(
@@ -1179,9 +1259,9 @@ useEffect(() => {
     prs,
     accessoryPRs,
     currentCycle,
-    bodyWeightToday
+    bodyWeights
   }));
-}, [history, prs, accessoryPRs, currentCycle, bodyWeightToday]);
+}, [history, prs, accessoryPRs, currentCycle, bodyWeights]);
 
 function handleStart(s, b, d) {
   localStorage.removeItem('kel-powerlifting');
@@ -1236,7 +1316,7 @@ function handleResetApp() {
   setAccessoryPRs({});
   setShowNewCycle(false);
   setCurrentCycle(1);
-  setBodyWeightToday(null);
+  setBodyWeights([]);
   setScreen('onboarding');
 }
 
@@ -1459,7 +1539,7 @@ setCompletedSummary({
   is1RMPR,
   isE1RMPR,
   topSet,
-  bodyWeight: bodyWeightToday,
+  bodyWeight: latestBodyWeight,
 });
 
   setPrs(prev => {
@@ -1478,7 +1558,6 @@ setCompletedSummary({
     topWeight: oneRMToday,
     topReps: sets.find(s => Number(s.weight) === oneRMToday)?.reps || topSet.reps,
     e1rm: e1RMToday,
-    bodyWeight: bodyWeightToday,
     date: new Date().toLocaleDateString('nl-NL'),
   };
 
@@ -1490,18 +1569,7 @@ setCompletedSummary({
 
   return [...prev, newEntry];
 });
-
-  } else if (bodyWeightToday) {
-    setHistory(prev => [
-      ...prev,
-      {
-        workoutNumber: workout.number,
-        lift: null,
-        bodyWeightToday,
-        date: new Date().toLocaleDateString('nl-NL'),
-      }
-    ]);
-  }
+}
 
   if (workout.accessories) {
     workout.accessories.forEach(acc => {
@@ -1533,33 +1601,19 @@ if (screen === 'onboarding') return <Onboarding onStart={handleStart} t={t}/>;
   if (screen !== 'onboarding' && (!workouts.length || !workouts[currentIndex])) {
   return <Onboarding onStart={handleStart} t={t}/>;
 }
-const workout = workouts[currentIndex];
 
 function saveBodyWeight(bw) {
   const today = new Date().toLocaleDateString('nl-NL');
 
-  setBodyWeightToday(bw);
-
-  setHistory(prev => {
-    const existingIndex = prev.findIndex(
-      h => h.date === today && h.lift === null
-    );
-
-    const entry = {
-      workoutNumber: 0,
-      lift: null,
-      bodyWeight: bw,
+  setBodyWeights(prev => [
+    ...prev.filter(entry => entry.date !== today),
+    {
+      workoutNumber: currentIndex,
       date: today,
-    };
-
-    if (existingIndex !== -1) {
-      const updated = [...prev];
-      updated[existingIndex] = entry;
-      return updated;
-    }
-
-    return [...prev, entry];
-  });
+      timestamp: new Date().toISOString(),
+      bodyWeight: bw,
+    },
+  ]);
 
   setShowBodyWeightModal(false);
 }
@@ -1596,10 +1650,7 @@ const bestE1RMs = {
 const total1RM = best1RMs.Squat + best1RMs.Bench + best1RMs.Deadlift;
 const totalE1RM = bestE1RMs.Squat + bestE1RMs.Bench + bestE1RMs.Deadlift;
 
-const latestBodyWeightEntry = [...history]
-  .filter(h => h.bodyWeight)
-  .slice(-1)[0];
-
+const latestBodyWeightEntry = [...bodyWeights].slice(-1)[0];
 const latestBodyWeight = latestBodyWeightEntry?.bodyWeight || null;
 
 const strengthRatio = latestBodyWeight
@@ -1697,11 +1748,12 @@ const strengthRatio = latestBodyWeight
       )}
 
       {screen === 'stats' && (
-      <StatsScreen
-        history={history}
-        onBack={() => setScreen('all')}
-        t={t}
-/>
+        <StatsScreen
+          history={history}
+          bodyWeights={bodyWeights}
+          onBack={() => setScreen('all')}
+          t={t}
+        />
 )}
 
       {screen === 'settings' && (
