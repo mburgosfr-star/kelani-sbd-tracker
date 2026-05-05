@@ -787,12 +787,6 @@ bodyWeights.forEach(entry => {
   });
 });
 
-function parseDate(date) {
-  const [day, month, year] = String(date).split(/[-/]/).map(Number);
-  if (!day || !month || !year) return 0;
-  return new Date(year, month - 1, day).getTime();
-}
-
 const sortedBodyWeights = [...bodyWeights].sort(
   (a, b) => (a.workoutNumber ?? 0) - (b.workoutNumber ?? 0)
 );
