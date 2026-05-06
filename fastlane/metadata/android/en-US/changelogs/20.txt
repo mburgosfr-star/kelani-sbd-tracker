@@ -1,0 +1,4 @@
+- Fixed completed workout snapshots so previous workouts keep their actual set state
+- Fixed completed workout screen to show edited set weights
+- Edited set weights are now saved correctly for 1RM/e1RM calculations
+- Improved completed workout display consistency
