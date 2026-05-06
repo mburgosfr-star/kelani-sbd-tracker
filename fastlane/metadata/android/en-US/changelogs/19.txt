@@ -1,0 +1,4 @@
+- Refactored bodyweight tracking into separate data storage
+- Bodyweight entries no longer create workout/stat entries
+- Fixed strength calculation per workout
+- Dashboard and stats now update correctly when bodyweight changes
