@@ -56,3 +56,9 @@ cd android
 ## Notes
 
 Kelani SBD Tracker is built for simplicity and consistency in training.
+
+## Maintainer
+
+Maintained by Kel.
+
+- GitHub: https://github.com/mburgosfr-star
