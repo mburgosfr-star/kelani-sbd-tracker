@@ -96,6 +96,34 @@ function normalizeBodyWeights(data) {
   );
 }
 
+function hydrateWorkoutsWithHistory(workouts, history) {
+  return workouts.map(workout => {
+    const saved = history.find(
+      entry =>
+        entry.workoutNumber === workout.number &&
+        entry.lift === workout.lift
+    );
+
+    if (saved?.workoutSnapshot) {
+      return saved.workoutSnapshot;
+    }
+
+    if (saved) {
+      return {
+        ...workout,
+        warmups: (workout.warmups || []).map(w => ({ ...w, done: true })),
+        sets: (workout.sets || []).map(s => ({ ...s, done: true })),
+        accessories: (workout.accessories || []).map(a => ({
+          ...a,
+          done: (a.done || []).map(() => true),
+        })),
+      };
+    }
+
+    return workout;
+  });
+}
+
 function generateWarmups(firstWorkWeight) {
   const warmups = [];
   let w = 20;
@@ -421,21 +449,25 @@ const [editing, setEditing] = useState(false);
               style={{ width: 70, padding: '4px 8px', fontSize: 16, fontWeight: 700, borderRadius: 4, border: '2px solid #e74c3c', textAlign: 'right' }} />
             <span style={{ fontSize: 16, color: THEME.text }}>kg</span>
             {!isWarmup && (
-  <button
-    onClick={handleEditClick}
-    style={{
-      background: 'none',
-      border: `1px solid ${THEME.primary}`,
-      cursor: 'pointer',
-      fontSize: 16,
-      padding: '2px 4px',
-      color: '#ffffff',
-      lineHeight: 1
-    }}
-  >
-    ✎
-  </button>
-)}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleConfirm();
+                }}
+                style={{
+                  background: 'none',
+                  border: `1px solid ${THEME.primary}`,
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  padding: '2px 6px',
+                  color: '#ffffff',
+                  lineHeight: 1,
+                  fontWeight: 700
+                }}
+              >
+                ✓
+              </button>
+            )}
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1223,8 +1255,11 @@ useEffect(() => {
       return;
     }
 
-    setWorkouts(generateProgram(squat, bench, deadlift));
-    setHistory(data.history || []);
+    const savedHistory = data.history || [];
+    const generatedWorkouts = generateProgram(squat, bench, deadlift);
+
+    setWorkouts(hydrateWorkoutsWithHistory(generatedWorkouts, savedHistory));
+    setHistory(savedHistory);
     setPrs(savedPrs);
     setAccessoryPRs(data.accessoryPRs || {});
     setCurrentCycle(data.currentCycle || 1);
@@ -1490,6 +1525,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     setTimer(null);
     
     const workout = workouts[selectedIndex];
+    const finishedWorkout = JSON.parse(JSON.stringify(workout));
   
     if (workout.type === 'training' && ['Deadlift', 'Bench', 'Squat'].includes(workout.lift)) {
     const sets = workout.sets || [];
@@ -1553,6 +1589,7 @@ setCompletedSummary({
     topReps: sets.find(s => Number(s.weight) === oneRMToday)?.reps || topSet.reps,
     e1rm: e1RMToday,
     date: new Date().toLocaleDateString('nl-NL'),
+    workoutSnapshot: finishedWorkout,
   };
 
   if (existingIndex !== -1) {
@@ -1580,7 +1617,7 @@ setCompletedSummary({
   const isLastWorkout = currentIndex === workouts.length - 2;
   if (isLastWorkout) setShowNewCycle(true);
 
-  setCompletedWorkout(workout);
+  setCompletedWorkout(finishedWorkout);
   setCompletedWorkoutIndex(selectedIndex);
 
   setSelectedIndex(currentIndex + 1);
@@ -1872,7 +1909,7 @@ const strengthRatio = latestBodyWeight
 
     const row = (label, value, isPR) => (
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ color: THEME.text }}>{label}</span>
+        <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
         <strong style={{ color: '#ffffff' }}>
           {value} kg {isPR ? '🚀' : ''}
         </strong>
@@ -1913,9 +1950,6 @@ color: THEME.text, borderRadius: 8, padding: 16, marginBottom: 20, textAlign: 'l
 </div>
 
 {(completedWorkout?.sets || []).map((set, i) => {
-  const isTopSet =
-    set.weight === Math.max(...completedWorkout.sets.map(s => s.weight));
-
   return (
     <div
   key={i}
@@ -1926,7 +1960,7 @@ color: THEME.text, borderRadius: 8, padding: 16, marginBottom: 20, textAlign: 'l
     color: '#ffffff'
   }}
 >
-  <span style={{ color: '#ffffff', fontWeight: isTopSet ? 700 : 500 }}>
+  <span style={{ color: '#ffffff', fontWeight: 700 }}>
     {set.label || `${t.set} ${i + 1}`} — {set.reps} {t.reps}
   </span>
 
