@@ -1,6 +1,6 @@
 {
   "name": "kel-powerlifting",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "private": true,
   "dependencies": {
     "@capacitor/android": "^8.3.1",
