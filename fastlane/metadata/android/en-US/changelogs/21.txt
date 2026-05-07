@@ -1,0 +1,6 @@
+- Added Android back button navigation
+- Workout screen now goes back to Program
+- Program screen now goes back to Dashboard
+- Stats screen now goes back to Program
+- Settings screen now goes back to Dashboard
+- Completed screen now goes back to the completed workout
