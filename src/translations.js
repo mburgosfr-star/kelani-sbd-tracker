@@ -8,6 +8,7 @@ export const translations = {
     settings: 'Instellingen',
     stats: 'Statistieken',
     language: 'Taal',
+    done: 'Gedaan',
 
     squat: 'Squat',
     bench: 'Bench Press',
@@ -79,6 +80,7 @@ export const translations = {
     settings: 'Settings',
     stats: 'Statistics',
     language: 'Language',
+    done: 'Done',
 
     squat: 'Squat',
     bench: 'Bench Press',
@@ -150,6 +152,7 @@ export const translations = {
     settings: 'Configuració',
     stats: 'Estadístiques',
     language: 'Llengua',
+    done: 'Fet',
 
     squat: 'Squat',
     bench: 'Bench Press',

@@ -393,16 +393,25 @@ const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(set.weight));
   const inputRef = useRef(null);
   useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
+  
   function handleEditClick(e) {
     e.stopPropagation();
     setInputVal(String(set.weight));
     setEditing(true);
   }
+
   function handleConfirm() {
     const val = parseFloat(inputVal);
-    if (!isNaN(val) && val > 0) onWeightChange(val);
+
+    if (!isNaN(val) && val > 0) {
+      onWeightChange(val);
+    } else {
+      setInputVal(String(set.weight));
+    }
+
     setEditing(false);
   }
+
   function handleKeyDown(e) {
     if (e.key === 'Enter') handleConfirm();
     if (e.key === 'Escape') setEditing(false);
@@ -422,8 +431,8 @@ const [editing, setEditing] = useState(false);
     width: 34,
     height: 34,
     borderRadius: '50%',
-    border: `2px solid ${set.done ? '#27ae60' : '#ccc'}`,
-    background: set.done ? '#27ae60' : 'white',
+    border: `2px solid ${set.done ? '#ae8a27' : '#ccc'}`,
+    background: set.done ? '#ae5827' : 'white',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -435,7 +444,6 @@ const [editing, setEditing] = useState(false);
     color: '#ffffff',
   }}
 >
-        {set.done && <span style={{ color: 'white', fontSize: 14 }}>✓</span>}
       </div>
       <div onClick={onToggle} style={{ flex: 1, cursor: 'pointer' }}>
         <span style={{ fontWeight: 500, color: THEME.text, textDecoration: set.done ? 'line-through' : 'none' }}>{label}</span>
@@ -446,7 +454,7 @@ const [editing, setEditing] = useState(false);
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {editing ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input ref={inputRef} type="number" value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={handleKeyDown}
+            <input ref={inputRef} type="number" value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={handleKeyDown} onBlur={handleConfirm}
               style={{ width: 70, padding: '4px 8px', fontSize: 16, fontWeight: 700, borderRadius: 4, border: '2px solid #e74c3c', textAlign: 'right' }} />
             <span style={{ fontSize: 16, color: THEME.text }}>kg</span>
             {!isWarmup && (
@@ -459,14 +467,14 @@ const [editing, setEditing] = useState(false);
                   background: 'none',
                   border: `1px solid ${THEME.primary}`,
                   cursor: 'pointer',
-                  fontSize: 16,
-                  padding: '2px 6px',
+                  fontSize: 14,
+                  padding: '4px 8px',
                   color: '#ffffff',
                   lineHeight: 1,
                   fontWeight: 700
                 }}
               >
-                ✓
+                {t.save}
               </button>
             )}
           </div>
@@ -727,7 +735,7 @@ function handleToggle(fn) {
   {isReadOnly
     ? t.previewNotCompletable
     : allDone
-    ? `${t.completeWorkout} ✓`
+    ? `${t.completeWorkout}`
     : t.completeWorkout}
 </button>
 
@@ -1065,7 +1073,7 @@ function AllWorkouts({ workouts, currentIndex, onSelect, onBack, onStats, t }) {
         </div>
       </div>
 
-      {isDone && <span style={{ color: THEME.primary, fontSize: 18 }}>✓</span>}
+      {isDone && <span style={{ color: THEME.primary, fontSize: 18 }}>✅</span>}
     </div>
   );
 })}
