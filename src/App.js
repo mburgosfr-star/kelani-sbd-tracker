@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { translations } from './translations';
+import { App as CapacitorApp } from '@capacitor/app';
 
 const show = v => (v === null || v === undefined ? '—' : v);
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
@@ -1233,6 +1234,54 @@ const t = translations[language];
     h => h.lift && h.workoutNumber > 0
   ).length;
   const PROGRAM_VERSION = 'cube-27-v1';
+
+useEffect(() => {
+  const setupBackButton = async () => {
+    const listener = await CapacitorApp.addListener('backButton', () => {
+      if (screen === 'current') {
+        setScreen('all');
+        return;
+      }
+
+      if (screen === 'all') {
+        setScreen('dashboard');
+        return;
+      }
+
+      if (screen === 'stats') {
+        setScreen('all');
+        return;
+      }
+
+      if (screen === 'settings') {
+        setScreen('dashboard');
+        return;
+      }
+
+      if (screen === 'completed') {
+        if (completedWorkoutIndex !== null) {
+          setSelectedIndex(completedWorkoutIndex);
+        }
+        setScreen('current');
+        return;
+      }
+
+      CapacitorApp.exitApp();
+    });
+
+    return listener;
+  };
+
+  let listener;
+
+  setupBackButton().then(l => {
+    listener = l;
+  });
+
+  return () => {
+    if (listener) listener.remove();
+  };
+}, [screen, completedWorkoutIndex]);
 
 useEffect(() => {
   const saved = localStorage.getItem(STORAGE_KEY);
