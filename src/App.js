@@ -126,17 +126,54 @@ function hydrateWorkoutsWithHistory(workouts, history) {
 }
 
 function generateWarmups(firstWorkWeight) {
-  const warmups = [];
-  let w = 20;
-  while (true) {
-    if (firstWorkWeight - w >= 25) {
-      warmups.push({ weight: w, reps: 5, isWarmup: true, done: false });
-      w += 50;
-    } else {
-      break;
-    }
+  function round25(w) {
+    return Math.round(w / 2.5) * 2.5;
   }
-  return warmups;
+
+  const weight = Number(firstWorkWeight) || 0;
+
+  if (weight <= 20) return [];
+
+  let template = [];
+
+  if (weight <= 50) {
+    template = [{ pct: null, weight: 20, reps: 5 }];
+  } else if (weight <= 100) {
+    template = [
+      { pct: null, weight: 20, reps: 5 },
+      { pct: 0.60, reps: 3 },
+    ];
+  } else if (weight <= 160) {
+    template = [
+      { pct: null, weight: 20, reps: 5 },
+      { pct: 0.50, reps: 5 },
+      { pct: 0.75, reps: 3 },
+    ];
+  } else {
+    template = [
+      { pct: null, weight: 20, reps: 5 },
+      { pct: 0.45, reps: 5 },
+      { pct: 0.65, reps: 3 },
+      { pct: 0.80, reps: 2 },
+      { pct: 0.90, reps: 1 },
+    ];
+  }
+
+  const seen = new Set();
+
+  return template
+    .map(w => ({
+      weight: w.weight ?? round25(weight * w.pct),
+      reps: w.reps,
+      isWarmup: true,
+      done: false,
+    }))
+    .filter(w => w.weight > 0 && w.weight < weight)
+    .filter(w => {
+      if (seen.has(w.weight)) return false;
+      seen.add(w.weight);
+      return true;
+    });
 }
 
 function generateProgram(s, b, d) {
@@ -151,67 +188,79 @@ function generateProgram(s, b, d) {
   };
 
   const program = [
-    { lift: 'Deadlift', blocks: [{ sets: 5, reps: 2, pct: 0.80 }] },
-    { lift: 'Bench', blocks: [{ sets: 3, reps: 12, pct: 0.70 }] },
-    { lift: 'Squat', blocks: [{ sets: 8, reps: 3, pct: 0.65 }] },
+    { lift: 'Deadlift', type: 'training', label: 'Base strength', blocks: [{ sets: 4, reps: 5, pct: 0.70 }] },
+    { lift: 'Bench', type: 'training', label: 'Volume', blocks: [{ sets: 5, reps: 8, pct: 0.65 }] },
+    { lift: 'Squat', type: 'training', label: 'Base volume', blocks: [{ sets: 5, reps: 6, pct: 0.65 }] },
+    { lift: 'Bench', type: 'training', label: 'Strength volume', blocks: [{ sets: 6, reps: 5, pct: 0.70 }] },
+    { lift: 'Squat', type: 'training', label: 'Strength volume', blocks: [{ sets: 5, reps: 5, pct: 0.70 }] },
+    { lift: 'Bench', type: 'training', label: 'Technique strength', blocks: [{ sets: 8, reps: 3, pct: 0.75 }] },
 
-    { lift: 'Deadlift', blocks: [{ sets: 8, reps: 3, pct: 0.65 }] },
-    { lift: 'Bench', blocks: [{ sets: 5, reps: 2, pct: 0.80 }] },
-    { lift: 'Squat', blocks: [{ sets: 3, reps: 12, pct: 0.70 }] },
+    { lift: 'Deadlift', type: 'training', label: 'Strength volume', blocks: [{ sets: 5, reps: 4, pct: 0.75 }] },
+    { lift: 'Bench', type: 'training', label: 'Volume strength', blocks: [{ sets: 5, reps: 6, pct: 0.70 }] },
+    { lift: 'Squat', type: 'training', label: 'Strength volume', blocks: [{ sets: 5, reps: 5, pct: 0.70 }] },
+    { lift: 'Bench', type: 'training', label: 'Strength', blocks: [{ sets: 6, reps: 4, pct: 0.75 }] },
+    { lift: 'Squat', type: 'training', label: 'Strength', blocks: [{ sets: 6, reps: 4, pct: 0.75 }] },
+    { lift: 'Bench', type: 'training', label: 'Heavy technique', blocks: [{ sets: 7, reps: 3, pct: 0.80 }] },
 
-    { lift: 'Deadlift', blocks: [{ sets: 3, reps: 12, pct: 0.70 }] },
-    { lift: 'Bench', blocks: [{ sets: 8, reps: 3, pct: 0.65 }] },
-    { lift: 'Squat', blocks: [{ sets: 5, reps: 2, pct: 0.80 }] },
+    { lift: 'Deadlift', type: 'training', label: 'Heavy strength', blocks: [{ sets: 5, reps: 3, pct: 0.80 }] },
+    { lift: 'Bench', type: 'training', label: 'Strength volume', blocks: [{ sets: 5, reps: 5, pct: 0.75 }] },
+    { lift: 'Squat', type: 'training', label: 'Heavy volume', blocks: [{ sets: 5, reps: 4, pct: 0.775 }] },
+    { lift: 'Bench', type: 'training', label: 'Heavy strength', blocks: [{ sets: 6, reps: 3, pct: 0.825 }] },
+    { lift: 'Squat', type: 'training', label: 'Heavy strength', blocks: [{ sets: 5, reps: 3, pct: 0.825 }] },
+    { lift: 'Bench', type: 'training', label: 'Heavy doubles', blocks: [{ sets: 5, reps: 2, pct: 0.875 }] },
 
-    { lift: 'Deadlift', blocks: [{ sets: 3, reps: 2, pct: 0.85 }] },
-    { lift: 'Bench', blocks: [{ sets: 3, reps: 8, pct: 0.80 }] },
-    { lift: 'Squat', blocks: [{ sets: 6, reps: 2, pct: 0.70 }] },
+    { lift: 'Deadlift', type: 'training', label: 'Peak strength', blocks: [{ sets: 4, reps: 2, pct: 0.85 }] },
+    { lift: 'Bench', type: 'training', label: 'Heavy volume', blocks: [{ sets: 4, reps: 4, pct: 0.80 }] },
+    { lift: 'Squat', type: 'training', label: 'Peak strength', blocks: [{ sets: 4, reps: 3, pct: 0.85 }] },
+    { lift: 'Bench', type: 'training', label: 'Peak doubles', blocks: [{ sets: 5, reps: 2, pct: 0.875 }] },
+    { lift: 'Squat', type: 'training', label: 'Heavy doubles', blocks: [{ sets: 3, reps: 2, pct: 0.90 }] },
+    { lift: 'Bench', type: 'training', label: 'Peak singles', blocks: [{ sets: 4, reps: 1, pct: 0.925 }] },
 
-    { lift: 'Deadlift', blocks: [{ sets: 6, reps: 2, pct: 0.70 }] },
-    { lift: 'Bench', blocks: [{ sets: 3, reps: 2, pct: 0.85 }] },
-    { lift: 'Squat', blocks: [{ sets: 3, reps: 8, pct: 0.80 }] },
-
-    { lift: 'Deadlift', blocks: [{ sets: 3, reps: 8, pct: 0.80 }] },
-    { lift: 'Bench', blocks: [{ sets: 6, reps: 2, pct: 0.70 }] },
-    { lift: 'Squat', blocks: [{ sets: 3, reps: 2, pct: 0.85 }] },
-
-    { lift: 'Deadlift', blocks: [
-      { sets: 1, reps: 2, pct: 0.90 },
-      { sets: 1, reps: 1, pct: 0.925 },
-      { sets: 1, reps: 1, pct: 0.95 },
-      { sets: 1, reps: 'AMRAP', pct: 0.80 },
-    ]},
-    { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.85 }] },
-    { lift: 'Squat', blocks: [{ sets: 5, reps: 2, pct: 0.75 }] },
-
-    { lift: 'Deadlift', blocks: [{ sets: 5, reps: 2, pct: 0.75 }] },
-    { lift: 'Bench', blocks: [
-      { sets: 1, reps: 2, pct: 0.90 },
-      { sets: 1, reps: 1, pct: 0.925 },
-      { sets: 1, reps: 1, pct: 0.95 },
-      { sets: 1, reps: 'AMRAP', pct: 0.80 },
-    ]},
-    { lift: 'Squat', blocks: [{ sets: 3, reps: 5, pct: 0.85 }] },
-
-    { lift: 'Deadlift', blocks: [{ sets: 3, reps: 5, pct: 0.85 }] },
-    { lift: 'Bench', blocks: [{ sets: 5, reps: 2, pct: 0.75 }] },
-    { lift: 'Squat', blocks: [
-      { sets: 1, reps: 2, pct: 0.90 },
-      { sets: 1, reps: 1, pct: 0.925 },
-      { sets: 1, reps: 1, pct: 0.95 },
-      { sets: 1, reps: 'AMRAP', pct: 0.80 },
-    ]},
+    {
+      lift: 'Deadlift',
+      type: 'training',
+      label: 'Pre-meet',
+      blocks: [
+        { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
+        { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
+        { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
+        { sets: 3, reps: 3, pct: 0.80, labelKey: 'backoff' },
+      ],
+    },
+    {
+      lift: 'Bench',
+      type: 'training',
+      label: 'Pre-meet',
+      blocks: [
+        { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
+        { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
+        { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
+        { sets: 3, reps: 3, pct: 0.80, labelKey: 'backoff' },
+      ],
+    },
+    {
+      lift: 'Squat',
+      type: 'training',
+      label: 'Pre-meet',
+      blocks: [
+        { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
+        { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
+        { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
+        { sets: 3, reps: 3, pct: 0.80, labelKey: 'backoff' },
+      ],
+    },
   ];
 
   const workouts = [];
-  let num = 1;
 
-  program.forEach(day => {
+  program.forEach((day, dayIndex) => {
     const sets = [];
 
     day.blocks.forEach(block => {
       for (let i = 0; i < block.sets; i++) {
         sets.push({
+          labelKey: block.labelKey || null,
+          label: block.label || null,
           reps: block.reps,
           pct: block.pct,
           weight: round25(oneRMs[day.lift] * block.pct),
@@ -223,43 +272,22 @@ function generateProgram(s, b, d) {
     const firstWorkWeight = sets.length ? sets[0].weight : 20;
     const warmups = generateWarmups(firstWorkWeight);
 
-    const accessories = ACCESSORIES[day.lift].map(a => {
-  const baseMap = { squat: s, bench: b, deadlift: d };
-
-  const mainReps = day.blocks[0].reps;
-
-  const intensityFactor =
-    mainReps <= 3 ? 0.9 :
-    mainReps >= 10 ? 1.1 :
-    1.0;
-
-  const baseWeight = a.lift
-    ? round25(baseMap[a.lift] * a.pct * intensityFactor)
-    : 0;
-
-  return {
-    ...a,
-    weight: baseWeight,
-    done: Array(a.sets).fill(false),
-    weights: Array(a.sets).fill(baseWeight),
-  };
-});
-
     workouts.push({
-      number: num++,
-      day: day.day,
-      type: 'training',
+      number: dayIndex + 1,
+      type: day.type,
       lift: day.lift,
+      label: day.label,
       warmups,
       sets,
-      accessories,
+      accessories: [],
     });
   });
 
   workouts.push({
-    number: num++,
+    number: 28,
     type: 'rest',
     lift: null,
+    label: 'SBD Meet Day',
     warmups: [],
     sets: [],
     accessories: [],
@@ -651,7 +679,7 @@ function handleToggle(fn) {
       key={i}
       set={set}
       index={i}
-      label={set.label || `${t.set} ${i + 1}`}
+      label={set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`}
       isWarmup={false}
       isActive={!isReadOnly && allWarmupsDone && i === firstIncomplete}
       isReadOnly={isReadOnly}

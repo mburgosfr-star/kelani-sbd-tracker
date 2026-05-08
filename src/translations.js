@@ -41,6 +41,10 @@ export const translations = {
     now: 'NU',
     restTime: 'Rusttijd',
     readyNextSet: 'Klaar voor volgende set!',
+    opener: 'Opener',
+    secondAttempt: 'Tweede poging',
+    thirdAttempt: 'Derde poging',
+    backoff: 'Back-off',
 
     startProgram: 'Start programma',
     completeWorkout: 'Workout voltooien',
@@ -113,6 +117,10 @@ export const translations = {
     now: 'NOW',
     restTime: 'Rest time',
     readyNextSet: 'Ready for next set!',
+    opener: 'Opener',
+    secondAttempt: 'Second attempt',
+    thirdAttempt: 'Third attempt',
+    backoff: 'Backoff',
 
     startProgram: 'Start program',
     completeWorkout: 'Complete workout',
@@ -185,6 +193,10 @@ export const translations = {
     now: 'ARA',
     restTime: 'Temps de descans',
     readyNextSet: 'A punt per a la sèrie següent!',
+    opener: 'Obertura',
+    secondAttempt: 'Segon intent',
+    thirdAttempt: 'Tercer intent',
+    backoff: 'Back-off',
 
     startProgram: 'Inicia el programa',
     completeWorkout: "Finalitza l'entrenament",
