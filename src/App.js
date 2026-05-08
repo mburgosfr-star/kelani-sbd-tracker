@@ -42,6 +42,14 @@ function epley(weight, reps) {
   return Math.round(weight * (1 + reps / 30));
 }
 
+function calculatePrsFromHistory(history) {
+  return {
+    Squat: Math.max(0, ...history.filter(h => h.lift === 'Squat').map(h => Number(h.e1rm) || 0)),
+    Bench: Math.max(0, ...history.filter(h => h.lift === 'Bench').map(h => Number(h.e1rm) || 0)),
+    Deadlift: Math.max(0, ...history.filter(h => h.lift === 'Deadlift').map(h => Number(h.e1rm) || 0)),
+  };
+}
+
 function normalizeBodyWeights(data) {
   const entries = [];
 
@@ -99,17 +107,35 @@ function normalizeBodyWeights(data) {
 
 function hydrateWorkoutsWithHistory(workouts, history) {
   return workouts.map(workout => {
+    const savedSnapshot = history.find(
+      entry =>
+        entry.workoutNumber === workout.number &&
+        entry.workoutSnapshot &&
+        (entry.lift === workout.lift || workout.type === 'meet')
+    );
+
+    if (savedSnapshot?.workoutSnapshot) {
+      return savedSnapshot.workoutSnapshot;
+    }
+
     const saved = history.find(
       entry =>
         entry.workoutNumber === workout.number &&
-        entry.lift === workout.lift
+        (entry.lift === workout.lift || workout.type === 'meet')
     );
 
-    if (saved?.workoutSnapshot) {
-      return saved.workoutSnapshot;
-    }
-
     if (saved) {
+      if (workout.type === 'meet') {
+        return {
+          ...workout,
+          lifts: (workout.lifts || []).map(liftBlock => ({
+            ...liftBlock,
+            warmups: (liftBlock.warmups || []).map(w => ({ ...w, done: true })),
+            sets: (liftBlock.sets || []).map(s => ({ ...s, done: true })),
+          })),
+        };
+      }
+
       return {
         ...workout,
         warmups: (workout.warmups || []).map(w => ({ ...w, done: true })),
@@ -123,6 +149,14 @@ function hydrateWorkoutsWithHistory(workouts, history) {
 
     return workout;
   });
+}
+
+function getCompletedWorkoutCount(history) {
+  return new Set(
+    (history || [])
+      .filter(h => h.lift && h.workoutNumber > 0)
+      .map(h => h.workoutNumber)
+  ).size;
 }
 
 function generateWarmups(firstWorkWeight) {
@@ -1409,9 +1443,7 @@ const t = translations[language];
   const [currentCycle, setCurrentCycle] = useState(1);
   const [bodyWeights, setBodyWeights] = useState([]);
   const [showBodyWeightModal, setShowBodyWeightModal] = useState(false);
-    const currentIndex = history.filter(
-    h => h.lift && h.workoutNumber > 0
-  ).length;
+  const currentIndex = getCompletedWorkoutCount(history);
   const PROGRAM_VERSION = 'cube-27-v1';
 
 useEffect(() => {
@@ -1493,11 +1525,7 @@ useEffect(() => {
     setCurrentCycle(data.currentCycle || 1);
     setBodyWeights(normalizeBodyWeights(data));
 
-    setSelectedIndex(
-    (data.history || []).filter(
-        h => h.lift && h.workoutNumber > 0
-    ).length
-  );
+    setSelectedIndex(getCompletedWorkoutCount(data.history || []));
   
     setShowNewCycle(false);
     setScreen('dashboard');
@@ -1835,6 +1863,90 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     
     const workout = workouts[selectedIndex];
     const finishedWorkout = JSON.parse(JSON.stringify(workout));
+
+    if (workout.type === 'meet') {
+  const today = new Date().toLocaleDateString('nl-NL');
+
+  const results = (workout.lifts || []).map(liftBlock => {
+    const sets = liftBlock.sets || [];
+
+    const topSet = sets.reduce(
+      (best, s) =>
+        epley(Number(s.weight) || 0, Number(s.reps) || 0) >
+        epley(Number(best.weight) || 0, Number(best.reps) || 0)
+          ? s
+          : best,
+      sets[0]
+    );
+
+    const oneRMToday = sets.length
+      ? Math.max(...sets.map(s => Number(s.weight) || 0))
+      : 0;
+
+    const e1RMToday = sets.length
+      ? Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0)))
+      : 0;
+
+    const previousBestE1RM = Math.max(
+      0,
+      ...history
+        .filter(h => h.lift === liftBlock.lift && h.workoutNumber !== workout.number)
+        .map(h => Number(h.e1rm) || 0)
+    );
+
+    const previousBest1RM = Math.max(
+      0,
+      ...history
+        .filter(h => h.lift === liftBlock.lift && h.workoutNumber !== workout.number)
+        .map(h => Number(h.topWeight) || 0)
+    );
+
+    return {
+      lift: liftBlock.lift,
+      oneRMToday,
+      e1RMToday,
+      previousBest1RM,
+      previousBestE1RM,
+      best1RM: Math.max(previousBest1RM, oneRMToday),
+      bestE1RM: Math.max(previousBestE1RM, e1RMToday),
+      is1RMPR: oneRMToday > previousBest1RM,
+      isE1RMPR: e1RMToday > previousBestE1RM,
+      topSet,
+    };
+  });
+
+  setCompletedSummary({
+    type: 'meet',
+    results,
+    bodyWeight: latestBodyWeight,
+  });
+
+    const withoutCurrentMeet = history.filter(
+    h => h.workoutNumber !== workout.number
+  );
+
+  const newEntries = results.map(result => ({
+    workoutNumber: workout.number,
+    lift: result.lift,
+    topWeight: result.oneRMToday,
+    topReps: 1,
+    e1rm: result.e1RMToday,
+    date: today,
+    workoutSnapshot: finishedWorkout,
+  }));
+
+  const nextHistory = [...withoutCurrentMeet, ...newEntries];
+
+  setHistory(nextHistory);
+  setPrs(calculatePrsFromHistory(nextHistory));
+
+  setCompletedWorkout(finishedWorkout);
+  setCompletedWorkoutIndex(selectedIndex);
+  setSelectedIndex(Math.min(currentIndex + 1, workouts.length - 1));
+  setScreen('completed');
+
+  return;
+}
   
     if (workout.type === 'training' && ['Deadlift', 'Bench', 'Squat'].includes(workout.lift)) {
     const sets = workout.sets || [];
@@ -1849,7 +1961,7 @@ const oneRMToday = sets.length
   : 0;
 
 const e1RMToday = sets.length
-  ? Math.round(Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0))))
+  ? Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0)))
   : 0;
 
 const previousBestE1RM = prs[workout.lift] || 0;
@@ -1929,7 +2041,7 @@ setCompletedSummary({
   setCompletedWorkout(finishedWorkout);
   setCompletedWorkoutIndex(selectedIndex);
 
-  setSelectedIndex(currentIndex + 1);
+  setSelectedIndex(Math.min(currentIndex + 1, workouts.length - 1));
 
   setScreen('completed');
 }
@@ -1937,8 +2049,14 @@ function selectWorkout(idx) {
   setSelectedIndex(idx);
   setScreen('current');
 }
+
 if (screen === 'onboarding') return <Onboarding onStart={handleStart} t={t}/>;
-  if (screen !== 'onboarding' && (!workouts.length || !workouts[currentIndex])) {
+
+if (screen !== 'onboarding' && !workouts.length) {
+  return <Onboarding onStart={handleStart} t={t}/>;
+}
+
+if (screen === 'current' && !workouts[selectedIndex]) {
   return <Onboarding onStart={handleStart} t={t}/>;
 }
 
@@ -1964,6 +2082,15 @@ function skipBodyWeight() {
 
 function updateBodyWeight() {
   setShowBodyWeightModal(true);
+}
+
+function changeScreen(nextScreen) {
+  if (nextScreen === 'current') {
+    const safeIndex = Math.min(currentIndex, workouts.length - 1);
+    setSelectedIndex(Math.max(0, safeIndex));
+  }
+
+  setScreen(nextScreen);
 }
 
 const best1RMs = {
@@ -2201,42 +2328,66 @@ const strengthRatio = latestBodyWeight
   marginBottom: 20,
   textAlign: 'left'
 }}>
-  {(() => {
-    const sets = completedWorkout?.sets || [];
-    const lift = completedWorkout?.lift;
 
-    const oneRMToday = sets.length
-      ? Math.max(...sets.map(s => Number(s.weight) || 0))
-      : 0;
+{(() => {
+  const row = (label, value, isPR) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+      <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
+      <strong style={{ color: '#ffffff' }}>
+        {value} kg {isPR ? '🚀' : ''}
+      </strong>
+    </div>
+  );
 
-    const e1RMToday = sets.length
-      ? Math.round(Math.max(...sets.map(s => (Number(s.weight) || 0) * (1 + (Number(s.reps) || 0) / 30))))
-      : 0;
-
-    const best1RM = completedSummary?.best1RM || oneRMToday;
-    const bestE1RM = completedSummary?.bestE1RM || completedSummary?.e1rm || e1RMToday;
-
-    const is1RMPR = oneRMToday >= best1RM && oneRMToday > 0;
-    const isE1RMPR = e1RMToday >= bestE1RM && e1RMToday > 0;
-
-    const row = (label, value, isPR) => (
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
-        <strong style={{ color: '#ffffff' }}>
-          {value} kg {isPR ? '🚀' : ''}
-        </strong>
-      </div>
-    );
+  if (completedWorkout?.type === 'meet') {
+    const liftLabel = lift =>
+      lift === 'Squat' ? t.squat :
+      lift === 'Bench' ? t.bench :
+      t.deadlift;
 
     return (
       <>
-        {row(t.oneRMToday, oneRMToday, is1RMPR)}
-        {row(t.e1RMToday, e1RMToday, isE1RMPR)}
-        {row(t.best1RM, Math.max(best1RM, oneRMToday), is1RMPR)}
-        {row(t.bestE1RM, Math.max(bestE1RM, e1RMToday), isE1RMPR)}
+        {(completedSummary?.results || []).map(result => (
+          <div key={result.lift} style={{ marginBottom: 14 }}>
+            <div style={{ fontWeight: 800, color: THEME.primary, marginBottom: 6 }}>
+              {liftLabel(result.lift)}
+            </div>
+            {row(t.oneRMToday, result.oneRMToday, result.is1RMPR)}
+            {row(t.e1RMToday, result.e1RMToday, result.isE1RMPR)}
+            {row(t.best1RM, result.best1RM, result.is1RMPR)}
+            {row(t.bestE1RM, result.bestE1RM, result.isE1RMPR)}
+          </div>
+        ))}
       </>
     );
-  })()}
+  }
+
+  const sets = completedWorkout?.sets || [];
+
+  const oneRMToday = sets.length
+    ? Math.max(...sets.map(s => Number(s.weight) || 0))
+    : 0;
+
+  const e1RMToday = sets.length
+      ? Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0)))
+  : 0;
+
+  const best1RM = completedSummary?.best1RM || oneRMToday;
+  const bestE1RM = completedSummary?.bestE1RM || completedSummary?.e1rm || e1RMToday;
+
+  const is1RMPR = oneRMToday >= best1RM && oneRMToday > 0;
+  const isE1RMPR = e1RMToday >= bestE1RM && e1RMToday > 0;
+
+  return (
+    <>
+      {row(t.oneRMToday, oneRMToday, is1RMPR)}
+      {row(t.e1RMToday, e1RMToday, isE1RMPR)}
+      {row(t.best1RM, Math.max(best1RM, oneRMToday), is1RMPR)}
+      {row(t.bestE1RM, Math.max(bestE1RM, e1RMToday), isE1RMPR)}
+    </>
+  );
+})()}
+
 </div>
 
 <div style={{ background: THEME.card,
@@ -2342,7 +2493,7 @@ style={{
   />
 )}
 
-      <BottomNav screen={screen} onChange={setScreen} t={t} />
+      <BottomNav screen={screen} onChange={changeScreen} t={t} />
     </div>
   );
 }
