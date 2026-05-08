@@ -39,6 +39,22 @@ function calculatePrsFromHistory(history) {
   };
 }
 
+function getEntryCycle(entry) {
+  return Number(entry.cycle) || 1;
+}
+
+function getCompletedWorkoutCount(history, cycle) {
+  return new Set(
+    (history || [])
+      .filter(h =>
+        h.lift &&
+        h.workoutNumber > 0 &&
+        getEntryCycle(h) === cycle
+      )
+      .map(h => h.workoutNumber)
+  ).size;
+}
+
 function normalizeBodyWeights(data) {
   const entries = [];
 
@@ -94,12 +110,13 @@ function normalizeBodyWeights(data) {
   );
 }
 
-function hydrateWorkoutsWithHistory(workouts, history) {
+function hydrateWorkoutsWithHistory(workouts, history, cycle) {
   return workouts.map(workout => {
     const savedSnapshot = history.find(
       entry =>
         entry.workoutNumber === workout.number &&
         entry.workoutSnapshot &&
+        getEntryCycle(entry) === cycle &&
         (entry.lift === workout.lift || workout.type === 'meet')
     );
 
@@ -110,6 +127,7 @@ function hydrateWorkoutsWithHistory(workouts, history) {
     const saved = history.find(
       entry =>
         entry.workoutNumber === workout.number &&
+        getEntryCycle(entry) === cycle &&
         (entry.lift === workout.lift || workout.type === 'meet')
     );
 
@@ -138,14 +156,6 @@ function hydrateWorkoutsWithHistory(workouts, history) {
 
     return workout;
   });
-}
-
-function getCompletedWorkoutCount(history) {
-  return new Set(
-    (history || [])
-      .filter(h => h.lift && h.workoutNumber > 0)
-      .map(h => h.workoutNumber)
-  ).size;
 }
 
 function generateWarmups(firstWorkWeight) {
@@ -603,13 +613,13 @@ function BodyWeightModal({ onSave, onSkip, t }) {
   );
 }
 
-function NewCycleModal({ prs, onStart }) {
+function NewCycleModal({ prs, onStart, t }) {
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
       <div style={{ background: THEME.card, borderRadius: 12, padding: 24, maxWidth: 340, width: '90%' }}>
         <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 10 }}>🏆</div>
-        <h3 style={{ margin: '0 0 8px', textAlign: 'center' }}>t.cycleCompleted</h3>
-        <p style={{ color: THEME.muted, fontSize: 14, margin: '0 0 20px', textAlign: 'center' }}>Nieuwe gewichten berekend op basis van je beste prestaties.</p>
+        <h3 style={{ margin: '0 0 8px', textAlign: 'center' }}>{t.cycleCompleted}</h3>
+        <p style={{ color: THEME.muted, fontSize: 14, margin: '0 0 20px', textAlign: 'center' }}>{t.newCycleWeights}</p>
         <div style={{ background: THEME.card,
 border: `1px solid ${THEME.border}`,
 color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
@@ -621,7 +631,7 @@ color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
           ))}
         </div>
         <button onClick={onStart} style={{ width: '100%', padding: 14, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.border}`, color: 'white', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
-          t.startNewCycle 🚀
+          {t.startNewCycle} 🚀
         </button>
       </div>
     </div>
@@ -928,7 +938,7 @@ function handleToggle(fn) {
     : t.completeWorkout}
 </button>
 
-      {showNewCycle && <NewCycleModal prs={newCyclePRs} onStart={onStartNewCycle} />}
+      {showNewCycle && <NewCycleModal prs={newCyclePRs} onStart={onStartNewCycle} t={t} />}
     </div>
   );
 }
@@ -1427,7 +1437,7 @@ const t = translations[language];
   const [currentCycle, setCurrentCycle] = useState(1);
   const [bodyWeights, setBodyWeights] = useState([]);
   const [showBodyWeightModal, setShowBodyWeightModal] = useState(false);
-  const currentIndex = getCompletedWorkoutCount(history);
+  const currentIndex = getCompletedWorkoutCount(history, currentCycle);
   const PROGRAM_VERSION = 'cube-27-v1';
 
 useEffect(() => {
@@ -1500,16 +1510,17 @@ useEffect(() => {
     }
 
     const savedHistory = data.history || [];
+    const savedCycle = data.currentCycle || 1;
     const generatedWorkouts = generateProgram(squat, bench, deadlift);
 
-    setWorkouts(hydrateWorkoutsWithHistory(generatedWorkouts, savedHistory));
+    setWorkouts(hydrateWorkoutsWithHistory(generatedWorkouts, savedHistory, savedCycle));
     setHistory(savedHistory);
     setPrs(savedPrs);
     setAccessoryPRs(data.accessoryPRs || {});
-    setCurrentCycle(data.currentCycle || 1);
+    setCurrentCycle(savedCycle);
     setBodyWeights(normalizeBodyWeights(data));
 
-    setSelectedIndex(getCompletedWorkoutCount(data.history || []));
+    setSelectedIndex(getCompletedWorkoutCount(savedHistory, savedCycle));
   
     setShowNewCycle(false);
     setScreen('dashboard');
@@ -1595,9 +1606,14 @@ function handleStartNewCycle() {
     return;
   }
 
+  const nextCycle = currentCycle + 1;
   const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift);
+
+  setCurrentCycle(nextCycle);
   setWorkouts(newWorkouts);
   setSelectedIndex(0);
+  setCompletedWorkout(null);
+  setCompletedSummary(null);
   setShowNewCycle(false);
   setScreen('all');
 }
@@ -1911,6 +1927,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 
   const newEntries = results.map(result => ({
     workoutNumber: workout.number,
+    cycle: currentCycle,
     lift: result.lift,
     topWeight: result.oneRMToday,
     topReps: 1,
@@ -1927,9 +1944,11 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   setCompletedWorkout(finishedWorkout);
   setCompletedWorkoutIndex(selectedIndex);
   setSelectedIndex(Math.min(currentIndex + 1, workouts.length - 1));
+  setShowNewCycle(true);
   setScreen('completed');
 
   return;
+
 }
   
     if (workout.type === 'training' && ['Deadlift', 'Bench', 'Squat'].includes(workout.lift)) {
@@ -1989,6 +2008,7 @@ setCompletedSummary({
 
   const newEntry = {
     workoutNumber: workout.number,
+    cycle: currentCycle,
     lift: workout.lift,
     topWeight: oneRMToday,
     topReps: sets.find(s => Number(s.weight) === oneRMToday)?.reps || topSet.reps,
@@ -2018,9 +2038,6 @@ setCompletedSummary({
       });
     });
   }
-
-  const isLastWorkout = currentIndex === workouts.length - 2;
-  if (isLastWorkout) setShowNewCycle(true);
 
   setCompletedWorkout(finishedWorkout);
   setCompletedWorkoutIndex(selectedIndex);
@@ -2464,6 +2481,14 @@ style={{
   <BodyWeightModal
     onSave={saveBodyWeight}
     onSkip={skipBodyWeight}
+    t={t}
+  />
+)}
+
+{showNewCycle && screen === 'completed' && (
+  <NewCycleModal
+    prs={prs}
+    onStart={handleStartNewCycle}
     t={t}
   />
 )}

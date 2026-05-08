@@ -62,6 +62,7 @@ export const translations = {
     cycle: 'Cyclus',
     cycleCompleted: 'Cyclus voltooid!',
     startNewCycle: 'Nieuwe cyclus starten',
+    newCycleWeights: 'Nieuwe gewichten berekend op basis van je beste prestaties.',
 
     cancel: 'Annuleren',
     save: 'Opslaan',
@@ -139,6 +140,7 @@ export const translations = {
     cycle: 'Cycle',
     cycleCompleted: 'Cycle completed!',
     startNewCycle: 'Start new cycle',
+    newCycleWeights: 'Nieuwe gewichten berekend op basis van je beste prestaties.',
 
     cancel: 'Cancel',
     save: 'Save',
@@ -216,6 +218,7 @@ export const translations = {
     cycle: 'Cicle',
     cycleCompleted: 'Cicle complet!',
     startNewCycle: 'Comença un nou cicle',
+    newCycleWeights: 'Nous pesos calculats a partir dels teus millors resultats.',
 
     cancel: 'Cancel·la',
     save: 'Desa',
