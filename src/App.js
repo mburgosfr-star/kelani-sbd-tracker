@@ -284,14 +284,45 @@ function generateProgram(s, b, d) {
   });
 
   workouts.push({
-    number: 28,
-    type: 'rest',
-    lift: null,
-    label: 'SBD Meet Day',
-    warmups: [],
-    sets: [],
-    accessories: [],
-  });
+  number: 28,
+  type: 'meet',
+  lift: 'SBD',
+  labelKey: 'meetDay',
+  lifts: ['Squat', 'Bench', 'Deadlift'].map(lift => {
+    const sets = [
+      {
+        labelKey: 'opener',
+        reps: 1,
+        pct: 0.90,
+        weight: round25(oneRMs[lift] * 0.90),
+        done: false,
+      },
+      {
+        labelKey: 'secondAttempt',
+        reps: 1,
+        pct: 0.975,
+        weight: round25(oneRMs[lift] * 0.975),
+        done: false,
+      },
+      {
+        labelKey: 'thirdAttempt',
+        reps: 1,
+        pct: 1.025,
+        weight: round25(oneRMs[lift] * 1.025),
+        done: false,
+      },
+    ];
+
+    return {
+      lift,
+      warmups: generateWarmups(sets[0].weight),
+      sets,
+    };
+  }),
+  warmups: [],
+  sets: [],
+  accessories: [],
+});
 
   return workouts;
 }
@@ -577,7 +608,7 @@ color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
   );
 }
 
-function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessorySet, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
+function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessorySet, onToggleMeetWarmup, onToggleMeetSet, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
   const [showBodyWeight, setShowBodyWeight] = useState(false);
 
   if (workout.type === 'rest') {
@@ -597,6 +628,118 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
         </div>
         <button onClick={onStartNewCycle} style={{ marginTop: 16, width: '100%', padding: 14, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.border}`, color: 'white', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
           {t.startNewCycle}
+        </button>
+      </div>
+    );
+  }
+
+    if (workout.type === 'meet') {
+    const liftLabel = lift =>
+      lift === 'Squat' ? t.squat :
+      lift === 'Bench' ? t.bench :
+      t.deadlift;
+
+    const allMeetDone = (workout.lifts || []).every(liftBlock =>
+      (liftBlock.sets || []).every(s => s.done)
+    );
+
+    const firstIncompleteLiftIndex = (workout.lifts || []).findIndex(liftBlock =>
+      (liftBlock.warmups || []).some(w => !w.done) ||
+      (liftBlock.sets || []).some(s => !s.done)
+    );
+
+    return (
+      <div style={{ maxWidth: 500, margin: '0 auto', padding: '8px 12px 12px', paddingBottom: timer !== null ? 100 : 16, fontFamily: 'sans-serif' }}>
+        <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
+          {t.workout} {workout.number} — {t.meetDay}
+        </h2>
+
+        {(workout.lifts || []).map((liftBlock, li) => {
+          const firstIncompleteWarmup = (liftBlock.warmups || []).findIndex(w => !w.done);
+          const firstIncompleteSet = (liftBlock.sets || []).findIndex(s => !s.done);
+          const allWarmupsDone = (liftBlock.warmups || []).every(w => w.done);
+
+          return (
+            <div
+              key={liftBlock.lift}
+              style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}
+            >
+              <div style={{
+                padding: '8px 16px',
+                fontSize: 16,
+                fontWeight: 800,
+                color: THEME.text,
+                borderBottom: `1px solid ${THEME.border}`,
+              }}>
+                {liftLabel(liftBlock.lift)}
+              </div>
+
+              {(liftBlock.warmups || []).map((w, wi) => (
+                <SetRow
+                  key={`warmup-${wi}`}
+                  set={w}
+                  index={wi}
+                  label={`${t.warmup} ${wi + 1}`}
+                  isWarmup={true}
+                  isActive={
+                    !isReadOnly &&
+                    li === firstIncompleteLiftIndex &&
+                    wi === firstIncompleteWarmup
+                  }
+                  isReadOnly={isReadOnly}
+                  onToggle={() => handleToggle(() => onToggleMeetWarmup(li, wi))}
+                  t={t}
+                />
+              ))}
+
+              {(liftBlock.sets || []).map((set, si) => (
+                <SetRow
+                  key={`attempt-${si}`}
+                  set={set}
+                  index={si}
+                  label={set.labelKey ? t[set.labelKey] : `${t.set} ${si + 1}`}
+                  isWarmup={false}
+                  isActive={
+                    !isReadOnly &&
+                    li === firstIncompleteLiftIndex &&
+                    allWarmupsDone &&
+                    si === firstIncompleteSet
+                  }
+                  isReadOnly={isReadOnly}
+                  onToggle={() => handleToggle(() => onToggleMeetSet(li, si))}
+                  onWeightChange={val => onMeetWeightChange(li, si, val)}
+                  t={t}
+                />
+              ))}
+            </div>
+          );
+        })}
+
+        <button
+          onClick={() => {
+            if (isReadOnly) return;
+            onComplete();
+          }}
+          disabled={!allMeetDone || isReadOnly}
+          style={{
+            width: '100%',
+            padding: 14,
+            fontSize: 16,
+            fontWeight: 600,
+            background: THEME.card,
+            color: (allMeetDone && !isReadOnly) ? 'white' : '#666',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 8,
+            cursor: (allMeetDone && !isReadOnly) ? 'pointer' : 'not-allowed',
+            marginBottom: 10,
+            opacity: 1
+          }}
+        >
+          {isReadOnly
+            ? t.previewNotCompletable
+            : allMeetDone
+            ? `${t.completeWorkout} ✓`
+            : t.completeWorkout}
         </button>
       </div>
     );
@@ -1585,6 +1728,87 @@ function changeWeight(type, index, val) {
   );
 }
 
+function toggleMeetWarmup(liftIndex, warmupIndex) {
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: w.lifts.map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
+            warmups: liftBlock.warmups.map((wu, i) =>
+              i === warmupIndex ? { ...wu, done: !wu.done } : wu
+            ),
+          };
+        }),
+      };
+    })
+  );
+}
+
+function hasMoreMeetSets(workout, liftIndex, setIndex) {
+  return (workout.lifts || []).some((liftBlock, li) => {
+    if (li < liftIndex) return false;
+    if (li > liftIndex) return (liftBlock.sets || []).some(s => !s.done);
+
+    return (liftBlock.sets || []).some((s, si) => si > setIndex && !s.done);
+  });
+}
+
+function toggleMeetSet(liftIndex, setIndex) {
+  const workout = workouts[selectedIndex];
+
+  if (hasMoreMeetSets(workout, liftIndex, setIndex)) {
+    startTimer(getRestTime());
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: w.lifts.map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
+            sets: liftBlock.sets.map((s, si) =>
+              si === setIndex ? { ...s, done: !s.done } : s
+            ),
+          };
+        }),
+      };
+    })
+  );
+}
+
+function changeMeetWeight(liftIndex, setIndex, val) {
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: w.lifts.map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
+            sets: liftBlock.sets.map((s, si) =>
+              si === setIndex ? { ...s, weight: val } : s
+            ),
+          };
+        }),
+      };
+    })
+  );
+}
+
 function changeAccessoryWeight(accIndex, setIndex, val) {
   setWorkouts(prev =>
     prev.map((w, wi) => {
@@ -1797,6 +2021,9 @@ const strengthRatio = latestBodyWeight
           t={t}
           timer={timer}
           setTimer={setTimer}
+          onToggleMeetWarmup={toggleMeetWarmup}
+          onToggleMeetSet={toggleMeetSet}
+          onMeetWeightChange={changeMeetWeight}
         />
       )}
 

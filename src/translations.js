@@ -45,6 +45,7 @@ export const translations = {
     secondAttempt: 'Tweede poging',
     thirdAttempt: 'Derde poging',
     backoff: 'Back-off',
+    meetDay: 'SBD-meetdag',
 
     startProgram: 'Start programma',
     completeWorkout: 'Workout voltooien',
@@ -121,6 +122,7 @@ export const translations = {
     secondAttempt: 'Second attempt',
     thirdAttempt: 'Third attempt',
     backoff: 'Backoff',
+    meetDay: 'SBD-meetdag',
 
     startProgram: 'Start program',
     completeWorkout: 'Complete workout',
@@ -197,6 +199,7 @@ export const translations = {
     secondAttempt: 'Segon intent',
     thirdAttempt: 'Tercer intent',
     backoff: 'Back-off',
+    meetDay: 'Dia de competició SBD',
 
     startProgram: 'Inicia el programa',
     completeWorkout: "Finalitza l'entrenament",
