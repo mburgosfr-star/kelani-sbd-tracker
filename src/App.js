@@ -21,17 +21,6 @@ const THEME = {
 
 const dash = v => (v ? v : '—');
 
-const ACCESSORIES = {
-  Deadlift: [
-    { name: 'Pause Bench', sets: 3, reps: 5, pct: 0.60, lift: 'bench', alternative: null },
-  ],
-  Bench: [
-  { name: 'Pause Squat', sets: 3, reps: 5, pct: 0.60, lift: 'squat', alternative: null },
-],
-  Squat: [
-    { name: 'Pause Bench', sets: 3, reps: 5, pct: 0.60, lift: 'bench', alternative: null },
-  ],
-};
 
 function getRestTime() {
   return 300;
@@ -361,9 +350,6 @@ function generateProgram(s, b, d) {
   return workouts;
 }
 
-const MODE_LABEL = { heavy: 'Zwaar', explosive: 'Explosief', rep: 'Repetitie', peak: 'Peak' };
-const MODE_COLOR = { heavy: '#e67e22', explosive: '#27ae60', rep: '#2980b9', peak: '#8e44ad' };
-const HEADER_COLOR = { 1: '#2c3e50', 2: '#1a5276', 3: '#154360', peak: '#8e44ad', rest: '#95a5a6' };
 
 function RestTimer({ seconds, onDismiss, t }) {
   const [remaining, setRemaining] = useState(seconds);
@@ -780,8 +766,6 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
   }
 
   const allDone = (workout.sets || []).every(s => s.done);
-  const allAccessoriesDone = (workout.accessories || []).every(a => (a.done || []).every(d => d));
-  const headerBg = workout.type === 'peak' ? HEADER_COLOR.peak : HEADER_COLOR[workout.cycle];
 
 function handleToggle(fn) {
   if (isReadOnly) return;
