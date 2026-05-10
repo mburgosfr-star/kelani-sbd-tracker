@@ -43,6 +43,19 @@ function getEntryCycle(entry) {
   return Number(entry.cycle) || 1;
 }
 
+function getEntryWorkoutNumber(entry) {
+  const workoutNumber = Number(entry.workoutNumber);
+  return Number.isFinite(workoutNumber) ? workoutNumber : 0;
+}
+
+function getAbsoluteWorkoutIndex(entry) {
+  return ((getEntryCycle(entry) - 1) * 28) + getEntryWorkoutNumber(entry);
+}
+
+function getWorkoutLabel(entry) {
+  return `C${getEntryCycle(entry)}W${getEntryWorkoutNumber(entry)}`;
+}
+
 function getCompletedWorkoutCount(history, cycle) {
   return new Set(
     (history || [])
@@ -178,8 +191,8 @@ function getWorkoutTypeLabel(workout, t) {
 }
 
 function generateWarmups(firstWorkWeight) {
-  function round25(w) {
-    return Math.round(w / 2.5) * 2.5;
+  function roundUp10(w) {
+    return Math.ceil(w / 10) * 10;
   }
 
   const weight = Number(firstWorkWeight) || 0;
@@ -189,37 +202,40 @@ function generateWarmups(firstWorkWeight) {
   let template = [];
 
   if (weight <= 50) {
-    template = [{ pct: null, weight: 20, reps: 5 }];
+    template = [{ weight: 20, reps: 5 }];
   } else if (weight <= 100) {
     template = [
-      { pct: null, weight: 20, reps: 5 },
+      { weight: 20, reps: 5 },
       { pct: 0.60, reps: 3 },
     ];
   } else if (weight <= 160) {
     template = [
-      { pct: null, weight: 20, reps: 5 },
+      { weight: 20, reps: 5 },
       { pct: 0.50, reps: 5 },
       { pct: 0.75, reps: 3 },
     ];
   } else {
     template = [
-      { pct: null, weight: 20, reps: 5 },
+      { weight: 20, reps: 5 },
       { pct: 0.45, reps: 5 },
       { pct: 0.65, reps: 3 },
       { pct: 0.80, reps: 2 },
-      { pct: 0.90, reps: 1 },
     ];
   }
 
   const seen = new Set();
 
   return template
-    .map(w => ({
-      weight: w.weight ?? round25(weight * w.pct),
-      reps: w.reps,
-      isWarmup: true,
-      done: false,
-    }))
+    .map(w => {
+      const warmupWeight = w.weight ?? roundUp10(weight * w.pct);
+
+      return {
+        weight: warmupWeight,
+        reps: w.reps,
+        isWarmup: true,
+        done: false,
+      };
+    })
     .filter(w => w.weight > 0 && w.weight < weight)
     .filter(w => {
       if (seen.has(w.weight)) return false;
@@ -988,8 +1004,12 @@ const bestStats = {
   Deadlift: { oneRM: 0, e1rm: 0 },
 };
 
-history.forEach(entry => {
-  const label = `W${entry.workoutNumber}`;
+const sortedHistory = [...history]
+  .filter(entry => entry && entry.lift)
+  .sort((a, b) => getAbsoluteWorkoutIndex(a) - getAbsoluteWorkoutIndex(b));
+
+sortedHistory.forEach(entry => {
+  const label = getWorkoutLabel(entry);
 
   if (entry.lift && ['Deadlift', 'Bench', 'Squat'].includes(entry.lift)) {
     if (!liftData[entry.lift]) liftData[entry.lift] = [];
@@ -1001,18 +1021,21 @@ history.forEach(entry => {
 
     bestStats[entry.lift].e1rm = Math.max(bestStats[entry.lift].e1rm, entry.e1rm || 0);
 
-    liftData[entry.lift].push({
-      label,
-      oneRM: bestStats[entry.lift].oneRM || null,
-      e1rm: bestStats[entry.lift].e1rm || null,
-    });
+    if (getEntryWorkoutNumber(entry) > 0) {
+      liftData[entry.lift].push({
+        label,
+        absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
+        oneRM: bestStats[entry.lift].oneRM || null,
+        e1rm: bestStats[entry.lift].e1rm || null,
+      });
+    }
   }
 
 });
 
 const bestPerLift = {};
 
-history.forEach(entry => {
+sortedHistory.forEach(entry => {
   if (!entry.lift || !['Squat', 'Bench', 'Deadlift'].includes(entry.lift)) return;
 
   if (!bestPerLift[entry.lift]) {
@@ -1029,10 +1052,11 @@ history.forEach(entry => {
     entry.e1rm || 0
   );
 
-  if (bestPerLift.Squat && bestPerLift.Bench && bestPerLift.Deadlift) {
+  if (getEntryWorkoutNumber(entry) > 0 && bestPerLift.Squat && bestPerLift.Bench && bestPerLift.Deadlift) {
     totalData.push({
-      label: `W${entry.workoutNumber}`,
-      workoutNumber: entry.workoutNumber,
+      label: getWorkoutLabel(entry),
+      workoutNumber: getEntryWorkoutNumber(entry),
+      absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
       date: entry.date,
       oneRM:
         bestPerLift.Squat.oneRM +
@@ -1047,22 +1071,25 @@ history.forEach(entry => {
 });
 
 bodyWeights.forEach(entry => {
+  const workoutNumber = getEntryWorkoutNumber(entry);
+
   bodyData.push({
-    label: entry.date,
-    workoutNumber: entry.workoutNumber ?? 0,
+    label: getWorkoutLabel(entry),
+    workoutNumber,
+    absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
     gewicht: entry.bodyWeight,
   });
 });
 
 const sortedBodyWeights = [...bodyWeights].sort(
-  (a, b) => (a.workoutNumber ?? 0) - (b.workoutNumber ?? 0)
+  (a, b) => getAbsoluteWorkoutIndex(a) - getAbsoluteWorkoutIndex(b)
 );
 
-function getBodyWeightForWorkout(workoutNumber) {
+function getBodyWeightForWorkoutIndex(absoluteWorkoutIndex) {
   let latest = null;
 
   sortedBodyWeights.forEach(entry => {
-    if ((entry.workoutNumber ?? 0) <= workoutNumber) {
+    if (getAbsoluteWorkoutIndex(entry) <= absoluteWorkoutIndex) {
       latest = entry;
     }
   });
@@ -1071,12 +1098,13 @@ function getBodyWeightForWorkout(workoutNumber) {
 }
 
 totalData.forEach(entry => {
-  const bodyWeightForWorkout = getBodyWeightForWorkout(entry.workoutNumber);
+  const bodyWeightForWorkout = getBodyWeightForWorkoutIndex(entry.absoluteWorkoutIndex);
 
   if (!bodyWeightForWorkout) return;
 
   strengthData.push({
     label: entry.label,
+    absoluteWorkoutIndex: entry.absoluteWorkoutIndex,
     strength: Math.round((entry.e1rm / bodyWeightForWorkout) * 100) / 100,
   });
 });
@@ -1090,17 +1118,49 @@ totalData.forEach(entry => {
       );
     }
 
+    const allXTicks = [...new Set(
+      data
+        .map(item => Number(item.absoluteWorkoutIndex))
+        .filter(value => Number.isFinite(value))
+    )];
+
+    const xTicks = allXTicks.length <= 4
+      ? allXTicks
+      : [
+          allXTicks[0],
+          allXTicks[Math.floor(allXTicks.length * 0.33)],
+          allXTicks[Math.floor(allXTicks.length * 0.66)],
+          allXTicks[allXTicks.length - 1],
+        ].filter((value, index, arr) => value !== undefined && arr.indexOf(value) === index);
+
+    const labelByX = data.reduce((labels, item) => {
+      labels[item.absoluteWorkoutIndex] = item.label;
+      return labels;
+    }, {});
+
     return (
       <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-          <CartesianGrid stroke={THEME.border} />
+        <LineChart data={data} margin={{ top: 5, right: 16, left: 8, bottom: 5 }}>
+          <CartesianGrid stroke={THEME.border} vertical={false} />
           <XAxis
-  stroke={THEME.text}
-  tickFormatter={(value) => `W${value}`}
-/>
-          <YAxis stroke={THEME.text} />
+            dataKey="absoluteWorkoutIndex"
+            type="number"
+            domain={['dataMin', 'dataMax']}
+            ticks={xTicks}
+            tickFormatter={(value) => labelByX[value] || ''}
+            allowDecimals={false}
+            stroke={THEME.text}
+            tick={{ fontSize: 8 }}
+            interval={0}
+            minTickGap={0}
+          />
+          <YAxis
+            stroke={THEME.text}
+            width={42}
+            allowDecimals={false}
+          />
           <Tooltip
-  labelFormatter={(value) => `W${value}`}
+  labelFormatter={(value, payload) => payload?.[0]?.payload?.label || labelByX[value] || value}
   formatter={(value, name) => {
     if (name === 'gewicht') return [value, t.bodyweight];
     if (name === 'strength') return [value, t.strength];
@@ -1120,10 +1180,12 @@ totalData.forEach(entry => {
           {dataKeys.map((key, i) => (
           <Line
   key={key}
-  type="monotone"
+  type="linear"
   dataKey={key}
   stroke={colors[i] || THEME.primary}
-  strokeWidth={2}
+  strokeWidth={3}
+  connectNulls={true}
+  isAnimationActive={false}
   dot={{ r: 3, fill: colors[i] || THEME.primary, stroke: colors[i] || THEME.primary }}
   activeDot={{ r: 5, fill: colors[i] || THEME.primary, stroke: '#ffffff' }}
   name={
@@ -2106,6 +2168,7 @@ function saveBodyWeight(bw) {
     ...prev.filter(entry => entry.date !== today),
     {
       workoutNumber: currentIndex,
+      cycle: currentCycle,
       date: today,
       timestamp: new Date().toISOString(),
       bodyWeight: bw,
