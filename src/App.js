@@ -1220,7 +1220,10 @@ function AllWorkouts({ workouts, currentIndex, onSelect, onBack, onStats, t }) {
   return (
     <div
       key={workout.number}
-      onClick={() => onSelect(idx)}
+      onClick={() => {
+        onSelect(idx);
+        window.scrollTo({ top: 0, behavior: 'auto' });
+      }}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -1439,6 +1442,10 @@ const t = translations[language];
   const [showBodyWeightModal, setShowBodyWeightModal] = useState(false);
   const currentIndex = getCompletedWorkoutCount(history, currentCycle);
   const PROGRAM_VERSION = 'cube-27-v1';
+
+useEffect(() => {
+  window.scrollTo({ top: 0, behavior: 'auto' });
+}, [screen, selectedIndex]);
 
 useEffect(() => {
   const setupBackButton = async () => {
@@ -2092,6 +2099,7 @@ function changeScreen(nextScreen) {
   }
 
   setScreen(nextScreen);
+  window.scrollTo({ top: 0, behavior: 'auto' });
 }
 
 const best1RMs = {
