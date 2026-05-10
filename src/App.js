@@ -158,6 +158,25 @@ function hydrateWorkoutsWithHistory(workouts, history, cycle) {
   });
 }
 
+function getWorkoutTypeKey(workout) {
+  if (!workout) return null;
+  if (workout.type === 'meet') return 'meetDay';
+  if (workout.label === 'Pre-meet') return 'preMeet';
+
+  const label = String(workout.label || '').toLowerCase();
+
+  if (label.includes('technique')) return 'practice';
+  if (label.includes('volume')) return 'volume';
+  if (label.includes('heavy') || label.includes('peak') || label.includes('strength')) return 'heavy';
+
+  return 'practice';
+}
+
+function getWorkoutTypeLabel(workout, t) {
+  const key = getWorkoutTypeKey(workout);
+  return key ? t[key] : '—';
+}
+
 function generateWarmups(firstWorkWeight) {
   function round25(w) {
     return Math.round(w / 2.5) * 2.5;
@@ -638,7 +657,7 @@ color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
   );
 }
 
-function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessorySet, onToggleMeetWarmup, onToggleMeetSet, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
+function CurrentWorkout({ workout, currentCycle, totalWorkouts, onToggleWarmup, onToggleSet, onToggleAccessorySet, onToggleMeetWarmup, onToggleMeetSet, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
   const [showBodyWeight, setShowBodyWeight] = useState(false);
 
   if (workout.type === 'rest') {
@@ -683,6 +702,10 @@ function CurrentWorkout({ workout, onToggleWarmup, onToggleSet, onToggleAccessor
         <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
           {t.workout} {workout.number} — {t.meetDay}
         </h2>
+
+        <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
+          {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts} · {t.meetDay}
+        </div>
 
         {(workout.lifts || []).map((liftBlock, li) => {
           const firstIncompleteWarmup = (liftBlock.warmups || []).findIndex(w => !w.done);
@@ -806,6 +829,10 @@ function handleToggle(fn) {
     </span>
   )}
 </h2>
+
+<div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
+  {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts} · {getWorkoutTypeLabel(workout, t)}
+</div>
 
       {(workout.warmups || []).length > 0 && (
         <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
@@ -1206,11 +1233,14 @@ totalData.forEach(entry => {
   );
 }
 
-function AllWorkouts({ workouts, currentIndex, onSelect, onBack, onStats, t }) {
+function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, onStats, t }) {
   return (
     <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
         <h2 style={{ margin: 0, flex: 1 }}>{t.program}</h2>
+        <div style={{ color: THEME.muted, fontSize: 13, marginTop: 4 }}>
+          {t.cycle} {currentCycle} · {t.workoutProgress} {Math.min(currentIndex + 1, workouts.length)} / {workouts.length}
+        </div>
       </div>
     {workouts.map((workout, idx) => {
   const isCurrent = idx === currentIndex;
@@ -1270,9 +1300,10 @@ function AllWorkouts({ workouts, currentIndex, onSelect, onBack, onStats, t }) {
           )}
         </div>
 
-        <div style={{ fontSize: 12, color: THEME.muted, marginTop: 2 }}>
-          {workout.type === 'rest' ? t.restAndRecovery : `${t.workout} ${workout.number}`}
-        </div>
+      <div style={{ fontSize: 12, color: THEME.muted, marginTop: 2 }}>
+        {t.workoutProgress} {workout.number} / {workouts.length} · {getWorkoutTypeLabel(workout, t)}
+      </div>
+
       </div>
 
       {isDone && <span style={{ color: THEME.primary, fontSize: 18 }}>✅</span>}
@@ -2143,6 +2174,8 @@ const strengthRatio = latestBodyWeight
       {screen === 'current' && (
         <CurrentWorkout
           workout={workouts[selectedIndex]}
+          currentCycle={currentCycle}
+          totalWorkouts={workouts.length}
           isReadOnly={selectedIndex > currentIndex}
           onToggleWarmup={toggleWarmup}
           onToggleSet={toggleSet}
@@ -2166,6 +2199,9 @@ const strengthRatio = latestBodyWeight
       {screen === 'dashboard' && (
   <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, background: THEME.bg, minHeight: '100vh', color: THEME.text }}>
     <h2 style={{ marginTop: 0, textAlign: 'center' }}>{t.dashboard}</h2>
+    <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
+      {t.cycle} {currentCycle} · {t.workoutProgress} {Math.min(currentIndex + 1, workouts.length)} / {workouts.length}
+    </div>
     <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 12 }}>
       {[
         [t.squat, THEME.red, best1RMs.Squat, bestE1RMs.Squat],
@@ -2216,6 +2252,7 @@ const strengthRatio = latestBodyWeight
         <AllWorkouts
           workouts={workouts}
           currentIndex={currentIndex}
+          currentCycle={currentCycle}
           onSelect={(idx) => {
             setSelectedIndex(idx);
             setScreen('current');

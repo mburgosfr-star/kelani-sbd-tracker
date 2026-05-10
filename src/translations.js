@@ -75,6 +75,12 @@ export const translations = {
     best1RM: 'Beste 1RM',
     bestE1RM: 'Beste e1RM',
     lift: 'Lift',
+
+    heavy: 'Zwaar',
+    practice: 'Praktijk',
+    volume: 'Volume',
+    preMeet: 'Pre-meet',
+    workoutProgress: 'Workout',
   },
 
   en: {
@@ -153,6 +159,12 @@ export const translations = {
     best1RM: 'Best 1RM',
     bestE1RM: 'Best e1RM',
     lift: 'Lift',
+
+    heavy: 'Heavy',
+    practice: 'Practice',
+    volume: 'Volume',
+    preMeet: 'Pre-meet',
+    workoutProgress: 'Workout',
   },
 
   ca: {
@@ -231,5 +243,11 @@ export const translations = {
     best1RM: 'Millor 1RM',
     bestE1RM: 'Millor e1RM',
     lift: 'Aixecament',
+
+    heavy: 'Intens',
+    practice: 'Pràctica',
+    volume: 'Volum',
+    preMeet: 'Pre-competició',
+    workoutProgress: 'Entrenament',
   },
 };
