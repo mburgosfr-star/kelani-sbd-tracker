@@ -1,0 +1,5 @@
+Improved Progress / Stats charts.
+
+Stats are now cycle-aware with clearer workout labels, reduced label clutter on small screens, and consistent bodyweight chart labels.
+
+Warmups now round upward to practical 10 kg steps and no longer equal the first work set.
