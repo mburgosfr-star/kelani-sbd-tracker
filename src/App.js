@@ -402,64 +402,87 @@ function RestTimer({ seconds, onDismiss, t }) {
   const hasBeepedRef = useRef(false);
 
   useEffect(() => {
-  setRemaining(seconds);
-  hasBeepedRef.current = false;
+    setRemaining(seconds);
+    hasBeepedRef.current = false;
 
-  return () => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-  };
-}, [seconds]);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [seconds]);
 
   useEffect(() => {
     if (remaining <= 0) {
       clearInterval(intervalRef.current);
-      if (!hasBeepedRef.current) { hasBeepedRef.current = true; playBeep(); }
+
+      if (!hasBeepedRef.current) {
+        hasBeepedRef.current = true;
+        playBeep();
+      }
+
       return;
     }
+
     intervalRef.current = setInterval(() => setRemaining(r => r - 1), 1000);
     return () => clearInterval(intervalRef.current);
   }, [remaining, seconds]);
+
   function playBeep() {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
       [0, 0.3, 0.6].forEach(delay => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
+
         osc.connect(gain);
         gain.connect(ctx.destination);
+
         osc.frequency.value = 880;
         osc.type = 'sine';
+
         gain.gain.setValueAtTime(0.5, ctx.currentTime + delay);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.3);
+
         osc.start(ctx.currentTime + delay);
         osc.stop(ctx.currentTime + delay + 0.3);
       });
-    } catch(e) {}
+    } catch (e) {}
   }
+
   const mins = Math.floor(remaining / 60);
   const secs = remaining % 60;
   const pct = remaining / seconds;
-  const radius = 54;
-  const circumference = 2 * Math.PI * radius;
   const isDone = remaining <= 0;
+
+  if (isDone) {
+    return (
+      <div style={{
+        background: THEME.bg,
+        borderTop: `1px solid ${THEME.border}`,
+        borderBottom: `1px solid ${THEME.border}`,
+        padding: '16px',
+        textAlign: 'center',
+        color: THEME.primary,
+        fontSize: 20,
+        fontWeight: 800
+      }}>
+        {t.readyNextSet}
+      </div>
+    );
+  }
+
   return (
-  <div style={{
-    position: 'fixed',
-    bottom: 76,
-    left: 12,
-    right: 12,
-    background: THEME.card,
-    border: `1px solid ${THEME.border}`,
-    borderRadius: 12,
-    padding: '14px 16px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    boxShadow: '0 -4px 20px rgba(0,0,0,0.45)',
-    zIndex: 9999,
-    color: '#ffffff'
-  }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+    <div style={{
+      background: THEME.bg,
+      borderTop: `1px solid ${THEME.border}`,
+      borderBottom: `1px solid ${THEME.border}`,
+      padding: '12px 16px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 14,
+      color: '#ffffff'
+    }}>
       <svg width="54" height="54" style={{ transform: 'rotate(-90deg)' }}>
         <circle cx="27" cy="27" r="24" fill="none" stroke={THEME.border} strokeWidth="5" />
         <circle
@@ -467,7 +490,7 @@ function RestTimer({ seconds, onDismiss, t }) {
           cy="27"
           r="24"
           fill="none"
-          stroke={isDone ? '#27ae60' : THEME.primary}
+          stroke={THEME.primary}
           strokeWidth="5"
           strokeDasharray={`${2 * Math.PI * 24} ${2 * Math.PI * 24}`}
           strokeDashoffset={(2 * Math.PI * 24) * (1 - pct)}
@@ -477,39 +500,20 @@ function RestTimer({ seconds, onDismiss, t }) {
 
       <div>
         <div style={{
-          fontSize: isDone ? 16 : 28,
+          fontSize: 28,
           fontWeight: 700,
-          color: isDone ? '#27ae60' : '#ffffff',
+          color: '#ffffff',
           fontFamily: 'monospace'
         }}>
-          {isDone ? t.readyNextSet : `${mins}:${String(secs).padStart(2, '0')}`}
+          {mins}:{String(secs).padStart(2, '0')}
         </div>
 
-        {!isDone && (
-          <div style={{ fontSize: 12, color: '#ffffff', opacity: 0.85 }}>
-            {t.restTime}
-          </div>
-        )}
+        <div style={{ fontSize: 12, color: '#ffffff', opacity: 0.85 }}>
+          {t.restTime}
+        </div>
       </div>
     </div>
-
-    <button
-      onClick={onDismiss}
-      style={{
-        padding: '8px 16px',
-        fontSize: 14,
-        background: isDone ? '#27ae60' : 'transparent',
-        color: '#ffffff',
-        border: `1px solid ${isDone ? '#27ae60' : THEME.border}`,
-        borderRadius: 8,
-        cursor: 'pointer',
-        fontWeight: 600
-      }}
-    >
-      {isDone ? t.continue : t.cancel}
-    </button>
-  </div>
-);
+  );
 }
 
 function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, isActive, isReadOnly, t }) {
@@ -629,6 +633,7 @@ const [editing, setEditing] = useState(false);
   );
 }
 
+
 function BodyWeightModal({ onSave, onSkip, t }) {
   const [weight, setWeight] = useState('');
   return (
@@ -676,6 +681,26 @@ color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
 function CurrentWorkout({ workout, currentCycle, totalWorkouts, onToggleWarmup, onToggleSet, onToggleAccessorySet, onToggleMeetWarmup, onToggleMeetSet, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
   const [showBodyWeight, setShowBodyWeight] = useState(false);
 
+  function isTimerFor(placement) {
+    if (!timer || !timer.placement) return false;
+    if (timer.placement.workoutNumber !== workout.number) return false;
+
+    return Object.keys(placement).every(key => timer.placement[key] === placement[key]);
+  }
+
+  function renderInlineTimer(placement) {
+    if (!isTimerFor(placement)) return null;
+
+    return (
+      <RestTimer
+        key={timer.id}
+        seconds={timer.seconds}
+        onDismiss={() => setTimer(null)}
+        t={t}
+      />
+    );
+  }
+
   if (workout.type === 'rest') {
     return (
       <div style={{ maxWidth: 500, margin: '60px auto', padding: 24, fontFamily: 'sans-serif', textAlign: 'center' }}>
@@ -714,7 +739,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onToggleWarmup, 
     );
 
     return (
-      <div style={{ maxWidth: 500, margin: '0 auto', padding: '8px 12px 12px', paddingBottom: timer !== null ? 100 : 16, fontFamily: 'sans-serif' }}>
+      <div style={{ maxWidth: 500, margin: '0 auto', padding: '8px 12px 12px', paddingBottom: 16, fontFamily: 'sans-serif' }}>
         <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
           {t.workout} {workout.number} — {t.meetDay}
         </h2>
@@ -822,7 +847,7 @@ function handleToggle(fn) {
 }
 
   return (
-    <div style={{ maxWidth: 500, margin: '0 auto', padding: '8px 12px 12px', paddingBottom: timer !== null ? 100 : 16, fontFamily: 'sans-serif' }}>
+    <div style={{ maxWidth: 500, margin: '0 auto', padding: '8px 12px 12px', paddingBottom: 16, fontFamily: 'sans-serif' }}>
   
     <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
 
@@ -861,16 +886,19 @@ function handleToggle(fn) {
   {t.warmup}
 </div>
           {workout.warmups.map((w, i) => (
-            <SetRow
-  key={i}
-  set={w}
-  index={i}
-  label={`${t.warmup} ${i + 1}`}
-  isWarmup={true}
-  isActive={!isReadOnly && i === workout.warmups.findIndex(wu => !wu.done)}
-  isReadOnly={isReadOnly}
-  onToggle={() => handleToggle(() => onToggleWarmup(i))}  t={t}
-/>
+            <React.Fragment key={i}>
+              <SetRow
+                set={w}
+                index={i}
+                label={`${t.warmup} ${i + 1}`}
+                isWarmup={true}
+                isActive={!isReadOnly && i === workout.warmups.findIndex(wu => !wu.done)}
+                isReadOnly={isReadOnly}
+                onToggle={() => handleToggle(() => onToggleWarmup(i))}
+                t={t}
+              />
+              {renderInlineTimer({ type: 'warmup', index: i })}
+            </React.Fragment>
           ))}
         </div>
       )}
@@ -889,18 +917,20 @@ function handleToggle(fn) {
   const firstIncomplete = workout.sets.findIndex(s => !s.done);
 
   return (
-    <SetRow
-      key={i}
-      set={set}
-      index={i}
-      label={set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`}
-      isWarmup={false}
-      isActive={!isReadOnly && allWarmupsDone && i === firstIncomplete}
-      isReadOnly={isReadOnly}
-      onToggle={() => handleToggle(() => onToggleSet(i))}      
-      onWeightChange={val => onWeightChange('set', i, val)}
-      t={t}
-    />
+    <React.Fragment key={i}>
+      <SetRow
+        set={set}
+        index={i}
+        label={set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`}
+        isWarmup={false}
+        isActive={!isReadOnly && allWarmupsDone && i === firstIncomplete}
+        isReadOnly={isReadOnly}
+        onToggle={() => handleToggle(() => onToggleSet(i))}
+        onWeightChange={val => onWeightChange('set', i, val)}
+        t={t}
+      />
+      {renderInlineTimer({ type: 'main', index: i })}
+    </React.Fragment>
   );
 })}
 </div>
@@ -1508,10 +1538,11 @@ export default function App() {
 
 const [timer, setTimer] = useState(null);
 
-function startTimer(seconds) {
+function startTimer(seconds, placement = null) {
   setTimer({
     id: Date.now(),
     seconds,
+    placement,
   });
 }
 
@@ -1612,15 +1643,31 @@ useEffect(() => {
     const savedHistory = data.history || [];
     const savedCycle = data.currentCycle || 1;
     const generatedWorkouts = generateProgram(squat, bench, deadlift);
+    const savedInProgress = data.inProgress || null;
 
-    setWorkouts(hydrateWorkoutsWithHistory(generatedWorkouts, savedHistory, savedCycle));
+    const canRestoreInProgress =
+      savedInProgress &&
+      savedInProgress.programVersion === PROGRAM_VERSION &&
+      savedInProgress.currentCycle === savedCycle &&
+      Array.isArray(savedInProgress.workouts) &&
+      savedInProgress.workouts.length === generatedWorkouts.length;
+
+    const restoredWorkouts = canRestoreInProgress
+      ? savedInProgress.workouts
+      : hydrateWorkoutsWithHistory(generatedWorkouts, savedHistory, savedCycle);
+
+    setWorkouts(restoredWorkouts);
     setHistory(savedHistory);
     setPrs(savedPrs);
     setAccessoryPRs(data.accessoryPRs || {});
     setCurrentCycle(savedCycle);
     setBodyWeights(normalizeBodyWeights(data));
 
-    setSelectedIndex(getCompletedWorkoutCount(savedHistory, savedCycle));
+    setSelectedIndex(
+      canRestoreInProgress
+        ? savedInProgress.selectedIndex || 0
+        : getCompletedWorkoutCount(savedHistory, savedCycle)
+    );
   
     setShowNewCycle(false);
     setScreen('dashboard');
@@ -1639,9 +1686,15 @@ useEffect(() => {
     prs,
     accessoryPRs,
     currentCycle,
-    bodyWeights
+    bodyWeights,
+    inProgress: {
+      programVersion: PROGRAM_VERSION,
+      currentCycle,
+      selectedIndex,
+      workouts,
+    },
   }));
-}, [history, prs, accessoryPRs, currentCycle, bodyWeights]);
+}, [history, prs, accessoryPRs, currentCycle, bodyWeights, selectedIndex, workouts]);
 
 function handleStart(s, b, d) {
   localStorage.removeItem('kel-powerlifting');
@@ -1766,7 +1819,13 @@ function shouldStartRestTimerAfterToggle(workout, type, index, accIndex = null) 
 function toggleWarmup(wIndex) {
   const workout = workouts[selectedIndex];
   if (shouldStartRestTimerAfterToggle(workout, 'warmup', wIndex)) {
-    startTimer(getRestTime((workout.sets || [])[0]?.reps || 3));
+    startTimer(getRestTime((workout.sets || [])[0]?.reps || 3), {
+      workoutNumber: workout.number,
+      type: 'warmup',
+      index: wIndex,
+    });
+  } else {
+    setTimer(null);
   }
 
   setWorkouts(prev =>
@@ -1788,7 +1847,13 @@ function toggleSet(setIndex) {
   const set = workout.sets?.[setIndex];
 
   if (shouldStartRestTimerAfterToggle(workout, 'main', setIndex)) {
-    startTimer(getRestTime(set.reps));
+    startTimer(getRestTime(set.reps), {
+      workoutNumber: workout.number,
+      type: 'main',
+      index: setIndex,
+    });
+  } else {
+    setTimer(null);
   }
 
   setWorkouts(prev =>
@@ -1810,7 +1875,14 @@ function toggleAccessorySet(accIndex, setIndex) {
   const acc = workout.accessories?.[accIndex];
 
   if (shouldStartRestTimerAfterToggle(workout, 'accessory', setIndex, accIndex)) {
-    startTimer(getRestTime(acc.reps));
+    startTimer(getRestTime(acc.reps), {
+      workoutNumber: workout.number,
+      type: 'accessory',
+      accIndex,
+      index: setIndex,
+    });
+  } else {
+    setTimer(null);
   }
 
   setWorkouts(prev =>
@@ -1891,7 +1963,14 @@ function toggleMeetSet(liftIndex, setIndex) {
   const workout = workouts[selectedIndex];
 
   if (hasMoreMeetSets(workout, liftIndex, setIndex)) {
-    startTimer(getRestTime());
+    startTimer(getRestTime(), {
+      workoutNumber: workout.number,
+      type: 'meetSet',
+      liftIndex,
+      index: setIndex,
+    });
+  } else {
+    setTimer(null);
   }
 
   setWorkouts(prev =>
@@ -2597,15 +2676,6 @@ style={{
   <NewCycleModal
     prs={prs}
     onStart={handleStartNewCycle}
-    t={t}
-  />
-)}
-
-{timer !== null && (
-  <RestTimer
-    key={timer.id}
-    seconds={timer.seconds}
-    onDismiss={() => setTimer(null)}
     t={t}
   />
 )}
