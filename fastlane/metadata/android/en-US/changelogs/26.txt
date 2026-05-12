@@ -1,0 +1,5 @@
+Added inline rest timer inside the workout flow.
+
+The rest timer now appears directly below the completed set instead of floating at the bottom of the screen.
+
+Workout progress is now saved live during in-progress workouts, so checked sets, warmups and edited weights survive app close/reopen and app updates.
