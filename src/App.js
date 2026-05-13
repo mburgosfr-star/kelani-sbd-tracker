@@ -1326,6 +1326,21 @@ totalData.forEach(entry => {
 }
 
 function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, onStats, t }) {
+  const currentWorkoutRef = useRef(null);
+
+  useEffect(() => {
+    if (!currentWorkoutRef.current) return;
+
+    const id = window.setTimeout(() => {
+      currentWorkoutRef.current?.scrollIntoView({
+        behavior: 'auto',
+        block: 'center',
+      });
+    }, 0);
+
+    return () => window.clearTimeout(id);
+  }, [currentIndex, workouts.length]);
+
   return (
     <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
@@ -1342,6 +1357,7 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
   return (
     <div
       key={workout.number}
+      ref={isCurrent ? currentWorkoutRef : null}
       onClick={() => {
         onSelect(idx);
         window.scrollTo({ top: 0, behavior: 'auto' });
