@@ -21,6 +21,32 @@ const THEME = {
 
 const dash = v => (v ? v : '—');
 
+function toOptionalNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function calculateLeanMassEstimate(bodyWeight, bodyFat, boneMass = null) {
+  if (!bodyWeight || !bodyFat) return null;
+
+  const fatMass = bodyWeight * (bodyFat / 100);
+  const leanMass = bodyWeight - fatMass - (boneMass || 0);
+
+  return Math.round(leanMass * 10) / 10;
+}
+
+function calculateBmrEstimate(leanMass) {
+  if (!leanMass) return null;
+  return Math.round(500 + (22 * leanMass));
+}
+
+
+function sexLabel(value, t) {
+  if (value === 'male') return t.male;
+  if (value === 'female') return t.female;
+  if (value === 'other') return t.other;
+  return '—';
+}
 
 function getRestTime() {
   return 300;
@@ -71,32 +97,40 @@ function getCompletedWorkoutCount(history, cycle) {
 function normalizeBodyWeights(data) {
   const entries = [];
 
-  (data.bodyWeights || []).forEach((entry, index) => {
-    const bodyWeight = Number(entry.bodyWeight || entry.weight);
-    if (!bodyWeight) return;
+  function normalizedBodyEntry(entry, fallbackWorkoutNumber = 0) {
+    const bodyData = {
+      bodyWeight: toOptionalNumber(entry.bodyWeight || entry.weight || entry.bodyWeightToday),
+      bodyFat: toOptionalNumber(entry.bodyFat),
+      bodyWater: toOptionalNumber(entry.bodyWater),
+      visceralFat: toOptionalNumber(entry.visceralFat),
+      leanMass: toOptionalNumber(entry.leanMass),
+      physiqueRating: toOptionalNumber(entry.physiqueRating),
+      boneMass: toOptionalNumber(entry.boneMass),
+      bmr: toOptionalNumber(entry.bmr),
+    };
 
-    entries.push({
+    const hasAnyBodyData = Object.values(bodyData).some(value => value !== null);
+    if (!hasAnyBodyData) return null;
+
+    return {
       workoutNumber: Number.isFinite(Number(entry.workoutNumber))
         ? Number(entry.workoutNumber)
-        : index,
+        : fallbackWorkoutNumber,
+      cycle: getEntryCycle(entry),
       date: entry.date || new Date().toLocaleDateString('nl-NL'),
       timestamp: entry.timestamp || new Date().toISOString(),
-      bodyWeight,
-    });
+      ...bodyData,
+    };
+  }
+
+  (data.bodyWeights || []).forEach((entry, index) => {
+    const normalized = normalizedBodyEntry(entry, index);
+    if (normalized) entries.push(normalized);
   });
 
   (data.history || []).forEach(entry => {
-    const bodyWeight = Number(entry.bodyWeight || entry.bodyWeightToday);
-    if (!bodyWeight) return;
-
-    entries.push({
-      workoutNumber: Number.isFinite(Number(entry.workoutNumber))
-        ? Number(entry.workoutNumber)
-        : 0,
-      date: entry.date || new Date().toLocaleDateString('nl-NL'),
-      timestamp: entry.timestamp || new Date().toISOString(),
-      bodyWeight,
-    });
+    const normalized = normalizedBodyEntry(entry, 0);
+    if (normalized) entries.push(normalized);
   });
 
   if (data.bodyWeightToday) {
@@ -104,22 +138,22 @@ function normalizeBodyWeights(data) {
       h => h.lift && h.workoutNumber > 0
     ).length;
 
-    entries.push({
+    const normalized = normalizedBodyEntry({
       workoutNumber: completedWorkouts,
-      date: new Date().toLocaleDateString('nl-NL'),
-      timestamp: new Date().toISOString(),
-      bodyWeight: Number(data.bodyWeightToday),
-    });
+      bodyWeight: data.bodyWeightToday,
+    }, completedWorkouts);
+
+    if (normalized) entries.push(normalized);
   }
 
   const byWorkout = {};
 
   entries.forEach(entry => {
-    byWorkout[entry.workoutNumber] = entry;
+    byWorkout[`${getEntryCycle(entry)}-${entry.workoutNumber}`] = entry;
   });
 
   return Object.values(byWorkout).sort(
-    (a, b) => a.workoutNumber - b.workoutNumber
+    (a, b) => getAbsoluteWorkoutIndex(a) - getAbsoluteWorkoutIndex(b)
   );
 }
 
@@ -634,21 +668,325 @@ const [editing, setEditing] = useState(false);
 }
 
 
-function BodyWeightModal({ onSave, onSkip, t }) {
-  const [weight, setWeight] = useState('');
+function ProfileSection({ userProfile, onSave, t }) {
+  const [birthDate, setBirthDate] = useState(userProfile?.birthDate || '');
+  const [sex, setSex] = useState(userProfile?.sex || '');
+  const [notice, setNotice] = useState(null);
+
+  useEffect(() => {
+    setBirthDate(userProfile?.birthDate || '');
+    setSex(userProfile?.sex || '');
+  }, [userProfile?.birthDate, userProfile?.sex]);
+
+  useEffect(() => {
+    if (!notice) return;
+
+    const id = window.setTimeout(() => {
+      setNotice(null);
+    }, 2200);
+
+    return () => window.clearTimeout(id);
+  }, [notice]);
+
+  function handleSave() {
+    onSave({ birthDate, sex });
+    setNotice({
+      id: Date.now(),
+      message: t.profileSaved,
+    });
+  }
+
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
-      <div style={{ background: THEME.card, borderRadius: 12, padding: 24, maxWidth: 340, width: '90%' }}>
-        <h3 style={{ margin: '0 0 16px', color: THEME.text }}>{t.updateBodyweight}</h3>
-        <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, fontSize: 14 }}>{t.bodyweight} (kg)</label>
-        <input type="number" value={weight} onChange={e => setWeight(e.target.value)} placeholder={t.exampleWeight} autoFocus
-          style={{ width: '100%', padding: 10, fontSize: 16, borderRadius: 4, background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.border}`, boxSizing: 'border-box', marginBottom: 16 }} />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onSkip} style={{ flex: 1, padding: 10, fontSize: 14, background: 'transparent', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: THEME.muted }}>{t.cancel}</button>
-          <button onClick={() => { const v = parseFloat(weight); if (!isNaN(v) && v > 0) onSave(v); else onSkip(); }}
-            style={{ flex: 1, padding: 10, fontSize: 14, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.border}`, color: 'white', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>{t.save}</button>
+    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 16 }}>
+      <h3 style={{ margin: '0 0 16px', color: THEME.text, textAlign: 'center' }}>{t.profile}</h3>
+
+      {notice && (
+        <div
+          key={notice.id}
+          style={{
+            position: 'fixed',
+            top: 18,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 500,
+            background: THEME.card,
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 999,
+            padding: '10px 16px',
+            color: THEME.text,
+            fontWeight: 800,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}
+        >
+          <span style={{ color: THEME.primary, fontSize: 18 }}>✓</span>
+          <span>{notice.message}</span>
         </div>
+      )}
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14, color: THEME.text }}>
+          {t.birthDate}
+        </label>
+        <input
+          type="date"
+          value={birthDate}
+          onChange={e => setBirthDate(e.target.value)}
+          style={{ width: '100%', padding: 10, fontSize: 16, borderRadius: 4, background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.border}`, boxSizing: 'border-box' }}
+        />
       </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14, color: THEME.text }}>
+          {t.sex}
+        </label>
+        <select
+          value={sex}
+          onChange={e => setSex(e.target.value)}
+          style={{ width: '100%', padding: 10, fontSize: 16, borderRadius: 4, background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.border}`, boxSizing: 'border-box' }}
+        >
+          <option value="">{t.selectSex}</option>
+          <option value="male">{t.male}</option>
+          <option value="female">{t.female}</option>
+          <option value="other">{t.other}</option>
+        </select>
+      </div>
+
+      <button
+        onClick={handleSave}
+        style={{
+          width: '100%',
+          padding: 12,
+          fontSize: 15,
+          fontWeight: 700,
+          background: THEME.card,
+          color: '#ffffff',
+          border: `1px solid ${THEME.primary}`,
+          borderRadius: 8,
+          cursor: 'pointer'
+        }}
+      >
+        {t.save}
+      </button>
+    </div>
+  );
+}
+
+
+function BodyDataSection({ bodyData, onSave, t }) {
+  const previous = bodyData || {};
+  const [saveNotice, setSaveNotice] = useState(null);
+
+  useEffect(() => {
+    if (!saveNotice) return;
+
+    const id = window.setTimeout(() => {
+      setSaveNotice(null);
+    }, 2200);
+
+    return () => window.clearTimeout(id);
+  }, [saveNotice]);
+
+  const [form, setForm] = useState({
+    bodyWeight: '',
+    bodyFat: '',
+    bodyWater: '',
+    visceralFat: '',
+    physiqueRating: '',
+    boneMass: '',
+  });
+
+  function updateField(field, value) {
+    setForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  function previousValue(field) {
+    return previous[field] ? String(previous[field]) : '';
+  }
+
+  function enteredValue(field) {
+    return toOptionalNumber(form[field]);
+  }
+
+  function finalValue(field) {
+    const entered = enteredValue(field);
+    if (entered !== null) return entered;
+    return previous[field] || null;
+  }
+
+  function estimateLeanMass(bodyWeight, bodyFat, boneMass = null) {
+    if (!bodyWeight || !bodyFat) return null;
+
+    const fatMass = bodyWeight * (bodyFat / 100);
+    const estimatedLeanMass = bodyWeight - fatMass - (boneMass || 0);
+
+    return Math.round(estimatedLeanMass * 10) / 10;
+  }
+
+  function estimateBmr(leanMass) {
+    if (!leanMass) return null;
+    return Math.round(500 + (22 * leanMass));
+  }
+
+  function estimatedValue(field) {
+    const bodyWeight = finalValue('bodyWeight');
+    const bodyFat = finalValue('bodyFat');
+    const boneMass = finalValue('boneMass');
+    const leanMass = finalValue('leanMass') || estimateLeanMass(bodyWeight, bodyFat, boneMass);
+
+    if (field === 'leanMass') return estimateLeanMass(bodyWeight, bodyFat, boneMass);
+    if (field === 'bmr') return estimateBmr(leanMass);
+
+    return null;
+  }
+
+  function displayPlaceholder(field) {
+    if (field === 'leanMass' || field === 'bmr') {
+      return estimatedValue(field) ? String(estimatedValue(field)) : previousValue(field);
+    }
+
+    return previousValue(field) || (estimatedValue(field) ? String(estimatedValue(field)) : '');
+  }
+
+  function valueStatus(field) {
+    return '';
+  }
+
+  function fieldHint(field, baseHint) {
+    if (field === 'leanMass' && !previous.leanMass && estimatedValue('leanMass')) {
+      return `${baseHint} ${t.estimatedLeanMassHint}`;
+    }
+
+    if (field === 'bmr' && !previous.bmr && estimatedValue('bmr')) {
+      return `${baseHint} ${t.estimatedBmrHint}`;
+    }
+
+    return baseHint;
+  }
+
+  function handleSave() {
+    const bodyWeight = finalValue('bodyWeight');
+    const bodyFat = finalValue('bodyFat');
+    const boneMass = finalValue('boneMass');
+
+    const calculatedLeanMass = estimateLeanMass(bodyWeight, bodyFat, boneMass);
+    const leanMass = calculatedLeanMass || previous.leanMass || null;
+
+    const calculatedBmr = estimateBmr(leanMass);
+    const bmr = calculatedBmr || previous.bmr || null;
+
+    const nextData = {
+      bodyWeight,
+      bodyFat,
+      bodyWater: finalValue('bodyWater'),
+      visceralFat: finalValue('visceralFat'),
+      leanMass,
+      physiqueRating: finalValue('physiqueRating'),
+      boneMass: finalValue('boneMass'),
+      bmr,
+    };
+
+    const hasAnyValue = Object.values(nextData).some(value => value !== null);
+    if (!hasAnyValue) return;
+
+    onSave(nextData);
+    setForm({
+      bodyWeight: '',
+      bodyFat: '',
+      bodyWater: '',
+      visceralFat: '',
+        physiqueRating: '',
+      boneMass: '',
+      });
+    setSaveNotice({
+      id: Date.now(),
+      message: t.bodyDataUpdated,
+    });
+  }
+
+  const fields = [
+    { key: 'bodyWeight', label: `${t.bodyweight} (${t.kg})`, hint: t.leaveBlankKeepsPrevious },
+    { key: 'bodyFat', label: t.bodyFatPercent, hint: t.bodyFatHint },
+    { key: 'bodyWater', label: t.bodyWaterPercent, hint: t.bodyWaterHint },
+    { key: 'visceralFat', label: t.visceralFatRating, hint: t.visceralFatHint },
+    { key: 'physiqueRating', label: t.physiqueRating, hint: t.physiqueRatingHint },
+    { key: 'boneMass', label: t.boneMassKg, hint: t.boneMassHint },
+  ];
+
+  return (
+    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 16 }}>
+      <h3 style={{ margin: '0 0 16px', color: THEME.text, textAlign: 'center' }}>{t.updateBodyData}</h3>
+
+      {saveNotice && (
+        <div
+          key={saveNotice.id}
+          style={{
+            position: 'fixed',
+            top: 18,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 500,
+            background: THEME.card,
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 999,
+            padding: '10px 16px',
+            color: THEME.text,
+            fontWeight: 800,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}
+        >
+          <span style={{ color: THEME.primary, fontSize: 18 }}>✓</span>
+          <span>{saveNotice.message}</span>
+        </div>
+      )}
+
+      {fields.map(field => (
+        <div key={field.key} style={{ marginBottom: 14 }}>
+          <label style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 8, fontWeight: 700, fontSize: 14, color: THEME.text }}>
+            <span>{field.label}</span>
+            {valueStatus(field.key) && (
+              <span style={{ color: THEME.primary, fontSize: 12, fontWeight: 700 }}>
+                {valueStatus(field.key)}
+              </span>
+            )}
+          </label>
+
+          <input
+            type="number"
+            value={form[field.key]}
+            onChange={e => updateField(field.key, e.target.value)}
+            placeholder={displayPlaceholder(field.key)}
+            style={{ width: '100%', padding: 10, fontSize: 16, borderRadius: 4, background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.border}`, boxSizing: 'border-box' }}
+          />
+
+          <div style={{ marginTop: 6, color: THEME.muted, fontSize: 12 }}>
+            {fieldHint(field.key, field.hint)}
+          </div>
+        </div>
+      ))}
+
+      <button
+        onClick={handleSave}
+        style={{
+          width: '100%',
+          padding: 12,
+          fontSize: 15,
+          fontWeight: 700,
+          background: THEME.card,
+          color: '#ffffff',
+          border: `1px solid ${THEME.primary}`,
+          borderRadius: 8,
+          cursor: 'pointer',
+          marginTop: 4
+        }}
+      >
+        {t.save}
+      </button>
     </div>
   );
 }
@@ -1024,8 +1362,8 @@ const [activescreen, setActivescreen] = useState('lifts');
   const strengthData = [];
   const COLORS = {
   Squat: THEME.red,
-  Bench: THEME.yellow,
-  Deadlift: THEME.primary
+  Bench: THEME.primary,
+  Deadlift: THEME.yellow
 };
   
 const bestStats = {
@@ -1100,14 +1438,48 @@ sortedHistory.forEach(entry => {
   }
 });
 
+const bodyMetricData = {
+  bodyFat: [],
+  bodyWater: [],
+  leanMass: [],
+  visceralFat: [],
+  physiqueRating: [],
+  boneMass: [],
+  bmr: [],
+};
+
 bodyWeights.forEach(entry => {
   const workoutNumber = getEntryWorkoutNumber(entry);
-
-  bodyData.push({
+  const base = {
     label: getWorkoutLabel(entry),
     workoutNumber,
     absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
-    gewicht: entry.bodyWeight,
+  };
+
+  if (entry.bodyWeight) {
+    bodyData.push({
+      ...base,
+      gewicht: entry.bodyWeight,
+    });
+  }
+
+  [
+    'bodyFat',
+    'bodyWater',
+    'leanMass',
+    'visceralFat',
+    'physiqueRating',
+    'boneMass',
+    'bmr',
+  ].forEach(key => {
+    const value = Number(entry[key]);
+
+    if (!Number.isFinite(value) || value <= 0) return;
+
+    bodyMetricData[key].push({
+      ...base,
+      [key]: value,
+    });
   });
 });
 
@@ -1119,7 +1491,7 @@ function getBodyWeightForWorkoutIndex(absoluteWorkoutIndex) {
   let latest = null;
 
   sortedBodyWeights.forEach(entry => {
-    if (getAbsoluteWorkoutIndex(entry) <= absoluteWorkoutIndex) {
+    if (getAbsoluteWorkoutIndex(entry) <= absoluteWorkoutIndex && entry.bodyWeight) {
       latest = entry;
     }
   });
@@ -1139,11 +1511,27 @@ totalData.forEach(entry => {
   });
 });
 
+function chartMetricLabel(key) {
+  if (key === 'oneRM') return '1RM';
+  if (key === 'e1rm') return 'e1RM';
+  if (key === 'gewicht') return `${t.bodyweight} (${t.kg})`;
+  if (key === 'strength') return t.strength;
+  if (key === 'bodyFat') return t.bodyFatPercent;
+  if (key === 'bodyWater') return t.bodyWaterPercent;
+  if (key === 'leanMass') return t.leanMassKg;
+  if (key === 'visceralFat') return t.visceralFatRating;
+  if (key === 'physiqueRating') return t.physiqueRating;
+  if (key === 'boneMass') return t.boneMassKg;
+  if (key === 'bmr') return t.bmrKcal;
+
+  return key;
+}
+
   function renderChart(data, dataKeys, colors) {
     if (!data || data.length === 0) {
       return (
         <p style={{ color: THEME.text, textAlign: 'center', padding: 20 }}>
-          Nog geen data — voltooi workouts om grafieken te zien.
+          {t.noStatsData}
         </p>
       );
     }
@@ -1191,13 +1579,7 @@ totalData.forEach(entry => {
           />
           <Tooltip
   labelFormatter={(value, payload) => payload?.[0]?.payload?.label || labelByX[value] || value}
-  formatter={(value, name) => {
-    if (name === 'gewicht') return [value, t.bodyweight];
-    if (name === 'strength') return [value, t.strength];
-    if (name === 'oneRM') return [value, '1RM'];
-    if (name === 'e1rm') return [value, 'e1RM'];
-    return [value, name];
-  }}
+  formatter={(value, name) => [value, chartMetricLabel(name)]}
   contentStyle={{
     backgroundColor: THEME.card,
     border: `1px solid ${THEME.border}`,
@@ -1218,13 +1600,7 @@ totalData.forEach(entry => {
   isAnimationActive={false}
   dot={{ r: 3, fill: colors[i] || THEME.primary, stroke: colors[i] || THEME.primary }}
   activeDot={{ r: 5, fill: colors[i] || THEME.primary, stroke: '#ffffff' }}
-  name={
-    key === 'oneRM' ? '1RM' : 
-    key === 'e1rm' ? 'e1RM' : 
-    key === 'gewicht' ? t.weight :
-    key === 'strength' ? t.strength :
-    key
-  }
+  name={chartMetricLabel(key)}
 />
 ))}
         </LineChart>
@@ -1310,9 +1686,71 @@ totalData.forEach(entry => {
       )}
 
       {activescreen === 'lichaam' && (
-        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
-          <h3 style={{ margin: '0 0 12px' }}>{t.bodyweight}</h3>
-          {renderChart(bodyData, ['gewicht'], [THEME.yellow])}
+        <div>
+          {[
+            {
+              key: 'gewicht',
+              title: `${t.bodyweight} (${t.kg})`,
+              data: bodyData,
+              color: THEME.primary,
+            },
+            {
+              key: 'bodyFat',
+              title: t.bodyFatPercent,
+              data: bodyMetricData.bodyFat,
+              color: THEME.primary,
+            },
+            {
+              key: 'bodyWater',
+              title: t.bodyWaterPercent,
+              data: bodyMetricData.bodyWater,
+              color: THEME.primary,
+            },
+            {
+              key: 'leanMass',
+              title: t.leanMassKg,
+              data: bodyMetricData.leanMass,
+              color: THEME.primary,
+            },
+            {
+              key: 'visceralFat',
+              title: t.visceralFatRating,
+              data: bodyMetricData.visceralFat,
+              color: THEME.primary,
+            },
+            {
+              key: 'physiqueRating',
+              title: t.physiqueRating,
+              data: bodyMetricData.physiqueRating,
+              color: THEME.primary,
+            },
+            {
+              key: 'boneMass',
+              title: t.boneMassKg,
+              data: bodyMetricData.boneMass,
+              color: THEME.primary,
+            },
+            {
+              key: 'bmr',
+              title: t.bmrKcal,
+              data: bodyMetricData.bmr,
+              color: THEME.primary,
+            },
+          ].filter(chart => chart.data.length > 0).map(chart => (
+            <div
+              key={chart.key}
+              style={{
+                background: THEME.card,
+                border: `1px solid ${THEME.border}`,
+                borderRadius: 8,
+                padding: 16,
+                marginBottom: 16
+              }}
+            >
+              <h3 style={{ margin: '0 0 12px' }}>{chart.title}</h3>
+              {renderChart(chart.data, [chart.key], [chart.color])}
+            </div>
+          ))}
         </div>
       )}
       {activescreen === 'kracht' && (
@@ -1426,47 +1864,130 @@ function Onboarding({ onStart, t }) {
   const [squat, setSquat] = useState('');
   const [bench, setBench] = useState('');
   const [deadlift, setDeadlift] = useState('');
-  function handleStart() {
-    const s = parseFloat(squat), b = parseFloat(bench), d = parseFloat(deadlift);
-    if (!s || !b || !d) { alert('Vul alle 1RM waarden in!'); return; }
-    onStart(s, b, d);
+  const [birthDate, setBirthDate] = useState('');
+  const [sex, setSex] = useState('');
+  const [bodyForm, setBodyForm] = useState({
+    bodyWeight: '',
+    bodyFat: '',
+    bodyWater: '',
+    visceralFat: '',
+    physiqueRating: '',
+    boneMass: '',
+  });
+
+  function updateBodyField(field, value) {
+    setBodyForm(prev => ({ ...prev, [field]: value }));
   }
+
+  function buildInitialBodyData() {
+    const bodyWeight = toOptionalNumber(bodyForm.bodyWeight);
+    const bodyFat = toOptionalNumber(bodyForm.bodyFat);
+    const bodyWater = toOptionalNumber(bodyForm.bodyWater);
+    const visceralFat = toOptionalNumber(bodyForm.visceralFat);
+    const physiqueRating = toOptionalNumber(bodyForm.physiqueRating);
+    const boneMass = toOptionalNumber(bodyForm.boneMass);
+    const leanMass = calculateLeanMassEstimate(bodyWeight, bodyFat, boneMass);
+    const bmr = calculateBmrEstimate(leanMass);
+
+    const bodyData = {
+      bodyWeight,
+      bodyFat,
+      bodyWater,
+      visceralFat,
+      leanMass,
+      physiqueRating,
+      boneMass,
+      bmr,
+    };
+
+    return Object.values(bodyData).some(value => value !== null) ? bodyData : null;
+  }
+
+  function handleStart() {
+    const s = parseFloat(squat);
+    const b = parseFloat(bench);
+    const d = parseFloat(deadlift);
+
+    if (!s || !b || !d || !birthDate || !sex) {
+      alert(t.fillRequiredFields);
+      return;
+    }
+
+    onStart(s, b, d, { birthDate, sex }, buildInitialBodyData());
+  }
+
+  const bodyFields = [
+    { key: 'bodyWeight', label: `${t.bodyweight} (${t.kg})` },
+    { key: 'bodyFat', label: t.bodyFatPercent },
+    { key: 'bodyWater', label: t.bodyWaterPercent },
+    { key: 'visceralFat', label: t.visceralFatRating },
+    { key: 'physiqueRating', label: t.physiqueRating },
+    { key: 'boneMass', label: t.boneMassKg },
+  ];
+
   return (
-  <div style={{
-    maxWidth: 500,
-    margin: '0 auto',
-    padding: 24,
-    paddingTop: 60,
-    minHeight: '100vh',
-    fontFamily: 'sans-serif',
-    background: THEME.bg,
-    color: THEME.text
-  }}>
-    <h1 style={{ textAlign: 'center', marginTop: 0, marginBottom: 24 }}>
-      Kelani SBD Tracker
-    </h1>
-
     <div style={{
-      background: THEME.card,
+      maxWidth: 500,
+      margin: '0 auto',
       padding: 24,
-      borderRadius: 8,
-      border: `1px solid ${THEME.border}`
+      paddingTop: 60,
+      minHeight: '100vh',
+      fontFamily: 'sans-serif',
+      background: THEME.bg,
+      color: THEME.text
     }}>
-      <h2 style={{ marginTop: 0, color: THEME.text }}>
-        {t.enter1RM}
-      </h2>
+      <h1 style={{ textAlign: 'center', marginTop: 0, marginBottom: 24 }}>
+        {t.appName}
+      </h1>
 
-      {[[t.squat, squat, setSquat], [t.bench, bench, setBench], [t.deadlift, deadlift, setDeadlift]].map(([label, val, setter]) => (
-        <div key={label} style={{ marginBottom: 16 }}>
+      <div style={{
+        background: THEME.card,
+        padding: 24,
+        borderRadius: 8,
+        border: `1px solid ${THEME.border}`
+      }}>
+        <h2 style={{ marginTop: 0, color: THEME.text, textAlign: 'center' }}>
+          {t.enterDetails}
+        </h2>
+
+        {[
+          [t.squat1RM, squat, setSquat],
+          [t.bench1RM, bench, setBench],
+          [t.deadlift1RM, deadlift, setDeadlift],
+        ].map(([label, val, setter]) => (
+          <div key={label} style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
+              {label}
+            </label>
+
+            <input
+              type="number"
+              value={val}
+              onChange={e => setter(e.target.value)}
+              placeholder={t.kg}
+              style={{
+                width: '100%',
+                padding: 10,
+                fontSize: 16,
+                borderRadius: 4,
+                border: `1px solid ${THEME.border}`,
+                boxSizing: 'border-box',
+                background: THEME.bg,
+                color: THEME.text
+              }}
+            />
+          </div>
+        ))}
+
+        <div style={{ marginBottom: 16 }}>
           <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
-            {label}
+            {t.birthDate}
           </label>
 
           <input
-            type="number"
-            value={val}
-            onChange={e => setter(e.target.value)}
-            placeholder={t.kg}
+            type="date"
+            value={birthDate}
+            onChange={e => setBirthDate(e.target.value)}
             style={{
               width: '100%',
               padding: 10,
@@ -1479,38 +2000,91 @@ function Onboarding({ onStart, t }) {
             }}
           />
         </div>
-      ))}
 
-      <button
-        onClick={handleStart}
-        style={{
-          width: '100%',
-          padding: 14,
-          fontSize: 16,
-          background: THEME.primary,
-          color: '#ffffff',
-          border: `1px solid ${THEME.primary}`,
-          borderRadius: 4,
-          cursor: 'pointer',
-          marginTop: 8,
-          fontWeight: 600
-        }}
-      >
-        {t.startProgram}
-      </button>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
+            {t.sex}
+          </label>
+
+          <select
+            value={sex}
+            onChange={e => setSex(e.target.value)}
+            style={{
+              width: '100%',
+              padding: 10,
+              fontSize: 16,
+              borderRadius: 4,
+              border: `1px solid ${THEME.border}`,
+              boxSizing: 'border-box',
+              background: THEME.bg,
+              color: THEME.text
+            }}
+          >
+            <option value="">{t.selectSex}</option>
+            <option value="male">{t.male}</option>
+            <option value="female">{t.female}</option>
+            <option value="other">{t.other}</option>
+          </select>
+        </div>
+
+        <h3 style={{ margin: '4px 0 16px', color: THEME.text, textAlign: 'center' }}>
+          {t.optionalBodyData}
+        </h3>
+
+        {bodyFields.map(field => (
+          <div key={field.key} style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
+              {field.label}
+            </label>
+
+            <input
+              type="number"
+              value={bodyForm[field.key]}
+              onChange={e => updateBodyField(field.key, e.target.value)}
+              style={{
+                width: '100%',
+                padding: 10,
+                fontSize: 16,
+                borderRadius: 4,
+                border: `1px solid ${THEME.border}`,
+                boxSizing: 'border-box',
+                background: THEME.bg,
+                color: THEME.text
+              }}
+            />
+          </div>
+        ))}
+
+        <button
+          onClick={handleStart}
+          style={{
+            width: '100%',
+            padding: 14,
+            fontSize: 16,
+            background: THEME.primary,
+            color: '#ffffff',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 4,
+            cursor: 'pointer',
+            marginTop: 8,
+            fontWeight: 600
+          }}
+        >
+          {t.startProgram}
+        </button>
+      </div>
     </div>
-  </div>
-);
+  );
 }
 
 function BottomNav({ screen, onChange, t }) {
-const items = [
-  { key: 'dashboard', label: t.dashboard },
-  { key: 'all', label: t.program },
-  { key: 'current', label: t.workout },
-  { key: 'stats', label: t.progress },
-  { key: 'settings', label: t.settings },
-];
+  const items = [
+    { key: 'dashboard', label: t.dashboard },
+    { key: 'all', label: t.program },
+    { key: 'current', label: t.workout },
+    { key: 'stats', label: t.progress },
+    { key: 'settings', label: t.settings },
+  ];
 
   return (
     <div style={{
@@ -1522,7 +2096,7 @@ const items = [
       zIndex: 100,
       background: THEME.card,
       borderTop: `1px solid ${THEME.border}`,
-}}>
+    }}>
       {items.map(item => (
         <button
           key={item.key}
@@ -1549,24 +2123,24 @@ const items = [
 
 export default function App() {
   const [language, setLanguage] = useState(() => {
-  return localStorage.getItem('language') || 'nl';
-});
-
-const [timer, setTimer] = useState(null);
-
-function startTimer(seconds, placement = null) {
-  setTimer({
-    id: Date.now(),
-    seconds,
-    placement,
+    return localStorage.getItem('language') || 'nl';
   });
-}
 
-useEffect(() => {
-  localStorage.setItem('language', language);
-}, [language]);
+  const [timer, setTimer] = useState(null);
 
-const t = translations[language];
+  function startTimer(seconds, placement = null) {
+    setTimer({
+      id: Date.now(),
+      seconds,
+      placement,
+    });
+  }
+
+  useEffect(() => {
+    localStorage.setItem('language', language);
+  }, [language]);
+
+  const t = translations[language];
   const [screen, setScreen] = useState('onboarding');
   const [workouts, setWorkouts] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -1579,180 +2153,200 @@ const t = translations[language];
   const [completedSummary, setCompletedSummary] = useState(null);
   const [currentCycle, setCurrentCycle] = useState(1);
   const [bodyWeights, setBodyWeights] = useState([]);
-  const [showBodyWeightModal, setShowBodyWeightModal] = useState(false);
+  const [userProfile, setUserProfile] = useState({});
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const currentIndex = getCompletedWorkoutCount(history, currentCycle);
   const PROGRAM_VERSION = 'cube-27-v1';
 
-useEffect(() => {
-  window.scrollTo({ top: 0, behavior: 'auto' });
-}, [screen, selectedIndex]);
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [screen, selectedIndex]);
 
-useEffect(() => {
-  const setupBackButton = async () => {
-    const listener = await CapacitorApp.addListener('backButton', () => {
-      if (screen === 'current') {
-        setScreen('all');
-        return;
-      }
-
-      if (screen === 'all') {
-        setScreen('dashboard');
-        return;
-      }
-
-      if (screen === 'stats') {
-        setScreen('all');
-        return;
-      }
-
-      if (screen === 'settings') {
-        setScreen('dashboard');
-        return;
-      }
-
-      if (screen === 'completed') {
-        if (completedWorkoutIndex !== null) {
-          setSelectedIndex(completedWorkoutIndex);
+  useEffect(() => {
+    const setupBackButton = async () => {
+      const listener = await CapacitorApp.addListener('backButton', () => {
+        if (screen === 'current') {
+          setScreen('all');
+          return;
         }
-        setScreen('current');
-        return;
-      }
 
-      CapacitorApp.exitApp();
+        if (screen === 'all') {
+          setScreen('dashboard');
+          return;
+        }
+
+        if (screen === 'stats') {
+          setScreen('all');
+          return;
+        }
+
+        if (screen === 'settings') {
+          setScreen('dashboard');
+          return;
+        }
+
+        if (screen === 'completed') {
+          if (completedWorkoutIndex !== null) {
+            setSelectedIndex(completedWorkoutIndex);
+          }
+          setScreen('current');
+          return;
+        }
+
+        CapacitorApp.exitApp();
+      });
+
+      return listener;
+    };
+
+    let listener;
+
+    setupBackButton().then(l => {
+      listener = l;
     });
 
-    return listener;
-  };
+    return () => {
+      if (listener) listener.remove();
+    };
+  }, [screen, completedWorkoutIndex]);
 
-  let listener;
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
 
-  setupBackButton().then(l => {
-    listener = l;
-  });
-
-  return () => {
-    if (listener) listener.remove();
-  };
-}, [screen, completedWorkoutIndex]);
-
-useEffect(() => {
-  const saved = localStorage.getItem(STORAGE_KEY);
-
-  if (!saved) {
-    setScreen('onboarding');
-    return;
-  }
-
-  try {
-    const data = JSON.parse(saved);
-
-    const savedPrs = data.prs || {};
-    const squat = savedPrs.Squat || 0;
-    const bench = savedPrs.Bench || 0;
-    const deadlift = savedPrs.Deadlift || 0;
-
-    if (!squat || !bench || !deadlift) {
+    if (!saved) {
       setScreen('onboarding');
       return;
     }
 
-    const savedHistory = data.history || [];
-    const savedCycle = data.currentCycle || 1;
-    const generatedWorkouts = generateProgram(squat, bench, deadlift);
-    const savedInProgress = data.inProgress || null;
+    try {
+      const data = JSON.parse(saved);
 
-    const canRestoreInProgress =
-      savedInProgress &&
-      savedInProgress.programVersion === PROGRAM_VERSION &&
-      savedInProgress.currentCycle === savedCycle &&
-      Array.isArray(savedInProgress.workouts) &&
-      savedInProgress.workouts.length === generatedWorkouts.length;
+      const savedPrs = data.prs || {};
+      const squat = savedPrs.Squat || 0;
+      const bench = savedPrs.Bench || 0;
+      const deadlift = savedPrs.Deadlift || 0;
 
-    const restoredWorkouts = canRestoreInProgress
-      ? savedInProgress.workouts
-      : hydrateWorkoutsWithHistory(generatedWorkouts, savedHistory, savedCycle);
+      if (!squat || !bench || !deadlift) {
+        setScreen('onboarding');
+        return;
+      }
 
-    setWorkouts(restoredWorkouts);
-    setHistory(savedHistory);
-    setPrs(savedPrs);
-    setAccessoryPRs(data.accessoryPRs || {});
-    setCurrentCycle(savedCycle);
-    setBodyWeights(normalizeBodyWeights(data));
+      const savedHistory = data.history || [];
+      const savedCycle = data.currentCycle || 1;
+      const generatedWorkouts = generateProgram(squat, bench, deadlift);
+      const savedInProgress = data.inProgress || null;
 
-    setSelectedIndex(
-      canRestoreInProgress
-        ? savedInProgress.selectedIndex || 0
-        : getCompletedWorkoutCount(savedHistory, savedCycle)
-    );
-  
+      const canRestoreInProgress =
+        savedInProgress &&
+        savedInProgress.programVersion === PROGRAM_VERSION &&
+        savedInProgress.currentCycle === savedCycle &&
+        Array.isArray(savedInProgress.workouts) &&
+        savedInProgress.workouts.length === generatedWorkouts.length;
+
+      const restoredWorkouts = canRestoreInProgress
+        ? savedInProgress.workouts
+        : hydrateWorkoutsWithHistory(generatedWorkouts, savedHistory, savedCycle);
+
+      setWorkouts(restoredWorkouts);
+      setHistory(savedHistory);
+      setPrs(savedPrs);
+      setAccessoryPRs(data.accessoryPRs || {});
+      setCurrentCycle(savedCycle);
+      setBodyWeights(normalizeBodyWeights(data));
+      setUserProfile(data.userProfile || {});
+
+      setSelectedIndex(
+        canRestoreInProgress
+          ? savedInProgress.selectedIndex || 0
+          : getCompletedWorkoutCount(savedHistory, savedCycle)
+      );
+
+      setShowNewCycle(false);
+      setScreen('dashboard');
+    } catch (e) {
+      console.error('Kon opgeslagen user data niet laden', e);
+      setScreen('onboarding');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!prs.Squat || !prs.Bench || !prs.Deadlift) return;
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: 1,
+      history,
+      prs,
+      accessoryPRs,
+      currentCycle,
+      bodyWeights,
+      userProfile,
+      inProgress: {
+        programVersion: PROGRAM_VERSION,
+        currentCycle,
+        selectedIndex,
+        workouts,
+      },
+    }));
+  }, [history, prs, accessoryPRs, currentCycle, bodyWeights, userProfile, selectedIndex, workouts]);
+
+  function handleStart(s, b, d, profile = {}, initialBodyData = null) {
+    const today = new Date().toLocaleDateString('nl-NL');
+
+    localStorage.removeItem('kel-powerlifting');
+    localStorage.removeItem('app_version');
+
+    setWorkouts(generateProgram(s, b, d));
+    setSelectedIndex(0);
+    setCurrentCycle(1);
+
+    setHistory([
+      {
+        workoutNumber: 0,
+        cycle: 1,
+        lift: 'Squat',
+        topWeight: s,
+        topReps: 1,
+        e1rm: s,
+        date: today,
+      },
+      {
+        workoutNumber: 0,
+        cycle: 1,
+        lift: 'Bench',
+        topWeight: b,
+        topReps: 1,
+        e1rm: b,
+        date: today,
+      },
+      {
+        workoutNumber: 0,
+        cycle: 1,
+        lift: 'Deadlift',
+        topWeight: d,
+        topReps: 1,
+        e1rm: d,
+        date: today,
+      }
+    ]);
+
+    setPrs({ Squat: s, Bench: b, Deadlift: d });
+    setAccessoryPRs({});
+    setUserProfile(profile);
+    setBodyWeights(initialBodyData ? [
+      {
+        workoutNumber: 0,
+        cycle: 1,
+        date: today,
+        timestamp: new Date().toISOString(),
+        ...initialBodyData,
+      }
+    ] : []);
     setShowNewCycle(false);
     setScreen('dashboard');
-  } catch (e) {
-    console.error('Kon opgeslagen user data niet laden', e);
-    setScreen('onboarding');
   }
-}, []);
-
-useEffect(() => {
-  if (!prs.Squat || !prs.Bench || !prs.Deadlift) return;
-
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
-    version: 1,
-    history,
-    prs,
-    accessoryPRs,
-    currentCycle,
-    bodyWeights,
-    inProgress: {
-      programVersion: PROGRAM_VERSION,
-      currentCycle,
-      selectedIndex,
-      workouts,
-    },
-  }));
-}, [history, prs, accessoryPRs, currentCycle, bodyWeights, selectedIndex, workouts]);
-
-function handleStart(s, b, d) {
-  localStorage.removeItem('kel-powerlifting');
-  localStorage.removeItem('app_version');
-
-  setWorkouts(generateProgram(s, b, d));
-  setSelectedIndex(0);
-
-  setHistory([
-  {
-    workoutNumber: 0,
-    lift: 'Squat',
-    topWeight: s,
-    topReps: 1,
-    e1rm: s,
-    date: new Date().toLocaleDateString('nl-NL'),
-  },
-  {
-    workoutNumber: 0,
-    lift: 'Bench',
-    topWeight: b,
-    topReps: 1,
-    e1rm: b,
-    date: new Date().toLocaleDateString('nl-NL'),
-  },
-  {
-    workoutNumber: 0,
-    lift: 'Deadlift',
-    topWeight: d,
-    topReps: 1,
-    e1rm: d,
-    date: new Date().toLocaleDateString('nl-NL'),
-  }
-]);
-
-  setPrs({ Squat: s, Bench: b, Deadlift: d });
-  setAccessoryPRs({});
-  setShowNewCycle(false);
-  setScreen('dashboard');
-}
 
 function handleResetApp() {
+  setShowResetConfirm(false);
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem('kel-powerlifting');
   localStorage.removeItem('app_version');
@@ -1763,6 +2357,7 @@ function handleResetApp() {
   setHistory([]);
   setPrs({});
   setAccessoryPRs({});
+  setUserProfile({});
   setShowNewCycle(false);
   setCurrentCycle(1);
   setBodyWeights([]);
@@ -2256,8 +2851,22 @@ if (screen === 'current' && !workouts[selectedIndex]) {
   return <Onboarding onStart={handleStart} t={t}/>;
 }
 
-function saveBodyWeight(bw) {
+function saveBodyWeight(data) {
   const today = new Date().toLocaleDateString('nl-NL');
+
+  const bodyData = {
+    bodyWeight: data.bodyWeight || null,
+    bodyFat: data.bodyFat || null,
+    bodyWater: data.bodyWater || null,
+    visceralFat: data.visceralFat || null,
+    leanMass: data.leanMass || null,
+    physiqueRating: data.physiqueRating || null,
+    boneMass: data.boneMass || null,
+    bmr: data.bmr || null,
+  };
+
+  const hasAnyValue = Object.values(bodyData).some(value => value !== null);
+  if (!hasAnyValue) return;
 
   setBodyWeights(prev => [
     ...prev.filter(entry => entry.date !== today),
@@ -2266,19 +2875,9 @@ function saveBodyWeight(bw) {
       cycle: currentCycle,
       date: today,
       timestamp: new Date().toISOString(),
-      bodyWeight: bw,
+      ...bodyData,
     },
   ]);
-
-  setShowBodyWeightModal(false);
-}
-
-function skipBodyWeight() {
-  setShowBodyWeightModal(false);
-}
-
-function updateBodyWeight() {
-  setShowBodyWeightModal(true);
 }
 
 function changeScreen(nextScreen) {
@@ -2315,12 +2914,187 @@ const bestE1RMs = {
 const total1RM = best1RMs.Squat + best1RMs.Bench + best1RMs.Deadlift;
 const totalE1RM = bestE1RMs.Squat + bestE1RMs.Bench + bestE1RMs.Deadlift;
 
-const latestBodyWeightEntry = [...bodyWeights].slice(-1)[0];
+const latestBodyDataEntry = [...bodyWeights].slice(-1)[0];
+const latestBodyWeightEntry = [...bodyWeights].filter(entry => entry.bodyWeight).slice(-1)[0];
 const latestBodyWeight = latestBodyWeightEntry?.bodyWeight || null;
 
 const strengthRatio = latestBodyWeight
   ? Math.round((totalE1RM / latestBodyWeight) * 100) / 100
   : null;
+
+function bodyMetricValue(value, suffix = '') {
+  if (!value) return null;
+  return suffix ? `${value} ${suffix}` : `${value}`;
+}
+
+function calculateAge(birthDate) {
+  if (!birthDate) return null;
+
+  const birth = new Date(birthDate);
+  if (Number.isNaN(birth.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age -= 1;
+  }
+
+  return age;
+}
+
+function makeStatus(label, color, symbol = '•') {
+  return { label, color, symbol };
+}
+
+function bodyFatStatus(value) {
+  if (!value || !userProfile?.birthDate || !userProfile?.sex) return null;
+
+  const age = calculateAge(userProfile.birthDate);
+  const sex = userProfile.sex;
+
+  if (!age || age < 18 || age > 99 || !['male', 'female'].includes(sex)) return null;
+
+  const ranges = {
+    male: [
+      { minAge: 18, maxAge: 39, healthyMin: 8, healthyMax: 20, overfatMax: 25 },
+      { minAge: 40, maxAge: 59, healthyMin: 11, healthyMax: 22, overfatMax: 28 },
+      { minAge: 60, maxAge: 99, healthyMin: 13, healthyMax: 25, overfatMax: 30 },
+    ],
+    female: [
+      { minAge: 18, maxAge: 39, healthyMin: 21, healthyMax: 33, overfatMax: 39 },
+      { minAge: 40, maxAge: 59, healthyMin: 23, healthyMax: 34, overfatMax: 40 },
+      { minAge: 60, maxAge: 99, healthyMin: 24, healthyMax: 36, overfatMax: 41 },
+    ],
+  };
+
+  const range = ranges[sex].find(r => age >= r.minAge && age <= r.maxAge);
+  if (!range) return null;
+
+  if (value < range.healthyMin) return makeStatus(t.bodyMetricUnderfat, THEME.primary, '');
+  if (value <= range.healthyMax) return makeStatus(t.bodyMetricHealthy, THEME.yellow, '');
+  if (value <= range.overfatMax) return makeStatus(t.bodyMetricOverfat, THEME.primary, '');
+  return makeStatus(t.bodyMetricObese, THEME.red, '');
+}
+
+function bodyWaterStatus(value) {
+  if (!value || !userProfile?.sex) return null;
+
+  if (userProfile.sex === 'male' && value >= 50 && value <= 65) {
+    return makeStatus(t.bodyMetricHealthy, THEME.yellow, '');
+  }
+
+  if (userProfile.sex === 'female' && value >= 45 && value <= 60) {
+    return makeStatus(t.bodyMetricHealthy, THEME.yellow, '');
+  }
+
+  return null;
+}
+
+function visceralFatStatus(value) {
+  if (!value) return null;
+
+  if (value >= 1 && value <= 12) {
+    return makeStatus(t.bodyMetricNormal, THEME.yellow, '');
+  }
+
+  if (value >= 13) {
+    return makeStatus(t.bodyMetricExcessive, THEME.red, '');
+  }
+
+  return null;
+}
+
+function physiqueStatus(value) {
+  if (!value) return null;
+
+  const key = `physique${Math.round(value)}`;
+  if (!t[key]) return null;
+
+  return makeStatus(t[key], THEME.primary, '');
+}
+
+function boneMassAverage(bodyWeight, sex) {
+  if (!bodyWeight || !['male', 'female'].includes(sex)) return null;
+
+  if (sex === 'female') {
+    if (bodyWeight < 50) return 1.95;
+    if (bodyWeight < 75) return 2.4;
+    return 2.95;
+  }
+
+  if (bodyWeight < 65) return 2.66;
+  if (bodyWeight < 95) return 3.29;
+  return 3.69;
+}
+
+function boneMassStatus(value) {
+  if (!value || !latestBodyDataEntry?.bodyWeight || !userProfile?.sex) return null;
+
+  const average = boneMassAverage(latestBodyDataEntry.bodyWeight, userProfile.sex);
+  if (!average) return null;
+
+  const diff = Math.round((value - average) * 10) / 10;
+
+  if (Math.abs(diff) < 0.1) {
+    return makeStatus(t.bodyMetricAverage, THEME.yellow, '');
+  }
+
+  if (diff > 0) {
+    return makeStatus(t.bodyMetricAboveAverage, THEME.yellow, '');
+  }
+
+  return makeStatus(t.bodyMetricBelowAverage, THEME.red, '');
+}
+
+const latestBodyDataRows = [
+  {
+    key: 'bodyWeight',
+    label: `${t.bodyweight} (${t.kg})`,
+    value: bodyMetricValue(latestBodyDataEntry?.bodyWeight, t.kg),
+  },
+  {
+    key: 'bodyFat',
+    label: t.bodyFatPercent,
+    value: bodyMetricValue(latestBodyDataEntry?.bodyFat, '%'),
+    status: bodyFatStatus(latestBodyDataEntry?.bodyFat),
+  },
+  {
+    key: 'bodyWater',
+    label: t.bodyWaterPercent,
+    value: bodyMetricValue(latestBodyDataEntry?.bodyWater, '%'),
+    status: bodyWaterStatus(latestBodyDataEntry?.bodyWater),
+  },
+  {
+    key: 'leanMass',
+    label: t.leanMassKg,
+    value: bodyMetricValue(latestBodyDataEntry?.leanMass, t.kg),
+  },
+  {
+    key: 'visceralFat',
+    label: t.visceralFatRating,
+    value: bodyMetricValue(latestBodyDataEntry?.visceralFat),
+    status: visceralFatStatus(latestBodyDataEntry?.visceralFat),
+  },
+  {
+    key: 'physiqueRating',
+    label: t.physiqueRating,
+    value: bodyMetricValue(latestBodyDataEntry?.physiqueRating),
+    status: physiqueStatus(latestBodyDataEntry?.physiqueRating),
+  },
+  {
+    key: 'boneMass',
+    label: t.boneMassKg,
+    value: bodyMetricValue(latestBodyDataEntry?.boneMass, t.kg),
+    status: boneMassStatus(latestBodyDataEntry?.boneMass),
+  },
+  {
+    key: 'bmr',
+    label: t.bmrKcal,
+    value: bodyMetricValue(latestBodyDataEntry?.bmr),
+  },
+].filter(row => row.value);
 
     return (
   <div style={{
@@ -2363,8 +3137,8 @@ const strengthRatio = latestBodyWeight
     <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 12 }}>
       {[
         [t.squat, THEME.red, best1RMs.Squat, bestE1RMs.Squat],
-        [t.bench, THEME.yellow, best1RMs.Bench, bestE1RMs.Bench],
-        [t.deadlift, THEME.primary, best1RMs.Deadlift, bestE1RMs.Deadlift],
+        [t.bench, THEME.primary, best1RMs.Bench, bestE1RMs.Bench],
+        [t.deadlift, THEME.yellow, best1RMs.Deadlift, bestE1RMs.Deadlift],
       ].map(([lift, color, oneRM, e1RM]) => (
         <div key={lift} style={{ marginBottom: lift === t.deadlift ? 0 : 12 }}>
           <div style={{ marginBottom: 6 }}>
@@ -2385,23 +3159,59 @@ const strengthRatio = latestBodyWeight
     <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ color: THEME.text, fontWeight: 700 }}>{t.total1rm}</span>
-        <strong style={{ color: THEME.red }}>{total1RM ? `${total1RM} kg` : '—'}</strong>
+        <strong style={{ color: '#ffffff' }}>{total1RM ? `${total1RM} kg` : '—'}</strong>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ color: THEME.text, fontWeight: 700 }}>{t.totalE1rm}</span>
-        <strong style={{ color: THEME.yellow }}>{totalE1RM ? `${totalE1RM} kg` : '—'}</strong>
+        <strong style={{ color: '#ffffff' }}>{totalE1RM ? `${totalE1RM} kg` : '—'}</strong>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <span style={{ color: THEME.text, fontWeight: 700 }}>{t.strength}</span>
-        <strong style={{ color: THEME.primary }}>{strengthRatio || '—'}</strong>
+        <strong style={{ color: '#ffffff' }}>{strengthRatio || '—'}</strong>
       </div>
     </div>
 
     <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ color: THEME.text, fontWeight: 700 }}>{t.bodyweight}</span>
-        <strong>{latestBodyWeight ? `${latestBodyWeight} kg` : '—'}</strong>
-      </div>
+      {latestBodyDataRows.length > 0 ? (
+        latestBodyDataRows.map((row, index) => (
+          <div
+            key={row.key}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 56px 160px',
+              alignItems: 'center',
+              columnGap: 8,
+              marginBottom: index === latestBodyDataRows.length - 1 ? 0 : 8
+            }}
+          >
+            <span style={{ color: THEME.text, fontWeight: 700 }}>
+              {row.label}:
+            </span>
+
+            <strong style={{ textAlign: 'right', whiteSpace: 'nowrap', minWidth: 56 }}>
+              {row.value}
+            </strong>
+
+            <span style={{ minWidth: 160, textAlign: 'right' }}>
+              {row.status && (
+                <span style={{
+                  color: row.status.color,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  whiteSpace: 'nowrap'
+                }}>
+                  {row.status.label}
+                </span>
+              )}
+            </span>
+          </div>
+        ))
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: THEME.text, fontWeight: 700 }}>{t.bodyweight}</span>
+          <strong>—</strong>
+        </div>
+      )}
     </div>
   </div>
 )}
@@ -2432,27 +3242,21 @@ const strengthRatio = latestBodyWeight
 
       {screen === 'settings' && (
        <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
-  <h2 style={{ marginTop: 0 }}>{t.settings}</h2>
-  <button
-  onClick={updateBodyWeight}
-  style={{
-    width: '100%',
-    padding: 14,
-    fontSize: 16,
-    fontWeight: 600,
-    background: THEME.card,
-    color: '#ffffff',
-    border: `1px solid ${THEME.border}`,
-    borderRadius: 8,
-    cursor: 'pointer',
-    marginBottom: 12
-  }}
->
-  {t.updateBodyweight}
-</button>
+  <h2 style={{ marginTop: 0, textAlign: 'center' }}>{t.settings}</h2>
+  <ProfileSection
+    userProfile={userProfile}
+    onSave={setUserProfile}
+    t={t}
+  />
+
+  <BodyDataSection
+    bodyData={latestBodyDataEntry}
+    onSave={saveBodyWeight}
+    t={t}
+  />
 
   <button
-    onClick={handleResetApp}
+    onClick={() => setShowResetConfirm(true)}
     style={{
       width: '100%',
       padding: 14,
@@ -2467,7 +3271,7 @@ const strengthRatio = latestBodyWeight
   >
     {t.restart}
   </button>
-  <div style={{ marginTop: 16, marginBottom: 8, fontWeight: 700 }}>
+  <div style={{ marginTop: 16, marginBottom: 8, fontWeight: 700, textAlign: 'center' }}>
   {t.language}
 </div>
 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
@@ -2680,13 +3484,6 @@ style={{
     </div>
   </div>
 )}
-    {showBodyWeightModal && (
-  <BodyWeightModal
-    onSave={saveBodyWeight}
-    onSkip={skipBodyWeight}
-    t={t}
-  />
-)}
 
 {showNewCycle && screen === 'completed' && (
   <NewCycleModal
@@ -2694,6 +3491,76 @@ style={{
     onStart={handleStartNewCycle}
     t={t}
   />
+)}
+
+{showResetConfirm && (
+  <div style={{
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0,0,0,0.65)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 600,
+    padding: 16
+  }}>
+    <div style={{
+      background: THEME.card,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 12,
+      padding: 20,
+      maxWidth: 380,
+      width: '100%',
+      color: THEME.text
+    }}>
+      <h3 style={{ margin: '0 0 10px', color: THEME.text }}>
+        {t.resetConfirmTitle}
+      </h3>
+
+      <p style={{ margin: '0 0 18px', color: THEME.muted, fontSize: 14, lineHeight: 1.45 }}>
+        {t.resetConfirmText}
+      </p>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={() => setShowResetConfirm(false)}
+          style={{
+            flex: 1,
+            padding: 12,
+            fontSize: 14,
+            fontWeight: 700,
+            background: 'transparent',
+            color: THEME.text,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          {t.resetConfirmCancel}
+        </button>
+
+        <button
+          onClick={handleResetApp}
+          style={{
+            flex: 1,
+            padding: 12,
+            fontSize: 14,
+            fontWeight: 800,
+            background: THEME.red,
+            color: '#ffffff',
+            border: `1px solid ${THEME.red}`,
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          {t.resetConfirmConfirm}
+        </button>
+      </div>
+    </div>
+  </div>
 )}
 
       <BottomNav screen={screen} onChange={changeScreen} t={t} />
