@@ -668,7 +668,211 @@ const [editing, setEditing] = useState(false);
 }
 
 
+function SettingsCard({ title, actionLabel, onAction, children, centerTitle = false }) {
+  return (
+    <div style={{
+      background: THEME.card,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 8,
+      padding: 14,
+      marginBottom: 12
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        marginBottom: 10
+      }}>
+        <h3 style={{
+          margin: 0,
+          color: THEME.text,
+          fontSize: 16,
+          textAlign: centerTitle ? 'center' : 'left',
+          flex: centerTitle ? 1 : 'initial'
+        }}>
+          {title}
+        </h3>
+
+        {actionLabel && (
+          <button
+            onClick={onAction}
+            style={{
+              padding: '6px 10px',
+              fontSize: 12,
+              fontWeight: 700,
+              background: THEME.card,
+              color: '#ffffff',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 8,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {actionLabel}
+          </button>
+        )}
+      </div>
+
+      {children}
+    </div>
+  );
+}
+
+function SettingsRow({ label, value }) {
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      gap: 12,
+      marginBottom: 6,
+      fontSize: 14
+    }}>
+      <span style={{ color: THEME.muted, fontWeight: 700 }}>{label}</span>
+      <strong style={{ color: THEME.text, textAlign: 'right' }}>{value || '—'}</strong>
+    </div>
+  );
+}
+
+function SettingsModal({ title, onClose, children }) {
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0,0,0,0.65)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 650,
+      padding: 16
+    }}>
+      <div style={{
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 12,
+        padding: 18,
+        maxWidth: 420,
+        width: '100%',
+        maxHeight: '88vh',
+        overflowY: 'auto',
+        color: THEME.text
+      }}>
+        <h3 style={{ margin: '0 0 16px', textAlign: 'center' }}>{title}</h3>
+        {children}
+        <button
+          onClick={onClose}
+          style={{
+            width: '100%',
+            marginTop: 10,
+            padding: 10,
+            fontSize: 14,
+            fontWeight: 700,
+            background: 'transparent',
+            color: THEME.text,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          {translations.nl.cancel && null}{/* keeps JSX parser happy without hardcoded visible text */}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function modalInputStyle() {
+  return {
+    width: '100%',
+    padding: 10,
+    fontSize: 16,
+    borderRadius: 4,
+    background: THEME.bg,
+    color: THEME.text,
+    border: `1px solid ${THEME.border}`,
+    boxSizing: 'border-box'
+  };
+}
+
+function Toast({ message }) {
+  if (!message) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 18,
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: 700,
+      background: THEME.card,
+      border: `1px solid ${THEME.primary}`,
+      borderRadius: 999,
+      padding: '10px 16px',
+      color: THEME.text,
+      fontWeight: 800,
+      boxShadow: '0 8px 24px rgba(0,0,0,0.35)'
+    }}>
+      {message}
+    </div>
+  );
+}
+
+function SupportSection({ t }) {
+  const links = [
+    {
+      label: t.sendFeedback,
+      url: 'mailto:mburgosfr@gmail.com?subject=Kelani%20SBD%20Tracker%20feedback',
+    },
+    {
+      label: t.reportBug,
+      url: 'https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new',
+    },
+    {
+      label: t.supportDevelopment,
+      url: 'https://kelani-site.mburgosfr.workers.dev/',
+    },
+    {
+      label: t.joinTestingOrCoaching,
+      url: 'mailto:mburgosfr@gmail.com?subject=Kelani%20SBD%20Tracker%20testing%20or%20coaching%20interest',
+    },
+  ];
+
+  function openLink(url) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  return (
+    <SettingsCard title={t.support} centerTitle={true}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {links.map(item => (
+          <button
+            key={item.label}
+            onClick={() => openLink(item.url)}
+            style={{
+              padding: '9px 8px',
+              fontSize: 12,
+              fontWeight: 700,
+              background: THEME.card,
+              color: '#ffffff',
+              border: `1px solid ${THEME.border}`,
+              borderRadius: 8,
+              cursor: 'pointer',
+              minHeight: 42
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </SettingsCard>
+  );
+}
+
 function ProfileSection({ userProfile, onSave, t }) {
+  const [isEditing, setIsEditing] = useState(false);
   const [birthDate, setBirthDate] = useState(userProfile?.birthDate || '');
   const [sex, setSex] = useState(userProfile?.sex || '');
   const [notice, setNotice] = useState(null);
@@ -680,115 +884,81 @@ function ProfileSection({ userProfile, onSave, t }) {
 
   useEffect(() => {
     if (!notice) return;
-
-    const id = window.setTimeout(() => {
-      setNotice(null);
-    }, 2200);
-
+    const id = window.setTimeout(() => setNotice(null), 1800);
     return () => window.clearTimeout(id);
   }, [notice]);
 
+  function openEdit() {
+    setBirthDate(userProfile?.birthDate || '');
+    setSex(userProfile?.sex || '');
+    setIsEditing(true);
+  }
+
   function handleSave() {
     onSave({ birthDate, sex });
-    setNotice({
-      id: Date.now(),
-      message: t.profileSaved,
-    });
+    setIsEditing(false);
+    setNotice(t.profileSaved);
   }
 
   return (
-    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 16 }}>
-      <h3 style={{ margin: '0 0 16px', color: THEME.text, textAlign: 'center' }}>{t.profile}</h3>
+    <>
+      <Toast message={notice} />
 
-      {notice && (
-        <div
-          key={notice.id}
-          style={{
-            position: 'fixed',
-            top: 18,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 500,
-            background: THEME.card,
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 999,
-            padding: '10px 16px',
-            color: THEME.text,
-            fontWeight: 800,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8
-          }}
-        >
-          <span style={{ color: THEME.primary, fontSize: 18 }}>✓</span>
-          <span>{notice.message}</span>
+      <SettingsCard title={t.profile} actionLabel={t.edit} onAction={openEdit}>
+        <SettingsRow label={t.birthDate} value={userProfile?.birthDate} />
+        <SettingsRow label={t.sex} value={sexLabel(userProfile?.sex, t)} />
+      </SettingsCard>
+
+      {isEditing && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 650,
+          padding: 16
+        }}>
+          <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 12, padding: 18, maxWidth: 420, width: '100%', color: THEME.text }}>
+            <h3 style={{ margin: '0 0 16px', textAlign: 'center' }}>{t.profile}</h3>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.birthDate}</label>
+              <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} style={modalInputStyle()} />
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.sex}</label>
+              <select value={sex} onChange={e => setSex(e.target.value)} style={modalInputStyle()}>
+                <option value="">{t.selectSex}</option>
+                <option value="male">{t.male}</option>
+                <option value="female">{t.female}</option>
+                <option value="other">{t.other}</option>
+              </select>
+            </div>
+
+            <button onClick={handleSave} style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
+              {t.save}
+            </button>
+
+            <button onClick={() => setIsEditing(false)} style={{ width: '100%', marginTop: 8, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
+              {t.cancel}
+            </button>
+          </div>
         </div>
       )}
-
-      <div style={{ marginBottom: 14 }}>
-        <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14, color: THEME.text }}>
-          {t.birthDate}
-        </label>
-        <input
-          type="date"
-          value={birthDate}
-          onChange={e => setBirthDate(e.target.value)}
-          style={{ width: '100%', padding: 10, fontSize: 16, borderRadius: 4, background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.border}`, boxSizing: 'border-box' }}
-        />
-      </div>
-
-      <div style={{ marginBottom: 14 }}>
-        <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14, color: THEME.text }}>
-          {t.sex}
-        </label>
-        <select
-          value={sex}
-          onChange={e => setSex(e.target.value)}
-          style={{ width: '100%', padding: 10, fontSize: 16, borderRadius: 4, background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.border}`, boxSizing: 'border-box' }}
-        >
-          <option value="">{t.selectSex}</option>
-          <option value="male">{t.male}</option>
-          <option value="female">{t.female}</option>
-          <option value="other">{t.other}</option>
-        </select>
-      </div>
-
-      <button
-        onClick={handleSave}
-        style={{
-          width: '100%',
-          padding: 12,
-          fontSize: 15,
-          fontWeight: 700,
-          background: THEME.card,
-          color: '#ffffff',
-          border: `1px solid ${THEME.primary}`,
-          borderRadius: 8,
-          cursor: 'pointer'
-        }}
-      >
-        {t.save}
-      </button>
-    </div>
+    </>
   );
 }
 
-
 function BodyDataSection({ bodyData, onSave, t }) {
   const previous = bodyData || {};
+  const [isEditing, setIsEditing] = useState(false);
   const [saveNotice, setSaveNotice] = useState(null);
-
-  useEffect(() => {
-    if (!saveNotice) return;
-
-    const id = window.setTimeout(() => {
-      setSaveNotice(null);
-    }, 2200);
-
-    return () => window.clearTimeout(id);
-  }, [saveNotice]);
-
   const [form, setForm] = useState({
     bodyWeight: '',
     bodyFat: '',
@@ -798,12 +968,26 @@ function BodyDataSection({ bodyData, onSave, t }) {
     boneMass: '',
   });
 
-  function updateField(field, value) {
-    setForm(prev => ({ ...prev, [field]: value }));
+  useEffect(() => {
+    if (!saveNotice) return;
+    const id = window.setTimeout(() => setSaveNotice(null), 1800);
+    return () => window.clearTimeout(id);
+  }, [saveNotice]);
+
+  function openEdit() {
+    setForm({
+      bodyWeight: '',
+      bodyFat: '',
+      bodyWater: '',
+      visceralFat: '',
+      physiqueRating: '',
+      boneMass: '',
+    });
+    setIsEditing(true);
   }
 
-  function previousValue(field) {
-    return previous[field] ? String(previous[field]) : '';
+  function updateField(field, value) {
+    setForm(prev => ({ ...prev, [field]: value }));
   }
 
   function enteredValue(field) {
@@ -816,66 +1000,12 @@ function BodyDataSection({ bodyData, onSave, t }) {
     return previous[field] || null;
   }
 
-  function estimateLeanMass(bodyWeight, bodyFat, boneMass = null) {
-    if (!bodyWeight || !bodyFat) return null;
-
-    const fatMass = bodyWeight * (bodyFat / 100);
-    const estimatedLeanMass = bodyWeight - fatMass - (boneMass || 0);
-
-    return Math.round(estimatedLeanMass * 10) / 10;
-  }
-
-  function estimateBmr(leanMass) {
-    if (!leanMass) return null;
-    return Math.round(500 + (22 * leanMass));
-  }
-
-  function estimatedValue(field) {
-    const bodyWeight = finalValue('bodyWeight');
-    const bodyFat = finalValue('bodyFat');
-    const boneMass = finalValue('boneMass');
-    const leanMass = finalValue('leanMass') || estimateLeanMass(bodyWeight, bodyFat, boneMass);
-
-    if (field === 'leanMass') return estimateLeanMass(bodyWeight, bodyFat, boneMass);
-    if (field === 'bmr') return estimateBmr(leanMass);
-
-    return null;
-  }
-
-  function displayPlaceholder(field) {
-    if (field === 'leanMass' || field === 'bmr') {
-      return estimatedValue(field) ? String(estimatedValue(field)) : previousValue(field);
-    }
-
-    return previousValue(field) || (estimatedValue(field) ? String(estimatedValue(field)) : '');
-  }
-
-  function valueStatus(field) {
-    return '';
-  }
-
-  function fieldHint(field, baseHint) {
-    if (field === 'leanMass' && !previous.leanMass && estimatedValue('leanMass')) {
-      return `${baseHint} ${t.estimatedLeanMassHint}`;
-    }
-
-    if (field === 'bmr' && !previous.bmr && estimatedValue('bmr')) {
-      return `${baseHint} ${t.estimatedBmrHint}`;
-    }
-
-    return baseHint;
-  }
-
   function handleSave() {
     const bodyWeight = finalValue('bodyWeight');
     const bodyFat = finalValue('bodyFat');
     const boneMass = finalValue('boneMass');
-
-    const calculatedLeanMass = estimateLeanMass(bodyWeight, bodyFat, boneMass);
-    const leanMass = calculatedLeanMass || previous.leanMass || null;
-
-    const calculatedBmr = estimateBmr(leanMass);
-    const bmr = calculatedBmr || previous.bmr || null;
+    const leanMass = calculateLeanMassEstimate(bodyWeight, bodyFat, boneMass) || previous.leanMass || null;
+    const bmr = calculateBmrEstimate(leanMass) || previous.bmr || null;
 
     const nextData = {
       bodyWeight,
@@ -884,7 +1014,7 @@ function BodyDataSection({ bodyData, onSave, t }) {
       visceralFat: finalValue('visceralFat'),
       leanMass,
       physiqueRating: finalValue('physiqueRating'),
-      boneMass: finalValue('boneMass'),
+      boneMass,
       bmr,
     };
 
@@ -892,102 +1022,179 @@ function BodyDataSection({ bodyData, onSave, t }) {
     if (!hasAnyValue) return;
 
     onSave(nextData);
-    setForm({
-      bodyWeight: '',
-      bodyFat: '',
-      bodyWater: '',
-      visceralFat: '',
-        physiqueRating: '',
-      boneMass: '',
-      });
-    setSaveNotice({
-      id: Date.now(),
-      message: t.bodyDataUpdated,
-    });
+    setIsEditing(false);
+    setSaveNotice(t.bodyDataUpdated);
   }
 
+  const rows = [
+    [`${t.bodyweight} (${t.kg})`, previous.bodyWeight ? `${previous.bodyWeight} ${t.kg}` : null],
+    [t.bodyFatPercent, previous.bodyFat ? `${previous.bodyFat}%` : null],
+    [t.bodyWaterPercent, previous.bodyWater ? `${previous.bodyWater}%` : null],
+    [t.visceralFatRating, previous.visceralFat],
+    [t.physiqueRating, previous.physiqueRating],
+    [t.boneMassKg, previous.boneMass ? `${previous.boneMass} ${t.kg}` : null],
+    [t.leanMassKg, previous.leanMass ? `${previous.leanMass} ${t.kg}` : null],
+    [t.bmrKcal, previous.bmr],
+  ];
+
   const fields = [
-    { key: 'bodyWeight', label: `${t.bodyweight} (${t.kg})`, hint: t.leaveBlankKeepsPrevious },
-    { key: 'bodyFat', label: t.bodyFatPercent, hint: t.bodyFatHint },
-    { key: 'bodyWater', label: t.bodyWaterPercent, hint: t.bodyWaterHint },
-    { key: 'visceralFat', label: t.visceralFatRating, hint: t.visceralFatHint },
-    { key: 'physiqueRating', label: t.physiqueRating, hint: t.physiqueRatingHint },
-    { key: 'boneMass', label: t.boneMassKg, hint: t.boneMassHint },
+    { key: 'bodyWeight', label: `${t.bodyweight} (${t.kg})` },
+    { key: 'bodyFat', label: t.bodyFatPercent },
+    { key: 'bodyWater', label: t.bodyWaterPercent },
+    { key: 'visceralFat', label: t.visceralFatRating },
+    { key: 'physiqueRating', label: t.physiqueRating },
+    { key: 'boneMass', label: t.boneMassKg },
   ];
 
   return (
-    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 16 }}>
-      <h3 style={{ margin: '0 0 16px', color: THEME.text, textAlign: 'center' }}>{t.updateBodyData}</h3>
+    <>
+      <Toast message={saveNotice} />
 
-      {saveNotice && (
-        <div
-          key={saveNotice.id}
-          style={{
-            position: 'fixed',
-            top: 18,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 500,
-            background: THEME.card,
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 999,
-            padding: '10px 16px',
-            color: THEME.text,
-            fontWeight: 800,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8
-          }}
-        >
-          <span style={{ color: THEME.primary, fontSize: 18 }}>✓</span>
-          <span>{saveNotice.message}</span>
-        </div>
-      )}
+      <SettingsCard title={t.updateBodyData} actionLabel={t.edit} onAction={openEdit}>
+        {rows.map(([label, value]) => (
+          <SettingsRow key={label} label={label} value={value} />
+        ))}
+      </SettingsCard>
 
-      {fields.map(field => (
-        <div key={field.key} style={{ marginBottom: 14 }}>
-          <label style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 8, fontWeight: 700, fontSize: 14, color: THEME.text }}>
-            <span>{field.label}</span>
-            {valueStatus(field.key) && (
-              <span style={{ color: THEME.primary, fontSize: 12, fontWeight: 700 }}>
-                {valueStatus(field.key)}
-              </span>
-            )}
-          </label>
+      {isEditing && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 650,
+          padding: 16
+        }}>
+          <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 12, padding: 18, maxWidth: 420, width: '100%', maxHeight: '88vh', overflowY: 'auto', color: THEME.text }}>
+            <h3 style={{ margin: '0 0 16px', textAlign: 'center' }}>{t.updateBodyData}</h3>
 
-          <input
-            type="number"
-            value={form[field.key]}
-            onChange={e => updateField(field.key, e.target.value)}
-            placeholder={displayPlaceholder(field.key)}
-            style={{ width: '100%', padding: 10, fontSize: 16, borderRadius: 4, background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.border}`, boxSizing: 'border-box' }}
-          />
+            {fields.map(field => (
+              <div key={field.key} style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{field.label}</label>
+                <input
+                  type="number"
+                  value={form[field.key]}
+                  onChange={e => updateField(field.key, e.target.value)}
+                  placeholder={previous[field.key] ? String(previous[field.key]) : ''}
+                  style={modalInputStyle()}
+                />
+              </div>
+            ))}
 
-          <div style={{ marginTop: 6, color: THEME.muted, fontSize: 12 }}>
-            {fieldHint(field.key, field.hint)}
+            <button onClick={handleSave} style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
+              {t.save}
+            </button>
+
+            <button onClick={() => setIsEditing(false)} style={{ width: '100%', marginTop: 8, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
+              {t.cancel}
+            </button>
           </div>
         </div>
-      ))}
+      )}
+    </>
+  );
+}
 
-      <button
-        onClick={handleSave}
-        style={{
-          width: '100%',
-          padding: 12,
-          fontSize: 15,
-          fontWeight: 700,
-          background: THEME.card,
-          color: '#ffffff',
-          border: `1px solid ${THEME.primary}`,
-          borderRadius: 8,
-          cursor: 'pointer',
-          marginTop: 4
-        }}
-      >
-        {t.save}
-      </button>
-    </div>
+function LanguageSection({ language, setLanguage, t }) {
+  const [isEditing, setIsEditing] = useState(false);
+
+  const languageNames = {
+    nl: t.languageDutch,
+    en: t.languageEnglish,
+    ca: t.languageCatalan,
+  };
+
+  return (
+    <>
+      <div style={{
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 8,
+        padding: 14,
+        marginBottom: 12
+      }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr auto',
+          alignItems: 'center',
+          gap: 12
+        }}>
+          <h3 style={{ margin: 0, color: THEME.text, fontSize: 16 }}>
+            {t.language}
+          </h3>
+
+          <button
+            onClick={() => setIsEditing(true)}
+            style={{
+              padding: '6px 10px',
+              fontSize: 14,
+              fontWeight: 800,
+              background: THEME.card,
+              color: '#ffffff',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 8,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {languageNames[language]}
+          </button>
+        </div>
+      </div>
+
+      {isEditing && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 650,
+          padding: 16
+        }}>
+          <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 12, padding: 18, maxWidth: 360, width: '100%', color: THEME.text }}>
+            <h3 style={{ margin: '0 0 16px', textAlign: 'center' }}>{t.changeLanguage}</h3>
+
+            {['ca', 'en', 'nl'].map(l => (
+              <button
+                key={l}
+                onClick={() => {
+                  setLanguage(l);
+                  setIsEditing(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  fontSize: 15,
+                  fontWeight: 700,
+                  background: language === l ? THEME.primary : THEME.card,
+                  color: '#ffffff',
+                  border: `1px solid ${language === l ? THEME.primary : THEME.border}`,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  marginBottom: 8
+                }}
+              >
+                {languageNames[l]}
+              </button>
+            ))}
+
+            <button onClick={() => setIsEditing(false)} style={{ width: '100%', padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
+              {t.cancel}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1354,7 +1561,7 @@ function handleToggle(fn) {
   );
 }
 
-function StatsScreen({ history, bodyWeights, onBack, t }) {
+function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, onBack, t }) {
 const [activescreen, setActivescreen] = useState('lifts');
   const liftData = {};
   const totalData = [];
@@ -1610,8 +1817,11 @@ function chartMetricLabel(key) {
 
   return (
     <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
-        <h2 style={{ margin: 0 }}>{t.stats}</h2>
+      <div style={{ marginBottom: 20, textAlign: 'center' }}>
+        <h2 style={{ margin: '0 0 6px' }}>{t.stats}</h2>
+        <div style={{ color: THEME.muted, fontSize: 13 }}>
+          {t.cycle} {currentCycle} · {t.workoutProgress} {Math.min(currentIndex + 1, totalWorkouts)} / {totalWorkouts}
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
@@ -1781,9 +1991,9 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
 
   return (
     <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
-        <h2 style={{ margin: 0, flex: 1 }}>{t.program}</h2>
-        <div style={{ color: THEME.muted, fontSize: 13, marginTop: 4 }}>
+      <div style={{ marginBottom: 20, textAlign: 'center' }}>
+        <h2 style={{ margin: '0 0 6px' }}>{t.program}</h2>
+        <div style={{ color: THEME.muted, fontSize: 13 }}>
           {t.cycle} {currentCycle} · {t.workoutProgress} {Math.min(currentIndex + 1, workouts.length)} / {workouts.length}
         </div>
       </div>
@@ -3235,6 +3445,9 @@ const latestBodyDataRows = [
         <StatsScreen
           history={history}
           bodyWeights={bodyWeights}
+          currentCycle={currentCycle}
+          currentIndex={currentIndex}
+          totalWorkouts={workouts.length}
           onBack={() => setScreen('all')}
           t={t}
         />
@@ -3243,6 +3456,7 @@ const latestBodyDataRows = [
       {screen === 'settings' && (
        <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
   <h2 style={{ marginTop: 0, textAlign: 'center' }}>{t.settings}</h2>
+
   <ProfileSection
     userProfile={userProfile}
     onSave={setUserProfile}
@@ -3255,56 +3469,42 @@ const latestBodyDataRows = [
     t={t}
   />
 
+  <LanguageSection
+    language={language}
+    setLanguage={setLanguage}
+    t={t}
+  />
+
+  <SupportSection t={t} />
+
   <button
     onClick={() => setShowResetConfirm(true)}
     style={{
       width: '100%',
-      padding: 14,
-      fontSize: 16,
-      fontWeight: 600,
+      padding: 9,
+      fontSize: 12,
+      fontWeight: 700,
       background: THEME.card,
-      color: '#ffffff',
-      border: `1px solid ${THEME.border}`,
+      color: THEME.red,
+      border: `1px solid ${THEME.red}`,
       borderRadius: 8,
-      cursor: 'pointer'
+      cursor: 'pointer',
+      marginTop: 20
     }}
   >
     {t.restart}
   </button>
-  <div style={{ marginTop: 16, marginBottom: 8, fontWeight: 700, textAlign: 'center' }}>
-  {t.language}
-</div>
-<div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-  {['ca','en','nl'].map(l => (
-    <button
-      key={l}
-      onClick={() => setLanguage(l)}
-      style={{
-        flex: 1,
-        padding: 10,
-        fontSize: 14,
-        fontWeight: 600,
-        borderRadius: 8,
-        cursor: 'pointer',
-        border: `1px solid ${language === l ? THEME.primary : THEME.border}`,
-        background: language === l ? THEME.primary : THEME.card,
-        color: '#ffffff'
-      }}
-    >
-      {l.toUpperCase()}
-    </button>
-  ))}
-</div>
-<div style={{
-  marginTop: 32,
-  paddingTop: 12,
-  borderTop: `1px solid ${THEME.border}`,
-  textAlign: 'center',
-  color: THEME.muted,
-  fontSize: 12
-}}>
-  Kelani SBD Tracker · v{process.env.REACT_APP_VERSION ?? 'dev'}
-</div>
+
+  <div style={{
+    marginTop: 32,
+    paddingTop: 12,
+    borderTop: `1px solid ${THEME.border}`,
+    textAlign: 'center',
+    color: THEME.muted,
+    fontSize: 12
+  }}>
+    Kelani SBD Tracker · v{process.env.REACT_APP_VERSION ?? 'dev'}
+  </div>
 </div>
       )}
       
