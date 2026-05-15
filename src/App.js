@@ -5,6 +5,9 @@ import { App as CapacitorApp } from '@capacitor/app';
 
 const show = v => (v === null || v === undefined ? '—' : v);
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
+const REST_TIME_OPTIONS = [90, 180, 300];
+const DEFAULT_REST_TIME_SECONDS = 300;
+
 const THEME = {
   bg: '#18110d',
   card: '#2b1f18',
@@ -48,8 +51,14 @@ function sexLabel(value, t) {
   return '—';
 }
 
-function getRestTime() {
-  return 300;
+function normalizeRestTimeSeconds(value) {
+  return REST_TIME_OPTIONS.includes(Number(value)) ? Number(value) : DEFAULT_REST_TIME_SECONDS;
+}
+
+function formatRestTime(seconds) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${String(secs).padStart(2, '0')}`;
 }
 
 function epley(weight, reps) {
@@ -462,24 +471,47 @@ function RestTimer({ seconds, onDismiss, t }) {
 
   function playBeep() {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
 
-      [0, 0.3, 0.6].forEach(delay => {
+
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(0.9, ctx.currentTime);
+      master.connect(ctx.destination);
+
+      const beep = (delay, frequency, duration = 0.22) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
 
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(frequency, ctx.currentTime + delay);
+
+        gain.gain.setValueAtTime(0.001, ctx.currentTime + delay);
+        gain.gain.exponentialRampToValueAtTime(0.85, ctx.currentTime + delay + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration);
+
         osc.connect(gain);
-        gain.connect(ctx.destination);
-
-        osc.frequency.value = 880;
-        osc.type = 'sine';
-
-        gain.gain.setValueAtTime(0.5, ctx.currentTime + delay);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.3);
+        gain.connect(master);
 
         osc.start(ctx.currentTime + delay);
-        osc.stop(ctx.currentTime + delay + 0.3);
-      });
+        osc.stop(ctx.currentTime + delay + duration);
+      };
+
+      [
+        [0, 1200],
+        [0.22, 1600],
+        [0.55, 1200],
+        [0.77, 1600],
+        [1.1, 1800],
+      ].forEach(([delay, frequency]) => beep(delay, frequency));
+
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+
+      setTimeout(() => {
+        ctx.close().catch(() => {});
+      }, 1800);
     } catch (e) {}
   }
 
@@ -762,23 +794,6 @@ function SettingsModal({ title, onClose, children }) {
       }}>
         <h3 style={{ margin: '0 0 16px', textAlign: 'center' }}>{title}</h3>
         {children}
-        <button
-          onClick={onClose}
-          style={{
-            width: '100%',
-            marginTop: 10,
-            padding: 10,
-            fontSize: 14,
-            fontWeight: 700,
-            background: 'transparent',
-            color: THEME.text,
-            border: `1px solid ${THEME.border}`,
-            borderRadius: 8,
-            cursor: 'pointer'
-          }}
-        >
-          {translations.nl.cancel && null}{/* keeps JSX parser happy without hardcoded visible text */}
-        </button>
       </div>
     </div>
   );
@@ -1095,6 +1110,99 @@ function BodyDataSection({ bodyData, onSave, t }) {
             </button>
           </div>
         </div>
+      )}
+    </>
+  );
+}
+
+function RestTimeSection({ restTimeSeconds, setRestTimeSeconds, t }) {
+  const [showOptions, setShowOptions] = useState(false);
+
+  return (
+    <>
+      <div style={{
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 8,
+        padding: 14,
+        marginBottom: 12
+      }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr auto',
+          alignItems: 'center',
+          gap: 12
+        }}>
+          <h3 style={{ margin: 0, color: THEME.text, fontSize: 16 }}>
+            {t.restTime}
+          </h3>
+
+          <button
+            onClick={() => setShowOptions(true)}
+            style={{
+              padding: '6px 10px',
+              fontSize: 14,
+              fontWeight: 800,
+              background: THEME.card,
+              color: '#ffffff',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 8,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {formatRestTime(restTimeSeconds)}
+          </button>
+        </div>
+      </div>
+
+      {showOptions && (
+        <SettingsModal
+          title={t.restTime}
+          onClose={() => setShowOptions(false)}
+        >
+          <div style={{ display: 'grid', gap: 8 }}>
+            {REST_TIME_OPTIONS.map(seconds => (
+              <button
+                key={seconds}
+                onClick={() => {
+                  setRestTimeSeconds(seconds);
+                  setShowOptions(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  border: `1px solid ${restTimeSeconds === seconds ? THEME.primary : THEME.border}`,
+                  background: restTimeSeconds === seconds ? THEME.primary : THEME.card,
+                  color: restTimeSeconds === seconds ? THEME.bg : THEME.text,
+                  cursor: 'pointer'
+                }}
+              >
+                {formatRestTime(seconds)}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setShowOptions(false)}
+              style={{
+                width: '100%',
+                padding: 10,
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'transparent',
+                color: THEME.text,
+                border: `1px solid ${THEME.border}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.cancel}
+            </button>
+          </div>
+        </SettingsModal>
       )}
     </>
   );
@@ -2337,6 +2445,7 @@ export default function App() {
   });
 
   const [timer, setTimer] = useState(null);
+  const [restTimeSeconds, setRestTimeSeconds] = useState(DEFAULT_REST_TIME_SECONDS);
 
   function startTimer(seconds, placement = null) {
     setTimer({
@@ -2464,6 +2573,7 @@ export default function App() {
       setCurrentCycle(savedCycle);
       setBodyWeights(normalizeBodyWeights(data));
       setUserProfile(data.userProfile || {});
+      setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
 
       setSelectedIndex(
         canRestoreInProgress
@@ -2490,6 +2600,7 @@ export default function App() {
       currentCycle,
       bodyWeights,
       userProfile,
+      restTimeSeconds,
       inProgress: {
         programVersion: PROGRAM_VERSION,
         currentCycle,
@@ -2497,7 +2608,7 @@ export default function App() {
         workouts,
       },
     }));
-  }, [history, prs, accessoryPRs, currentCycle, bodyWeights, userProfile, selectedIndex, workouts]);
+  }, [history, prs, accessoryPRs, currentCycle, bodyWeights, userProfile, restTimeSeconds, selectedIndex, workouts]);
 
   function handleStart(s, b, d, profile = {}, initialBodyData = null) {
     const today = new Date().toLocaleDateString('nl-NL');
@@ -2640,7 +2751,7 @@ function shouldStartRestTimerAfterToggle(workout, type, index, accIndex = null) 
 function toggleWarmup(wIndex) {
   const workout = workouts[selectedIndex];
   if (shouldStartRestTimerAfterToggle(workout, 'warmup', wIndex)) {
-    startTimer(getRestTime((workout.sets || [])[0]?.reps || 3), {
+    startTimer(restTimeSeconds, {
       workoutNumber: workout.number,
       type: 'warmup',
       index: wIndex,
@@ -2668,7 +2779,7 @@ function toggleSet(setIndex) {
   const set = workout.sets?.[setIndex];
 
   if (shouldStartRestTimerAfterToggle(workout, 'main', setIndex)) {
-    startTimer(getRestTime(set.reps), {
+    startTimer(restTimeSeconds, {
       workoutNumber: workout.number,
       type: 'main',
       index: setIndex,
@@ -2696,7 +2807,7 @@ function toggleAccessorySet(accIndex, setIndex) {
   const acc = workout.accessories?.[accIndex];
 
   if (shouldStartRestTimerAfterToggle(workout, 'accessory', setIndex, accIndex)) {
-    startTimer(getRestTime(acc.reps), {
+    startTimer(restTimeSeconds, {
       workoutNumber: workout.number,
       type: 'accessory',
       accIndex,
@@ -2784,7 +2895,7 @@ function toggleMeetSet(liftIndex, setIndex) {
   const workout = workouts[selectedIndex];
 
   if (hasMoreMeetSets(workout, liftIndex, setIndex)) {
-    startTimer(getRestTime(), {
+    startTimer(restTimeSeconds, {
       workoutNumber: workout.number,
       type: 'meetSet',
       liftIndex,
@@ -3466,6 +3577,12 @@ const latestBodyDataRows = [
   <BodyDataSection
     bodyData={latestBodyDataEntry}
     onSave={saveBodyWeight}
+    t={t}
+  />
+
+  <RestTimeSection
+    restTimeSeconds={restTimeSeconds}
+    setRestTimeSeconds={setRestTimeSeconds}
     t={t}
   />
 
