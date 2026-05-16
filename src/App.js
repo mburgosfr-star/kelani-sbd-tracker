@@ -225,6 +225,13 @@ function getWorkoutTypeKey(workout) {
   return 'practice';
 }
 
+function liftLabel(lift, t) {
+  if (lift === 'Squat') return t.squat;
+  if (lift === 'Bench') return t.bench;
+  if (lift === 'Deadlift') return t.deadlift;
+  return lift;
+}
+
 function getWorkoutTypeLabel(workout, t) {
   const key = getWorkoutTypeKey(workout);
   return key ? t[key] : '—';
@@ -1352,7 +1359,7 @@ border: `1px solid ${THEME.border}`,
 color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
           {['Deadlift', 'Bench', 'Squat'].map(lift => (
             <div key={lift} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 14 }}>
-              <span style={{ color: THEME.text, fontWeight: 700 }}>{lift} e1RM</span>
+              <span style={{ color: THEME.text, fontWeight: 700 }}>{liftLabel(lift, t)} e1RM</span>
               <span style={{ fontWeight: 700 }}>{prs[lift] || '—'} kg</span>
             </div>
           ))}
@@ -1410,10 +1417,6 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onToggleWarmup, 
   }
 
     if (workout.type === 'meet') {
-    const liftLabel = lift =>
-      lift === 'Squat' ? t.squat :
-      lift === 'Bench' ? t.bench :
-      t.deadlift;
 
     const allMeetDone = (workout.lifts || []).every(liftBlock =>
       (liftBlock.sets || []).every(s => s.done)
@@ -1451,7 +1454,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onToggleWarmup, 
                 color: THEME.text,
                 borderBottom: `1px solid ${THEME.border}`,
               }}>
-                {liftLabel(liftBlock.lift)}
+                {liftLabel(liftBlock.lift, t)}
               </div>
 
               {(liftBlock.warmups || []).map((w, wi) => (
@@ -1537,11 +1540,7 @@ function handleToggle(fn) {
   
     <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
 
-{t.workout} {workout.number} — {
-  workout.lift === 'Squat' ? t.squat :
-  workout.lift === 'Bench' ? t.bench :
-  t.deadlift
-}
+{t.workout} {workout.number} — {liftLabel(workout.lift, t)}
 
   {isReadOnly && (
     <span style={{
@@ -1596,7 +1595,7 @@ function handleToggle(fn) {
   fontWeight: 700,
   color: THEME.text
 }}>
-  {workout.lift}
+  {liftLabel(workout.lift, t)}
 </div>
       {workout.sets.map((set, i) => {
   const allWarmupsDone = (workout.warmups || []).every(w => w.done);
@@ -2182,7 +2181,7 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
 
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: isCurrent ? 700 : 500, color: isCurrent ? THEME.primary : '#ffffff' }}>
-          {workout.type === 'rest' ? t.deload : workout.lift}
+          {workout.type === 'rest' ? t.deload : liftLabel(workout.lift, t)}
           {isCurrent && (
             <span style={{
               fontSize: 11,
@@ -3692,10 +3691,6 @@ const latestBodyDataRows = [
   );
 
   if (completedWorkout?.type === 'meet') {
-    const liftLabel = lift =>
-      lift === 'Squat' ? t.squat :
-      lift === 'Bench' ? t.bench :
-      t.deadlift;
 
     return (
       <>
