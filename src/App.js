@@ -442,32 +442,69 @@ function generateProgram(s, b, d) {
 function RestTimer({ seconds, onDismiss, t }) {
   const [remaining, setRemaining] = useState(seconds);
   const intervalRef = useRef(null);
+  const timeoutRef = useRef(null);
   const hasBeepedRef = useRef(false);
 
   useEffect(() => {
-    setRemaining(seconds);
-    hasBeepedRef.current = false;
+    const endTime = Date.now() + (seconds * 1000);
 
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+    const clearTick = () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
-  }, [seconds]);
 
-  useEffect(() => {
-    if (remaining <= 0) {
-      clearInterval(intervalRef.current);
+    const clearFinishTimeout = () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+
+    const finishTimer = () => {
+      clearTick();
+      setRemaining(0);
 
       if (!hasBeepedRef.current) {
         hasBeepedRef.current = true;
         playBeep();
       }
+    };
 
-      return;
-    }
+    const updateRemaining = () => {
+      const nextRemaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+      setRemaining(nextRemaining);
 
-    intervalRef.current = setInterval(() => setRemaining(r => r - 1), 1000);
-    return () => clearInterval(intervalRef.current);
-  }, [remaining, seconds]);
+      if (nextRemaining <= 0) {
+        finishTimer();
+      }
+    };
+
+    const startVisibleTick = () => {
+      clearTick();
+      updateRemaining();
+
+      if (!document.hidden && Date.now() < endTime) {
+        intervalRef.current = setInterval(updateRemaining, 1000);
+      }
+    };
+
+    hasBeepedRef.current = false;
+    setRemaining(seconds);
+
+    clearFinishTimeout();
+    timeoutRef.current = setTimeout(finishTimer, seconds * 1000);
+
+    startVisibleTick();
+    document.addEventListener('visibilitychange', startVisibleTick);
+
+    return () => {
+      clearTick();
+      clearFinishTimeout();
+      document.removeEventListener('visibilitychange', startVisibleTick);
+    };
+  }, [seconds]);
 
   function playBeep() {
     try {
