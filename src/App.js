@@ -3,7 +3,6 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { translations } from './translations';
 import { App as CapacitorApp } from '@capacitor/app';
 
-const show = v => (v === null || v === undefined ? '—' : v);
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
 const REST_TIME_OPTIONS = [90, 180, 300];
 const DEFAULT_REST_TIME_SECONDS = 300;
@@ -21,8 +20,6 @@ const THEME = {
   brown: '#a86f45'
   
 };
-
-const dash = v => (v ? v : '—');
 
 function toOptionalNumber(value) {
   const parsed = Number(value);
@@ -1360,7 +1357,7 @@ color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
             </div>
           ))}
         </div>
-        <button onClick={onStart} style={{ width: '100%', padding: 14, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.border}`, color: 'white', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+        <button onClick={onStart} style={{ width: '100%', padding: 14, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
           {t.startNewCycle} 🚀
         </button>
       </div>
@@ -1369,7 +1366,6 @@ color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
 }
 
 function CurrentWorkout({ workout, currentCycle, totalWorkouts, onToggleWarmup, onToggleSet, onToggleAccessorySet, onToggleMeetWarmup, onToggleMeetSet, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
-  const [showBodyWeight, setShowBodyWeight] = useState(false);
 
   function isTimerFor(placement) {
     if (!timer || !timer.placement) return false;
@@ -1399,14 +1395,14 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onToggleWarmup, 
         marginTop: 80, 
         marginBottom: 24 
       }}>
-        Kelani SBD Tracker
+        {t.appName}
       </h1>        
       <div style={{ background: THEME.card, padding: 40, borderRadius: 8 }}>
           <div style={{ fontSize: 48 }}>🎉</div>
           <h2>{t.deload}</h2>
           <p style={{ color: THEME.muted }}>{t.restReadyNextCycle}</p>
         </div>
-        <button onClick={onStartNewCycle} style={{ marginTop: 16, width: '100%', padding: 14, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.border}`, color: 'white', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+        <button onClick={onStartNewCycle} style={{ marginTop: 16, width: '100%', padding: 14, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
           {t.startNewCycle}
         </button>
       </div>
@@ -2813,7 +2809,6 @@ function toggleWarmup(wIndex) {
 
 function toggleSet(setIndex) {
   const workout = workouts[selectedIndex];
-  const set = workout.sets?.[setIndex];
 
   if (shouldStartRestTimerAfterToggle(workout, 'main', setIndex)) {
     startTimer(restTimeSeconds, {
@@ -2841,7 +2836,6 @@ function toggleSet(setIndex) {
 
 function toggleAccessorySet(accIndex, setIndex) {
   const workout = workouts[selectedIndex];
-  const acc = workout.accessories?.[accIndex];
 
   if (shouldStartRestTimerAfterToggle(workout, 'accessory', setIndex, accIndex)) {
     startTimer(restTimeSeconds, {
@@ -3193,10 +3187,6 @@ setCompletedSummary({
   setSelectedIndex(Math.min(currentIndex + 1, workouts.length - 1));
 
   setScreen('completed');
-}
-function selectWorkout(idx) {
-  setSelectedIndex(idx);
-  setScreen('current');
 }
 
 if (screen === 'onboarding') return <Onboarding onStart={handleStart} t={t}/>;
