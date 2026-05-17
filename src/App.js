@@ -303,38 +303,38 @@ function generateProgram(s, b, d) {
   };
 
   const program = [
-    { lift: 'Deadlift', type: 'training', label: 'Base strength', blocks: [{ sets: 4, reps: 5, pct: 0.70 }] },
-    { lift: 'Bench', type: 'training', label: 'Volume', blocks: [{ sets: 5, reps: 8, pct: 0.65 }] },
-    { lift: 'Squat', type: 'training', label: 'Base volume', blocks: [{ sets: 5, reps: 6, pct: 0.65 }] },
-    { lift: 'Bench', type: 'training', label: 'Strength volume', blocks: [{ sets: 6, reps: 5, pct: 0.70 }] },
-    { lift: 'Squat', type: 'training', label: 'Strength volume', blocks: [{ sets: 5, reps: 5, pct: 0.70 }] },
-    { lift: 'Bench', type: 'training', label: 'Technique strength', blocks: [{ sets: 8, reps: 3, pct: 0.75 }] },
+    { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [{ sets: 4, reps: 5, pct: 0.70 }] },
+    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 8, pct: 0.65 }] },
+    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 6, pct: 0.65 }] },
+    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 6, reps: 5, pct: 0.70 }] },
+    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 5, pct: 0.70 }] },
+    { lift: 'Bench', type: 'training', labelKey: 'practice', blocks: [{ sets: 8, reps: 3, pct: 0.75 }] },
 
-    { lift: 'Deadlift', type: 'training', label: 'Strength volume', blocks: [{ sets: 5, reps: 4, pct: 0.75 }] },
-    { lift: 'Bench', type: 'training', label: 'Volume strength', blocks: [{ sets: 5, reps: 6, pct: 0.70 }] },
-    { lift: 'Squat', type: 'training', label: 'Strength volume', blocks: [{ sets: 5, reps: 5, pct: 0.70 }] },
-    { lift: 'Bench', type: 'training', label: 'Strength', blocks: [{ sets: 6, reps: 4, pct: 0.75 }] },
-    { lift: 'Squat', type: 'training', label: 'Strength', blocks: [{ sets: 6, reps: 4, pct: 0.75 }] },
-    { lift: 'Bench', type: 'training', label: 'Heavy technique', blocks: [{ sets: 7, reps: 3, pct: 0.80 }] },
+    { lift: 'Deadlift', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 4, pct: 0.75 }] },
+    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 6, pct: 0.70 }] },
+    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 5, pct: 0.70 }] },
+    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 6, reps: 4, pct: 0.75 }] },
+    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [{ sets: 6, reps: 4, pct: 0.75 }] },
+    { lift: 'Bench', type: 'training', labelKey: 'practice', blocks: [{ sets: 7, reps: 3, pct: 0.80 }] },
 
-    { lift: 'Deadlift', type: 'training', label: 'Heavy strength', blocks: [{ sets: 5, reps: 3, pct: 0.80 }] },
-    { lift: 'Bench', type: 'training', label: 'Strength volume', blocks: [{ sets: 5, reps: 5, pct: 0.75 }] },
-    { lift: 'Squat', type: 'training', label: 'Heavy volume', blocks: [{ sets: 5, reps: 4, pct: 0.775 }] },
-    { lift: 'Bench', type: 'training', label: 'Heavy strength', blocks: [{ sets: 6, reps: 3, pct: 0.825 }] },
-    { lift: 'Squat', type: 'training', label: 'Heavy strength', blocks: [{ sets: 5, reps: 3, pct: 0.825 }] },
-    { lift: 'Bench', type: 'training', label: 'Heavy doubles', blocks: [{ sets: 5, reps: 2, pct: 0.875 }] },
+    { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [{ sets: 5, reps: 3, pct: 0.80 }] },
+    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 5, pct: 0.75 }] },
+    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 4, pct: 0.775 }] },
+    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 6, reps: 3, pct: 0.825 }] },
+    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [{ sets: 5, reps: 3, pct: 0.825 }] },
+    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 5, reps: 2, pct: 0.875 }] },
 
-    { lift: 'Deadlift', type: 'training', label: 'Peak strength', blocks: [{ sets: 4, reps: 2, pct: 0.85 }] },
-    { lift: 'Bench', type: 'training', label: 'Heavy volume', blocks: [{ sets: 4, reps: 4, pct: 0.80 }] },
-    { lift: 'Squat', type: 'training', label: 'Peak strength', blocks: [{ sets: 4, reps: 3, pct: 0.85 }] },
-    { lift: 'Bench', type: 'training', label: 'Peak doubles', blocks: [{ sets: 5, reps: 2, pct: 0.875 }] },
-    { lift: 'Squat', type: 'training', label: 'Heavy doubles', blocks: [{ sets: 3, reps: 2, pct: 0.90 }] },
-    { lift: 'Bench', type: 'training', label: 'Peak singles', blocks: [{ sets: 4, reps: 1, pct: 0.925 }] },
+    { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [{ sets: 4, reps: 2, pct: 0.85 }] },
+    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 4, reps: 4, pct: 0.80 }] },
+    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [{ sets: 4, reps: 3, pct: 0.85 }] },
+    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 5, reps: 2, pct: 0.875 }] },
+    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [{ sets: 3, reps: 2, pct: 0.90 }] },
+    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 4, reps: 1, pct: 0.925 }] },
 
     {
       lift: 'Deadlift',
       type: 'training',
-      label: 'Pre-meet',
+      labelKey: 'preMeet',
       blocks: [
         { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
         { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
@@ -345,7 +345,7 @@ function generateProgram(s, b, d) {
     {
       lift: 'Bench',
       type: 'training',
-      label: 'Pre-meet',
+      labelKey: 'preMeet',
       blocks: [
         { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
         { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
@@ -356,7 +356,7 @@ function generateProgram(s, b, d) {
     {
       lift: 'Squat',
       type: 'training',
-      label: 'Pre-meet',
+      labelKey: 'preMeet',
       blocks: [
         { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
         { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
@@ -3646,7 +3646,7 @@ const latestBodyDataRows = [
     color: THEME.muted,
     fontSize: 12
   }}>
-    Kelani SBD Tracker · v{process.env.REACT_APP_VERSION ?? 'dev'}
+    {t.appName} · v{process.env.REACT_APP_VERSION ?? 'dev'}
   </div>
 </div>
       )}
