@@ -1,0 +1,4 @@
+Improved translation consistency across Dutch, English, and Catalan.
+Localized visible lift labels in Program and Workout screens.
+Improved Dutch labels for Bench Press, bodyweight strength, and body data.
+Cleaned up remaining hardcoded labels and warnings.
