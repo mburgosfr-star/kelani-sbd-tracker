@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { translations } from './translations';
 import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
 const REST_TIME_OPTIONS = [90, 180, 300];
@@ -912,13 +915,20 @@ function DataSection({ t }) {
         data: JSON.parse(saved),
       };
       const json = JSON.stringify(backup, null, 2);
-      const file = new File([json], filename, { type: 'application/json' });
 
-      if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
-        await navigator.share({
+      if (Capacitor.isNativePlatform()) {
+        const result = await Filesystem.writeFile({
+          path: filename,
+          data: json,
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8,
+        });
+
+        await Share.share({
           title: t.exportData,
           text: t.exportDataDescription,
-          files: [file],
+          files: [result.uri],
+          dialogTitle: t.exportData,
         });
       } else {
         downloadJson(filename, json);
