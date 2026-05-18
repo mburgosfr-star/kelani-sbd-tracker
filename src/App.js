@@ -881,6 +881,8 @@ function Toast({ message }) {
 
 function DataSection({ t }) {
   const [notice, setNotice] = useState('');
+  const [pendingImportData, setPendingImportData] = useState(null);
+  const importInputRef = useRef(null);
 
   const downloadJson = (filename, json) => {
     const blob = new Blob([json], { type: 'application/json' });
@@ -940,27 +942,163 @@ function DataSection({ t }) {
     }
   };
 
-  return (
-    <SettingsCard title={t.dataManagement} actionLabel={t.exportData} onAction={exportData}>
-      <p style={{
-        margin: '0 0 8px',
-        color: THEME.muted,
-        fontSize: 13,
-        lineHeight: 1.4
-      }}>
-        {t.exportDataDescription}
-      </p>
+  const importData = async event => {
+    try {
+      const file = event.target.files?.[0];
+      event.target.value = '';
 
-      {notice && (
-        <div style={{
-          color: THEME.primary,
+      if (!file) return;
+
+      const text = await file.text();
+      const backup = JSON.parse(text);
+
+      if (
+        backup?.storageKey !== STORAGE_KEY ||
+        !backup?.data ||
+        typeof backup.data !== 'object' ||
+        !backup.data.prs ||
+        !backup.data.history
+      ) {
+        setNotice(t.importDataInvalid);
+        return;
+      }
+
+      setPendingImportData(backup.data);
+    } catch (e) {
+      setNotice(t.importDataError);
+    }
+  };
+
+  const confirmImport = () => {
+    if (!pendingImportData) return;
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingImportData));
+    setNotice(t.importDataSuccess);
+    setPendingImportData(null);
+    window.location.reload();
+  };
+
+  return (
+    <>
+      <SettingsCard title={t.dataManagement}>
+        <p style={{
+          margin: '0 0 10px',
+          color: THEME.muted,
           fontSize: 13,
-          fontWeight: 700
+          lineHeight: 1.4
         }}>
-          {notice}
+          {t.exportDataDescription}
+        </p>
+
+        <div style={{ display: 'grid', gap: 8 }}>
+          <button
+            onClick={exportData}
+            style={{
+              width: '100%',
+              padding: 10,
+              fontSize: 14,
+              fontWeight: 800,
+              background: THEME.card,
+              color: '#ffffff',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 8,
+              cursor: 'pointer'
+            }}
+          >
+            {t.exportData}
+          </button>
+
+          <button
+            onClick={() => importInputRef.current?.click()}
+            style={{
+              width: '100%',
+              padding: 10,
+              fontSize: 14,
+              fontWeight: 800,
+              background: THEME.card,
+              color: '#ffffff',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 8,
+              cursor: 'pointer'
+            }}
+          >
+            {t.importData}
+          </button>
         </div>
+
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          onChange={importData}
+          style={{ display: 'none' }}
+        />
+
+        {notice && (
+          <div style={{
+            marginTop: 8,
+            color: THEME.primary,
+            fontSize: 13,
+            fontWeight: 700
+          }}>
+            {notice}
+          </div>
+        )}
+      </SettingsCard>
+
+      {pendingImportData && (
+        <SettingsModal
+          title={t.importData}
+          onClose={() => setPendingImportData(null)}
+        >
+          <p style={{
+            margin: '0 0 16px',
+            color: THEME.text,
+            fontSize: 14,
+            lineHeight: 1.4,
+            textAlign: 'center'
+          }}>
+            {t.importDataConfirm}
+          </p>
+
+          <div style={{ display: 'grid', gap: 8 }}>
+            <button
+              onClick={confirmImport}
+              style={{
+                width: '100%',
+                padding: 12,
+                fontSize: 14,
+                fontWeight: 800,
+                background: THEME.card,
+                color: '#ffffff',
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.importData}
+            </button>
+
+            <button
+              onClick={() => setPendingImportData(null)}
+              style={{
+                width: '100%',
+                padding: 10,
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'transparent',
+                color: THEME.text,
+                border: `1px solid ${THEME.border}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.cancel}
+            </button>
+          </div>
+        </SettingsModal>
       )}
-    </SettingsCard>
+    </>
   );
 }
 
