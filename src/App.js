@@ -898,6 +898,24 @@ function DataSection({ t }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  const buildBackupSummary = data => {
+    const currentCycle = data?.currentCycle || 1;
+    const totalWorkouts = data?.inProgress?.workouts?.length || 28;
+    const selectedIndex = data?.inProgress?.selectedIndex;
+    const completedWorkoutCount = getCompletedWorkoutCount(data?.history || [], currentCycle);
+    const currentWorkout = Math.min((selectedIndex ?? completedWorkoutCount) + 1, totalWorkouts);
+
+    return {
+      backupVersion: 1,
+      programVersion: data?.inProgress?.programVersion || null,
+      currentCycle,
+      currentWorkout,
+      totalWorkouts,
+      historyEntries: Array.isArray(data?.history) ? data.history.length : 0,
+      bodyDataEntries: Array.isArray(data?.bodyWeights) ? data.bodyWeights.length : 0,
+    };
+  };
+
   const exportData = async () => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -907,14 +925,18 @@ function DataSection({ t }) {
         return;
       }
 
-      const date = new Date().toISOString().slice(0, 10);
-      const filename = `kelani-sbd-tracker-backup-${date}.json`;
+      const exportedAt = new Date().toISOString();
+      const timestamp = exportedAt.slice(0, 16).replace('T', '-').replace(':', '');
+      const filename = `kelani-sbd-tracker-backup-${timestamp}.json`;
+      const data = JSON.parse(saved);
       const backup = {
         app: t.appName,
+        backupVersion: 1,
         appVersion: process.env.REACT_APP_VERSION ?? 'dev',
-        exportedAt: new Date().toISOString(),
+        exportedAt,
         storageKey: STORAGE_KEY,
-        data: JSON.parse(saved),
+        summary: buildBackupSummary(data),
+        data,
       };
       const json = JSON.stringify(backup, null, 2);
 
@@ -967,6 +989,7 @@ function DataSection({ t }) {
         data: backup.data,
         appVersion: backup.appVersion || '—',
         exportedAt: backup.exportedAt || '—',
+        summary: backup.summary || buildBackupSummary(backup.data),
       });
     } catch (e) {
       setNotice(t.importDataError);
@@ -981,6 +1004,8 @@ function DataSection({ t }) {
     setPendingImport(null);
     window.location.reload();
   };
+
+  const importSummary = pendingImport?.summary;
 
   return (
     <>
@@ -1093,9 +1118,9 @@ function DataSection({ t }) {
               ],
               [
                 t.importPreviewProgress,
-                `${t.cycle} ${pendingImport.data?.currentCycle || 1} · ${t.workoutProgress} ${Math.min(((pendingImport.data?.inProgress?.selectedIndex ?? getCompletedWorkoutCount(pendingImport.data?.history || [], pendingImport.data?.currentCycle || 1)) + 1), pendingImport.data?.inProgress?.workouts?.length || 28)} / ${pendingImport.data?.inProgress?.workouts?.length || 28}`
+                `${t.cycle} ${importSummary?.currentCycle || 1} · ${t.workoutProgress} ${importSummary?.currentWorkout || 1} / ${importSummary?.totalWorkouts || 28}`
               ],
-              [t.importPreviewBodyData, pendingImport.data?.bodyWeights?.length ?? 0],
+              [t.importPreviewBodyData, importSummary?.bodyDataEntries ?? 0],
             ].map(([label, value]) => (
               <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                 <span style={{ color: THEME.muted, fontWeight: 700 }}>{label}</span>
