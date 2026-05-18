@@ -881,7 +881,7 @@ function Toast({ message }) {
 
 function DataSection({ t }) {
   const [notice, setNotice] = useState('');
-  const [pendingImportData, setPendingImportData] = useState(null);
+  const [pendingImport, setPendingImport] = useState(null);
   const importInputRef = useRef(null);
 
   const downloadJson = (filename, json) => {
@@ -963,18 +963,22 @@ function DataSection({ t }) {
         return;
       }
 
-      setPendingImportData(backup.data);
+      setPendingImport({
+        data: backup.data,
+        appVersion: backup.appVersion || '—',
+        exportedAt: backup.exportedAt || '—',
+      });
     } catch (e) {
       setNotice(t.importDataError);
     }
   };
 
   const confirmImport = () => {
-    if (!pendingImportData) return;
+    if (!pendingImport) return;
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingImportData));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingImport.data));
     setNotice(t.importDataSuccess);
-    setPendingImportData(null);
+    setPendingImport(null);
     window.location.reload();
   };
 
@@ -1046,10 +1050,10 @@ function DataSection({ t }) {
         )}
       </SettingsCard>
 
-      {pendingImportData && (
+      {pendingImport && (
         <SettingsModal
           title={t.importData}
-          onClose={() => setPendingImportData(null)}
+          onClose={() => setPendingImport(null)}
         >
           <p style={{
             margin: '0 0 16px',
@@ -1060,6 +1064,45 @@ function DataSection({ t }) {
           }}>
             {t.importDataConfirm}
           </p>
+
+          <div style={{
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 14,
+            display: 'grid',
+            gap: 8,
+            fontSize: 13
+          }}>
+            <h4 style={{
+              margin: '0 0 4px',
+              color: THEME.text,
+              fontSize: 14,
+              textAlign: 'center'
+            }}>
+              {t.importPreviewTitle}
+            </h4>
+
+            {[
+              [t.importPreviewVersion, pendingImport.appVersion],
+              [
+                t.importPreviewExportedAt,
+                pendingImport.exportedAt && pendingImport.exportedAt !== '—'
+                  ? new Date(pendingImport.exportedAt).toLocaleString()
+                  : '—'
+              ],
+              [
+                t.importPreviewProgress,
+                `${t.cycle} ${pendingImport.data?.currentCycle || 1} · ${t.workoutProgress} ${Math.min(((pendingImport.data?.inProgress?.selectedIndex ?? getCompletedWorkoutCount(pendingImport.data?.history || [], pendingImport.data?.currentCycle || 1)) + 1), pendingImport.data?.inProgress?.workouts?.length || 28)} / ${pendingImport.data?.inProgress?.workouts?.length || 28}`
+              ],
+              [t.importPreviewBodyData, pendingImport.data?.bodyWeights?.length ?? 0],
+            ].map(([label, value]) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ color: THEME.muted, fontWeight: 700 }}>{label}</span>
+                <strong style={{ color: THEME.text, textAlign: 'right' }}>{value}</strong>
+              </div>
+            ))}
+          </div>
 
           <div style={{ display: 'grid', gap: 8 }}>
             <button
@@ -1080,7 +1123,7 @@ function DataSection({ t }) {
             </button>
 
             <button
-              onClick={() => setPendingImportData(null)}
+              onClick={() => setPendingImport(null)}
               style={{
                 width: '100%',
                 padding: 10,
