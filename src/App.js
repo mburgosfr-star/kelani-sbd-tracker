@@ -876,6 +876,84 @@ function Toast({ message }) {
   );
 }
 
+function DataSection({ t }) {
+  const [notice, setNotice] = useState('');
+
+  const downloadJson = (filename, json) => {
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const exportData = async () => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+
+      if (!saved) {
+        setNotice(t.exportDataNoData);
+        return;
+      }
+
+      const date = new Date().toISOString().slice(0, 10);
+      const filename = `kelani-sbd-tracker-backup-${date}.json`;
+      const backup = {
+        app: t.appName,
+        appVersion: process.env.REACT_APP_VERSION ?? 'dev',
+        exportedAt: new Date().toISOString(),
+        storageKey: STORAGE_KEY,
+        data: JSON.parse(saved),
+      };
+      const json = JSON.stringify(backup, null, 2);
+      const file = new File([json], filename, { type: 'application/json' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+        await navigator.share({
+          title: t.exportData,
+          text: t.exportDataDescription,
+          files: [file],
+        });
+      } else {
+        downloadJson(filename, json);
+      }
+
+      setNotice(t.exportDataSuccess);
+    } catch (e) {
+      setNotice(t.exportDataError);
+    }
+  };
+
+  return (
+    <SettingsCard title={t.dataManagement} actionLabel={t.exportData} onAction={exportData}>
+      <p style={{
+        margin: '0 0 8px',
+        color: THEME.muted,
+        fontSize: 13,
+        lineHeight: 1.4
+      }}>
+        {t.exportDataDescription}
+      </p>
+
+      {notice && (
+        <div style={{
+          color: THEME.primary,
+          fontSize: 13,
+          fontWeight: 700
+        }}>
+          {notice}
+        </div>
+      )}
+    </SettingsCard>
+  );
+}
+
 function SupportSection({ t }) {
   const links = [
     {
@@ -3617,6 +3695,8 @@ const latestBodyDataRows = [
     setLanguage={setLanguage}
     t={t}
   />
+
+  <DataSection t={t} />
 
   <SupportSection t={t} />
 
