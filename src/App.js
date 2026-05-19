@@ -372,6 +372,51 @@ function generateWarmups(firstWorkWeight) {
 }
 
 
+const MEET_ATTEMPT_KEYS = ['opener', 'second', 'third'];
+const MEET_ATTEMPT_PCTS = [0.90, 0.975, 1.025];
+
+function roundMeetWeight(weight) {
+  return Math.round((Number(weight) || 0) / 2.5) * 2.5;
+}
+
+function getMeetPlannerAttemptWeight(attempts, lift, setIndex, fallback) {
+  const key = MEET_ATTEMPT_KEYS[setIndex];
+  const custom = attempts?.[lift]?.[key];
+  const value = Number(custom);
+
+  return Number.isFinite(value) && value > 0
+    ? roundMeetWeight(value)
+    : fallback;
+}
+
+function applyMeetPlannerAttemptsToWorkouts(workouts, attempts = {}, prs = {}) {
+  return (workouts || []).map(workout => {
+    if (workout.type !== 'meet') return workout;
+
+    return {
+      ...workout,
+      lifts: (workout.lifts || []).map(liftBlock => ({
+        ...liftBlock,
+        sets: (liftBlock.sets || []).map((set, setIndex) => {
+          const suggestedWeight = prs?.[liftBlock.lift]
+            ? roundMeetWeight(prs[liftBlock.lift] * (set.pct || MEET_ATTEMPT_PCTS[setIndex] || 1))
+            : set.weight;
+
+          return {
+            ...set,
+            weight: getMeetPlannerAttemptWeight(
+              attempts,
+              liftBlock.lift,
+              setIndex,
+              suggestedWeight
+            ),
+          };
+        }),
+      })),
+    };
+  });
+}
+
 function generateProgram(s, b, d) {
   function round25(w) {
     return Math.round(w / 2.5) * 2.5;
@@ -3166,6 +3211,18 @@ export default function App() {
   const currentIndex = getCompletedWorkoutCount(history, currentCycle);
   const PROGRAM_VERSION = 'cube-27-v3';
 
+  function updateMeetPlannerAttempts(next) {
+    setMeetPlannerAttempts(prev => {
+      const updated = typeof next === 'function' ? next(prev || {}) : (next || {});
+
+      setWorkouts(prevWorkouts =>
+        applyMeetPlannerAttemptsToWorkouts(prevWorkouts, updated, prs)
+      );
+
+      return updated;
+    });
+  }
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, [screen, selectedIndex]);
@@ -3243,6 +3300,7 @@ export default function App() {
       const savedCycle = data.currentCycle || 1;
       const generatedWorkouts = generateProgram(squat, bench, deadlift);
       const savedInProgress = data.inProgress || null;
+      const savedMeetPlannerAttempts = data.meetPlannerAttempts || {};
 
       const canRestoreInProgress =
         savedInProgress &&
@@ -3262,14 +3320,18 @@ export default function App() {
         savedCycle
       );
 
-      setWorkouts(normalizedWorkouts);
+      setWorkouts(applyMeetPlannerAttemptsToWorkouts(
+        normalizedWorkouts,
+        savedMeetPlannerAttempts,
+        savedPrs
+      ));
       setHistory(savedHistory);
       setPrs(savedPrs);
       setAccessoryPRs(data.accessoryPRs || {});
       setCurrentCycle(savedCycle);
       setBodyWeights(normalizeBodyWeights(data));
       setUserProfile(data.userProfile || {});
-      setMeetPlannerAttempts(data.meetPlannerAttempts || {});
+      setMeetPlannerAttempts(savedMeetPlannerAttempts);
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
 
       setSelectedIndex(
@@ -3666,6 +3728,21 @@ function toggleMeetSet(liftIndex, setIndex) {
 }
 
 function changeMeetWeight(liftIndex, setIndex, val) {
+  const workout = workouts[selectedIndex];
+  const lift = workout?.lifts?.[liftIndex]?.lift;
+  const key = MEET_ATTEMPT_KEYS[setIndex];
+  const roundedVal = roundMeetWeight(val);
+
+  if (lift && key) {
+    setMeetPlannerAttempts(prev => ({
+      ...(prev || {}),
+      [lift]: {
+        ...((prev || {})[lift] || {}),
+        [key]: roundedVal,
+      },
+    }));
+  }
+
   setWorkouts(prev =>
     prev.map((w, wi) => {
       if (wi !== selectedIndex) return w;
@@ -3678,7 +3755,7 @@ function changeMeetWeight(liftIndex, setIndex, val) {
           return {
             ...liftBlock,
             sets: liftBlock.sets.map((s, si) =>
-              si === setIndex ? { ...s, weight: val } : s
+              si === setIndex ? { ...s, weight: roundedVal } : s
             ),
           };
         }),
@@ -4297,7 +4374,7 @@ const latestBodyDataRows = [
           currentIndex={currentIndex}
           totalWorkouts={workouts.length}
           meetPlannerAttempts={meetPlannerAttempts}
-          setMeetPlannerAttempts={setMeetPlannerAttempts}
+          setMeetPlannerAttempts={updateMeetPlannerAttempts}
           onBack={() => setScreen('all')}
           t={t}
         />
