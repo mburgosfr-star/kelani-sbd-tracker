@@ -153,6 +153,8 @@ export const translations = {
     cycle: 'Cyclus',
     cycleCompleted: 'Cyclus voltooid!',
     startNewCycle: 'Nieuwe cyclus starten',
+    startNewCycleConfirmTitle: 'Nieuwe cyclus starten?',
+    startNewCycleConfirmText: 'Dit start een nieuwe cyclus op basis van je huidige beste prestaties. Je geschiedenis en lichaamsgegevens blijven bewaard.',
     newCycleWeights: 'Nieuwe gewichten berekend op basis van je beste prestaties.',
 
     cancel: 'Annuleren',
@@ -356,6 +358,8 @@ export const translations = {
     cycle: 'Cycle',
     cycleCompleted: 'Cycle completed!',
     startNewCycle: 'Start new cycle',
+    startNewCycleConfirmTitle: 'Start new cycle?',
+    startNewCycleConfirmText: 'This starts a new cycle based on your current best results. Your history and body data stay saved.',
     newCycleWeights: 'New weights calculated from your best results.',
 
     cancel: 'Cancel',
@@ -559,6 +563,8 @@ export const translations = {
     cycle: 'Cicle',
     cycleCompleted: 'Cicle complet!',
     startNewCycle: 'Comença un nou cicle',
+    startNewCycleConfirmTitle: 'Vols començar un nou cicle?',
+    startNewCycleConfirmText: 'Això comença un nou cicle a partir dels teus millors resultats actuals. L’historial i les dades corporals es conserven.',
     newCycleWeights: 'Nous pesos calculats a partir dels teus millors resultats.',
 
     cancel: 'Cancel·la',

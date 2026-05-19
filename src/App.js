@@ -2814,8 +2814,9 @@ const meetTotals = {
   );
 }
 
-function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, onStats, t }) {
+function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t }) {
   const currentWorkoutRef = useRef(null);
+  const [showStartCycleConfirm, setShowStartCycleConfirm] = useState(false);
 
   useEffect(() => {
     if (!currentWorkoutRef.current) return;
@@ -2838,75 +2839,162 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
           {t.cycle} {currentCycle} · {t.workoutProgress} {Math.min(currentIndex + 1, workouts.length)} / {workouts.length}
         </div>
       </div>
-    {workouts.map((workout, idx) => {
-  const isCurrent = idx === currentIndex;
-  const isDone = idx < currentIndex;
-  const headerBg = workout.type === 'rest' ? THEME.brown : THEME.border;
 
-  return (
-    <div
-      key={workout.number}
-      ref={isCurrent ? currentWorkoutRef : null}
-      onClick={() => {
-        onSelect(idx);
-        window.scrollTo({ top: 0, behavior: 'auto' });
-      }}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        padding: '12px 16px',
-        marginBottom: 10,
-        borderRadius: 8,
-        border: isCurrent ? `2px solid ${THEME.primary}` : `1px solid ${THEME.border}`,
-        background: THEME.card,
-        cursor: 'pointer',
-        opacity: 1
-      }}
-    >
-      <div style={{
-        width: 40,
-        height: 40,
-        borderRadius: 8,
-        background: headerBg,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#ffffff',
-        fontWeight: 700,
-        fontSize: 16,
-        marginRight: 14,
-        flexShrink: 0
-      }}>
-        {workout.number}
-      </div>
+      {workouts.map((workout, idx) => {
+        const isCurrent = idx === currentIndex;
+        const isDone = idx < currentIndex;
+        const headerBg = workout.type === 'rest' ? THEME.brown : THEME.border;
 
-      <div style={{ flex: 1 }}>
-        <div style={{ fontWeight: isCurrent ? 700 : 500, color: isCurrent ? THEME.primary : '#ffffff' }}>
-          {workout.type === 'rest' ? t.deload : liftLabel(workout.lift, t)}
-          {isCurrent && (
-            <span style={{
-              fontSize: 11,
-              background: THEME.primary,
+        return (
+          <div
+            key={workout.number}
+            ref={isCurrent ? currentWorkoutRef : null}
+            onClick={() => {
+              onSelect(idx);
+              window.scrollTo({ top: 0, behavior: 'auto' });
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              padding: '12px 16px',
+              marginBottom: 10,
+              borderRadius: 8,
+              border: isCurrent ? `2px solid ${THEME.primary}` : `1px solid ${THEME.border}`,
+              background: THEME.card,
+              cursor: 'pointer',
+              opacity: 1
+            }}
+          >
+            <div style={{
+              width: 40,
+              height: 40,
+              borderRadius: 8,
+              background: headerBg,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               color: '#ffffff',
-              padding: '1px 6px',
-              borderRadius: 3,
-              marginLeft: 8
+              fontWeight: 700,
+              fontSize: 16,
+              marginRight: 14,
+              flexShrink: 0
             }}>
-              {t.now}
-            </span>
-          )}
+              {workout.number}
+            </div>
+
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: isCurrent ? 700 : 500, color: isCurrent ? THEME.primary : '#ffffff' }}>
+                {workout.type === 'rest' ? t.deload : liftLabel(workout.lift, t)}
+                {isCurrent && (
+                  <span style={{
+                    fontSize: 11,
+                    background: THEME.primary,
+                    color: '#ffffff',
+                    padding: '1px 6px',
+                    borderRadius: 3,
+                    marginLeft: 8
+                  }}>
+                    {t.now}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ fontSize: 12, color: THEME.muted, marginTop: 2 }}>
+                {t.workoutProgress} {workout.number} / {workouts.length} · {getWorkoutTypeLabel(workout, t)}
+              </div>
+            </div>
+
+            {isDone && <span style={{ color: THEME.primary, fontSize: 18 }}>✅</span>}
+          </div>
+        );
+      })}
+
+      <button
+        onClick={() => setShowStartCycleConfirm(true)}
+        style={{
+          width: '100%',
+          marginTop: 12,
+          padding: 12,
+          fontSize: 14,
+          fontWeight: 800,
+          background: THEME.card,
+          color: '#ffffff',
+          border: `1px solid ${THEME.primary}`,
+          borderRadius: 8,
+          cursor: 'pointer'
+        }}
+      >
+        {t.startNewCycle}
+      </button>
+
+      {showStartCycleConfirm && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 800,
+          padding: 16
+        }}>
+          <div style={{
+            background: THEME.card,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 12,
+            padding: 18,
+            maxWidth: 420,
+            width: '100%',
+            color: THEME.text
+          }}>
+            <h3 style={{ margin: '0 0 10px', textAlign: 'center' }}>
+              {t.startNewCycleConfirmTitle}
+            </h3>
+
+            <p style={{ color: THEME.muted, fontSize: 14, lineHeight: 1.4, margin: '0 0 16px', textAlign: 'center' }}>
+              {t.startNewCycleConfirmText}
+            </p>
+
+            <button
+              onClick={() => {
+                setShowStartCycleConfirm(false);
+                onStartNewCycle();
+              }}
+              style={{
+                width: '100%',
+                padding: 12,
+                fontSize: 15,
+                fontWeight: 800,
+                background: THEME.card,
+                color: '#ffffff',
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.startNewCycle}
+            </button>
+
+            <button
+              onClick={() => setShowStartCycleConfirm(false)}
+              style={{
+                width: '100%',
+                marginTop: 8,
+                padding: 10,
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'transparent',
+                color: THEME.text,
+                border: `1px solid ${THEME.border}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.cancel}
+            </button>
+          </div>
         </div>
-
-      <div style={{ fontSize: 12, color: THEME.muted, marginTop: 2 }}>
-        {t.workoutProgress} {workout.number} / {workouts.length} · {getWorkoutTypeLabel(workout, t)}
-      </div>
-
-      </div>
-
-      {isDone && <span style={{ color: THEME.primary, fontSize: 18 }}>✅</span>}
-    </div>
-  );
-})}
+      )}
     </div>
   );
 }
@@ -4363,6 +4451,7 @@ const latestBodyDataRows = [
           }}
           onBack={() => setScreen('current')}
           onStats={() => setScreen('stats')}
+          onStartNewCycle={handleStartNewCycle}
           t={t}
         />
       )}
