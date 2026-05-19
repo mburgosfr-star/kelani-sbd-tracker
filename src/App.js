@@ -2655,12 +2655,17 @@ const meetTotals = {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
                   {[
-                    [`${t.opener} 90%`, row.opener],
-                    [`${t.secondAttempt} 97.5%`, row.second],
-                    [`${t.thirdAttempt} 102.5%`, row.third],
-                  ].map(([label, value]) => (
+                    [t.opener, '90%', row.opener],
+                    [t.secondAttempt, '97.5%', row.second],
+                    [t.thirdAttempt, '102.5%', row.third],
+                  ].map(([label, pct, value]) => (
                     <div key={label}>
-                      <div style={{ color: THEME.muted, fontSize: 12, marginBottom: 3 }}>{label}</div>
+                      <div style={{ color: THEME.text, fontSize: 12, fontWeight: 800, marginBottom: 2 }}>
+                        {label}
+                      </div>
+                      <div style={{ color: THEME.muted, fontSize: 11, marginBottom: 4 }}>
+                        {pct}
+                      </div>
                       <strong>{value ? `${value} ${t.kg}` : '—'}</strong>
                     </div>
                   ))}
