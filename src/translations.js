@@ -99,6 +99,9 @@ export const translations = {
     meetPlannerShort: 'Wedstrijd',
     suggestedAttempts: 'Voorgestelde pogingen',
     projectedTotal: 'Verwacht totaal',
+    totalAfterOpener: 'Totaal na opener',
+    totalAfterSecond: 'Totaal na tweede poging',
+    totalAfterThird: 'Totaal na derde poging',
     basedOnBestE1RM: 'Gebaseerd op je beste e1RM’s.',
 
     strength: 'Kracht',
@@ -298,6 +301,9 @@ export const translations = {
     meetPlannerShort: 'Meet',
     suggestedAttempts: 'Suggested attempts',
     projectedTotal: 'Projected total',
+    totalAfterOpener: 'Total after opener',
+    totalAfterSecond: 'Total after second attempt',
+    totalAfterThird: 'Total after third attempt',
     basedOnBestE1RM: 'Based on your best e1RMs.',
 
     strength: 'Strength',
@@ -497,6 +503,9 @@ export const translations = {
     meetPlannerShort: 'Competició',
     suggestedAttempts: 'Intents suggerits',
     projectedTotal: 'Total previst',
+    totalAfterOpener: 'Total després de l’obertura',
+    totalAfterSecond: 'Total després del segon intent',
+    totalAfterThird: 'Total després del tercer intent',
     basedOnBestE1RM: 'Basat en les teves millors e1RM.',
 
     strength: 'Força',

@@ -2380,7 +2380,11 @@ const meetPlan = ['Squat', 'Bench', 'Deadlift'].map(lift => {
   };
 });
 
-const projectedTotal = meetPlan.reduce((sum, row) => sum + (row.third || 0), 0);
+const meetTotals = {
+  opener: meetPlan.reduce((sum, row) => sum + (row.opener || 0), 0),
+  second: meetPlan.reduce((sum, row) => sum + (row.second || 0), 0),
+  third: meetPlan.reduce((sum, row) => sum + (row.third || 0), 0),
+};
 
   function renderChart(data, dataKeys, colors) {
     if (!data || data.length === 0) {
@@ -2651,9 +2655,9 @@ const projectedTotal = meetPlan.reduce((sum, row) => sum + (row.third || 0), 0);
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
                   {[
-                    [t.opener, row.opener],
-                    [t.secondAttempt, row.second],
-                    [t.thirdAttempt, row.third],
+                    [`${t.opener} 90%`, row.opener],
+                    [`${t.secondAttempt} 97.5%`, row.second],
+                    [`${t.thirdAttempt} 102.5%`, row.third],
                   ].map(([label, value]) => (
                     <div key={label}>
                       <div style={{ color: THEME.muted, fontSize: 12, marginBottom: 3 }}>{label}</div>
@@ -2669,13 +2673,20 @@ const projectedTotal = meetPlan.reduce((sum, row) => sum + (row.third || 0), 0);
             marginTop: 14,
             paddingTop: 12,
             borderTop: `1px solid ${THEME.border}`,
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: 12,
-            fontSize: 15
+            display: 'grid',
+            gap: 8,
+            fontSize: 14
           }}>
-            <span style={{ color: THEME.text, fontWeight: 800 }}>{t.projectedTotal}</span>
-            <strong>{projectedTotal ? `${projectedTotal} ${t.kg}` : '—'}</strong>
+            {[
+              [t.totalAfterOpener, meetTotals.opener],
+              [t.totalAfterSecond, meetTotals.second],
+              [t.totalAfterThird, meetTotals.third],
+            ].map(([label, value]) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ color: THEME.text, fontWeight: 800 }}>{label}</span>
+                <strong>{value ? `${value} ${t.kg}` : '—'}</strong>
+              </div>
+            ))}
           </div>
         </div>
       )}
