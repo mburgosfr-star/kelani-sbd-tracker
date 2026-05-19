@@ -241,58 +241,47 @@ function getWorkoutTypeLabel(workout, t) {
 }
 
 function generateWarmups(firstWorkWeight) {
-  function roundUp10(w) {
-    return Math.ceil(w / 10) * 10;
+  function roundDown10(w) {
+    return Math.floor(w / 10) * 10;
+  }
+
+  function getWarmupReps(index) {
+    if (index <= 1) return 5;
+    if (index === 2) return 3;
+    if (index === 3) return 2;
+    return 1;
   }
 
   const weight = Number(firstWorkWeight) || 0;
 
-  if (weight <= 20) return [];
+  if (weight < 30) return [];
 
-  let template = [];
+  const warmups = [{ weight: 20, reps: 5 }];
 
-  if (weight <= 50) {
-    template = [{ weight: 20, reps: 5 }];
-  } else if (weight <= 100) {
-    template = [
-      { weight: 20, reps: 5 },
-      { pct: 0.60, reps: 3 },
-    ];
-  } else if (weight <= 160) {
-    template = [
-      { weight: 20, reps: 5 },
-      { pct: 0.50, reps: 5 },
-      { pct: 0.75, reps: 3 },
-    ];
-  } else {
-    template = [
-      { weight: 20, reps: 5 },
-      { pct: 0.45, reps: 5 },
-      { pct: 0.65, reps: 3 },
-      { pct: 0.80, reps: 2 },
-    ];
+  while (weight - warmups[warmups.length - 1].weight > 50) {
+    const previous = warmups[warmups.length - 1].weight;
+    let nextWeight = previous + 50;
+
+    if (weight - nextWeight < 10) {
+      nextWeight = roundDown10(weight - 10);
+    }
+
+    if (nextWeight <= previous || nextWeight >= weight) break;
+
+    warmups.push({
+      weight: nextWeight,
+      reps: getWarmupReps(warmups.length),
+    });
   }
 
-  const seen = new Set();
-
-  return template
-    .map(w => {
-      const warmupWeight = w.weight ?? roundUp10(weight * w.pct);
-
-      return {
-        weight: warmupWeight,
-        reps: w.reps,
-        isWarmup: true,
-        done: false,
-      };
-    })
-    .filter(w => w.weight > 0 && w.weight < weight)
-    .filter(w => {
-      if (seen.has(w.weight)) return false;
-      seen.add(w.weight);
-      return true;
-    });
+  return warmups.map(w => ({
+    weight: w.weight,
+    reps: w.reps,
+    isWarmup: true,
+    done: false,
+  }));
 }
+
 
 function generateProgram(s, b, d) {
   function round25(w) {
@@ -2801,7 +2790,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const currentIndex = getCompletedWorkoutCount(history, currentCycle);
-  const PROGRAM_VERSION = 'cube-27-v1';
+  const PROGRAM_VERSION = 'cube-27-v2';
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
