@@ -2364,6 +2364,24 @@ function chartMetricLabel(key) {
   return key;
 }
 
+function roundAttempt(weight) {
+  return Math.round((Number(weight) || 0) / 2.5) * 2.5;
+}
+
+const meetPlan = ['Squat', 'Bench', 'Deadlift'].map(lift => {
+  const e1rm = bestStats[lift]?.e1rm || 0;
+
+  return {
+    lift,
+    e1rm,
+    opener: roundAttempt(e1rm * 0.90),
+    second: roundAttempt(e1rm * 0.975),
+    third: roundAttempt(e1rm * 1.025),
+  };
+});
+
+const projectedTotal = meetPlan.reduce((sum, row) => sum + (row.third || 0), 0);
+
   function renderChart(data, dataKeys, colors) {
     if (!data || data.length === 0) {
       return (
@@ -2610,9 +2628,55 @@ function chartMetricLabel(key) {
       {activescreen === 'meet' && (
         <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
           <h3 style={{ margin: '0 0 6px' }}>{t.meetPlanner}</h3>
-          <p style={{ margin: 0, color: THEME.muted, fontSize: 13 }}>
+          <p style={{ margin: '0 0 14px', color: THEME.muted, fontSize: 13 }}>
             {t.basedOnBestE1RM}
           </p>
+
+          <div style={{ display: 'grid', gap: 10 }}>
+            {meetPlan.map(row => (
+              <div
+                key={row.lift}
+                style={{
+                  border: `1px solid ${THEME.border}`,
+                  borderRadius: 8,
+                  padding: 12
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+                  <strong style={{ color: COLORS[row.lift] }}>{liftLabel(row.lift, t)}</strong>
+                  <span style={{ color: THEME.muted, fontSize: 13 }}>
+                    e1RM: {row.e1rm ? `${row.e1rm} ${t.kg}` : '—'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
+                  {[
+                    [t.opener, row.opener],
+                    [t.secondAttempt, row.second],
+                    [t.thirdAttempt, row.third],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <div style={{ color: THEME.muted, fontSize: 12, marginBottom: 3 }}>{label}</div>
+                      <strong>{value ? `${value} ${t.kg}` : '—'}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{
+            marginTop: 14,
+            paddingTop: 12,
+            borderTop: `1px solid ${THEME.border}`,
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 12,
+            fontSize: 15
+          }}>
+            <span style={{ color: THEME.text, fontWeight: 800 }}>{t.projectedTotal}</span>
+            <strong>{projectedTotal ? `${projectedTotal} ${t.kg}` : '—'}</strong>
+          </div>
         </div>
       )}
     </div>
