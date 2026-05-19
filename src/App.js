@@ -305,12 +305,12 @@ function generatePrepItems(lift) {
   const itemsByLift = {
     Bench: [
       { labelKey: 'prepBandPullApart', prescription: '2×20' },
-      { labelKey: 'prepBandExternalRotation', prescription: '2×15 / side' },
+      { labelKey: 'prepBandExternalRotation', prescription: '2×15', perSide: true },
       { labelKey: 'prepLightRows', prescription: '2×15' },
       { labelKey: 'prepScapPushups', prescription: '2×10' },
     ],
     Squat: [
-      { labelKey: 'prepHipOpeners', prescription: '2×10 / side' },
+      { labelKey: 'prepHipOpeners', prescription: '2×10', perSide: true },
       { labelKey: 'prepBodyweightSquats', prescription: '2×10' },
       { labelKey: 'prepGluteBridges', prescription: '2×12' },
       { labelKey: 'prepBracingBreaths', prescription: '2×5' },
@@ -318,7 +318,7 @@ function generatePrepItems(lift) {
     Deadlift: [
       { labelKey: 'prepHipHinges', prescription: '2×10' },
       { labelKey: 'prepLatPulldowns', prescription: '2×15' },
-      { labelKey: 'prepHamstringSweeps', prescription: '2×10 / side' },
+      { labelKey: 'prepHamstringSweeps', prescription: '2×10', perSide: true },
       { labelKey: 'prepEmptyBarRows', prescription: '2×10' },
     ],
   };
@@ -706,6 +706,10 @@ function RestTimer({ seconds, onDismiss, t }) {
   );
 }
 
+function formatPrepPrescription(item, t) {
+  return item.perSide ? `${item.prescription} / ${t.side}` : item.prescription;
+}
+
 function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
   return (
     <div style={{
@@ -743,7 +747,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
           {t[item.labelKey]}
         </div>
         <div style={{ color: THEME.muted, fontSize: 12, marginTop: 2 }}>
-          {item.prescription}
+          {formatPrepPrescription(item, t)}
         </div>
       </div>
     </div>

@@ -103,6 +103,7 @@ export const translations = {
     weight: 'Gewicht',
     kg: 'kg',
 
+    side: 'kant',
     prepTitle: 'Voorbereiding',
     prepBandPullApart: 'Band uit elkaar trekken',
     prepBandExternalRotation: 'Externe rotaties met band',
@@ -114,7 +115,7 @@ export const translations = {
     prepBracingBreaths: 'Bracing-ademhalingen',
     prepHipHinges: 'Heupscharnieren',
     prepLatPulldowns: 'Lichte lat pulldowns',
-    prepHamstringSweeps: 'Hamstring sweeps',
+    prepHamstringSweeps: 'Dynamische hamstringstretch',
     prepEmptyBarRows: 'Licht roeien met stang',
     warmup: 'Warming-up',
     set: 'Set',
@@ -296,6 +297,7 @@ export const translations = {
     weight: 'Weight',
     kg: 'kg',
 
+    side: 'side',
     prepTitle: 'Preparation',
     prepBandPullApart: 'Band pull-aparts',
     prepBandExternalRotation: 'Band external rotations',
@@ -489,6 +491,7 @@ export const translations = {
     weight: 'Pes',
     kg: 'kg',
 
+    side: 'costat',
     prepTitle: 'Preparació',
     prepBandPullApart: 'Separacions amb banda',
     prepBandExternalRotation: 'Rotacions externes d’espatlla amb banda',
