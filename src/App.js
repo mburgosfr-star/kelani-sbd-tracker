@@ -3457,6 +3457,7 @@ function handleStartNewCycle() {
   const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift);
 
   setCurrentCycle(nextCycle);
+  setMeetPlannerAttempts({});
   setWorkouts(newWorkouts);
   setSelectedIndex(0);
   setCompletedWorkout(null);
