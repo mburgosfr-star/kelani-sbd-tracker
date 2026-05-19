@@ -2193,6 +2193,7 @@ function handleToggle(fn) {
 
 function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, onBack, t }) {
 const [activescreen, setActivescreen] = useState('lifts');
+const [customMeetAttempts, setCustomMeetAttempts] = useState({});
   const liftData = {};
   const totalData = [];
   const bodyData = [];
@@ -2368,7 +2369,26 @@ function roundAttempt(weight) {
   return Math.round((Number(weight) || 0) / 2.5) * 2.5;
 }
 
-const meetPlan = ['Squat', 'Bench', 'Deadlift'].map(lift => {
+function updateMeetAttempt(lift, key, value) {
+  setCustomMeetAttempts(prev => ({
+    ...prev,
+    [lift]: {
+      ...(prev[lift] || {}),
+      [key]: value,
+    },
+  }));
+}
+
+function meetAttemptValue(lift, key, fallback) {
+  const custom = customMeetAttempts?.[lift]?.[key];
+
+  if (custom === undefined || custom === null) return fallback;
+  if (custom === '') return '';
+
+  return custom;
+}
+
+const suggestedMeetPlan = ['Squat', 'Bench', 'Deadlift'].map(lift => {
   const e1rm = bestStats[lift]?.e1rm || 0;
 
   return {
@@ -2380,10 +2400,17 @@ const meetPlan = ['Squat', 'Bench', 'Deadlift'].map(lift => {
   };
 });
 
+const meetPlan = suggestedMeetPlan.map(row => ({
+  ...row,
+  opener: meetAttemptValue(row.lift, 'opener', row.opener),
+  second: meetAttemptValue(row.lift, 'second', row.second),
+  third: meetAttemptValue(row.lift, 'third', row.third),
+}));
+
 const meetTotals = {
-  opener: meetPlan.reduce((sum, row) => sum + (row.opener || 0), 0),
-  second: meetPlan.reduce((sum, row) => sum + (row.second || 0), 0),
-  third: meetPlan.reduce((sum, row) => sum + (row.third || 0), 0),
+  opener: meetPlan.reduce((sum, row) => sum + (Number(row.opener) || 0), 0),
+  second: meetPlan.reduce((sum, row) => sum + (Number(row.second) || 0), 0),
+  third: meetPlan.reduce((sum, row) => sum + (Number(row.third) || 0), 0),
 };
 
   function renderChart(data, dataKeys, colors) {
@@ -2655,18 +2682,43 @@ const meetTotals = {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
                   {[
-                    [t.opener, '90%', row.opener],
-                    [t.secondAttempt, '97.5%', row.second],
-                    [t.thirdAttempt, '102.5%', row.third],
-                  ].map(([label, pct, value]) => (
-                    <div key={label}>
+                    ['opener', t.opener, '90%', row.opener],
+                    ['second', t.secondAttempt, '97.5%', row.second],
+                    ['third', t.thirdAttempt, '102.5%', row.third],
+                  ].map(([key, label, pct, value]) => (
+                    <div key={key}>
                       <div style={{ color: THEME.text, fontSize: 12, fontWeight: 800, marginBottom: 2 }}>
                         {label}
                       </div>
                       <div style={{ color: THEME.muted, fontSize: 11, marginBottom: 4 }}>
                         {pct}
                       </div>
-                      <strong>{value ? `${value} ${t.kg}` : '—'}</strong>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="2.5"
+                        value={value}
+                        onChange={e => updateMeetAttempt(row.lift, key, e.target.value)}
+                        onBlur={e => {
+                          const rounded = roundAttempt(e.target.value);
+                          updateMeetAttempt(row.lift, key, rounded || '');
+                        }}
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          padding: '7px 4px',
+                          borderRadius: 6,
+                          border: `1px solid ${THEME.border}`,
+                          background: THEME.bg,
+                          color: THEME.text,
+                          textAlign: 'center',
+                          fontSize: 14,
+                          fontWeight: 800
+                        }}
+                      />
+                      <div style={{ color: THEME.muted, fontSize: 11, marginTop: 3 }}>
+                        {t.kg}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -2692,6 +2744,24 @@ const meetTotals = {
                 <strong>{value ? `${value} ${t.kg}` : '—'}</strong>
               </div>
             ))}
+
+            <button
+              onClick={() => setCustomMeetAttempts({})}
+              style={{
+                marginTop: 4,
+                width: '100%',
+                padding: 10,
+                fontSize: 13,
+                fontWeight: 800,
+                background: THEME.card,
+                color: THEME.text,
+                border: `1px solid ${THEME.border}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.resetMeetPlanner}
+            </button>
           </div>
         </div>
       )}
