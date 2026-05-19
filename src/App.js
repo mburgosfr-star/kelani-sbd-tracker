@@ -2454,15 +2454,20 @@ function chartMetricLabel(key) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        {['lifts', 'totaal', 'lichaam', 'kracht'].map(screen => (
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: 8,
+        marginBottom: 20
+      }}>
+        {['lifts', 'totaal', 'lichaam', 'kracht', 'meet'].map(screen => (
   <button
     key={screen}
     onClick={() => setActivescreen(screen)}
     style={{
-  flex: 1,
-  padding: '8px 0',
-  fontSize: 16,
+  width: '100%',
+  padding: '9px 6px',
+  fontSize: 14,
   background: THEME.card,
   color: activescreen === screen ? THEME.primary : THEME.text,
   border: `1px solid ${THEME.border}`,
@@ -2480,7 +2485,9 @@ function chartMetricLabel(key) {
       ? t.total
       : screen === 'lichaam'
       ? t.body
-      : t.strength}
+      : screen === 'kracht'
+      ? t.strength
+      : t.meetPlannerShort}
   </button>
 ))}   
 </div>
@@ -2599,6 +2606,15 @@ function chartMetricLabel(key) {
     {renderChart(strengthData, ['strength'], [THEME.primary])}
   </div>
 )}
+
+      {activescreen === 'meet' && (
+        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
+          <h3 style={{ margin: '0 0 6px' }}>{t.meetPlanner}</h3>
+          <p style={{ margin: 0, color: THEME.muted, fontSize: 13 }}>
+            {t.basedOnBestE1RM}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
