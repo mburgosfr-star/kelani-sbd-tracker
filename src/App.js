@@ -166,6 +166,42 @@ function normalizeBodyWeights(data) {
   );
 }
 
+function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, history, cycle) {
+  const completedCount = getCompletedWorkoutCount(history, cycle);
+
+  return workouts.map((workout, index) => {
+    const generated = generatedWorkouts[index];
+    if (!generated) return workout;
+
+    const prepDone = index < completedCount;
+
+    if (workout.type === 'meet') {
+      return {
+        ...workout,
+        lifts: (workout.lifts || generated.lifts || []).map((liftBlock, liftIndex) => {
+          const generatedLiftBlock = (generated.lifts || [])[liftIndex] || {};
+
+          return {
+            ...liftBlock,
+            prepItems: (liftBlock.prepItems || generatedLiftBlock.prepItems || []).map(item => ({
+              ...item,
+              done: item.done ?? prepDone,
+            })),
+          };
+        }),
+      };
+    }
+
+    return {
+      ...workout,
+      prepItems: (workout.prepItems || generated.prepItems || []).map(item => ({
+        ...item,
+        done: item.done ?? prepDone,
+      })),
+    };
+  });
+}
+
 function hydrateWorkoutsWithHistory(workouts, history, cycle) {
   return workouts.map(workout => {
     const savedSnapshot = history.find(
@@ -177,7 +213,30 @@ function hydrateWorkoutsWithHistory(workouts, history, cycle) {
     );
 
     if (savedSnapshot?.workoutSnapshot) {
-      return savedSnapshot.workoutSnapshot;
+      if (workout.type === 'meet') {
+        return {
+          ...savedSnapshot.workoutSnapshot,
+          lifts: (savedSnapshot.workoutSnapshot.lifts || workout.lifts || []).map((liftBlock, index) => {
+            const generatedLiftBlock = (workout.lifts || [])[index] || {};
+
+            return {
+              ...liftBlock,
+              prepItems: (liftBlock.prepItems || generatedLiftBlock.prepItems || []).map(item => ({
+                ...item,
+                done: true,
+              })),
+            };
+          }),
+        };
+      }
+
+      return {
+        ...savedSnapshot.workoutSnapshot,
+        prepItems: (savedSnapshot.workoutSnapshot.prepItems || workout.prepItems || []).map(item => ({
+          ...item,
+          done: true,
+        })),
+      };
     }
 
     const saved = history.find(
@@ -193,6 +252,7 @@ function hydrateWorkoutsWithHistory(workouts, history, cycle) {
           ...workout,
           lifts: (workout.lifts || []).map(liftBlock => ({
             ...liftBlock,
+            prepItems: (liftBlock.prepItems || []).map(item => ({ ...item, done: true })),
             warmups: (liftBlock.warmups || []).map(w => ({ ...w, done: true })),
             sets: (liftBlock.sets || []).map(s => ({ ...s, done: true })),
           })),
@@ -201,6 +261,7 @@ function hydrateWorkoutsWithHistory(workouts, history, cycle) {
 
       return {
         ...workout,
+        prepItems: (workout.prepItems || []).map(item => ({ ...item, done: true })),
         warmups: (workout.warmups || []).map(w => ({ ...w, done: true })),
         sets: (workout.sets || []).map(s => ({ ...s, done: true })),
         accessories: (workout.accessories || []).map(a => ({
@@ -238,6 +299,34 @@ function liftLabel(lift, t) {
 function getWorkoutTypeLabel(workout, t) {
   const key = getWorkoutTypeKey(workout);
   return key ? t[key] : '—';
+}
+
+function generatePrepItems(lift) {
+  const itemsByLift = {
+    Bench: [
+      { labelKey: 'prepBandPullApart', prescription: '2×20' },
+      { labelKey: 'prepBandExternalRotation', prescription: '2×15 / side' },
+      { labelKey: 'prepLightRows', prescription: '2×15' },
+      { labelKey: 'prepScapPushups', prescription: '2×10' },
+    ],
+    Squat: [
+      { labelKey: 'prepHipOpeners', prescription: '2×10 / side' },
+      { labelKey: 'prepBodyweightSquats', prescription: '2×10' },
+      { labelKey: 'prepGluteBridges', prescription: '2×12' },
+      { labelKey: 'prepBracingBreaths', prescription: '2×5' },
+    ],
+    Deadlift: [
+      { labelKey: 'prepHipHinges', prescription: '2×10' },
+      { labelKey: 'prepLatPulldowns', prescription: '2×15' },
+      { labelKey: 'prepHamstringSweeps', prescription: '2×10 / side' },
+      { labelKey: 'prepEmptyBarRows', prescription: '2×10' },
+    ],
+  };
+
+  return (itemsByLift[lift] || []).map(item => ({
+    ...item,
+    done: false,
+  }));
 }
 
 function generateWarmups(firstWorkWeight) {
@@ -384,6 +473,7 @@ function generateProgram(s, b, d) {
       type: day.type,
       lift: day.lift,
       label: day.label,
+      prepItems: generatePrepItems(day.lift),
       warmups,
       sets,
       accessories: [],
@@ -422,6 +512,7 @@ function generateProgram(s, b, d) {
 
     return {
       lift,
+      prepItems: generatePrepItems(lift),
       warmups: generateWarmups(sets[0].weight),
       sets,
     };
@@ -615,6 +706,50 @@ function RestTimer({ seconds, onDismiss, t }) {
   );
 }
 
+function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      padding: '12px 16px',
+      borderTop: `1px solid ${THEME.border}`,
+      background: item.done ? 'rgba(255, 138, 61, 0.08)' : THEME.card,
+      boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none'
+    }}>
+      <button
+        onClick={onToggle}
+        disabled={isReadOnly}
+        style={{
+          width: 26,
+          height: 26,
+          borderRadius: '50%',
+          border: `2px solid ${item.done ? THEME.primary : THEME.border}`,
+          background: item.done ? THEME.primary : THEME.card,
+          color: item.done ? THEME.bg : THEME.text,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginRight: 12,
+          flexShrink: 0,
+          cursor: isReadOnly ? 'not-allowed' : 'pointer',
+          fontWeight: 900
+        }}
+      >
+        {item.done ? '✓' : ''}
+      </button>
+
+      <div style={{ flex: 1 }}>
+        <div style={{ color: THEME.text, fontWeight: 800, fontSize: 14 }}>
+          {t[item.labelKey]}
+        </div>
+        <div style={{ color: THEME.muted, fontSize: 12, marginTop: 2 }}>
+          {item.prescription}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, isActive, isReadOnly, t }) {
 const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(set.weight));
@@ -658,21 +793,29 @@ const [editing, setEditing] = useState(false);
     width: 34,
     height: 34,
     borderRadius: '50%',
-    border: `2px solid ${set.done ? '#ae8a27' : '#ccc'}`,
-    background: set.done ? '#ae5827' : 'white',
+    border: `2px solid ${set.done ? THEME.primary : THEME.border}`,
+    background: set.done ? THEME.primary : THEME.card,
+    color: set.done ? THEME.bg : THEME.text,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
     flexShrink: 0,
-    cursor: 'pointer',
+    cursor: isReadOnly ? 'not-allowed' : 'pointer',
     transition: 'all 0.15s ease',
-    transform: set.done ? 'scale(1.1)' : 'scale(1)',
-    color: '#ffffff',
+    transform: set.done ? 'scale(1.08)' : 'scale(1)',
+    fontWeight: 900,
   }}
 >
+        {set.done ? '✓' : ''}
       </div>
-      <div onClick={onToggle} style={{ flex: 1, cursor: 'pointer' }}>
+      <div
+        onClick={isReadOnly ? undefined : onToggle}
+        style={{
+          flex: 1,
+          cursor: isReadOnly ? 'not-allowed' : 'pointer'
+        }}
+      >
         <span style={{ fontWeight: 500, color: THEME.text, textDecoration: set.done ? 'line-through' : 'none' }}>{label}</span>
 <span style={{ color: THEME.text, fontSize: 16, fontWeight: 700, marginLeft: 12 }}>
 {set.reps} {t.reps}
@@ -1655,7 +1798,7 @@ color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
   );
 }
 
-function CurrentWorkout({ workout, currentCycle, totalWorkouts, onToggleWarmup, onToggleSet, onToggleAccessorySet, onToggleMeetWarmup, onToggleMeetSet, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
+function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onToggleAccessorySet, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
 
   function isTimerFor(placement) {
     if (!timer || !timer.placement) return false;
@@ -1706,6 +1849,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onToggleWarmup, 
     );
 
     const firstIncompleteLiftIndex = (workout.lifts || []).findIndex(liftBlock =>
+      (liftBlock.prepItems || []).some(item => !item.done) ||
       (liftBlock.warmups || []).some(w => !w.done) ||
       (liftBlock.sets || []).some(s => !s.done)
     );
@@ -1721,8 +1865,10 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onToggleWarmup, 
         </div>
 
         {(workout.lifts || []).map((liftBlock, li) => {
+          const firstIncompletePrepItem = (liftBlock.prepItems || []).findIndex(item => !item.done);
           const firstIncompleteWarmup = (liftBlock.warmups || []).findIndex(w => !w.done);
           const firstIncompleteSet = (liftBlock.sets || []).findIndex(s => !s.done);
+          const allPrepDone = (liftBlock.prepItems || []).every(item => item.done);
           const allWarmupsDone = (liftBlock.warmups || []).every(w => w.done);
 
           return (
@@ -1740,6 +1886,36 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onToggleWarmup, 
                 {liftLabel(liftBlock.lift, t)}
               </div>
 
+              {(liftBlock.prepItems || []).length > 0 && (
+                <div>
+                  <div style={{
+                    padding: '8px 16px',
+                    fontSize: 14,
+                    fontWeight: 800,
+                    color: THEME.text,
+                    borderTop: `1px solid ${THEME.border}`,
+                    background: THEME.card
+                  }}>
+                    {t.prepTitle}
+                  </div>
+
+                  {(liftBlock.prepItems || []).map((item, pi) => (
+                    <PrepRow
+                      key={`prep-${pi}`}
+                      item={item}
+                      isActive={
+                        !isReadOnly &&
+                        li === firstIncompleteLiftIndex &&
+                        pi === firstIncompletePrepItem
+                      }
+                      isReadOnly={isReadOnly}
+                      onToggle={() => handleToggle(() => onToggleMeetPrepItem(li, pi))}
+                      t={t}
+                    />
+                  ))}
+                </div>
+              )}
+
               {(liftBlock.warmups || []).map((w, wi) => (
                 <SetRow
                   key={`warmup-${wi}`}
@@ -1750,6 +1926,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onToggleWarmup, 
                   isActive={
                     !isReadOnly &&
                     li === firstIncompleteLiftIndex &&
+                    allPrepDone &&
                     wi === firstIncompleteWarmup
                   }
                   isReadOnly={isReadOnly}
@@ -1768,6 +1945,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onToggleWarmup, 
                   isActive={
                     !isReadOnly &&
                     li === firstIncompleteLiftIndex &&
+                    allPrepDone &&
                     allWarmupsDone &&
                     si === firstIncompleteSet
                   }
@@ -1812,6 +1990,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onToggleWarmup, 
   }
 
   const allDone = (workout.sets || []).every(s => s.done);
+  const allPrepDone = (workout.prepItems || []).every(item => item.done);
 
 function handleToggle(fn) {
   if (isReadOnly) return;
@@ -1843,6 +2022,30 @@ function handleToggle(fn) {
   {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts} · {getWorkoutTypeLabel(workout, t)}
 </div>
 
+      {(workout.prepItems || []).length > 0 && (
+        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+          <div style={{
+            padding: '8px 16px',
+            fontSize: 16,
+            fontWeight: 700,
+            color: THEME.text
+          }}>
+            {t.prepTitle}
+          </div>
+
+          {workout.prepItems.map((item, i) => (
+            <PrepRow
+              key={i}
+              item={item}
+              isActive={!isReadOnly && i === workout.prepItems.findIndex(prep => !prep.done)}
+              isReadOnly={isReadOnly}
+              onToggle={() => handleToggle(() => onTogglePrepItem(i))}
+              t={t}
+            />
+          ))}
+        </div>
+      )}
+
       {(workout.warmups || []).length > 0 && (
         <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
         <div style={{
@@ -1860,7 +2063,7 @@ function handleToggle(fn) {
                 index={i}
                 label={`${t.warmup} ${i + 1}`}
                 isWarmup={true}
-                isActive={!isReadOnly && i === workout.warmups.findIndex(wu => !wu.done)}
+                isActive={!isReadOnly && allPrepDone && i === workout.warmups.findIndex(wu => !wu.done)}
                 isReadOnly={isReadOnly}
                 onToggle={() => handleToggle(() => onToggleWarmup(i))}
                 t={t}
@@ -1881,7 +2084,7 @@ function handleToggle(fn) {
   {liftLabel(workout.lift, t)}
 </div>
       {workout.sets.map((set, i) => {
-  const allWarmupsDone = (workout.warmups || []).every(w => w.done);
+  const allWarmupsDone = allPrepDone && (workout.warmups || []).every(w => w.done);
   const firstIncomplete = workout.sets.findIndex(s => !s.done);
 
   return (
@@ -2790,7 +2993,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const currentIndex = getCompletedWorkoutCount(history, currentCycle);
-  const PROGRAM_VERSION = 'cube-27-v2';
+  const PROGRAM_VERSION = 'cube-27-v3';
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
@@ -2881,7 +3084,14 @@ export default function App() {
         ? savedInProgress.workouts
         : hydrateWorkoutsWithHistory(generatedWorkouts, savedHistory, savedCycle);
 
-      setWorkouts(restoredWorkouts);
+      const normalizedWorkouts = mergeGeneratedWorkoutStructure(
+        restoredWorkouts,
+        generatedWorkouts,
+        savedHistory,
+        savedCycle
+      );
+
+      setWorkouts(normalizedWorkouts);
       setHistory(savedHistory);
       setPrs(savedPrs);
       setAccessoryPRs(data.accessoryPRs || {});
@@ -3063,6 +3273,23 @@ function shouldStartRestTimerAfterToggle(workout, type, index, accIndex = null) 
   return false;
 }
 
+function togglePrepItem(index) {
+  setTimer(null);
+
+  setWorkouts(prev =>
+    prev.map((w, wi) =>
+      wi !== selectedIndex
+        ? w
+        : {
+            ...w,
+            prepItems: (w.prepItems || []).map((item, i) =>
+              i === index ? { ...item, done: !item.done } : item
+            ),
+          }
+    )
+  );
+}
+
 function toggleWarmup(wIndex) {
   const workout = workouts[selectedIndex];
   if (shouldStartRestTimerAfterToggle(workout, 'warmup', wIndex)) {
@@ -3169,6 +3396,30 @@ function changeWeight(type, index, val) {
       }
 
       return w;
+    })
+  );
+}
+
+function toggleMeetPrepItem(liftIndex, prepIndex) {
+  setTimer(null);
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: (w.lifts || []).map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
+            prepItems: (liftBlock.prepItems || []).map((item, i) =>
+              i === prepIndex ? { ...item, done: !item.done } : item
+            ),
+          };
+        }),
+      };
     })
   );
 }
@@ -3739,6 +3990,7 @@ const latestBodyDataRows = [
           currentCycle={currentCycle}
           totalWorkouts={workouts.length}
           isReadOnly={selectedIndex > currentIndex}
+          onTogglePrepItem={togglePrepItem}
           onToggleWarmup={toggleWarmup}
           onToggleSet={toggleSet}
           onToggleAccessorySet={toggleAccessorySet}
@@ -3752,6 +4004,7 @@ const latestBodyDataRows = [
           t={t}
           timer={timer}
           setTimer={setTimer}
+          onToggleMeetPrepItem={toggleMeetPrepItem}
           onToggleMeetWarmup={toggleMeetWarmup}
           onToggleMeetSet={toggleMeetSet}
           onMeetWeightChange={changeMeetWeight}
