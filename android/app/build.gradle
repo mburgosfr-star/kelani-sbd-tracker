@@ -16,8 +16,18 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+signingConfigs {
+    release {
+        storeFile file(findProperty("KELANI_RELEASE_STORE_FILE") ?: "kelani-release-key.jks")
+        storePassword findProperty("KELANI_RELEASE_STORE_PASSWORD")
+        keyAlias findProperty("KELANI_RELEASE_KEY_ALIAS")
+        keyPassword findProperty("KELANI_RELEASE_KEY_PASSWORD")
+    }
+}
+
 buildTypes {
     release {
+        signingConfig signingConfigs.release
         minifyEnabled false
         proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
     }
