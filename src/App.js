@@ -2191,9 +2191,9 @@ function handleToggle(fn) {
   );
 }
 
-function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, onBack, t }) {
+function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, meetPlannerAttempts, setMeetPlannerAttempts, onBack, t }) {
 const [activescreen, setActivescreen] = useState('lifts');
-const [customMeetAttempts, setCustomMeetAttempts] = useState({});
+const customMeetAttempts = meetPlannerAttempts || {};
   const liftData = {};
   const totalData = [];
   const bodyData = [];
@@ -2370,10 +2370,10 @@ function roundAttempt(weight) {
 }
 
 function updateMeetAttempt(lift, key, value) {
-  setCustomMeetAttempts(prev => ({
-    ...prev,
+  setMeetPlannerAttempts(prev => ({
+    ...(prev || {}),
     [lift]: {
-      ...(prev[lift] || {}),
+      ...((prev || {})[lift] || {}),
       [key]: value,
     },
   }));
@@ -2746,7 +2746,7 @@ const meetTotals = {
             ))}
 
             <button
-              onClick={() => setCustomMeetAttempts({})}
+              onClick={() => setMeetPlannerAttempts({})}
               style={{
                 marginTop: 4,
                 width: '100%',
@@ -3161,6 +3161,7 @@ export default function App() {
   const [currentCycle, setCurrentCycle] = useState(1);
   const [bodyWeights, setBodyWeights] = useState([]);
   const [userProfile, setUserProfile] = useState({});
+  const [meetPlannerAttempts, setMeetPlannerAttempts] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const currentIndex = getCompletedWorkoutCount(history, currentCycle);
   const PROGRAM_VERSION = 'cube-27-v3';
@@ -3268,6 +3269,7 @@ export default function App() {
       setCurrentCycle(savedCycle);
       setBodyWeights(normalizeBodyWeights(data));
       setUserProfile(data.userProfile || {});
+      setMeetPlannerAttempts(data.meetPlannerAttempts || {});
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
 
       setSelectedIndex(
@@ -3295,6 +3297,7 @@ export default function App() {
       currentCycle,
       bodyWeights,
       userProfile,
+      meetPlannerAttempts,
       restTimeSeconds,
       inProgress: {
         programVersion: PROGRAM_VERSION,
@@ -3303,7 +3306,7 @@ export default function App() {
         workouts,
       },
     }));
-  }, [history, prs, accessoryPRs, currentCycle, bodyWeights, userProfile, restTimeSeconds, selectedIndex, workouts]);
+  }, [history, prs, accessoryPRs, currentCycle, bodyWeights, userProfile, meetPlannerAttempts, restTimeSeconds, selectedIndex, workouts]);
 
   function handleStart(s, b, d, profile = {}, initialBodyData = null) {
     const today = new Date().toLocaleDateString('nl-NL');
@@ -3348,6 +3351,7 @@ export default function App() {
     setPrs({ Squat: s, Bench: b, Deadlift: d });
     setAccessoryPRs({});
     setUserProfile(profile);
+    setMeetPlannerAttempts({});
     setBodyWeights(initialBodyData ? [
       {
         workoutNumber: 0,
@@ -3374,6 +3378,7 @@ function handleResetApp() {
   setPrs({});
   setAccessoryPRs({});
   setUserProfile({});
+  setMeetPlannerAttempts({});
   setShowNewCycle(false);
   setCurrentCycle(1);
   setBodyWeights([]);
@@ -4291,6 +4296,8 @@ const latestBodyDataRows = [
           currentCycle={currentCycle}
           currentIndex={currentIndex}
           totalWorkouts={workouts.length}
+          meetPlannerAttempts={meetPlannerAttempts}
+          setMeetPlannerAttempts={setMeetPlannerAttempts}
           onBack={() => setScreen('all')}
           t={t}
         />
