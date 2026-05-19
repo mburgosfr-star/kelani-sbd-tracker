@@ -114,7 +114,7 @@ export const translations = {
     prepGluteBridges: 'Heupbruggen',
     prepBracingBreaths: 'Bracing-ademhalingen',
     prepHipHinges: 'Heupscharnieren',
-    prepLatPulldowns: 'Lichte lat pulldowns',
+    prepLatPulldowns: 'Lichte trekkingen aan hoge katrol',
     prepHamstringSweeps: 'Dynamische hamstringstretch',
     prepEmptyBarRows: 'Licht roeien met stang',
     warmup: 'Warming-up',
