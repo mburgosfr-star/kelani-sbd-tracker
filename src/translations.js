@@ -103,6 +103,8 @@ export const translations = {
     totalAfterSecond: 'Totaal na tweede poging',
     totalAfterThird: 'Totaal na derde poging',
     resetMeetPlanner: 'Terug naar suggesties',
+    resetMeetPlannerConfirmTitle: 'Meet Planner resetten?',
+    resetMeetPlannerConfirmText: 'Dit zet je handmatige pogingen terug naar de suggesties. Je geschiedenis en lichaamsgegevens blijven bewaard.',
     basedOnBestE1RM: 'Gebaseerd op je beste e1RM’s.',
 
     strength: 'Kracht',
@@ -308,6 +310,8 @@ export const translations = {
     totalAfterSecond: 'Total after second attempt',
     totalAfterThird: 'Total after third attempt',
     resetMeetPlanner: 'Reset to suggestions',
+    resetMeetPlannerConfirmTitle: 'Reset Meet Planner?',
+    resetMeetPlannerConfirmText: 'This resets your manual attempts to the suggestions. Your history and body data stay saved.',
     basedOnBestE1RM: 'Based on your best e1RMs.',
 
     strength: 'Strength',
@@ -512,7 +516,9 @@ export const translations = {
     totalAfterOpener: 'Total després de l’obertura',
     totalAfterSecond: 'Total després del segon intent',
     totalAfterThird: 'Total després del tercer intent',
-    resetMeetPlanner: 'Torna als suggeriments',
+    resetMeetPlanner: 'Restableix el planificador',
+    resetMeetPlannerConfirmTitle: 'Vols tornar als suggeriments?',
+    resetMeetPlannerConfirmText: 'Això esborra els canvis fets manualment al planificador. L’historial i les dades corporals es conserven.',
     basedOnBestE1RM: 'Basat en les teves millors e1RM.',
 
     strength: 'Força',
