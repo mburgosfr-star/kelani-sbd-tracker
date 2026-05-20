@@ -2701,115 +2701,130 @@ const meetTotals = {
   </div>
 )}
 
-      {activescreen === 'meet' && (
-        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
-          <h3 style={{ margin: '0 0 6px' }}>{t.meetPlanner}</h3>
-          <p style={{ margin: '0 0 14px', color: THEME.muted, fontSize: 13 }}>
-            {t.basedOnBestE1RM}
-          </p>
+{activescreen === 'meet' && (
+  <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
+    <h3 style={{ margin: '0 0 6px' }}>{t.meetPlanner}</h3>
+    <p style={{ margin: '0 0 16px', color: THEME.muted, fontSize: 13, lineHeight: 1.4 }}>
+      {t.basedOnBestE1RM}
+    </p>
 
-          <div style={{ display: 'grid', gap: 10 }}>
-            {meetPlan.map(row => (
+    <div style={{ display: 'grid', gap: 12 }}>
+      {meetPlan.map(row => (
+        <div
+          key={row.lift}
+          style={{
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 10,
+            padding: 12,
+            background: THEME.bg
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 10 }}>
+            <strong style={{ color: COLORS[row.lift], fontSize: 16 }}>
+              {liftLabel(row.lift, t)}
+            </strong>
+            <span style={{ color: THEME.muted, fontSize: 13, whiteSpace: 'nowrap' }}>
+              e1RM {row.e1rm ? `${row.e1rm} ${t.kg}` : '—'}
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+            {[
+              ['opener', t.opener, '90%', row.opener],
+              ['second', t.secondAttempt, '97.5%', row.second],
+              ['third', t.thirdAttempt, '102.5%', row.third],
+            ].map(([key, label, pct, value]) => (
               <div
-                key={row.lift}
+                key={key}
                 style={{
                   border: `1px solid ${THEME.border}`,
                   borderRadius: 8,
-                  padding: 12
+                  padding: 8,
+                  textAlign: 'center',
+                  background: THEME.card
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
-                  <strong style={{ color: COLORS[row.lift] }}>{liftLabel(row.lift, t)}</strong>
-                  <span style={{ color: THEME.muted, fontSize: 13 }}>
-                    e1RM: {row.e1rm ? `${row.e1rm} ${t.kg}` : '—'}
-                  </span>
+                <div style={{ color: THEME.text, fontSize: 12, fontWeight: 800, marginBottom: 2 }}>
+                  {label}
                 </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
-                  {[
-                    ['opener', t.opener, '90%', row.opener],
-                    ['second', t.secondAttempt, '97.5%', row.second],
-                    ['third', t.thirdAttempt, '102.5%', row.third],
-                  ].map(([key, label, pct, value]) => (
-                    <div key={key}>
-                      <div style={{ color: THEME.text, fontSize: 12, fontWeight: 800, marginBottom: 2 }}>
-                        {label}
-                      </div>
-                      <div style={{ color: THEME.muted, fontSize: 11, marginBottom: 4 }}>
-                        {pct}
-                      </div>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        step="2.5"
-                        value={value}
-                        onChange={e => updateMeetAttempt(row.lift, key, e.target.value)}
-                        onBlur={e => {
-                          const rounded = roundAttempt(e.target.value);
-                          updateMeetAttempt(row.lift, key, rounded || '');
-                        }}
-                        style={{
-                          width: '100%',
-                          boxSizing: 'border-box',
-                          padding: '7px 4px',
-                          borderRadius: 6,
-                          border: `1px solid ${THEME.border}`,
-                          background: THEME.bg,
-                          color: THEME.text,
-                          textAlign: 'center',
-                          fontSize: 14,
-                          fontWeight: 800
-                        }}
-                      />
-                      <div style={{ color: THEME.muted, fontSize: 11, marginTop: 3 }}>
-                        {t.kg}
-                      </div>
-                    </div>
-                  ))}
+                <div style={{ color: THEME.muted, fontSize: 11, marginBottom: 6 }}>
+                  {pct}
+                </div>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="2.5"
+                  value={value}
+                  onChange={e => updateMeetAttempt(row.lift, key, e.target.value)}
+                  onBlur={e => {
+                    const rounded = roundAttempt(e.target.value);
+                    updateMeetAttempt(row.lift, key, rounded || '');
+                  }}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '8px 4px',
+                    borderRadius: 6,
+                    border: `1px solid ${THEME.border}`,
+                    background: THEME.bg,
+                    color: THEME.text,
+                    textAlign: 'center',
+                    fontSize: 15,
+                    fontWeight: 800
+                  }}
+                />
+                <div style={{ color: THEME.muted, fontSize: 11, marginTop: 4 }}>
+                  {t.kg}
                 </div>
               </div>
             ))}
-          </div>
-
-          <div style={{
-            marginTop: 14,
-            paddingTop: 12,
-            borderTop: `1px solid ${THEME.border}`,
-            display: 'grid',
-            gap: 8,
-            fontSize: 14
-          }}>
-            {[
-              [t.totalAfterOpener, meetTotals.opener],
-              [t.totalAfterSecond, meetTotals.second],
-              [t.totalAfterThird, meetTotals.third],
-            ].map(([label, value]) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <span style={{ color: THEME.text, fontWeight: 800 }}>{label}</span>
-                <strong>{value ? `${value} ${t.kg}` : '—'}</strong>
-              </div>
-            ))}
-
-            <button
-              onClick={() => setMeetPlannerAttempts({})}
-              style={{
-                marginTop: 4,
-                width: '100%',
-                padding: 10,
-                fontSize: 13,
-                fontWeight: 800,
-                background: THEME.card,
-                color: THEME.text,
-                border: `1px solid ${THEME.border}`,
-                borderRadius: 8,
-                cursor: 'pointer'
-              }}
-            >
-              {t.resetMeetPlanner}
-            </button>
           </div>
         </div>
-      )}
+      ))}
+    </div>
+
+    <div style={{
+      marginTop: 14,
+      padding: 12,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 10,
+      background: THEME.bg,
+      display: 'grid',
+      gap: 8,
+      fontSize: 14
+    }}>
+      {[
+        [t.totalAfterOpener, meetTotals.opener],
+        [t.totalAfterSecond, meetTotals.second],
+        [t.totalAfterThird, meetTotals.third],
+      ].map(([label, value]) => (
+        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+          <span style={{ color: THEME.text, fontWeight: 800 }}>{label}</span>
+          <strong>{value ? `${value} ${t.kg}` : '—'}</strong>
+        </div>
+      ))}
+    </div>
+
+    <button
+      onClick={() => setMeetPlannerAttempts({})}
+      style={{
+        marginTop: 10,
+        width: '100%',
+        padding: 10,
+        fontSize: 13,
+        fontWeight: 800,
+        background: THEME.card,
+        color: THEME.text,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 8,
+        cursor: 'pointer'
+      }}
+    >
+      {t.resetMeetPlanner}
+    </button>
+  </div>
+)}
+
     </div>
   );
 }
