@@ -3443,6 +3443,7 @@ export default function App() {
   const [bodyWeights, setBodyWeights] = useState([]);
   const [userProfile, setUserProfile] = useState({});
   const [meetPlannerAttempts, setMeetPlannerAttempts] = useState({});
+  const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const currentIndex = getCompletedWorkoutCount(history, currentCycle);
   const PROGRAM_VERSION = 'cube-27-v3';
@@ -3537,6 +3538,7 @@ export default function App() {
       const generatedWorkouts = generateProgram(squat, bench, deadlift);
       const savedInProgress = data.inProgress || null;
       const savedMeetPlannerAttempts = data.meetPlannerAttempts || {};
+      const savedMeetPrepChecklist = data.meetPrepChecklist || {};
 
       const canRestoreInProgress =
         savedInProgress &&
@@ -3568,6 +3570,7 @@ export default function App() {
       setBodyWeights(normalizeBodyWeights(data));
       setUserProfile(data.userProfile || {});
       setMeetPlannerAttempts(savedMeetPlannerAttempts);
+      setMeetPrepChecklist(savedMeetPrepChecklist);
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
 
       setSelectedIndex(
@@ -3596,6 +3599,7 @@ export default function App() {
       bodyWeights,
       userProfile,
       meetPlannerAttempts,
+      meetPrepChecklist,
       restTimeSeconds,
       inProgress: {
         programVersion: PROGRAM_VERSION,
@@ -3604,7 +3608,7 @@ export default function App() {
         workouts,
       },
     }));
-  }, [history, prs, accessoryPRs, currentCycle, bodyWeights, userProfile, meetPlannerAttempts, restTimeSeconds, selectedIndex, workouts]);
+  }, [history, prs, accessoryPRs, currentCycle, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, selectedIndex, workouts]);
 
   function handleStart(s, b, d, profile = {}, initialBodyData = null) {
     const today = new Date().toLocaleDateString('nl-NL');
