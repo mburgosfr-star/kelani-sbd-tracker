@@ -13,6 +13,7 @@ const env = {
   ...process.env,
   JAVA_HOME: javaHome,
   PATH: `${path.join(javaHome, 'bin')}:${process.env.PATH}`,
+  REACT_APP_VERSION: pkg.version,
 };
 
 function run(command, options = {}) {
