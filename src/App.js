@@ -2715,6 +2715,22 @@ const meetTotals = {
       {t.basedOnBestE1RM}
     </p>
 
+<div style={{
+  marginBottom: 14,
+  padding: 14,
+  border: `1px solid ${THEME.primary}`,
+  borderRadius: 10,
+  background: THEME.bg,
+  textAlign: 'center'
+}}>
+  <div style={{ color: THEME.muted, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+    {t.projectedTotal}
+  </div>
+  <div style={{ color: THEME.text, fontSize: 28, fontWeight: 900, lineHeight: 1 }}>
+    {meetTotals.third ? `${meetTotals.third} ${t.kg}` : '—'}
+  </div>
+</div>
+
     <div style={{ display: 'grid', gap: 12 }}>
       {meetPlan.map(row => (
         <div
