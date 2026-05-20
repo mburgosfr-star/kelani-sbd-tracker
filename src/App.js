@@ -1060,7 +1060,26 @@ function Toast({ message }) {
   );
 }
 
-function DataSection({ t }) {
+function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, t }) {
+  const [showMeetPrepChecklist, setShowMeetPrepChecklist] = useState(false);
+
+  const meetPrepItems = [
+    ['id', 'meetPrepId'],
+    ['shoes', 'meetPrepShoes'],
+    ['socks', 'meetPrepSocks'],
+    ['food', 'meetPrepFood'],
+    ['attempts', 'meetPrepAttempts'],
+    ['rackHeights', 'meetPrepRackHeights'],
+  ];
+
+  const toggleMeetPrepItem = key => {
+    setMeetPrepChecklist(prev => ({
+      ...(prev || {}),
+      [key]: !prev?.[key],
+    }));
+  };
+
+
   const [notice, setNotice] = useState('');
   const [pendingImport, setPendingImport] = useState(null);
   const importInputRef = useRef(null);
@@ -1190,6 +1209,121 @@ function DataSection({ t }) {
 
   return (
     <>
+      <SettingsCard
+        title={t.meetPrepChecklist}
+        actionLabel={t.edit}
+        onAction={() => setShowMeetPrepChecklist(true)}
+      >
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12
+        }}>
+          <p style={{
+            margin: 0,
+            color: THEME.muted,
+            fontSize: 13,
+            lineHeight: 1.4
+          }}>
+            {t.meetPrepChecklistHint}
+          </p>
+
+          <strong style={{
+            color: THEME.text,
+            fontSize: 14,
+            whiteSpace: 'nowrap'
+          }}>
+            {Object.values(meetPrepChecklist || {}).filter(Boolean).length} / {meetPrepItems.length}
+          </strong>
+        </div>
+      </SettingsCard>
+
+      {showMeetPrepChecklist && (
+        <SettingsModal
+          title={t.meetPrepChecklist}
+          onClose={() => setShowMeetPrepChecklist(false)}
+        >
+          <p style={{
+            margin: '0 0 14px',
+            color: THEME.muted,
+            fontSize: 13,
+            lineHeight: 1.4,
+            textAlign: 'center'
+          }}>
+            {t.meetPrepChecklistHint}
+          </p>
+
+          <div style={{ display: 'grid', gap: 8 }}>
+            {meetPrepItems.map(([key, labelKey]) => {
+              const checked = !!meetPrepChecklist?.[key];
+
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleMeetPrepItem(key)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    width: '100%',
+                    padding: 10,
+                    borderRadius: 8,
+                    border: `1px solid ${checked ? THEME.primary : THEME.border}`,
+                    background: THEME.bg,
+                    color: THEME.text,
+                    cursor: 'pointer',
+                    textAlign: 'left'
+                  }}
+                >
+                  <span style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 6,
+                    border: `1px solid ${checked ? THEME.primary : THEME.border}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: THEME.primary,
+                    fontWeight: 900,
+                    flexShrink: 0
+                  }}>
+                    {checked ? '✓' : ''}
+                  </span>
+
+                  <span style={{
+                    fontSize: 14,
+                    fontWeight: checked ? 700 : 500,
+                    textDecoration: checked ? 'line-through' : 'none'
+                  }}>
+                    {t[labelKey]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <button
+  type="button"
+  onClick={() => setShowMeetPrepChecklist(false)}
+  style={{
+    width: '100%',
+    marginTop: 14,
+    padding: 10,
+    fontSize: 14,
+    fontWeight: 800,
+    background: THEME.bg,
+    color: THEME.text,
+    border: `1px solid ${THEME.border}`,
+    borderRadius: 8,
+    cursor: 'pointer'
+  }}
+>
+  {t.done}
+</button>
+        </SettingsModal>
+      )}
+
       <SettingsCard title={t.dataManagement}>
         <p style={{
           margin: '0 0 10px',
@@ -2949,6 +3083,8 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
   const currentWorkoutRef = useRef(null);
   const [showStartCycleConfirm, setShowStartCycleConfirm] = useState(false);
 
+
+
   useEffect(() => {
     if (!currentWorkoutRef.current) return;
 
@@ -2970,6 +3106,7 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
           {t.cycle} {currentCycle} · {t.workoutProgress} {Math.min(currentIndex + 1, workouts.length)} / {workouts.length}
         </div>
       </div>
+
 
       {workouts.map((workout, idx) => {
         const isCurrent = idx === currentIndex;
@@ -4650,7 +4787,11 @@ const latestBodyDataRows = [
     t={t}
   />
 
-  <DataSection t={t} />
+  <DataSection
+    meetPrepChecklist={meetPrepChecklist}
+    setMeetPrepChecklist={setMeetPrepChecklist}
+    t={t}
+  />
 
   <SupportSection t={t} />
 
