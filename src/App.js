@@ -875,7 +875,7 @@ const [editing, setEditing] = useState(false);
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <input ref={inputRef} type="number" value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={handleKeyDown} onBlur={handleConfirm}
               style={{ width: 70, padding: '4px 8px', fontSize: 16, fontWeight: 700, borderRadius: 4, border: '2px solid #e74c3c', textAlign: 'right' }} />
-            <span style={{ fontSize: 16, color: THEME.text }}>kg</span>
+            <span style={{ fontSize: 16, color: THEME.text }}>{t.kg}</span>
             {!isWarmup && (
               <button
                 onClick={(e) => {
@@ -4384,7 +4384,7 @@ const latestBodyDataRows = [
             <strong style={{ color }}>{lift}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ color: THEME.text, fontWeight: 700 }}>1RM:</span>
+            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.oneRM}:</span>
             <strong>{oneRM ? `${oneRM} kg` : '—'}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
