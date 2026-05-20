@@ -1834,7 +1834,7 @@ border: `1px solid ${THEME.border}`,
 color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
           {['Deadlift', 'Bench', 'Squat'].map(lift => (
             <div key={lift} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 14 }}>
-              <span style={{ color: THEME.text, fontWeight: 700 }}>{liftLabel(lift, t)} e1RM</span>
+              <span style={{ color: THEME.text, fontWeight: 700 }}>{liftLabel(lift, t)} {t.e1RM}</span>
               <span style={{ fontWeight: 700 }}>{prs[lift] || '—'} kg</span>
             </div>
           ))}
@@ -2396,7 +2396,7 @@ totalData.forEach(entry => {
 
 function chartMetricLabel(key) {
   if (key === 'oneRM') return '1RM';
-  if (key === 'e1rm') return 'e1RM';
+  if (key === 'e1rm') return t.e1RM;
   if (key === 'gewicht') return `${t.bodyweight} (${t.kg})`;
   if (key === 'strength') return t.strength;
   if (key === 'bodyFat') return t.bodyFatPercent;
@@ -2724,7 +2724,7 @@ const meetTotals = {
               {liftLabel(row.lift, t)}
             </strong>
             <span style={{ color: THEME.muted, fontSize: 13, whiteSpace: 'nowrap' }}>
-              e1RM {row.e1rm ? `${row.e1rm} ${t.kg}` : '—'}
+              {t.e1RM} {row.e1rm ? `${row.e1rm} ${t.kg}` : '—'}
             </span>
           </div>
 
@@ -4388,8 +4388,8 @@ const latestBodyDataRows = [
             <strong>{oneRM ? `${oneRM} kg` : '—'}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: THEME.text, fontWeight: 700 }}>e1RM:</span>
-            <strong>{e1RM ? `${e1RM} kg` : '—'}</strong>
+            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.e1RM}:</span>
+            <strong>{e1RM ? `${e1RM} ${t.kg}` : '—'}</strong>
           </div>
         </div>
       ))}
