@@ -3019,23 +3019,40 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
         );
       })}
 
-      <button
-        onClick={() => setShowStartCycleConfirm(true)}
-        style={{
-          width: '100%',
-          marginTop: 12,
-          padding: 12,
-          fontSize: 14,
-          fontWeight: 800,
-          background: THEME.card,
-          color: '#ffffff',
-          border: `1px solid ${THEME.primary}`,
-          borderRadius: 8,
-          cursor: 'pointer'
-        }}
-      >
-        {t.startNewCycle}
-      </button>
+      <div style={{
+  marginTop: 14,
+  padding: 12,
+  border: `1px solid ${THEME.border}`,
+  borderRadius: 10,
+  background: THEME.card
+}}>
+  <p style={{
+    margin: '0 0 10px',
+    color: THEME.muted,
+    fontSize: 13,
+    lineHeight: 1.4,
+    textAlign: 'center'
+  }}>
+    {t.startNewCycleHint}
+  </p>
+
+  <button
+    onClick={() => setShowStartCycleConfirm(true)}
+    style={{
+      width: '100%',
+      padding: 12,
+      fontSize: 14,
+      fontWeight: 800,
+      background: THEME.card,
+      color: '#ffffff',
+      border: `1px solid ${THEME.primary}`,
+      borderRadius: 8,
+      cursor: 'pointer'
+    }}
+  >
+    {t.startNewCycle}
+  </button>
+</div>
 
       {showStartCycleConfirm && (
         <div style={{
