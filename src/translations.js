@@ -205,6 +205,15 @@ export const translations = {
     volume: 'Volume',
     preMeet: 'Pre-wedstrijd',
     workoutProgress: 'Training',
+
+    meetPrepChecklist: 'Wedstrijddag checklist',
+    meetPrepChecklistHint: 'Vink af wat je klaar hebt voor de wedstrijddag.',
+    meetPrepId: 'ID / paspoort',
+    meetPrepShoes: 'Schoenen',
+    meetPrepSocks: 'Deadlift socks',
+    meetPrepFood: 'Eten en drinken',
+    meetPrepAttempts: 'Openers en pogingen',
+    meetPrepRackHeights: 'Rack heights',
   },
 
   en: {
@@ -413,6 +422,15 @@ export const translations = {
     volume: 'Volume',
     preMeet: 'Pre-competition',
     workoutProgress: 'Training',
+
+    meetPrepChecklist: 'Meet day checklist',
+    meetPrepChecklistHint: 'Check off what you have ready for meet day.',
+    meetPrepId: 'ID / passport',
+    meetPrepShoes: 'Shoes',
+    meetPrepSocks: 'Deadlift socks',
+    meetPrepFood: 'Food and drinks',
+    meetPrepAttempts: 'Openers and attempts',
+    meetPrepRackHeights: 'Rack heights',
   },
 
   ca: {
@@ -621,5 +639,14 @@ export const translations = {
     volume: 'Volum',
     preMeet: 'Pre-competició',
     workoutProgress: 'Entrenament',
+
+    meetPrepChecklist: 'Llista de competició',
+    meetPrepChecklistHint: 'Marca el que ja tens preparat per al dia de competició.',
+    meetPrepId: 'DNI / passaport',
+    meetPrepShoes: 'Sabatilles',
+    meetPrepSocks: 'Mitjons de pes mort',
+    meetPrepFood: 'Menjar i beguda',
+    meetPrepAttempts: 'Obertures i intents',
+    meetPrepRackHeights: 'Alçades del rack',
   },
 };
