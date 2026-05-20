@@ -2239,6 +2239,12 @@ function handleToggle(fn) {
 function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, meetPlannerAttempts, setMeetPlannerAttempts, onBack, t }) {
 const [activescreen, setActivescreen] = useState('lifts');
 const customMeetAttempts = meetPlannerAttempts || {};
+const hasCustomMeetAttempts = Object.values(customMeetAttempts).some(liftAttempts =>
+  liftAttempts &&
+  Object.values(liftAttempts).some(value =>
+    value !== undefined && value !== null && value !== ''
+  )
+);
   const liftData = {};
   const totalData = [];
   const bodyData = [];
@@ -2805,23 +2811,26 @@ const meetTotals = {
       ))}
     </div>
 
-    <button
-      onClick={() => setMeetPlannerAttempts({})}
-      style={{
-        marginTop: 10,
-        width: '100%',
-        padding: 10,
-        fontSize: 13,
-        fontWeight: 800,
-        background: THEME.card,
-        color: THEME.text,
-        border: `1px solid ${THEME.border}`,
-        borderRadius: 8,
-        cursor: 'pointer'
-      }}
-    >
-      {t.resetMeetPlanner}
-    </button>
+  {hasCustomMeetAttempts && (
+  <button
+    onClick={() => setMeetPlannerAttempts({})}
+    style={{
+      marginTop: 10,
+      width: '100%',
+      padding: 10,
+      fontSize: 13,
+      fontWeight: 800,
+      background: THEME.card,
+      color: THEME.text,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 8,
+      cursor: 'pointer'
+    }}
+  >
+    {t.resetMeetPlanner}
+  </button>
+)}
+
   </div>
 )}
 
