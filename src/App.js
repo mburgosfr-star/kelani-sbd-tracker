@@ -1897,6 +1897,11 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       (liftBlock.sets || []).every(s => s.done)
     );
 
+    const meetDayProjectedTotal = (workout.lifts || []).reduce((total, liftBlock) => {
+      const thirdAttempt = liftBlock.sets?.[2]?.weight;
+      return total + (Number(thirdAttempt) || 0);
+    }, 0);
+
     const firstIncompleteLiftIndex = (workout.lifts || []).findIndex(liftBlock =>
       (liftBlock.prepItems || []).some(item => !item.done) ||
       (liftBlock.warmups || []).some(w => !w.done) ||
@@ -1912,6 +1917,22 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
         <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
           {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts} · {t.meetDay}
         </div>
+
+<div style={{
+  marginBottom: 14,
+  padding: 14,
+  border: `1px solid ${THEME.primary}`,
+  borderRadius: 10,
+  background: THEME.card,
+  textAlign: 'center'
+}}>
+  <div style={{ color: THEME.muted, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+    {t.projectedTotal}
+  </div>
+  <div style={{ color: THEME.text, fontSize: 26, fontWeight: 900, lineHeight: 1 }}>
+    {meetDayProjectedTotal ? `${meetDayProjectedTotal} ${t.kg}` : '—'}
+  </div>
+</div>
 
         {(workout.lifts || []).map((liftBlock, li) => {
           const firstIncompletePrepItem = (liftBlock.prepItems || []).findIndex(item => !item.done);
