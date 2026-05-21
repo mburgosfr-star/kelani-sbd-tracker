@@ -25,7 +25,8 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "android:release-apk": "node scripts/build-release-apk.js",
-    "github:release": "node scripts/create-github-release.js"
+    "github:release": "node scripts/create-github-release.js",
+    "android:izzy-test": "node scripts/test-izzy-build.js"
   },
   "eslintConfig": {
     "extends": [
