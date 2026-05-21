@@ -1068,9 +1068,11 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
     ['id', 'meetPrepId'],
     ['shoes', 'meetPrepShoes'],
     ['socks', 'meetPrepSocks'],
+    ['clothing', 'meetPrepClothing'],
     ['food', 'meetPrepFood'],
     ['attempts', 'meetPrepAttempts'],
     ['rackHeights', 'meetPrepRackHeights'],
+    ['pen', 'meetPrepPen'],
   ];
 
   const toggleMeetPrepItem = key => {

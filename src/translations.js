@@ -214,9 +214,11 @@ export const translations = {
     meetPrepId: 'ID / paspoort',
     meetPrepShoes: 'Schoenen',
     meetPrepSocks: 'Deadlift socks',
+    meetPrepClothing: 'Schone T-shirt / wedstrijdkleding',
     meetPrepFood: 'Eten en drinken',
     meetPrepAttempts: 'Openers en pogingen',
     meetPrepRackHeights: 'Rack heights',
+    meetPrepPen: 'Pen voor pogingbriefjes',
   },
 
   en: {
@@ -434,9 +436,11 @@ export const translations = {
     meetPrepId: 'ID / passport',
     meetPrepShoes: 'Shoes',
     meetPrepSocks: 'Deadlift socks',
+    meetPrepClothing: 'Clean T-shirt / meet clothing',
     meetPrepFood: 'Food and drinks',
     meetPrepAttempts: 'Openers and attempts',
     meetPrepRackHeights: 'Rack heights',
+    meetPrepPen: 'Pen for attempt cards',
   },
 
   ca: {
@@ -654,8 +658,10 @@ export const translations = {
     meetPrepId: 'DNI / passaport',
     meetPrepShoes: 'Sabatilles',
     meetPrepSocks: 'Mitjons de pes mort',
+    meetPrepClothing: 'Samarreta neta / roba de competició',
     meetPrepFood: 'Menjar i beguda',
     meetPrepAttempts: 'Obertures i intents',
     meetPrepRackHeights: 'Alçades del rack',
+    meetPrepPen: 'Bolígraf per als intents',
   },
 };
