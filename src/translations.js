@@ -208,6 +208,7 @@ export const translations = {
 
     meetPrepChecklist: 'Wedstrijddag checklist',
     meetPrepChecklistHint: 'Vink af wat je klaar hebt voor de wedstrijddag.',
+    meetPrepReady: 'Klaar',
     meetPrepReset: 'Checklist resetten',
     meetPrepResetConfirm: 'Ja, checklist resetten',
     meetPrepResetConfirmText: 'Dit haalt alle vinkjes uit de wedstrijddag checklist.',
@@ -430,6 +431,7 @@ export const translations = {
 
     meetPrepChecklist: 'Meet day checklist',
     meetPrepChecklistHint: 'Check off what you have ready for meet day.',
+    meetPrepReady: 'Ready',
     meetPrepReset: 'Reset checklist',
     meetPrepResetConfirm: 'Yes, reset checklist',
     meetPrepResetConfirmText: 'This removes all checkmarks from the meet day checklist.',
@@ -652,6 +654,7 @@ export const translations = {
 
     meetPrepChecklist: 'Llista de competició',
     meetPrepChecklistHint: 'Marca el que ja tens preparat per al dia de competició.',
+    meetPrepReady: 'A punt',
     meetPrepReset: 'Restableix la llista',
     meetPrepResetConfirm: 'Sí, restableix la llista',
     meetPrepResetConfirmText: 'Això treu totes les marques de la llista de competició.',

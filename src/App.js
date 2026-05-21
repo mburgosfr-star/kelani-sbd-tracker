@@ -1082,7 +1082,9 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
     }));
   };
 
-  const hasCheckedMeetPrepItems = Object.values(meetPrepChecklist || {}).some(Boolean);
+  const checkedMeetPrepItems = meetPrepItems.filter(([key]) => !!meetPrepChecklist?.[key]).length;
+  const allMeetPrepItemsChecked = checkedMeetPrepItems === meetPrepItems.length && meetPrepItems.length > 0;
+  const hasCheckedMeetPrepItems = checkedMeetPrepItems > 0;
 
 
   const [notice, setNotice] = useState('');
@@ -1239,7 +1241,7 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
             fontSize: 14,
             whiteSpace: 'nowrap'
           }}>
-            {Object.values(meetPrepChecklist || {}).filter(Boolean).length} / {meetPrepItems.length}
+            {checkedMeetPrepItems} / {meetPrepItems.length}{allMeetPrepItemsChecked ? ` · ${t.meetPrepReady}` : ''}
           </strong>
         </div>
       </SettingsCard>
@@ -1253,7 +1255,7 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
           }}
         >
           <p style={{
-            margin: '0 0 14px',
+            margin: '0 0 8px',
             color: THEME.muted,
             fontSize: 13,
             lineHeight: 1.4,
@@ -1261,6 +1263,16 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
           }}>
             {t.meetPrepChecklistHint}
           </p>
+
+          <div style={{
+            margin: '0 0 14px',
+            color: THEME.text,
+            fontSize: 14,
+            fontWeight: 800,
+            textAlign: 'center'
+          }}>
+            {checkedMeetPrepItems} / {meetPrepItems.length}{allMeetPrepItemsChecked ? ` · ${t.meetPrepReady}` : ''}
+          </div>
 
           <div style={{ display: 'grid', gap: 8 }}>
             {meetPrepItems.map(([key, labelKey]) => {
