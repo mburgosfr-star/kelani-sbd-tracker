@@ -1240,11 +1240,11 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
           </p>
 
           <strong style={{
-            color: THEME.text,
+            color: allMeetPrepItemsChecked ? THEME.primary : THEME.text,
             fontSize: 14,
             whiteSpace: 'nowrap'
           }}>
-            {checkedMeetPrepItems} / {meetPrepItems.length}{allMeetPrepItemsChecked ? ` · ${t.meetPrepReady}` : ''}
+            {checkedMeetPrepItems} / {meetPrepItems.length}{allMeetPrepItemsChecked ? ` · ✓ ${t.meetPrepReady}` : ''}
           </strong>
         </div>
       </SettingsCard>
@@ -1269,12 +1269,12 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
 
           <div style={{
             margin: '0 0 14px',
-            color: THEME.text,
+            color: allMeetPrepItemsChecked ? THEME.primary : THEME.text,
             fontSize: 14,
             fontWeight: 800,
             textAlign: 'center'
           }}>
-            {checkedMeetPrepItems} / {meetPrepItems.length}{allMeetPrepItemsChecked ? ` · ${t.meetPrepReady}` : ''}
+            {checkedMeetPrepItems} / {meetPrepItems.length}{allMeetPrepItemsChecked ? ` · ✓ ${t.meetPrepReady}` : ''}
           </div>
 
           <div style={{ display: 'grid', gap: 8 }}>
