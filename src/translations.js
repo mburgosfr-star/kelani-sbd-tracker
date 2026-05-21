@@ -213,6 +213,8 @@ export const translations = {
     meetPrepResetConfirm: 'Ja, checklist resetten',
     meetPrepResetConfirmText: 'Dit haalt alle vinkjes uit de wedstrijddag checklist.',
     meetPrepId: 'ID / paspoort',
+    meetPrepRegistration: 'Inschrijving / licentie',
+    meetPrepBodyweight: 'Lichaamsgewicht / weegmoment',
     meetPrepShoes: 'Schoenen',
     meetPrepSocks: 'Deadlift socks',
     meetPrepClothing: 'Schone T-shirt / wedstrijdkleding',
@@ -220,6 +222,7 @@ export const translations = {
     meetPrepAttempts: 'Openers en pogingen',
     meetPrepRackHeights: 'Rack heights',
     meetPrepPen: 'Pen voor pogingbriefjes',
+    meetPrepPhone: 'Telefoon / oplader',
   },
 
   en: {
@@ -436,6 +439,8 @@ export const translations = {
     meetPrepResetConfirm: 'Yes, reset checklist',
     meetPrepResetConfirmText: 'This removes all checkmarks from the meet day checklist.',
     meetPrepId: 'ID / passport',
+    meetPrepRegistration: 'Registration / membership',
+    meetPrepBodyweight: 'Body weight / weigh-in',
     meetPrepShoes: 'Shoes',
     meetPrepSocks: 'Deadlift socks',
     meetPrepClothing: 'Clean T-shirt / meet clothing',
@@ -443,6 +448,7 @@ export const translations = {
     meetPrepAttempts: 'Openers and attempts',
     meetPrepRackHeights: 'Rack heights',
     meetPrepPen: 'Pen for attempt cards',
+    meetPrepPhone: 'Phone / charger',
   },
 
   ca: {
@@ -659,6 +665,8 @@ export const translations = {
     meetPrepResetConfirm: 'Sí, restableix la llista',
     meetPrepResetConfirmText: 'Això treu totes les marques de la llista de competició.',
     meetPrepId: 'DNI / passaport',
+    meetPrepRegistration: 'Inscripció / llicència',
+    meetPrepBodyweight: 'Pes corporal / pesatge',
     meetPrepShoes: 'Sabatilles',
     meetPrepSocks: 'Mitjons de pes mort',
     meetPrepClothing: 'Samarreta neta / roba de competició',
@@ -666,5 +674,6 @@ export const translations = {
     meetPrepAttempts: 'Obertures i intents',
     meetPrepRackHeights: 'Alçades del rack',
     meetPrepPen: 'Bolígraf per als intents',
+    meetPrepPhone: 'Telèfon / carregador',
   },
 };
