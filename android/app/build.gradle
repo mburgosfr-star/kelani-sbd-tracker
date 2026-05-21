@@ -16,18 +16,32 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
+def releaseStoreFile = findProperty("KELANI_RELEASE_STORE_FILE")
+def hasReleaseSigning =
+        releaseStoreFile &&
+        findProperty("KELANI_RELEASE_STORE_PASSWORD") &&
+        findProperty("KELANI_RELEASE_KEY_ALIAS") &&
+        findProperty("KELANI_RELEASE_KEY_PASSWORD") &&
+        file(releaseStoreFile).exists()
+
 signingConfigs {
-    release {
-        storeFile file(findProperty("KELANI_RELEASE_STORE_FILE") ?: "kelani-release-key.jks")
-        storePassword findProperty("KELANI_RELEASE_STORE_PASSWORD")
-        keyAlias findProperty("KELANI_RELEASE_KEY_ALIAS")
-        keyPassword findProperty("KELANI_RELEASE_KEY_PASSWORD")
+    if (hasReleaseSigning) {
+        release {
+            storeFile file(releaseStoreFile)
+            storePassword findProperty("KELANI_RELEASE_STORE_PASSWORD")
+            keyAlias findProperty("KELANI_RELEASE_KEY_ALIAS")
+            keyPassword findProperty("KELANI_RELEASE_KEY_PASSWORD")
+        }
     }
 }
 
 buildTypes {
     release {
-        signingConfig signingConfigs.release
+        if (hasReleaseSigning) {
+            signingConfig signingConfigs.release
+        }
+
         minifyEnabled false
         proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
     }
