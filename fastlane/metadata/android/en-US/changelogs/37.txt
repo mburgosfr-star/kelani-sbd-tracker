@@ -1,0 +1,4 @@
+- Added meet prep checklist in Settings.
+- Added checklist progress and completion status.
+- Added reset confirmation for the meet prep checklist.
+- Added practical competition-day items such as ID/passport, registration, weigh-in, shoes, deadlift socks, clothing, food and drinks, attempts, rack heights, attempt cards, and phone/charger.
