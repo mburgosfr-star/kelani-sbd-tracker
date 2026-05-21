@@ -1062,6 +1062,7 @@ function Toast({ message }) {
 
 function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, t }) {
   const [showMeetPrepChecklist, setShowMeetPrepChecklist] = useState(false);
+  const [showMeetPrepResetConfirm, setShowMeetPrepResetConfirm] = useState(false);
 
   const meetPrepItems = [
     ['id', 'meetPrepId'],
@@ -1078,6 +1079,8 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
       [key]: !prev?.[key],
     }));
   };
+
+  const hasCheckedMeetPrepItems = Object.values(meetPrepChecklist || {}).some(Boolean);
 
 
   const [notice, setNotice] = useState('');
@@ -1242,7 +1245,10 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
       {showMeetPrepChecklist && (
         <SettingsModal
           title={t.meetPrepChecklist}
-          onClose={() => setShowMeetPrepChecklist(false)}
+          onClose={() => {
+            setShowMeetPrepChecklist(false);
+            setShowMeetPrepResetConfirm(false);
+          }}
         >
           <p style={{
             margin: '0 0 14px',
@@ -1303,9 +1309,92 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
               );
             })}
           </div>
+          {hasCheckedMeetPrepItems && (
+            <div style={{
+              marginTop: 14,
+              paddingTop: 12,
+              borderTop: `1px solid ${THEME.border}`
+            }}>
+              {showMeetPrepResetConfirm ? (
+                <div>
+                  <p style={{
+                    margin: '0 0 10px',
+                    color: THEME.muted,
+                    fontSize: 13,
+                    lineHeight: 1.4,
+                    textAlign: 'center'
+                  }}>
+                    {t.meetPrepResetConfirmText}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMeetPrepChecklist({});
+                      setShowMeetPrepResetConfirm(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: 10,
+                      fontSize: 14,
+                      fontWeight: 800,
+                      background: THEME.card,
+                      color: '#ffffff',
+                      border: `1px solid ${THEME.primary}`,
+                      borderRadius: 8,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {t.meetPrepResetConfirm}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowMeetPrepResetConfirm(false)}
+                    style={{
+                      width: '100%',
+                      marginTop: 8,
+                      padding: 10,
+                      fontSize: 14,
+                      fontWeight: 700,
+                      background: THEME.bg,
+                      color: THEME.text,
+                      border: `1px solid ${THEME.border}`,
+                      borderRadius: 8,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {t.cancel}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowMeetPrepResetConfirm(true)}
+                  style={{
+                    width: '100%',
+                    padding: 10,
+                    fontSize: 14,
+                    fontWeight: 800,
+                    background: THEME.bg,
+                    color: THEME.text,
+                    border: `1px solid ${THEME.border}`,
+                    borderRadius: 8,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {t.meetPrepReset}
+                </button>
+              )}
+            </div>
+          )}
+
           <button
   type="button"
-  onClick={() => setShowMeetPrepChecklist(false)}
+  onClick={() => {
+    setShowMeetPrepChecklist(false);
+    setShowMeetPrepResetConfirm(false);
+  }}
   style={{
     width: '100%',
     marginTop: 14,
