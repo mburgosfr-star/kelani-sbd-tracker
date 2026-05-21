@@ -10,6 +10,9 @@ Website: https://kelani-site.mburgosfr.workers.dev/
 
 ## Features
 
+- Meet Planner for planning squat, bench press and deadlift attempts before competition day.
+- Meet prep checklist for practical competition-day preparation.
+
 - Structured SBD training programs
 - Automatic progression based on performance
 - Rest timer with audio signals
