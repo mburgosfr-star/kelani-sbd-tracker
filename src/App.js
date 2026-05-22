@@ -2249,35 +2249,39 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
   const allDone = (workout.sets || []).every(s => s.done);
   const allPrepDone = (workout.prepItems || []).every(item => item.done);
 
-function handleToggle(fn) {
-  if (isReadOnly) return;
-  fn();
-}
+  function handleToggle(fn) {
+    if (isReadOnly) return;
+    fn();
+  }
 
   return (
-    <div style={{ maxWidth: 500, margin: '0 auto', padding: '8px 12px 12px', paddingBottom: 16, fontFamily: 'sans-serif' }}>
-  
-    <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
-
-{t.workout} {workout.number} — {liftLabel(workout.lift, t)}
-
-  {isReadOnly && (
-    <span style={{
-      marginLeft: 8,
-      fontSize: 12,
-      background: '#999',
-      color: 'white',
-      padding: '2px 6px',
-      borderRadius: 4
+    <div style={{
+      maxWidth: 500,
+      margin: '0 auto',
+      padding: '8px 12px 12px',
+      paddingBottom: 16,
+      fontFamily: 'sans-serif'
     }}>
-      {t.preview}
-    </span>
-  )}
-</h2>
+      <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
+        {t.workout} {workout.number} — {liftLabel(workout.lift, t)}
 
-<div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
-  {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts} · {getWorkoutTypeLabel(workout, t)}
-</div>
+        {isReadOnly && (
+          <span style={{
+            marginLeft: 8,
+            fontSize: 12,
+            background: '#999',
+            color: 'white',
+            padding: '2px 6px',
+            borderRadius: 4
+          }}>
+            {t.preview}
+          </span>
+        )}
+      </h2>
+
+      <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
+        {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts} · {getWorkoutTypeLabel(workout, t)}
+      </div>
 
       {(workout.prepItems || []).length > 0 && (
         <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
@@ -2304,15 +2308,21 @@ function handleToggle(fn) {
       )}
 
       {(workout.warmups || []).length > 0 && (
-        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
         <div style={{
-  padding: '8px 16px',
-  fontSize: 16,
-  fontWeight: 700,
-  color: THEME.text
-}}>
-  {t.warmup}
-</div>
+          background: THEME.card,
+          border: `1px solid ${THEME.border}`,
+          borderRadius: 8,
+          overflow: 'hidden',
+          marginBottom: 16
+        }}>
+          <div style={{
+            padding: '8px 16px',
+            fontSize: 16,
+            fontWeight: 700,
+            color: THEME.text
+          }}>
+            {t.warmup}
+          </div>
           {workout.warmups.map((w, i) => (
             <React.Fragment key={i}>
               <SetRow
@@ -2331,37 +2341,44 @@ function handleToggle(fn) {
         </div>
       )}
 
-      <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
       <div style={{
-  padding: '8px 16px',
-  fontSize: 16,
-  fontWeight: 700,
-  color: THEME.text
-}}>
-  {liftLabel(workout.lift, t)}
-</div>
-      {workout.sets.map((set, i) => {
-  const allWarmupsDone = allPrepDone && (workout.warmups || []).every(w => w.done);
-  const firstIncomplete = workout.sets.findIndex(s => !s.done);
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginBottom: 16
+      }}>
+        <div style={{
+          padding: '8px 16px',
+          fontSize: 16,
+          fontWeight: 700,
+          color: THEME.text
+        }}>
+          {liftLabel(workout.lift, t)}
+        </div>
 
-  return (
-    <React.Fragment key={i}>
-      <SetRow
-        set={set}
-        index={i}
-        label={set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`}
-        isWarmup={false}
-        isActive={!isReadOnly && allWarmupsDone && i === firstIncomplete}
-        isReadOnly={isReadOnly}
-        onToggle={() => handleToggle(() => onToggleSet(i))}
-        onWeightChange={val => onWeightChange('set', i, val)}
-        t={t}
-      />
-      {renderInlineTimer({ type: 'main', index: i })}
-    </React.Fragment>
-  );
-})}
-</div>
+        {workout.sets.map((set, i) => {
+          const allWarmupsDone = allPrepDone && (workout.warmups || []).every(w => w.done);
+          const firstIncomplete = workout.sets.findIndex(s => !s.done);
+
+          return (
+            <React.Fragment key={i}>
+              <SetRow
+                set={set}
+                index={i}
+                label={set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`}
+                isWarmup={false}
+                isActive={!isReadOnly && allWarmupsDone && i === firstIncomplete}
+                isReadOnly={isReadOnly}
+                onToggle={() => handleToggle(() => onToggleSet(i))}
+                onWeightChange={val => onWeightChange('set', i, val)}
+                t={t}
+              />
+              {renderInlineTimer({ type: 'main', index: i })}
+            </React.Fragment>
+          );
+        })}
+      </div>
 
       {(workout.accessories || []).length > 0 && (
         <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
