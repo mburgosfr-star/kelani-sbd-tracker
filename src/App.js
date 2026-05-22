@@ -5015,7 +5015,7 @@ const latestBodyDataRows = [
       color: THEME.muted,
       fontSize: 12
     }}>
-      {t.appName} · v{process.env.REACT_APP_VERSION ?? 'dev'}
+      {t.appName} · {process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev'}
     </div>
   </div>
 </div>
