@@ -2918,35 +2918,45 @@ const meetTotals = {
 
 {activescreen === 'meet' && (
   <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
-    <h3 style={{ margin: '0 0 6px', textAlign: 'center' }}>
-      {t.meetPlanner}
-    </h3>
-
-    <p style={{
-      margin: '0 0 16px',
-      color: THEME.muted,
-      fontSize: 13,
-      lineHeight: 1.4,
-      textAlign: 'center'
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) auto',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 14
     }}>
-      {t.basedOnBestE1RM}
-    </p>
+      <div>
+        <h3 style={{ margin: '0 0 6px' }}>
+          {t.meetPlanner}
+        </h3>
 
-<div style={{
-  marginBottom: 14,
-  padding: 14,
-  border: `1px solid ${THEME.primary}`,
-  borderRadius: 10,
-  background: THEME.bg,
-  textAlign: 'center'
-}}>
-  <div style={{ color: THEME.muted, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
-    {t.projectedTotal}
-  </div>
-  <div style={{ color: THEME.text, fontSize: 28, fontWeight: 900, lineHeight: 1 }}>
-    {meetTotals.third ? `${meetTotals.third} ${t.kg}` : '—'}
-  </div>
-</div>
+        <p style={{
+          margin: 0,
+          color: THEME.muted,
+          fontSize: 13,
+          lineHeight: 1.4
+        }}>
+          {t.basedOnBestE1RM}
+        </p>
+      </div>
+
+      <div style={{
+        minWidth: 118,
+        padding: '10px 12px',
+        border: `1px solid ${THEME.primary}`,
+        borderRadius: 10,
+        background: THEME.bg,
+        textAlign: 'center'
+      }}>
+        <div style={{ color: THEME.muted, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>
+          {t.projectedTotal}
+        </div>
+
+        <div style={{ color: THEME.text, fontSize: 22, fontWeight: 900, lineHeight: 1 }}>
+          {meetTotals.third ? `${meetTotals.third} ${t.kg}` : '—'}
+        </div>
+      </div>
+    </div>
 
     <div style={{ display: 'grid', gap: 12 }}>
       {meetPlan.map(row => (
