@@ -7,8 +7,8 @@ android {
         applicationId "com.kel.powerlifting"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 37
-        versionName "0.9.4"
+        versionCode 38
+        versionName "0.9.5"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,18 +16,28 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+def releaseStoreFile = findProperty("KELANI_RELEASE_STORE_FILE") ?: "kelani-release-key.jks"
+def releaseStorePassword = findProperty("KELANI_RELEASE_STORE_PASSWORD")
+def releaseKeyAlias = findProperty("KELANI_RELEASE_KEY_ALIAS")
+def releaseKeyPassword = findProperty("KELANI_RELEASE_KEY_PASSWORD")
+def hasReleaseSigning = releaseStorePassword && releaseKeyAlias && releaseKeyPassword && file(releaseStoreFile).exists()
+
 signingConfigs {
-    release {
-        storeFile file(findProperty("KELANI_RELEASE_STORE_FILE") ?: "kelani-release-key.jks")
-        storePassword findProperty("KELANI_RELEASE_STORE_PASSWORD")
-        keyAlias findProperty("KELANI_RELEASE_KEY_ALIAS")
-        keyPassword findProperty("KELANI_RELEASE_KEY_PASSWORD")
+    if (hasReleaseSigning) {
+        release {
+            storeFile file(releaseStoreFile)
+            storePassword releaseStorePassword
+            keyAlias releaseKeyAlias
+            keyPassword releaseKeyPassword
+        }
     }
 }
 
 buildTypes {
     release {
-        signingConfig signingConfigs.release
+        if (hasReleaseSigning) {
+            signingConfig signingConfigs.release
+        }
         minifyEnabled false
         proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
     }
