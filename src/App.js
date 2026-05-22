@@ -1857,41 +1857,11 @@ function RestTimeSection({ restTimeSeconds, setRestTimeSeconds, t }) {
 
   return (
     <>
-      <div style={{
-        background: THEME.card,
-        border: `1px solid ${THEME.border}`,
-        borderRadius: 8,
-        padding: 14,
-        marginBottom: 12
-      }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr auto',
-          alignItems: 'center',
-          gap: 12
-        }}>
-          <h3 style={{ margin: 0, color: THEME.text, fontSize: 16 }}>
-            {t.restTime}
-          </h3>
-
-          <button
-            onClick={() => setShowOptions(true)}
-            style={{
-              padding: '6px 10px',
-              fontSize: 14,
-              fontWeight: 800,
-              background: THEME.card,
-              color: '#ffffff',
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 8,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {formatRestTime(restTimeSeconds)}
-          </button>
-        </div>
-      </div>
+      <SettingsCard
+        title={t.restTime}
+        actionLabel={formatRestTime(restTimeSeconds)}
+        onAction={() => setShowOptions(true)}
+      />
 
       {showOptions && (
         <SettingsModal
