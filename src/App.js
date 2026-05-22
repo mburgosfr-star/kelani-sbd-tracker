@@ -1426,7 +1426,7 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
         t={t}
       />
 
-      <SettingsCard title={t.dataManagement}>
+      <SettingsCard title={t.dataManagement} centerTitle={true}>
         <p style={{
           margin: '0 0 10px',
           color: THEME.muted,
@@ -1436,7 +1436,13 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
           {t.exportDataDescription}
         </p>
 
-        <div style={{ display: 'grid', gap: 8 }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: 8,
+          maxWidth: 340,
+          margin: '0 auto'
+        }}>
           <SettingsActionButton onClick={exportData}>
             {t.exportData}
           </SettingsActionButton>
