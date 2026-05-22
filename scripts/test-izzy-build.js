@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
+const pkg = require(path.join(root, 'package.json'));
 const androidDir = path.join(root, 'android');
 const gradleHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kelani-izzy-gradle-'));
 
@@ -14,6 +15,7 @@ const env = {
   JAVA_HOME: javaHome,
   PATH: `${path.join(javaHome, 'bin')}:${process.env.PATH}`,
   GRADLE_USER_HOME: gradleHome,
+  REACT_APP_VERSION: pkg.version,
 };
 
 function run(command, cwd = root) {
