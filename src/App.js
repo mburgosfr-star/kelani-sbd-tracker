@@ -1796,44 +1796,31 @@ function BodyDataSection({ bodyData, onSave, t }) {
       </SettingsCard>
 
       {isEditing && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.65)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 650,
-          padding: 16
-        }}>
-          <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 12, padding: 18, maxWidth: 420, width: '100%', maxHeight: '88vh', overflowY: 'auto', color: THEME.text }}>
-            <h3 style={{ margin: '0 0 16px', textAlign: 'center' }}>{t.updateBodyData}</h3>
+        <SettingsModal
+          title={t.updateBodyData}
+          onClose={() => setIsEditing(false)}
+        >
+          {fields.map(field => (
+            <div key={field.key} style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{field.label}</label>
+              <input
+                type="number"
+                value={form[field.key]}
+                onChange={e => updateField(field.key, e.target.value)}
+                placeholder={previous[field.key] ? String(previous[field.key]) : ''}
+                style={modalInputStyle()}
+              />
+            </div>
+          ))}
 
-            {fields.map(field => (
-              <div key={field.key} style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{field.label}</label>
-                <input
-                  type="number"
-                  value={form[field.key]}
-                  onChange={e => updateField(field.key, e.target.value)}
-                  placeholder={previous[field.key] ? String(previous[field.key]) : ''}
-                  style={modalInputStyle()}
-                />
-              </div>
-            ))}
+          <button onClick={handleSave} style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
+            {t.save}
+          </button>
 
-            <button onClick={handleSave} style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
-              {t.save}
-            </button>
-
-            <button onClick={() => setIsEditing(false)} style={{ width: '100%', marginTop: 8, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
-              {t.cancel}
-            </button>
-          </div>
-        </div>
+          <button onClick={() => setIsEditing(false)} style={{ width: '100%', marginTop: 8, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
+            {t.cancel}
+          </button>
+        </SettingsModal>
       )}
     </>
   );
