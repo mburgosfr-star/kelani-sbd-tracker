@@ -1615,7 +1615,13 @@ function SupportSection({ t }) {
 
   return (
     <SettingsCard title={t.support} centerTitle={true}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+        gap: 8,
+        maxWidth: 360,
+        margin: '0 auto'
+      }}>
         {links.map(item => (
           <SupportActionButton
             key={item.label}
