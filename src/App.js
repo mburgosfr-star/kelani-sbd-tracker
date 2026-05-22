@@ -1946,22 +1946,75 @@ function LanguageSection({ language, setLanguage, t }) {
 
 function NewCycleModal({ prs, onStart, t }) {
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
-      <div style={{ background: THEME.card, borderRadius: 12, padding: 24, maxWidth: 340, width: '90%' }}>
-        <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 10 }}>🏆</div>
-        <h3 style={{ margin: '0 0 8px', textAlign: 'center' }}>{t.cycleCompleted}</h3>
-        <p style={{ color: THEME.muted, fontSize: 14, margin: '0 0 20px', textAlign: 'center' }}>{t.newCycleWeights}</p>
-        <div style={{ background: THEME.card,
-border: `1px solid ${THEME.border}`,
-color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 200,
+      padding: 16
+    }}>
+      <div style={{
+        background: THEME.card,
+        borderRadius: 12,
+        padding: 24,
+        maxWidth: 340,
+        width: '90%'
+      }}>
+        <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 10 }}>
+          🏆
+        </div>
+
+        <h3 style={{ margin: '0 0 8px', textAlign: 'center' }}>
+          {t.cycleCompleted}
+        </h3>
+
+        <p style={{ color: THEME.muted, fontSize: 14, margin: '0 0 20px', textAlign: 'center' }}>
+          {t.newCycleWeights}
+        </p>
+
+        <div style={{
+          background: THEME.card,
+          border: `1px solid ${THEME.border}`,
+          color: THEME.text,
+          borderRadius: 8,
+          padding: 12,
+          marginBottom: 20
+        }}>
           {['Deadlift', 'Bench', 'Squat'].map(lift => (
-            <div key={lift} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 14 }}>
-              <span style={{ color: THEME.text, fontWeight: 700 }}>{liftLabel(lift, t)} {t.e1RM}</span>
+            <div
+              key={lift}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                padding: '4px 0',
+                fontSize: 14
+              }}
+            >
+              <span style={{ color: THEME.text, fontWeight: 700 }}>
+                {liftLabel(lift, t)} {t.e1RM}
+              </span>
               <span style={{ fontWeight: 700 }}>{prs[lift] || '—'} kg</span>
             </div>
           ))}
         </div>
-        <button onClick={onStart} style={{ width: '100%', padding: 14, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+
+        <button
+          onClick={onStart}
+          style={{
+            width: '100%',
+            padding: 14,
+            fontSize: 16,
+            background: THEME.card,
+            color: '#ffffff',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 4,
+            cursor: 'pointer',
+            fontWeight: 600
+          }}
+        >
           {t.startNewCycle} 🚀
         </button>
       </div>
