@@ -3292,7 +3292,7 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
       {workouts.map((workout, idx) => {
         const isCurrent = idx === currentIndex;
         const isDone = idx < currentIndex;
-        const headerBg = workout.type === 'rest' ? THEME.brown : THEME.border;
+        const headerBg = isCurrent ? THEME.primary : workout.type === 'rest' ? THEME.brown : THEME.border;
 
         return (
           <div
