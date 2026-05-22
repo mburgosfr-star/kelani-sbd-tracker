@@ -2918,8 +2918,17 @@ const meetTotals = {
 
 {activescreen === 'meet' && (
   <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
-    <h3 style={{ margin: '0 0 6px' }}>{t.meetPlanner}</h3>
-    <p style={{ margin: '0 0 16px', color: THEME.muted, fontSize: 13, lineHeight: 1.4 }}>
+    <h3 style={{ margin: '0 0 6px', textAlign: 'center' }}>
+      {t.meetPlanner}
+    </h3>
+
+    <p style={{
+      margin: '0 0 16px',
+      color: THEME.muted,
+      fontSize: 13,
+      lineHeight: 1.4,
+      textAlign: 'center'
+    }}>
       {t.basedOnBestE1RM}
     </p>
 
