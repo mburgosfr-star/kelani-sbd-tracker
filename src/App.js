@@ -3609,7 +3609,7 @@ function BottomNav({ screen, onChange, t }) {
     { key: 'dashboard', label: t.dashboard },
     { key: 'all', label: t.program },
     { key: 'current', label: t.workout },
-    { key: 'stats', label: t.progress },
+    { key: 'stats', label: t.stats },
     { key: 'settings', label: t.settings },
   ];
 
