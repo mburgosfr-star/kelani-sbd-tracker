@@ -2381,80 +2381,86 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       </div>
 
       {(workout.accessories || []).length > 0 && (
-        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+        <div style={{
+          background: THEME.card,
+          border: `1px solid ${THEME.border}`,
+          borderRadius: 8,
+          overflow: 'hidden',
+          marginBottom: 16
+        }}>
           {workout.accessories.map((acc, ai) => (
             <div key={ai}>
-<div style={{
-  padding: '8px 16px',
-  background: THEME.card,
-  borderBottom: `1px solid ${THEME.border}`,
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center'
-}}>
-<span style={{ fontWeight: 800, color: THEME.text }}>
-  {acc.name}
-</span>
-                </div>
+              <div style={{
+                padding: '8px 16px',
+                background: THEME.card,
+                borderBottom: `1px solid ${THEME.border}`,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span style={{ fontWeight: 800, color: THEME.text }}>
+                  {acc.name}
+                </span>
+              </div>
+
               {acc.done.map((done, si) => {
-  const allMainSetsDone = (workout.sets || []).every(s => s.done);
-  const firstIncompleteAccessoryGroup = (workout.accessories || []).findIndex(a =>
-    (a.done || []).some(d => !d)
-  );
-  const firstIncompleteAccessorySet = (acc.done || []).findIndex(d => !d);
+                const allMainSetsDone = (workout.sets || []).every(s => s.done);
+                const firstIncompleteAccessoryGroup = (workout.accessories || []).findIndex(a =>
+                  (a.done || []).some(d => !d)
+                );
+                const firstIncompleteAccessorySet = (acc.done || []).findIndex(d => !d);
 
-  return (
-    <SetRow
-      key={si}
-      set={{ done, weight: acc.weights[si], reps: acc.reps }}
-      index={si}
-      label={`${t.set} ${si + 1}`}
-      isWarmup={false}
-      isActive={
-        !isReadOnly &&
-        allMainSetsDone &&
-        ai === firstIncompleteAccessoryGroup &&
-        si === firstIncompleteAccessorySet
-      }
-      isReadOnly={isReadOnly}
-      onToggle={() => handleToggle(() => onToggleAccessorySet(ai, si))}      
-      onWeightChange={val => onAccessoryWeightChange(ai, si, val)}
-      t={t}
-    />
-  );
-  })}
-
+                return (
+                  <SetRow
+                    key={si}
+                    set={{ done, weight: acc.weights[si], reps: acc.reps }}
+                    index={si}
+                    label={`${t.set} ${si + 1}`}
+                    isWarmup={false}
+                    isActive={
+                      !isReadOnly &&
+                      allMainSetsDone &&
+                      ai === firstIncompleteAccessoryGroup &&
+                      si === firstIncompleteAccessorySet
+                    }
+                    isReadOnly={isReadOnly}
+                    onToggle={() => handleToggle(() => onToggleAccessorySet(ai, si))}
+                    onWeightChange={val => onAccessoryWeightChange(ai, si, val)}
+                    t={t}
+                  />
+                );
+              })}
             </div>
           ))}
         </div>
       )}
 
       <button
-  onClick={() => {
-    if (isReadOnly) return;
-    onComplete();
-  }}
-  disabled={!allDone || isReadOnly}
-  style={{
-    width: '100%',
-    padding: 14,
-    fontSize: 16,
-    fontWeight: 600,
-    background: THEME.card,
-    color: (allDone && !isReadOnly) ? 'white' : '#666',
-    border: `1px solid ${THEME.primary}`,
-    borderRadius: 8,
-    cursor: (allDone && !isReadOnly) ? 'pointer' : 'not-allowed',
-    marginBottom: 10,
-    opacity: 1
-  }}
->
-  {isReadOnly
-    ? t.previewNotCompletable
-    : allDone
-    ? `${t.completeWorkout}`
-    : t.completeWorkout}
-</button>
+        onClick={() => {
+          if (isReadOnly) return;
+          onComplete();
+        }}
+        disabled={!allDone || isReadOnly}
+        style={{
+          width: '100%',
+          padding: 14,
+          fontSize: 16,
+          fontWeight: 600,
+          background: THEME.card,
+          color: (allDone && !isReadOnly) ? 'white' : '#666',
+          border: `1px solid ${THEME.primary}`,
+          borderRadius: 8,
+          cursor: (allDone && !isReadOnly) ? 'pointer' : 'not-allowed',
+          marginBottom: 10,
+          opacity: 1
+        }}
+      >
+        {isReadOnly
+          ? t.previewNotCompletable
+          : allDone
+          ? t.completeWorkout
+          : t.completeWorkout}
+      </button>
 
       {showNewCycle && <NewCycleModal prs={newCyclePRs} onStart={onStartNewCycle} t={t} />}
     </div>
