@@ -3132,11 +3132,126 @@ const meetTotals = {
   );
 }
 
-function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t }) {
-  const currentWorkoutRef = useRef(null);
+function StartNewCycleSection({ onStartNewCycle, t }) {
   const [showStartCycleConfirm, setShowStartCycleConfirm] = useState(false);
 
+  return (
+    <>
+      <div style={{
+        marginTop: 14,
+        padding: 12,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 10,
+        background: THEME.card
+      }}>
+        <p style={{
+          margin: '0 0 10px',
+          color: THEME.muted,
+          fontSize: 13,
+          lineHeight: 1.4,
+          textAlign: 'center'
+        }}>
+          {t.startNewCycleHint}
+        </p>
 
+        <button
+          onClick={() => setShowStartCycleConfirm(true)}
+          style={{
+            width: '100%',
+            padding: 12,
+            fontSize: 14,
+            fontWeight: 800,
+            background: THEME.card,
+            color: '#ffffff',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          {t.startNewCycle}
+        </button>
+      </div>
+
+      {showStartCycleConfirm && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 800,
+          padding: 16
+        }}>
+          <div style={{
+            background: THEME.card,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 12,
+            padding: 18,
+            maxWidth: 420,
+            width: '100%',
+            color: THEME.text
+          }}>
+            <h3 style={{ margin: '0 0 10px', textAlign: 'center' }}>
+              {t.startNewCycleConfirmTitle}
+            </h3>
+
+            <p style={{
+              color: THEME.muted,
+              fontSize: 14,
+              lineHeight: 1.4,
+              margin: '0 0 16px',
+              textAlign: 'center'
+            }}>
+              {t.startNewCycleConfirmText}
+            </p>
+
+            <button
+              onClick={() => {
+                setShowStartCycleConfirm(false);
+                onStartNewCycle();
+              }}
+              style={{
+                width: '100%',
+                padding: 12,
+                fontSize: 15,
+                fontWeight: 800,
+                background: THEME.card,
+                color: '#ffffff',
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.startNewCycle}
+            </button>
+
+            <button
+              onClick={() => setShowStartCycleConfirm(false)}
+              style={{
+                width: '100%',
+                marginTop: 8,
+                padding: 10,
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'transparent',
+                color: THEME.text,
+                border: `1px solid ${THEME.border}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.cancel}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t }) {
+  const currentWorkoutRef = useRef(null);
 
   useEffect(() => {
     if (!currentWorkoutRef.current) return;
@@ -3230,109 +3345,10 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
         );
       })}
 
-      <div style={{
-        marginTop: 14,
-        padding: 12,
-        border: `1px solid ${THEME.border}`,
-        borderRadius: 10,
-        background: THEME.card
-      }}>
-        <p style={{
-          margin: '0 0 10px',
-          color: THEME.muted,
-          fontSize: 13,
-          lineHeight: 1.4,
-          textAlign: 'center'
-        }}>
-          {t.startNewCycleHint}
-        </p>
-
-        <button
-          onClick={() => setShowStartCycleConfirm(true)}
-          style={{
-            width: '100%',
-            padding: 12,
-            fontSize: 14,
-            fontWeight: 800,
-            background: THEME.card,
-            color: '#ffffff',
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 8,
-            cursor: 'pointer'
-          }}
-        >
-          {t.startNewCycle}
-        </button>
-      </div>
-
-      {showStartCycleConfirm && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.65)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 800,
-          padding: 16
-        }}>
-          <div style={{
-            background: THEME.card,
-            border: `1px solid ${THEME.border}`,
-            borderRadius: 12,
-            padding: 18,
-            maxWidth: 420,
-            width: '100%',
-            color: THEME.text
-          }}>
-            <h3 style={{ margin: '0 0 10px', textAlign: 'center' }}>
-              {t.startNewCycleConfirmTitle}
-            </h3>
-
-            <p style={{ color: THEME.muted, fontSize: 14, lineHeight: 1.4, margin: '0 0 16px', textAlign: 'center' }}>
-              {t.startNewCycleConfirmText}
-            </p>
-
-            <button
-              onClick={() => {
-                setShowStartCycleConfirm(false);
-                onStartNewCycle();
-              }}
-              style={{
-                width: '100%',
-                padding: 12,
-                fontSize: 15,
-                fontWeight: 800,
-                background: THEME.card,
-                color: '#ffffff',
-                border: `1px solid ${THEME.primary}`,
-                borderRadius: 8,
-                cursor: 'pointer'
-              }}
-            >
-              {t.startNewCycle}
-            </button>
-
-            <button
-              onClick={() => setShowStartCycleConfirm(false)}
-              style={{
-                width: '100%',
-                marginTop: 8,
-                padding: 10,
-                fontSize: 14,
-                fontWeight: 700,
-                background: 'transparent',
-                color: THEME.text,
-                border: `1px solid ${THEME.border}`,
-                borderRadius: 8,
-                cursor: 'pointer'
-              }}
-            >
-              {t.cancel}
-            </button>
-          </div>
-        </div>
-      )}
+      <StartNewCycleSection
+        onStartNewCycle={onStartNewCycle}
+        t={t}
+      />
     </div>
   );
 }
