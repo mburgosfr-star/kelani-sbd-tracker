@@ -158,6 +158,7 @@ export const translations = {
     startNewCycleConfirmTitle: 'Nieuwe cyclus starten?',
     startNewCycleConfirmText: 'Dit slaat de resterende workouts van deze cyclus over en start Workout 1 van een nieuwe cyclus. Je Meet Planner wordt teruggezet naar suggesties. Je geschiedenis en lichaamsgegevens blijven bewaard.',
     startNewCycleHint: 'Sla de resterende workouts over en start direct een nieuwe cyclus.',
+    startNewCycleStarted: 'Nieuwe cyclus gestart.',
     newCycleWeights: 'Nieuwe gewichten berekend op basis van je beste prestaties.',
 
     cancel: 'Annuleren',
@@ -384,6 +385,7 @@ export const translations = {
     startNewCycleConfirmTitle: 'Start new cycle?',
     startNewCycleConfirmText: 'This skips the remaining workouts in this cycle and starts Workout 1 of a new cycle. Your Meet Planner is reset to suggestions. Your history and body data stay saved.',
     startNewCycleHint: 'Skip the remaining workouts and start a new cycle now.',
+    startNewCycleStarted: 'New cycle started.',
     newCycleWeights: 'New weights calculated from your best results.',
 
     cancel: 'Cancel',
@@ -610,6 +612,7 @@ export const translations = {
     startNewCycleConfirmTitle: 'Vols començar un nou cicle?',
     startNewCycleConfirmText: 'Això salta els entrenaments restants d’aquest cicle i comença l’entrenament 1 d’un nou cicle. El planificador de competició es restableix als suggeriments. L’historial i les dades corporals es conserven.',
     startNewCycleHint: 'Salta els entrenaments restants i comença ara un nou cicle.',
+    startNewCycleStarted: 'Nou cicle iniciat.',
     newCycleWeights: 'Nous pesos calculats a partir dels teus millors resultats.',
 
     cancel: 'Cancel·la',

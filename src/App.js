@@ -3134,9 +3134,17 @@ const meetTotals = {
 
 function StartNewCycleSection({ onStartNewCycle, t }) {
   const [showStartCycleConfirm, setShowStartCycleConfirm] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    if (!notice) return;
+    const id = window.setTimeout(() => setNotice(''), 1800);
+    return () => window.clearTimeout(id);
+  }, [notice]);
 
   return (
     <>
+      <Toast message={notice} />
       <div style={{
         marginTop: 14,
         padding: 12,
@@ -3209,7 +3217,12 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
             <button
               onClick={() => {
                 setShowStartCycleConfirm(false);
+                setNotice(t.startNewCycleStarted);
                 onStartNewCycle();
+
+                window.setTimeout(() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }, 0);
               }}
               style={{
                 width: '100%',
