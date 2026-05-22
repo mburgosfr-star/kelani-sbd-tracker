@@ -3100,7 +3100,7 @@ const meetTotals = {
             padding: 10,
             fontSize: 14,
             fontWeight: 700,
-            background: THEME.bg,
+            background: 'transparent',
             color: THEME.text,
             border: `1px solid ${THEME.border}`,
             borderRadius: 8,
