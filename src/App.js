@@ -2754,6 +2754,15 @@ const meetTotals = {
     );
   }
 
+  const statsTabs = [
+    { key: 'lifts', label: t.lifts },
+    { key: 'totaal', label: t.total },
+    { key: 'lichaam', label: t.body },
+    { key: 'compositie', label: t.composition },
+    { key: 'scores', label: t.ratings },
+    { key: 'meet', label: t.meetPlannerShort },
+  ];
+
   function renderMetricChartCards(charts) {
     return (
       <div>
@@ -2791,10 +2800,10 @@ const meetTotals = {
         gap: 8,
         marginBottom: 20
       }}>
-        {['lifts', 'totaal', 'lichaam', 'compositie', 'scores', 'meet'].map(screen => (
+        {statsTabs.map(tab => (
           <button
-            key={screen}
-            onClick={() => setActivescreen(screen)}
+            key={tab.key}
+            onClick={() => setActivescreen(tab.key)}
             style={{
               width: '100%',
               minHeight: 38,
@@ -2802,28 +2811,18 @@ const meetTotals = {
               fontSize: 13,
               lineHeight: 1.15,
               background: THEME.card,
-              color: activescreen === screen ? THEME.primary : THEME.text,
+              color: activescreen === tab.key ? THEME.primary : THEME.text,
               border: `1px solid ${THEME.border}`,
-              borderTop: activescreen === screen
+              borderTop: activescreen === tab.key
                 ? `2px solid ${THEME.primary}`
                 : `2px solid ${THEME.border}`,
               borderRadius: 4,
               cursor: 'pointer',
-              fontWeight: activescreen === screen ? 700 : 500,
+              fontWeight: activescreen === tab.key ? 700 : 500,
               textAlign: 'center'
             }}
           >
-            {screen === 'lifts'
-              ? t.lifts
-              : screen === 'totaal'
-              ? t.total
-              : screen === 'lichaam'
-              ? t.body
-              : screen === 'compositie'
-              ? t.composition
-              : screen === 'scores'
-              ? t.ratings
-              : t.meetPlannerShort}
+            {tab.label}
           </button>
         ))}
       </div>
