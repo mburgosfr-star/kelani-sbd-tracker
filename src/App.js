@@ -3028,16 +3028,28 @@ const meetTotals = {
             background: THEME.bg
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 10 }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            marginBottom: 8
+          }}>
             <strong style={{ color: COLORS[row.lift], fontSize: 16 }}>
               {liftLabel(row.lift, t)}
             </strong>
-            <span style={{ color: THEME.muted, fontSize: 13, whiteSpace: 'nowrap' }}>
+
+            <span style={{
+              color: THEME.muted,
+              fontSize: 12,
+              fontWeight: 700,
+              whiteSpace: 'nowrap'
+            }}>
               {t.e1RM} {row.e1rm ? `${row.e1rm} ${t.kg}` : '—'}
             </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
             {[
               ['opener', t.opener, '90%', row.opener],
               ['second', t.secondAttempt, '97.5%', row.second],
@@ -3048,17 +3060,33 @@ const meetTotals = {
                 style={{
                   border: `1px solid ${THEME.border}`,
                   borderRadius: 8,
-                  padding: 8,
+                  padding: 7,
                   textAlign: 'center',
                   background: THEME.card
                 }}
               >
-                <div style={{ color: THEME.text, fontSize: 12, fontWeight: 800, marginBottom: 2 }}>
+                <div style={{
+                  color: THEME.text,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  lineHeight: 1.15,
+                  minHeight: 25,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
                   {label}
                 </div>
-                <div style={{ color: THEME.muted, fontSize: 11, marginBottom: 6 }}>
+
+                <div style={{
+                  color: THEME.muted,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  margin: '2px 0 5px'
+                }}>
                   {pct}
                 </div>
+
                 <input
                   type="number"
                   inputMode="decimal"
@@ -3072,17 +3100,18 @@ const meetTotals = {
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
-                    padding: '8px 4px',
+                    padding: '7px 4px',
                     borderRadius: 6,
                     border: `1px solid ${THEME.border}`,
                     background: THEME.bg,
                     color: THEME.text,
                     textAlign: 'center',
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: 800
                   }}
                 />
-                <div style={{ color: THEME.muted, fontSize: 11, marginTop: 4 }}>
+
+                <div style={{ color: THEME.muted, fontSize: 10, marginTop: 3 }}>
                   {t.kg}
                 </div>
               </div>
