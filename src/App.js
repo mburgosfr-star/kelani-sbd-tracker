@@ -2754,6 +2754,28 @@ const meetTotals = {
     );
   }
 
+  function renderMetricChartCards(charts) {
+    return (
+      <div>
+        {charts.filter(chart => chart.data.length > 0).map(chart => (
+          <div
+            key={chart.key}
+            style={{
+              background: THEME.card,
+              border: `1px solid ${THEME.border}`,
+              borderRadius: 8,
+              padding: 16,
+              marginBottom: 16
+            }}
+          >
+            <h3 style={{ margin: '0 0 12px' }}>{chart.title}</h3>
+            {renderChart(chart.data, [chart.key], [chart.color])}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
       <div style={{ marginBottom: 20, textAlign: 'center' }}>
@@ -2864,116 +2886,62 @@ const meetTotals = {
         </div>
       )}
 
-      {activescreen === 'lichaam' && (
-        <div>
-          {[
-            {
-              key: 'gewicht',
-              title: `${t.bodyweight} (${t.kg})`,
-              data: bodyData,
-              color: THEME.primary,
-            },
-            {
-              key: 'bodyFat',
-              title: t.bodyFatPercent,
-              data: bodyMetricData.bodyFat,
-              color: THEME.primary,
-            },
-            {
-              key: 'bodyWater',
-              title: t.bodyWaterPercent,
-              data: bodyMetricData.bodyWater,
-              color: THEME.primary,
-            },
-          ].filter(chart => chart.data.length > 0).map(chart => (
-            <div
-              key={chart.key}
-              style={{
-                background: THEME.card,
-                border: `1px solid ${THEME.border}`,
-                borderRadius: 8,
-                padding: 16,
-                marginBottom: 16
-              }}
-            >
-              <h3 style={{ margin: '0 0 12px' }}>{chart.title}</h3>
-              {renderChart(chart.data, [chart.key], [chart.color])}
-            </div>
-          ))}
-        </div>
-      )}
+      {activescreen === 'lichaam' && renderMetricChartCards([
+        {
+          key: 'gewicht',
+          title: `${t.bodyweight} (${t.kg})`,
+          data: bodyData,
+          color: THEME.primary,
+        },
+        {
+          key: 'bodyFat',
+          title: t.bodyFatPercent,
+          data: bodyMetricData.bodyFat,
+          color: THEME.primary,
+        },
+        {
+          key: 'bodyWater',
+          title: t.bodyWaterPercent,
+          data: bodyMetricData.bodyWater,
+          color: THEME.primary,
+        },
+      ])}
 
-      {activescreen === 'compositie' && (
-        <div>
-          {[
-            {
-              key: 'leanMass',
-              title: t.leanMassKg,
-              data: bodyMetricData.leanMass,
-              color: THEME.primary,
-            },
-            {
-              key: 'boneMass',
-              title: t.boneMassKg,
-              data: bodyMetricData.boneMass,
-              color: THEME.primary,
-            },
-            {
-              key: 'bmr',
-              title: t.bmrKcal,
-              data: bodyMetricData.bmr,
-              color: THEME.primary,
-            },
-          ].filter(chart => chart.data.length > 0).map(chart => (
-            <div
-              key={chart.key}
-              style={{
-                background: THEME.card,
-                border: `1px solid ${THEME.border}`,
-                borderRadius: 8,
-                padding: 16,
-                marginBottom: 16
-              }}
-            >
-              <h3 style={{ margin: '0 0 12px' }}>{chart.title}</h3>
-              {renderChart(chart.data, [chart.key], [chart.color])}
-            </div>
-          ))}
-        </div>
-      )}
+      {activescreen === 'compositie' && renderMetricChartCards([
+        {
+          key: 'leanMass',
+          title: t.leanMassKg,
+          data: bodyMetricData.leanMass,
+          color: THEME.primary,
+        },
+        {
+          key: 'boneMass',
+          title: t.boneMassKg,
+          data: bodyMetricData.boneMass,
+          color: THEME.primary,
+        },
+        {
+          key: 'bmr',
+          title: t.bmrKcal,
+          data: bodyMetricData.bmr,
+          color: THEME.primary,
+        },
+      ])}
 
-      {activescreen === 'scores' && (
-        <div>
-          {[
-            {
-              key: 'visceralFat',
-              title: t.visceralFatRating,
-              data: bodyMetricData.visceralFat,
-              color: THEME.primary,
-            },
-            {
-              key: 'physiqueRating',
-              title: t.physiqueRating,
-              data: bodyMetricData.physiqueRating,
-              color: THEME.primary,
-            },
-          ].filter(chart => chart.data.length > 0).map(chart => (
-            <div
-              key={chart.key}
-              style={{
-                background: THEME.card,
-                border: `1px solid ${THEME.border}`,
-                borderRadius: 8,
-                padding: 16,
-                marginBottom: 16
-              }}
-            >
-              <h3 style={{ margin: '0 0 12px' }}>{chart.title}</h3>
-              {renderChart(chart.data, [chart.key], [chart.color])}
-            </div>
-          ))}
-        </div>
-      )}
+      {activescreen === 'scores' && renderMetricChartCards([
+        {
+          key: 'visceralFat',
+          title: t.visceralFatRating,
+          data: bodyMetricData.visceralFat,
+          color: THEME.primary,
+        },
+        {
+          key: 'physiqueRating',
+          title: t.physiqueRating,
+          data: bodyMetricData.physiqueRating,
+          color: THEME.primary,
+        },
+      ])}
 
 {activescreen === 'meet' && (
   <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
