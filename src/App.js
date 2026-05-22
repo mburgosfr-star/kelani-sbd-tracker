@@ -1407,28 +1407,28 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
           )}
 
           {!showMeetPrepResetConfirm && (
-  <button
-    type="button"
-    onClick={() => {
-      setShowMeetPrepChecklist(false);
-      setShowMeetPrepResetConfirm(false);
-    }}
-    style={{
-      width: '100%',
-      marginTop: 14,
-      padding: 10,
-      fontSize: 14,
-      fontWeight: 800,
-      background: THEME.bg,
-      color: THEME.text,
-      border: `1px solid ${THEME.border}`,
-      borderRadius: 8,
-      cursor: 'pointer'
-    }}
-  >
-    {t.done}
-  </button>
-)}
+            <button
+              type="button"
+              onClick={() => {
+                setShowMeetPrepChecklist(false);
+                setShowMeetPrepResetConfirm(false);
+              }}
+              style={{
+                width: '100%',
+                marginTop: 14,
+                padding: 10,
+                fontSize: 14,
+                fontWeight: 800,
+                background: THEME.bg,
+                color: THEME.text,
+                border: `1px solid ${THEME.border}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.done}
+            </button>
+          )}
         </SettingsModal>
       )}
 
