@@ -1437,39 +1437,13 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
         </p>
 
         <div style={{ display: 'grid', gap: 8 }}>
-          <button
-            onClick={exportData}
-            style={{
-              width: '100%',
-              padding: 10,
-              fontSize: 14,
-              fontWeight: 800,
-              background: THEME.card,
-              color: '#ffffff',
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 8,
-              cursor: 'pointer'
-            }}
-          >
+          <SettingsActionButton onClick={exportData}>
             {t.exportData}
-          </button>
+          </SettingsActionButton>
 
-          <button
-            onClick={() => importInputRef.current?.click()}
-            style={{
-              width: '100%',
-              padding: 10,
-              fontSize: 14,
-              fontWeight: 800,
-              background: THEME.card,
-              color: '#ffffff',
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 8,
-              cursor: 'pointer'
-            }}
-          >
+          <SettingsActionButton onClick={() => importInputRef.current?.click()}>
             {t.importData}
-          </button>
+          </SettingsActionButton>
         </div>
 
         <input
