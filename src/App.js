@@ -2769,7 +2769,7 @@ const meetTotals = {
         gap: 8,
         marginBottom: 20
       }}>
-        {['lifts', 'totaal', 'lichaam', 'kracht', 'meet'].map(screen => (
+        {['lifts', 'totaal', 'lichaam', 'compositie', 'scores', 'meet'].map(screen => (
   <button
     key={screen}
     onClick={() => setActivescreen(screen)}
@@ -2794,8 +2794,10 @@ const meetTotals = {
       ? t.total
       : screen === 'lichaam'
       ? t.body
-      : screen === 'kracht'
-      ? t.strength
+      : screen === 'compositie'
+      ? t.composition
+      : screen === 'scores'
+      ? t.ratings
       : t.meetPlannerShort}
   </button>
 ))}   
@@ -2835,9 +2837,27 @@ const meetTotals = {
 )}
 
       {activescreen === 'totaal' && (
-        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
-          <h3 style={{ margin: '0 0 12px' }}>{t.totalSBD}</h3>
-          {renderChart(totalData, ['oneRM', 'e1rm'], [THEME.muted, THEME.primary])}
+        <div>
+          <div style={{
+            background: THEME.card,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            padding: 16,
+            marginBottom: 16
+          }}>
+            <h3 style={{ margin: '0 0 12px' }}>{t.totalSBD}</h3>
+            {renderChart(totalData, ['oneRM', 'e1rm'], [THEME.muted, THEME.primary])}
+          </div>
+
+          <div style={{
+            background: THEME.card,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            padding: 16
+          }}>
+            <h3 style={{ margin: '0 0 12px' }}>{t.strengthTotalBodyweight}</h3>
+            {renderChart(strengthData, ['strength'], [THEME.primary])}
+          </div>
         </div>
       )}
 
@@ -2862,22 +2882,31 @@ const meetTotals = {
               data: bodyMetricData.bodyWater,
               color: THEME.primary,
             },
+          ].filter(chart => chart.data.length > 0).map(chart => (
+            <div
+              key={chart.key}
+              style={{
+                background: THEME.card,
+                border: `1px solid ${THEME.border}`,
+                borderRadius: 8,
+                padding: 16,
+                marginBottom: 16
+              }}
+            >
+              <h3 style={{ margin: '0 0 12px' }}>{chart.title}</h3>
+              {renderChart(chart.data, [chart.key], [chart.color])}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activescreen === 'compositie' && (
+        <div>
+          {[
             {
               key: 'leanMass',
               title: t.leanMassKg,
               data: bodyMetricData.leanMass,
-              color: THEME.primary,
-            },
-            {
-              key: 'visceralFat',
-              title: t.visceralFatRating,
-              data: bodyMetricData.visceralFat,
-              color: THEME.primary,
-            },
-            {
-              key: 'physiqueRating',
-              title: t.physiqueRating,
-              data: bodyMetricData.physiqueRating,
               color: THEME.primary,
             },
             {
@@ -2909,12 +2938,39 @@ const meetTotals = {
           ))}
         </div>
       )}
-      {activescreen === 'kracht' && (
-  <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
-    <h3 style={{ margin: '0 0 12px' }}>{t.strengthTotalBodyweight}</h3>
-    {renderChart(strengthData, ['strength'], [THEME.primary])}
-  </div>
-)}
+
+      {activescreen === 'scores' && (
+        <div>
+          {[
+            {
+              key: 'visceralFat',
+              title: t.visceralFatRating,
+              data: bodyMetricData.visceralFat,
+              color: THEME.primary,
+            },
+            {
+              key: 'physiqueRating',
+              title: t.physiqueRating,
+              data: bodyMetricData.physiqueRating,
+              color: THEME.primary,
+            },
+          ].filter(chart => chart.data.length > 0).map(chart => (
+            <div
+              key={chart.key}
+              style={{
+                background: THEME.card,
+                border: `1px solid ${THEME.border}`,
+                borderRadius: 8,
+                padding: 16,
+                marginBottom: 16
+              }}
+            >
+              <h3 style={{ margin: '0 0 12px' }}>{chart.title}</h3>
+              {renderChart(chart.data, [chart.key], [chart.color])}
+            </div>
+          ))}
+        </div>
+      )}
 
 {activescreen === 'meet' && (
   <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
