@@ -2765,43 +2765,46 @@ const meetTotals = {
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
+        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
         gap: 8,
         marginBottom: 20
       }}>
         {['lifts', 'totaal', 'lichaam', 'compositie', 'scores', 'meet'].map(screen => (
-  <button
-    key={screen}
-    onClick={() => setActivescreen(screen)}
-    style={{
-  width: '100%',
-  padding: '9px 6px',
-  fontSize: 14,
-  background: THEME.card,
-  color: activescreen === screen ? THEME.primary : THEME.text,
-  border: `1px solid ${THEME.border}`,
-  borderTop: activescreen === screen
-    ? `2px solid ${THEME.primary}`
-    : `2px solid ${THEME.border}`,
-  borderRadius: 4,
-  cursor: 'pointer',
-  fontWeight: activescreen === screen ? 600 : 400
-}}
->
-    {screen === 'lifts'
-      ? t.lifts
-      : screen === 'totaal'
-      ? t.total
-      : screen === 'lichaam'
-      ? t.body
-      : screen === 'compositie'
-      ? t.composition
-      : screen === 'scores'
-      ? t.ratings
-      : t.meetPlannerShort}
-  </button>
-))}   
-</div>
+          <button
+            key={screen}
+            onClick={() => setActivescreen(screen)}
+            style={{
+              width: '100%',
+              minHeight: 38,
+              padding: '8px 4px',
+              fontSize: 13,
+              lineHeight: 1.15,
+              background: THEME.card,
+              color: activescreen === screen ? THEME.primary : THEME.text,
+              border: `1px solid ${THEME.border}`,
+              borderTop: activescreen === screen
+                ? `2px solid ${THEME.primary}`
+                : `2px solid ${THEME.border}`,
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontWeight: activescreen === screen ? 700 : 500,
+              textAlign: 'center'
+            }}
+          >
+            {screen === 'lifts'
+              ? t.lifts
+              : screen === 'totaal'
+              ? t.total
+              : screen === 'lichaam'
+              ? t.body
+              : screen === 'compositie'
+              ? t.composition
+              : screen === 'scores'
+              ? t.ratings
+              : t.meetPlannerShort}
+          </button>
+        ))}
+      </div>
 
       {activescreen === 'lifts' && (
   <div>
