@@ -991,6 +991,32 @@ function SettingsRow({ label, value }) {
   );
 }
 
+function SettingsActionButton({ children, onClick, variant = 'primary', style = {}, disabled = false }) {
+  const isPrimary = variant === 'primary';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        width: '100%',
+        padding: 10,
+        fontSize: 14,
+        fontWeight: 800,
+        background: isPrimary ? THEME.card : THEME.bg,
+        color: disabled ? THEME.muted : THEME.text,
+        border: `1px solid ${isPrimary ? THEME.primary : THEME.border}`,
+        borderRadius: 8,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        ...style
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 function SettingsModal({ title, onClose, children }) {
   return (
     <div style={{
@@ -1218,90 +1244,45 @@ function MeetPrepChecklistSection({ meetPrepChecklist = {}, setMeetPrepChecklist
                     {t.meetPrepResetConfirmText}
                   </p>
 
-                  <button
-                    type="button"
+                  <SettingsActionButton
                     onClick={() => {
                       setMeetPrepChecklist({});
                       setShowMeetPrepResetConfirm(false);
                     }}
-                    style={{
-                      width: '100%',
-                      padding: 10,
-                      fontSize: 14,
-                      fontWeight: 800,
-                      background: THEME.card,
-                      color: '#ffffff',
-                      border: `1px solid ${THEME.primary}`,
-                      borderRadius: 8,
-                      cursor: 'pointer'
-                    }}
                   >
                     {t.meetPrepResetConfirm}
-                  </button>
+                  </SettingsActionButton>
 
-                  <button
-                    type="button"
+                  <SettingsActionButton
+                    variant="secondary"
                     onClick={() => setShowMeetPrepResetConfirm(false)}
-                    style={{
-                      width: '100%',
-                      marginTop: 8,
-                      padding: 10,
-                      fontSize: 14,
-                      fontWeight: 700,
-                      background: THEME.bg,
-                      color: THEME.text,
-                      border: `1px solid ${THEME.border}`,
-                      borderRadius: 8,
-                      cursor: 'pointer'
-                    }}
+                    style={{ marginTop: 8, fontWeight: 700 }}
                   >
                     {t.cancel}
-                  </button>
+                  </SettingsActionButton>
                 </div>
               ) : (
-                <button
-                  type="button"
+                <SettingsActionButton
+                  variant="secondary"
                   onClick={() => setShowMeetPrepResetConfirm(true)}
-                  style={{
-                    width: '100%',
-                    padding: 10,
-                    fontSize: 14,
-                    fontWeight: 800,
-                    background: THEME.bg,
-                    color: THEME.text,
-                    border: `1px solid ${THEME.border}`,
-                    borderRadius: 8,
-                    cursor: 'pointer'
-                  }}
                 >
                   {t.meetPrepReset}
-                </button>
+                </SettingsActionButton>
               )}
             </div>
           )}
 
           {!showMeetPrepResetConfirm && (
-            <button
-              type="button"
+            <SettingsActionButton
+              variant="secondary"
               onClick={() => {
                 setShowMeetPrepChecklist(false);
                 setShowMeetPrepResetConfirm(false);
               }}
-              style={{
-                width: '100%',
-                marginTop: 14,
-                padding: 10,
-                fontSize: 14,
-                fontWeight: 800,
-                background: THEME.bg,
-                color: THEME.text,
-                border: `1px solid ${THEME.border}`,
-                borderRadius: 8,
-                cursor: 'pointer'
-              }}
+              style={{ marginTop: 14 }}
             >
               {t.done}
-            </button>
+            </SettingsActionButton>
           )}
         </SettingsModal>
       )}
