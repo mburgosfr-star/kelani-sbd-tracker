@@ -1662,46 +1662,33 @@ function ProfileSection({ userProfile, onSave, t }) {
       </SettingsCard>
 
       {isEditing && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.65)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 650,
-          padding: 16
-        }}>
-          <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 12, padding: 18, maxWidth: 420, width: '100%', color: THEME.text }}>
-            <h3 style={{ margin: '0 0 16px', textAlign: 'center' }}>{t.profile}</h3>
-
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.birthDate}</label>
-              <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} style={modalInputStyle()} />
-            </div>
-
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.sex}</label>
-              <select value={sex} onChange={e => setSex(e.target.value)} style={modalInputStyle()}>
-                <option value="">{t.selectSex}</option>
-                <option value="male">{t.male}</option>
-                <option value="female">{t.female}</option>
-                <option value="other">{t.other}</option>
-              </select>
-            </div>
-
-            <button onClick={handleSave} style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
-              {t.save}
-            </button>
-
-            <button onClick={() => setIsEditing(false)} style={{ width: '100%', marginTop: 8, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
-              {t.cancel}
-            </button>
+        <SettingsModal
+          title={t.profile}
+          onClose={() => setIsEditing(false)}
+        >
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.birthDate}</label>
+            <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} style={modalInputStyle()} />
           </div>
-        </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.sex}</label>
+            <select value={sex} onChange={e => setSex(e.target.value)} style={modalInputStyle()}>
+              <option value="">{t.selectSex}</option>
+              <option value="male">{t.male}</option>
+              <option value="female">{t.female}</option>
+              <option value="other">{t.other}</option>
+            </select>
+          </div>
+
+          <button onClick={handleSave} style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
+            {t.save}
+          </button>
+
+          <button onClick={() => setIsEditing(false)} style={{ width: '100%', marginTop: 8, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
+            {t.cancel}
+          </button>
+        </SettingsModal>
       )}
     </>
   );
