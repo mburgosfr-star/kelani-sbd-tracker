@@ -4836,33 +4836,37 @@ const latestBodyDataRows = [
 
   <SupportSection t={t} />
 
-  <button
-    onClick={() => setShowResetConfirm(true)}
-    style={{
-      width: '100%',
-      padding: 9,
-      fontSize: 12,
-      fontWeight: 700,
-      background: THEME.card,
-      color: THEME.red,
-      border: `1px solid ${THEME.red}`,
-      borderRadius: 8,
-      cursor: 'pointer',
-      marginTop: 20
-    }}
-  >
-    {t.restart}
-  </button>
-
   <div style={{
-    marginTop: 32,
-    paddingTop: 12,
+    marginTop: 10,
+    paddingTop: 10,
     borderTop: `1px solid ${THEME.border}`,
-    textAlign: 'center',
-    color: THEME.muted,
-    fontSize: 12
+    textAlign: 'center'
   }}>
-    {t.appName} · v{process.env.REACT_APP_VERSION ?? 'dev'}
+    <button
+      onClick={() => setShowResetConfirm(true)}
+      style={{
+        width: 'auto',
+        minWidth: 150,
+        padding: '8px 14px',
+        fontSize: 12,
+        fontWeight: 800,
+        background: '#8b1e1e',
+        color: '#ffffff',
+        border: `1px solid ${THEME.primary}`,
+        borderRadius: 8,
+        cursor: 'pointer'
+      }}
+    >
+      {t.restart}
+    </button>
+
+    <div style={{
+      marginTop: 10,
+      color: THEME.muted,
+      fontSize: 12
+    }}>
+      {t.appName} · v{process.env.REACT_APP_VERSION ?? 'dev'}
+    </div>
   </div>
 </div>
       )}
@@ -5051,10 +5055,7 @@ style={{
 {showResetConfirm && (
   <div style={{
     position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    inset: 0,
     background: 'rgba(0,0,0,0.65)',
     display: 'flex',
     alignItems: 'center',
