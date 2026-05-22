@@ -3036,24 +3036,26 @@ const meetTotals = {
       ))}
     </div>
 
-  {hasCustomMeetAttempts && (
-  <button
-    onClick={() => setShowResetMeetPlannerConfirm(true)}
-    style={{
-      marginTop: 10,
-      width: '100%',
-      padding: 10,
-      fontSize: 13,
-      fontWeight: 800,
-      background: THEME.card,
-      color: THEME.text,
-      border: `1px solid ${THEME.border}`,
-      borderRadius: 8,
-      cursor: 'pointer'
-    }}
-  >
-    {t.resetMeetPlanner}
-  </button>
+    {hasCustomMeetAttempts && (
+      <div style={{ marginTop: 10, textAlign: 'center' }}>
+        <button
+          onClick={() => setShowResetMeetPlannerConfirm(true)}
+          style={{
+            width: 'auto',
+            minWidth: 170,
+            padding: '8px 12px',
+            fontSize: 13,
+            fontWeight: 800,
+            background: 'transparent',
+            color: THEME.text,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          {t.resetMeetPlanner}
+        </button>
+      </div>
     )}
 
   {showResetMeetPlannerConfirm && (
