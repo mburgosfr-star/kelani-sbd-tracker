@@ -1561,6 +1561,28 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
   );
 }
 
+function SupportActionButton({ children, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '9px 8px',
+        fontSize: 12,
+        fontWeight: 700,
+        background: THEME.card,
+        color: '#ffffff',
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 8,
+        cursor: 'pointer',
+        minHeight: 42
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 function SupportSection({ t }) {
   const links = [
     {
@@ -1589,23 +1611,12 @@ function SupportSection({ t }) {
     <SettingsCard title={t.support} centerTitle={true}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         {links.map(item => (
-          <button
+          <SupportActionButton
             key={item.label}
             onClick={() => openLink(item.url)}
-            style={{
-              padding: '9px 8px',
-              fontSize: 12,
-              fontWeight: 700,
-              background: THEME.card,
-              color: '#ffffff',
-              border: `1px solid ${THEME.border}`,
-              borderRadius: 8,
-              cursor: 'pointer',
-              minHeight: 42
-            }}
           >
             {item.label}
-          </button>
+          </SupportActionButton>
         ))}
       </div>
     </SettingsCard>
