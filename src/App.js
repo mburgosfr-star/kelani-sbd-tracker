@@ -1933,51 +1933,38 @@ function LanguageSection({ language, setLanguage, t }) {
       />
 
       {isEditing && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.65)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 650,
-          padding: 16
-        }}>
-          <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 12, padding: 18, maxWidth: 360, width: '100%', color: THEME.text }}>
-            <h3 style={{ margin: '0 0 16px', textAlign: 'center' }}>{t.changeLanguage}</h3>
-
-            {['ca', 'en', 'nl'].map(l => (
-              <button
-                key={l}
-                onClick={() => {
-                  setLanguage(l);
-                  setIsEditing(false);
-                }}
-                style={{
-                  width: '100%',
-                  padding: 12,
-                  fontSize: 15,
-                  fontWeight: 700,
-                  background: language === l ? THEME.primary : THEME.card,
-                  color: '#ffffff',
-                  border: `1px solid ${language === l ? THEME.primary : THEME.border}`,
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  marginBottom: 8
-                }}
-              >
-                {languageNames[l]}
-              </button>
-            ))}
-
-            <button onClick={() => setIsEditing(false)} style={{ width: '100%', padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
-              {t.cancel}
+        <SettingsModal
+          title={t.changeLanguage}
+          onClose={() => setIsEditing(false)}
+        >
+          {['ca', 'en', 'nl'].map(l => (
+            <button
+              key={l}
+              onClick={() => {
+                setLanguage(l);
+                setIsEditing(false);
+              }}
+              style={{
+                width: '100%',
+                padding: 12,
+                fontSize: 15,
+                fontWeight: 700,
+                background: language === l ? THEME.primary : THEME.card,
+                color: '#ffffff',
+                border: `1px solid ${language === l ? THEME.primary : THEME.border}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                marginBottom: 8
+              }}
+            >
+              {languageNames[l]}
             </button>
-          </div>
-        </div>
+          ))}
+
+          <button onClick={() => setIsEditing(false)} style={{ width: '100%', padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
+            {t.cancel}
+          </button>
+        </SettingsModal>
       )}
     </>
   );
