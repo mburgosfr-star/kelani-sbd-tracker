@@ -4988,8 +4988,6 @@ const latestBodyDataRows = [
 
   <div style={{
     marginTop: 10,
-    paddingTop: 10,
-    borderTop: `1px solid ${THEME.border}`,
     textAlign: 'center'
   }}>
     <button
@@ -5011,7 +5009,9 @@ const latestBodyDataRows = [
     </button>
 
     <div style={{
-      marginTop: 10,
+      marginTop: 14,
+      paddingTop: 10,
+      borderTop: `1px solid ${THEME.border}`,
       color: THEME.muted,
       fontSize: 12
     }}>
