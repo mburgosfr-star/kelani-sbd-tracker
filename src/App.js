@@ -1060,11 +1060,8 @@ function Toast({ message }) {
   );
 }
 
-function MeetPrepChecklistSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, t }) {
-  const [showMeetPrepChecklist, setShowMeetPrepChecklist] = useState(false);
-  const [showMeetPrepResetConfirm, setShowMeetPrepResetConfirm] = useState(false);
 
-  const meetPrepItems = [
+const MEET_PREP_ITEMS = [
     ['id', 'meetPrepId'],
     ['registration', 'meetPrepRegistration'],
     ['bodyweight', 'meetPrepBodyweight'],
@@ -1076,7 +1073,12 @@ function MeetPrepChecklistSection({ meetPrepChecklist = {}, setMeetPrepChecklist
     ['rackHeights', 'meetPrepRackHeights'],
     ['pen', 'meetPrepPen'],
     ['phone', 'meetPrepPhone'],
-  ];
+];
+
+function MeetPrepChecklistSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, t }) {
+  const [showMeetPrepChecklist, setShowMeetPrepChecklist] = useState(false);
+  const [showMeetPrepResetConfirm, setShowMeetPrepResetConfirm] = useState(false);
+
 
   const toggleMeetPrepItem = key => {
     setMeetPrepChecklist(prev => ({
@@ -1085,8 +1087,8 @@ function MeetPrepChecklistSection({ meetPrepChecklist = {}, setMeetPrepChecklist
     }));
   };
 
-  const checkedMeetPrepItems = meetPrepItems.filter(([key]) => !!meetPrepChecklist?.[key]).length;
-  const allMeetPrepItemsChecked = checkedMeetPrepItems === meetPrepItems.length && meetPrepItems.length > 0;
+  const checkedMeetPrepItems = MEET_PREP_ITEMS.filter(([key]) => !!meetPrepChecklist?.[key]).length;
+  const allMeetPrepItemsChecked = checkedMeetPrepItems === MEET_PREP_ITEMS.length && MEET_PREP_ITEMS.length > 0;
   const hasCheckedMeetPrepItems = checkedMeetPrepItems > 0;
 
   return (
@@ -1116,7 +1118,7 @@ function MeetPrepChecklistSection({ meetPrepChecklist = {}, setMeetPrepChecklist
             fontSize: 14,
             whiteSpace: 'nowrap'
           }}>
-            {checkedMeetPrepItems} / {meetPrepItems.length}{allMeetPrepItemsChecked ? ` · ✓ ${t.meetPrepReady}` : ''}
+            {checkedMeetPrepItems} / {MEET_PREP_ITEMS.length}{allMeetPrepItemsChecked ? ` · ✓ ${t.meetPrepReady}` : ''}
           </strong>
         </div>
       </SettingsCard>
@@ -1146,11 +1148,11 @@ function MeetPrepChecklistSection({ meetPrepChecklist = {}, setMeetPrepChecklist
             fontWeight: 800,
             textAlign: 'center'
           }}>
-            {checkedMeetPrepItems} / {meetPrepItems.length}{allMeetPrepItemsChecked ? ` · ✓ ${t.meetPrepReady}` : ''}
+            {checkedMeetPrepItems} / {MEET_PREP_ITEMS.length}{allMeetPrepItemsChecked ? ` · ✓ ${t.meetPrepReady}` : ''}
           </div>
 
           <div style={{ display: 'grid', gap: 8 }}>
-            {meetPrepItems.map(([key, labelKey]) => {
+            {MEET_PREP_ITEMS.map(([key, labelKey]) => {
               const checked = !!meetPrepChecklist?.[key];
 
               return (
