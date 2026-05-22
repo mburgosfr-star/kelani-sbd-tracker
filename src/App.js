@@ -1060,7 +1060,7 @@ function Toast({ message }) {
   );
 }
 
-function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, t }) {
+function MeetPrepChecklistSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, t }) {
   const [showMeetPrepChecklist, setShowMeetPrepChecklist] = useState(false);
   const [showMeetPrepResetConfirm, setShowMeetPrepResetConfirm] = useState(false);
 
@@ -1088,134 +1088,6 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
   const checkedMeetPrepItems = meetPrepItems.filter(([key]) => !!meetPrepChecklist?.[key]).length;
   const allMeetPrepItemsChecked = checkedMeetPrepItems === meetPrepItems.length && meetPrepItems.length > 0;
   const hasCheckedMeetPrepItems = checkedMeetPrepItems > 0;
-
-
-  const [notice, setNotice] = useState('');
-  const [pendingImport, setPendingImport] = useState(null);
-  const importInputRef = useRef(null);
-
-  const downloadJson = (filename, json) => {
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-
-  const buildBackupSummary = data => {
-    const currentCycle = data?.currentCycle || 1;
-    const totalWorkouts = data?.inProgress?.workouts?.length || 28;
-    const selectedIndex = data?.inProgress?.selectedIndex;
-    const completedWorkoutCount = getCompletedWorkoutCount(data?.history || [], currentCycle);
-    const currentWorkout = Math.min((selectedIndex ?? completedWorkoutCount) + 1, totalWorkouts);
-
-    return {
-      backupVersion: 1,
-      programVersion: data?.inProgress?.programVersion || null,
-      currentCycle,
-      currentWorkout,
-      totalWorkouts,
-      historyEntries: Array.isArray(data?.history) ? data.history.length : 0,
-      bodyDataEntries: Array.isArray(data?.bodyWeights) ? data.bodyWeights.length : 0,
-    };
-  };
-
-  const exportData = async () => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-
-      if (!saved) {
-        setNotice(t.exportDataNoData);
-        return;
-      }
-
-      const exportedAt = new Date().toISOString();
-      const timestamp = exportedAt.slice(0, 16).replace('T', '-').replace(':', '');
-      const filename = `kelani-sbd-tracker-backup-${timestamp}.json`;
-      const data = JSON.parse(saved);
-      const backup = {
-        app: t.appName,
-        backupVersion: 1,
-        appVersion: process.env.REACT_APP_VERSION ?? 'dev',
-        exportedAt,
-        storageKey: STORAGE_KEY,
-        summary: buildBackupSummary(data),
-        data,
-      };
-      const json = JSON.stringify(backup, null, 2);
-
-      if (Capacitor.isNativePlatform()) {
-        const result = await Filesystem.writeFile({
-          path: filename,
-          data: json,
-          directory: Directory.Cache,
-          encoding: Encoding.UTF8,
-        });
-
-        await Share.share({
-          title: t.exportData,
-          text: t.exportDataDescription,
-          files: [result.uri],
-          dialogTitle: t.exportData,
-        });
-      } else {
-        downloadJson(filename, json);
-      }
-
-      setNotice(t.exportDataSuccess);
-    } catch (e) {
-      setNotice(t.exportDataError);
-    }
-  };
-
-  const importData = async event => {
-    try {
-      const file = event.target.files?.[0];
-      event.target.value = '';
-
-      if (!file) return;
-
-      const text = await file.text();
-      const backup = JSON.parse(text);
-
-      if (
-        backup?.storageKey !== STORAGE_KEY ||
-        !backup?.data ||
-        typeof backup.data !== 'object' ||
-        !backup.data.prs ||
-        !backup.data.history
-      ) {
-        setNotice(t.importDataInvalid);
-        return;
-      }
-
-      setPendingImport({
-        data: backup.data,
-        appVersion: backup.appVersion || '—',
-        exportedAt: backup.exportedAt || '—',
-        summary: backup.summary || buildBackupSummary(backup.data),
-      });
-    } catch (e) {
-      setNotice(t.importDataError);
-    }
-  };
-
-  const confirmImport = () => {
-    if (!pendingImport) return;
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingImport.data));
-    setNotice(t.importDataSuccess);
-    setPendingImport(null);
-    window.location.reload();
-  };
-
-  const importSummary = pendingImport?.summary;
 
   return (
     <>
@@ -1431,6 +1303,145 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
           )}
         </SettingsModal>
       )}
+    </>
+  );
+}
+
+function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, t }) {
+  const [notice, setNotice] = useState('');
+  const [pendingImport, setPendingImport] = useState(null);
+  const importInputRef = useRef(null);
+
+  const downloadJson = (filename, json) => {
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const buildBackupSummary = data => {
+    const currentCycle = data?.currentCycle || 1;
+    const totalWorkouts = data?.inProgress?.workouts?.length || 28;
+    const selectedIndex = data?.inProgress?.selectedIndex;
+    const completedWorkoutCount = getCompletedWorkoutCount(data?.history || [], currentCycle);
+    const currentWorkout = Math.min((selectedIndex ?? completedWorkoutCount) + 1, totalWorkouts);
+
+    return {
+      backupVersion: 1,
+      programVersion: data?.inProgress?.programVersion || null,
+      currentCycle,
+      currentWorkout,
+      totalWorkouts,
+      historyEntries: Array.isArray(data?.history) ? data.history.length : 0,
+      bodyDataEntries: Array.isArray(data?.bodyWeights) ? data.bodyWeights.length : 0,
+    };
+  };
+
+  const exportData = async () => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+
+      if (!saved) {
+        setNotice(t.exportDataNoData);
+        return;
+      }
+
+      const exportedAt = new Date().toISOString();
+      const timestamp = exportedAt.slice(0, 16).replace('T', '-').replace(':', '');
+      const filename = `kelani-sbd-tracker-backup-${timestamp}.json`;
+      const data = JSON.parse(saved);
+      const backup = {
+        app: t.appName,
+        backupVersion: 1,
+        appVersion: process.env.REACT_APP_VERSION ?? 'dev',
+        exportedAt,
+        storageKey: STORAGE_KEY,
+        summary: buildBackupSummary(data),
+        data,
+      };
+      const json = JSON.stringify(backup, null, 2);
+
+      if (Capacitor.isNativePlatform()) {
+        const result = await Filesystem.writeFile({
+          path: filename,
+          data: json,
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8,
+        });
+
+        await Share.share({
+          title: t.exportData,
+          text: t.exportDataDescription,
+          files: [result.uri],
+          dialogTitle: t.exportData,
+        });
+      } else {
+        downloadJson(filename, json);
+      }
+
+      setNotice(t.exportDataSuccess);
+    } catch (e) {
+      setNotice(t.exportDataError);
+    }
+  };
+
+  const importData = async event => {
+    try {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+
+      if (!file) return;
+
+      const text = await file.text();
+      const backup = JSON.parse(text);
+
+      if (
+        backup?.storageKey !== STORAGE_KEY ||
+        !backup?.data ||
+        typeof backup.data !== 'object' ||
+        !backup.data.prs ||
+        !backup.data.history
+      ) {
+        setNotice(t.importDataInvalid);
+        return;
+      }
+
+      setPendingImport({
+        data: backup.data,
+        appVersion: backup.appVersion || '—',
+        exportedAt: backup.exportedAt || '—',
+        summary: backup.summary || buildBackupSummary(backup.data),
+      });
+    } catch (e) {
+      setNotice(t.importDataError);
+    }
+  };
+
+  const confirmImport = () => {
+    if (!pendingImport) return;
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingImport.data));
+    setNotice(t.importDataSuccess);
+    setPendingImport(null);
+    window.location.reload();
+  };
+
+  const importSummary = pendingImport?.summary;
+
+  return (
+    <>
+      <MeetPrepChecklistSection
+        meetPrepChecklist={meetPrepChecklist}
+        setMeetPrepChecklist={setMeetPrepChecklist}
+        t={t}
+      />
 
       <SettingsCard title={t.dataManagement}>
         <p style={{
