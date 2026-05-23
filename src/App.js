@@ -414,6 +414,10 @@ function getSetPctForWeight(set, weight) {
   return Number(weight) / trainingMax;
 }
 
+function isTopSetLabel(labelKey) {
+  return ['heavySingle', 'topSingle', 'topDouble', 'topTriple'].includes(labelKey);
+}
+
 function getMeetPlannerAttemptWeight(attempts, lift, setIndex, fallback) {
   const key = MEET_ATTEMPT_KEYS[setIndex];
   const custom = attempts?.[lift]?.[key];
@@ -956,9 +960,9 @@ const [editing, setEditing] = useState(false);
     width: 34,
     height: 34,
     borderRadius: '50%',
-    border: `2px solid ${set.done ? THEME.primary : THEME.border}`,
-    background: set.done ? THEME.primary : THEME.card,
-    color: set.done ? THEME.bg : THEME.text,
+    border: `2px solid ${set.skipped ? '#e74c3c' : set.done ? THEME.primary : THEME.border}`,
+    background: set.skipped ? '#e74c3c' : set.done ? THEME.primary : THEME.card,
+    color: (set.skipped || set.done) ? THEME.bg : THEME.text,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -970,7 +974,7 @@ const [editing, setEditing] = useState(false);
     fontWeight: 900,
   }}
 >
-        {set.done ? '✓' : ''}
+        {set.skipped ? '✕' : set.done ? '✓' : ''}
       </div>
       <div
         onClick={isReadOnly ? undefined : onToggle}
@@ -979,7 +983,7 @@ const [editing, setEditing] = useState(false);
           cursor: isReadOnly ? 'not-allowed' : 'pointer'
         }}
       >
-        <div style={{ fontWeight: 500, color: THEME.text, textDecoration: set.done && !isFailed ? 'line-through' : 'none' }}>
+        <div style={{ fontWeight: 500, color: THEME.text, textDecoration: set.done && !isFailed && !set.skipped ? 'line-through' : 'none' }}>
           {label}
         </div>
         <div style={{ color: THEME.text, fontSize: 14, fontWeight: 700, marginTop: 2 }}>
@@ -2530,7 +2534,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
           return (
             <React.Fragment key={i}>
-              {set.failed && set.adjustedWeight && (
+              {(set.failed || set.skipped) && (
                 <div style={{
                   margin: 0,
                   padding: '10px 14px',
@@ -2560,11 +2564,13 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     !
                   </span>
                   <span>
-                    {t.failedSetAdjusted
-                      .replace('{weight}', `${set.adjustedWeight} ${t.kg}`)}
+                    {set.skipped
+                      ? t.topSetSkipped
+                      : t.failedSetAdjusted.replace('{weight}', `${set.adjustedWeight} ${t.kg}`)}
                   </span>
                 </div>
               )}
+              {set.failed && renderInlineTimer({ type: 'main', index: i })}
               <SetRow
                 set={set}
                 index={i}
@@ -2578,7 +2584,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 onWeightChange={val => onWeightChange('set', i, val)}
                 t={t}
               />
-              {renderInlineTimer({ type: 'main', index: i })}
+              {!set.failed && renderInlineTimer({ type: 'main', index: i })}
             </React.Fragment>
           );
         })}
@@ -4314,10 +4320,26 @@ function toggleWarmup(wIndex) {
   );
 }
 
+function hasMoreWorkAfterMainSet(workout, setIndex) {
+  const sets = workout.sets || [];
+  const accessories = workout.accessories || [];
+
+  const hasMoreMainSets = sets.some((set, index) =>
+    index > setIndex && !set.done && !set.skipped
+  );
+
+  const hasAccessories = accessories.some(a => (a.done || []).some(d => !d));
+
+  return hasMoreMainSets || hasAccessories;
+}
+
 function toggleSet(setIndex) {
   const workout = workouts[selectedIndex];
+  const currentSet = workout?.sets?.[setIndex];
 
-  if (shouldStartRestTimerAfterToggle(workout, 'main', setIndex)) {
+  const shouldComplete = currentSet && !currentSet.done && !currentSet.skipped;
+
+  if (shouldComplete && hasMoreWorkAfterMainSet(workout, setIndex)) {
     startTimer(restTimeSeconds, {
       workoutNumber: workout.number,
       type: 'main',
@@ -4331,46 +4353,124 @@ function toggleSet(setIndex) {
         ? w
         : {
             ...w,
-            sets: w.sets.map((s, si) =>
-              si === setIndex ? { ...s, done: !s.done } : s
-            ),
+            sets: w.sets.map((s, si) => {
+              if (si !== setIndex) return s;
+
+              if (s.skipped) {
+                const restoredWeight = Number(s.failedWeight ?? s.originalWeight ?? s.weight) || s.weight;
+                const restoredPct = Number(s.originalPct ?? getSetPctForWeight(s, restoredWeight)) || s.pct;
+
+                return {
+                  ...s,
+                  weight: restoredWeight,
+                  pct: restoredPct,
+                  done: false,
+                  failed: false,
+                  skipped: false,
+                  failedWeight: null,
+                  adjustedWeight: null,
+                  adjustedFromFailedSet: false,
+                  adjustedFromOriginal: false,
+                };
+              }
+
+              if (!s.done) {
+                return {
+                  ...s,
+                  done: true,
+                  failed: false,
+                };
+              }
+
+              return {
+                ...s,
+                done: false,
+              };
+            }),
           }
     )
   );
 }
 
 function markSetFailed(setIndex) {
+  const workout = workouts[selectedIndex];
+
+  if (workout && hasMoreWorkAfterMainSet(workout, setIndex)) {
+    startTimer(restTimeSeconds, {
+      workoutNumber: workout.number,
+      type: 'main',
+      index: setIndex,
+    });
+  }
+
   setWorkouts(prev =>
     prev.map((w, wi) => {
       if (wi !== selectedIndex) return w;
 
       const failedSet = w.sets[setIndex];
       const adjustedWeight = getFailedSetSuggestedWeight(failedSet?.weight);
+      const failedAttempts = (Number(failedSet?.failedAttempts) || 0) + 1;
+      const nextBackoff = (w.sets || []).find((set, index) =>
+        index > setIndex && set.labelKey === 'backoff' && !set.done
+      );
+      const nextBackoffWeight = Number(nextBackoff?.weight) || 0;
+      const isTopSet = isTopSetLabel(failedSet?.labelKey);
+      const isBackoff = failedSet?.labelKey === 'backoff';
+      const shouldSkipTopSet =
+        isTopSet &&
+        (failedAttempts >= 2 || (nextBackoffWeight > 0 && adjustedWeight <= nextBackoffWeight));
 
       return {
         ...w,
         sets: w.sets.map((s, si) => {
-          if (si !== setIndex) return s;
+          const shouldAdjustThisSet = si === setIndex;
+          const shouldAdjustLaterBackoff =
+            isBackoff &&
+            si > setIndex &&
+            s.labelKey === 'backoff' &&
+            !s.done &&
+            !s.skipped;
+
+          if (!shouldAdjustThisSet && !shouldAdjustLaterBackoff) return s;
 
           const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
           const originalPct = Number(s.originalPct ?? s.pct) || 0;
+
+          if (shouldAdjustThisSet && shouldSkipTopSet) {
+            return {
+              ...s,
+              done: true,
+              failed: false,
+              skipped: true,
+              failedAttempts,
+              failedWeight: Number(s.failedWeight ?? s.weight) || 0,
+              originalWeight,
+              originalPct,
+              adjustedWeight: null,
+              adjustedFromFailedSet: false,
+              adjustedFromOriginal: false,
+            };
+          }
+
+          const nextWeight = adjustedWeight;
           const adjustedPct = getSetPctForWeight(
             { ...s, originalWeight, originalPct },
-            adjustedWeight
+            nextWeight
           );
 
           return {
             ...s,
             done: false,
-            failed: true,
-            failedAttempts: (Number(s.failedAttempts) || 0) + 1,
-            failedWeight: Number(s.failedWeight ?? s.weight) || 0,
-            weight: adjustedWeight,
+            failed: shouldAdjustThisSet,
+            skipped: false,
+            failedAttempts: shouldAdjustThisSet ? failedAttempts : Number(s.failedAttempts) || 0,
+            failedWeight: shouldAdjustThisSet ? Number(s.failedWeight ?? s.weight) || 0 : s.failedWeight ?? null,
+            weight: nextWeight,
             pct: adjustedPct || s.pct,
             originalWeight,
             originalPct,
-            adjustedWeight,
-            adjustedFromFailedSet: true,
+            adjustedWeight: shouldAdjustThisSet ? nextWeight : s.adjustedWeight ?? null,
+            adjustedFromFailedSet: shouldAdjustThisSet,
             adjustedFromOriginal: true,
           };
         }),
@@ -4398,6 +4498,7 @@ function restoreSetWeight(setIndex) {
                 pct: restoredPct,
                 done: false,
                 failed: false,
+                skipped: false,
                 failedWeight: null,
                 adjustedWeight: null,
                 adjustedFromFailedSet: false,
@@ -4724,7 +4825,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 }
   
     if (workout.type === 'training' && ['Deadlift', 'Bench', 'Squat'].includes(workout.lift)) {
-    const sets = (workout.sets || []).filter(s => s.done);
+    const sets = (workout.sets || []).filter(s => s.done && !s.failed && !s.skipped);
 
 if (sets.length > 0) {
 
@@ -5360,7 +5461,7 @@ const latestBodyDataRows = [
     );
   }
 
-  const sets = completedWorkout?.sets || [];
+  const sets = (completedWorkout?.sets || []).filter(s => s.done && !s.failed && !s.skipped);
 
   const oneRMToday = sets.length
     ? Math.max(...sets.map(s => Number(s.weight) || 0))
@@ -5411,24 +5512,41 @@ color: THEME.text, borderRadius: 8, padding: 16, marginBottom: 20, textAlign: 'l
 </div>
 
 {(completedWorkout?.sets || []).map((set, i) => {
+  const setLabel = set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`;
+  const isInvalidSet = set.failed || set.skipped;
+  const statusLabel = set.skipped
+    ? t.skipped
+    : set.failed
+    ? t.setNotCompleted
+    : null;
+
   return (
     <div
-  key={i}
-  style={{
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '10px 12px',
-    color: '#ffffff'
-  }}
->
-  <span style={{ color: '#ffffff', fontWeight: 700 }}>
-    {set.label || `${t.set} ${i + 1}`} — {set.reps} {t.reps}
-  </span>
+      key={i}
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 12,
+        padding: '10px 12px',
+        color: '#ffffff',
+        opacity: isInvalidSet ? 0.8 : 1,
+        borderLeft: isInvalidSet ? '3px solid #e74c3c' : '3px solid transparent'
+      }}
+    >
+      <span style={{ color: '#ffffff', fontWeight: 700 }}>
+        {isInvalidSet ? '✕ ' : '✓ '}
+        {setLabel} — {set.reps} {t.reps}
+        {statusLabel && (
+          <span style={{ color: '#e74c3c', fontSize: 12, marginLeft: 6 }}>
+            {statusLabel}
+          </span>
+        )}
+      </span>
 
-  <strong style={{ color: '#ffffff' }}>
-    {set.weight} kg
-  </strong>
-</div>
+      <strong style={{ color: isInvalidSet ? '#e74c3c' : '#ffffff', whiteSpace: 'nowrap' }}>
+        {set.weight} {t.kg}
+      </strong>
+    </div>
   );
 })}
 </div>
@@ -5453,7 +5571,11 @@ color: THEME.text, borderRadius: 8, padding: 16, marginBottom: 20, textAlign: 'l
 
       <button
 onClick={() => {
-  setSelectedIndex(completedWorkoutIndex);
+  const targetIndex = Number.isInteger(completedWorkoutIndex)
+    ? completedWorkoutIndex
+    : Math.max(0, (completedWorkout?.number || 1) - 1);
+
+  setSelectedIndex(targetIndex);
   setScreen('current');
 }}
 style={{
