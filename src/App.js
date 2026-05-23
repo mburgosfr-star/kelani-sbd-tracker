@@ -4339,12 +4339,16 @@ function toggleSet(setIndex) {
 
   const shouldComplete = currentSet && !currentSet.done && !currentSet.skipped;
 
-  if (shouldComplete && hasMoreWorkAfterMainSet(workout, setIndex)) {
-    startTimer(restTimeSeconds, {
-      workoutNumber: workout.number,
-      type: 'main',
-      index: setIndex,
-    });
+  if (shouldComplete) {
+    if (hasMoreWorkAfterMainSet(workout, setIndex)) {
+      startTimer(restTimeSeconds, {
+        workoutNumber: workout.number,
+        type: 'main',
+        index: setIndex,
+      });
+    } else {
+      setTimer(null);
+    }
   }
 
   setWorkouts(prev =>
@@ -4395,7 +4399,7 @@ function toggleSet(setIndex) {
 function markSetFailed(setIndex) {
   const workout = workouts[selectedIndex];
 
-  if (workout && hasMoreWorkAfterMainSet(workout, setIndex)) {
+  if (workout) {
     startTimer(restTimeSeconds, {
       workoutNumber: workout.number,
       type: 'main',
@@ -4520,6 +4524,11 @@ function toggleAccessorySet(accIndex, setIndex) {
       accIndex,
       index: setIndex,
     });
+  } else {
+    const currentDone = workout?.accessories?.[accIndex]?.done?.[setIndex];
+    if (currentDone === false) {
+      setTimer(null);
+    }
   }
 
   setWorkouts(prev =>
