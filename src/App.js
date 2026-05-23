@@ -890,8 +890,13 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
   );
 }
 
-function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, isActive, isReadOnly, t }) {
+function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t }) {
 const isFailed = Boolean(set.failed);
+const displayPct = set.adjustedFromFailedSet && set.failedWeight && set.pct
+  ? Math.round((Number(set.weight) / (Number(set.failedWeight) / Number(set.pct))) * 100)
+  : set.pct
+  ? Math.round(set.pct * 100)
+  : null;
 const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(set.weight));
   const inputRef = useRef(null);
@@ -927,16 +932,16 @@ const [editing, setEditing] = useState(false);
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }}
-      style={{ display: 'flex', alignItems: 'center', padding: '14px 16px', border: `1px solid ${isFailed ? '#e74c3c' : THEME.border}`, boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none', borderLeft: isFailed ? '4px solid #e74c3c' : isActive && !isWarmup ? `4px solid ${THEME.primary}` : '4px solid transparent'}}>
+      style={{ display: 'flex', alignItems: 'center', padding: '14px 16px', border: `1px solid ${THEME.border}`, boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none', borderLeft: isActive && !isWarmup ? `4px solid ${THEME.primary}` : '4px solid transparent'}}>
       <div
   onClick={isReadOnly ? undefined : onToggle}
   style={{
     width: 34,
     height: 34,
     borderRadius: '50%',
-    border: `2px solid ${isFailed ? '#e74c3c' : set.done ? THEME.primary : THEME.border}`,
-    background: isFailed ? '#e74c3c' : set.done ? THEME.primary : THEME.card,
-    color: (isFailed || set.done) ? THEME.bg : THEME.text,
+    border: `2px solid ${set.done ? THEME.primary : THEME.border}`,
+    background: set.done ? THEME.primary : THEME.card,
+    color: set.done ? THEME.bg : THEME.text,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -948,7 +953,7 @@ const [editing, setEditing] = useState(false);
     fontWeight: 900,
   }}
 >
-        {isFailed ? '!' : set.done ? '✓' : ''}
+        {set.done ? '✓' : ''}
       </div>
       <div
         onClick={isReadOnly ? undefined : onToggle}
@@ -957,15 +962,12 @@ const [editing, setEditing] = useState(false);
           cursor: isReadOnly ? 'not-allowed' : 'pointer'
         }}
       >
-        <span style={{ fontWeight: 500, color: THEME.text, textDecoration: set.done && !isFailed ? 'line-through' : 'none' }}>{label}</span>
-<span style={{ color: THEME.text, fontSize: 16, fontWeight: 700, marginLeft: 12 }}>
-{set.reps} {t.reps}
-</span>
-        {isFailed && set.suggestedWeight && (
-          <div style={{ color: '#e74c3c', fontSize: 12, fontWeight: 800, marginTop: 4 }}>
-            {t.setNotCompleted} · {t.reduceWeightAdvice.replace('{weight}', `${set.suggestedWeight} ${t.kg}`)}
-          </div>
-        )}
+        <div style={{ fontWeight: 500, color: THEME.text, textDecoration: set.done && !isFailed ? 'line-through' : 'none' }}>
+          {label}
+        </div>
+        <div style={{ color: THEME.text, fontSize: 14, fontWeight: 700, marginTop: 2 }}>
+          {set.reps} {t.reps}
+        </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {editing ? (
@@ -996,8 +998,8 @@ const [editing, setEditing] = useState(false);
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontWeight: 700, fontSize: 18, color: '#ffffff' }}>{set.weight} kg</span>
-            {set.pct && <span style={{ color: '#ffffff', fontSize: 12 }}>{Math.round(set.pct * 100)}%</span>}
+            <span style={{ fontWeight: 800, fontSize: 18, color: set.adjustedFromFailedSet ? '#f39c12' : '#ffffff' }}>{set.weight} kg</span>
+            {displayPct && <span style={{ color: set.adjustedFromFailedSet ? '#f39c12' : '#ffffff', fontSize: 12 }}>{displayPct}%</span>}
             {!isWarmup && (
   <button
     onClick={handleEditClick}
@@ -1014,8 +1016,34 @@ const [editing, setEditing] = useState(false);
     ✎
   </button>
 )}
+            {onRestoreWeight && set.adjustedFromFailedSet && !set.done && !isReadOnly && (
+              <button
+                type="button"
+                title={t.restoreOriginalWeight}
+                aria-label={t.restoreOriginalWeight}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRestoreWeight();
+                }}
+                style={{
+                  background: 'none',
+                  border: '1px solid #f39c12',
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  padding: '2px 5px',
+                  color: '#ffffff',
+                  lineHeight: 1,
+                  fontWeight: 900
+                }}
+              >
+                ↺
+              </button>
+            )}
             {onMarkFailed && !set.done && !isReadOnly && (
               <button
+                type="button"
+                title={t.markSetFailed}
+                aria-label={t.markSetFailed}
                 onClick={(e) => {
                   e.stopPropagation();
                   onMarkFailed();
@@ -1024,15 +1052,14 @@ const [editing, setEditing] = useState(false);
                   background: 'none',
                   border: '1px solid #e74c3c',
                   cursor: 'pointer',
-                  fontSize: 12,
-                  padding: '3px 6px',
+                  fontSize: 16,
+                  padding: '2px 5px',
                   color: '#ffffff',
-                  borderRadius: 4,
                   lineHeight: 1,
-                  fontWeight: 800
+                  fontWeight: 900
                 }}
               >
-                {t.markSetFailed}
+                ✕
               </button>
             )}
           </div>
@@ -2152,7 +2179,7 @@ function NewCycleModal({ prs, onStart, t }) {
   );
 }
 
-function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onToggleAccessorySet, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
+function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
 
   function isTimerFor(placement) {
     if (!timer || !timer.placement) return false;
@@ -2256,6 +2283,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 fontSize: 16,
                 fontWeight: 800,
                 color: THEME.text,
+                textAlign: 'center',
                 borderBottom: `1px solid ${THEME.border}`,
               }}>
                 {liftLabel(liftBlock.lift, t)}
@@ -2268,6 +2296,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     fontSize: 14,
                     fontWeight: 800,
                     color: THEME.text,
+                    textAlign: 'center',
                     borderTop: `1px solid ${THEME.border}`,
                     background: THEME.card
                   }}>
@@ -2407,7 +2436,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             padding: '8px 16px',
             fontSize: 16,
             fontWeight: 700,
-            color: THEME.text
+            color: THEME.text,
+            textAlign: 'center'
           }}>
             {t.prepTitle}
           </div>
@@ -2437,7 +2467,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             padding: '8px 16px',
             fontSize: 16,
             fontWeight: 700,
-            color: THEME.text
+            color: THEME.text,
+            textAlign: 'center'
           }}>
             {t.warmup}
           </div>
@@ -2470,7 +2501,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           padding: '8px 16px',
           fontSize: 16,
           fontWeight: 700,
-          color: THEME.text
+          color: THEME.text,
+          textAlign: 'center'
         }}>
           {liftLabel(workout.lift, t)}
         </div>
@@ -2481,6 +2513,41 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
           return (
             <React.Fragment key={i}>
+              {set.failed && set.adjustedWeight && (
+                <div style={{
+                  margin: 0,
+                  padding: '10px 14px',
+                  borderTop: '1px solid #e74c3c',
+                  borderBottom: '1px solid #e74c3c',
+                  color: '#ffffff',
+                  background: 'rgba(231, 76, 60, 0.16)',
+                  fontSize: 13,
+                  fontWeight: 800,
+                  lineHeight: 1.35,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10
+                }}>
+                  <span style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    background: '#e74c3c',
+                    color: THEME.bg,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    fontWeight: 900
+                  }}>
+                    !
+                  </span>
+                  <span>
+                    {t.failedSetAdjusted
+                      .replace('{weight}', `${set.adjustedWeight} ${t.kg}`)}
+                  </span>
+                </div>
+              )}
               <SetRow
                 set={set}
                 index={i}
@@ -2490,6 +2557,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 isReadOnly={isReadOnly}
                 onToggle={() => handleToggle(() => onToggleSet(i))}
                 onMarkFailed={() => handleToggle(() => onMarkSetFailed(i))}
+                onRestoreWeight={() => handleToggle(() => onRestoreSetWeight(i))}
                 onWeightChange={val => onWeightChange('set', i, val)}
                 t={t}
               />
@@ -4251,7 +4319,7 @@ function toggleSet(setIndex) {
         : {
             ...w,
             sets: w.sets.map((s, si) =>
-              si === setIndex ? { ...s, done: !s.done, failed: false, failedWeight: null, suggestedWeight: null } : s
+              si === setIndex ? { ...s, done: !s.done, failed: false, failedWeight: null, adjustedWeight: null, adjustedFromFailedSet: false } : s
             ),
           }
     )
@@ -4259,6 +4327,36 @@ function toggleSet(setIndex) {
 }
 
 function markSetFailed(setIndex) {
+  setTimer(null);
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      const failedSet = w.sets[setIndex];
+      const adjustedWeight = getFailedSetSuggestedWeight(failedSet?.weight);
+
+      return {
+        ...w,
+        sets: w.sets.map((s, si) => {
+          if (si !== setIndex) return s;
+
+          return {
+            ...s,
+            done: false,
+            failed: true,
+            failedWeight: Number(s.failedWeight || s.weight) || 0,
+            weight: adjustedWeight,
+            adjustedWeight,
+            adjustedFromFailedSet: true,
+          };
+        }),
+      };
+    })
+  );
+}
+
+function restoreSetWeight(setIndex) {
   setTimer(null);
 
   setWorkouts(prev =>
@@ -4271,10 +4369,12 @@ function markSetFailed(setIndex) {
               si === setIndex
                 ? {
                     ...s,
-                    done: true,
-                    failed: true,
-                    failedWeight: Number(s.weight) || 0,
-                    suggestedWeight: getFailedSetSuggestedWeight(s.weight),
+                    weight: s.failedWeight || s.weight,
+                    done: false,
+                    failed: false,
+                    failedWeight: null,
+                    adjustedWeight: null,
+                    adjustedFromFailedSet: false,
                   }
                 : s
             ),
@@ -4952,6 +5052,7 @@ const latestBodyDataRows = [
           onToggleWarmup={toggleWarmup}
           onToggleSet={toggleSet}
           onMarkSetFailed={markSetFailed}
+          onRestoreSetWeight={restoreSetWeight}
           onToggleAccessorySet={toggleAccessorySet}
           onWeightChange={changeWeight}
           onAccessoryWeightChange={changeAccessoryWeight}
