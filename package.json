@@ -27,7 +27,7 @@
     "android:release-apk": "node scripts/build-release-apk.js",
     "github:release": "node scripts/create-github-release.js",
     "android:izzy-test": "node scripts/test-izzy-build.js",
-    "android:install-apk": "adb install -r \"$HOME/Downloads/kelani-sbd-tracker-v$(node -p \\\"require('./package.json').version\\\").apk\""
+    "android:install-apk": "node scripts/install-apk.js"
   },
   "eslintConfig": {
     "extends": [
