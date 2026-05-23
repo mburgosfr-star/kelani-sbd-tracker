@@ -139,6 +139,10 @@ export const translations = {
     secondAttempt: 'Tweede poging',
     thirdAttempt: 'Derde poging',
     backoff: 'Back-off',
+    heavySingle: 'Zware single',
+    topTriple: 'Top triple',
+    topDouble: 'Top double',
+    topSingle: 'Top single',
     meetDay: 'SBD-wedstrijddag',
 
     startProgram: 'Start programma',
@@ -367,6 +371,10 @@ export const translations = {
     secondAttempt: 'Second attempt',
     thirdAttempt: 'Third attempt',
     backoff: 'Backoff',
+    heavySingle: 'Heavy single',
+    topTriple: 'Top triple',
+    topDouble: 'Top double',
+    topSingle: 'Top single',
     meetDay: 'SBD competition day',
 
     startProgram: 'Start program',
@@ -595,6 +603,10 @@ export const translations = {
     secondAttempt: 'Segon intent',
     thirdAttempt: 'Tercer intent',
     backoff: 'Back-off',
+    heavySingle: 'Single pesada',
+    topTriple: 'Triple pesada',
+    topDouble: 'Doble pesada',
+    topSingle: 'Single pesada',
     meetDay: 'Dia de competició SBD',
 
     startProgram: 'Inicia el programa',

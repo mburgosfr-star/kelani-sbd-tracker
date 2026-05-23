@@ -173,9 +173,14 @@ function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, history, cy
     const generated = generatedWorkouts[index];
     if (!generated) return workout;
 
-    const prepDone = index < completedCount;
+    const isCompleted = index < completedCount;
+    const prepDone = isCompleted;
 
     if (workout.type === 'meet') {
+      if (!isCompleted) {
+        return generated;
+      }
+
       return {
         ...workout,
         lifts: (workout.lifts || generated.lifts || []).map((liftBlock, liftIndex) => {
@@ -189,6 +194,16 @@ function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, history, cy
             })),
           };
         }),
+      };
+    }
+
+    if (!isCompleted) {
+      return {
+        ...generated,
+        prepItems: (generated.prepItems || []).map((item, itemIndex) => ({
+          ...item,
+          done: workout.prepItems?.[itemIndex]?.done ?? false,
+        })),
       };
     }
 
@@ -379,6 +394,10 @@ function roundMeetWeight(weight) {
   return Math.round((Number(weight) || 0) / 2.5) * 2.5;
 }
 
+function getFailedSetSuggestedWeight(weight) {
+  return roundMeetWeight((Number(weight) || 0) * 0.925);
+}
+
 function getMeetPlannerAttemptWeight(attempts, lift, setIndex, fallback) {
   const key = MEET_ATTEMPT_KEYS[setIndex];
   const custom = attempts?.[lift]?.[key];
@@ -429,33 +448,105 @@ function generateProgram(s, b, d) {
   };
 
   const program = [
-    { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [{ sets: 4, reps: 5, pct: 0.70 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 8, pct: 0.65 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 6, pct: 0.65 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 6, reps: 5, pct: 0.70 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 5, pct: 0.70 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'practice', blocks: [{ sets: 8, reps: 3, pct: 0.75 }] },
+    { lift: 'Deadlift', type: 'training', labelKey: 'practice', blocks: [
+      { sets: 1, reps: 3, pct: 0.75, labelKey: 'topTriple' },
+      { sets: 3, reps: 5, pct: 0.675, labelKey: 'backoff' },
+    ] },
+    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [
+      { sets: 1, reps: 3, pct: 0.75, labelKey: 'topTriple' },
+      { sets: 4, reps: 6, pct: 0.65, labelKey: 'backoff' },
+    ] },
+    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [
+      { sets: 1, reps: 3, pct: 0.75, labelKey: 'topTriple' },
+      { sets: 4, reps: 5, pct: 0.65, labelKey: 'backoff' },
+    ] },
+    { lift: 'Bench', type: 'training', labelKey: 'practice', blocks: [
+      { sets: 1, reps: 3, pct: 0.775, labelKey: 'topTriple' },
+      { sets: 5, reps: 4, pct: 0.70, labelKey: 'backoff' },
+    ] },
+    { lift: 'Squat', type: 'training', labelKey: 'practice', blocks: [
+      { sets: 1, reps: 3, pct: 0.775, labelKey: 'topTriple' },
+      { sets: 4, reps: 5, pct: 0.70, labelKey: 'backoff' },
+    ] },
+    { lift: 'Bench', type: 'training', labelKey: 'practice', blocks: [
+      { sets: 1, reps: 2, pct: 0.80, labelKey: 'topDouble' },
+      { sets: 6, reps: 3, pct: 0.725, labelKey: 'backoff' },
+    ] },
 
-    { lift: 'Deadlift', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 4, pct: 0.75 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 6, pct: 0.70 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 5, pct: 0.70 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 6, reps: 4, pct: 0.75 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [{ sets: 6, reps: 4, pct: 0.75 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'practice', blocks: [{ sets: 7, reps: 3, pct: 0.80 }] },
+    { lift: 'Deadlift', type: 'training', labelKey: 'volume', blocks: [
+      { sets: 1, reps: 3, pct: 0.80, labelKey: 'topTriple' },
+      { sets: 4, reps: 4, pct: 0.725, labelKey: 'backoff' },
+    ] },
+    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [
+      { sets: 1, reps: 3, pct: 0.80, labelKey: 'topTriple' },
+      { sets: 4, reps: 5, pct: 0.70, labelKey: 'backoff' },
+    ] },
+    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [
+      { sets: 1, reps: 3, pct: 0.80, labelKey: 'topTriple' },
+      { sets: 4, reps: 4, pct: 0.70, labelKey: 'backoff' },
+    ] },
+    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
+      { sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' },
+      { sets: 4, reps: 4, pct: 0.75, labelKey: 'backoff' },
+    ] },
+    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [
+      { sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' },
+      { sets: 4, reps: 4, pct: 0.75, labelKey: 'backoff' },
+    ] },
+    { lift: 'Bench', type: 'training', labelKey: 'practice', blocks: [
+      { sets: 1, reps: 2, pct: 0.85, labelKey: 'topDouble' },
+      { sets: 5, reps: 3, pct: 0.775, labelKey: 'backoff' },
+    ] },
 
-    { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [{ sets: 5, reps: 3, pct: 0.80 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 5, pct: 0.75 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 4, pct: 0.775 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 6, reps: 3, pct: 0.825 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [{ sets: 5, reps: 3, pct: 0.825 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 5, reps: 2, pct: 0.875 }] },
+    { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [
+      { sets: 1, reps: 2, pct: 0.85, labelKey: 'topDouble' },
+      { sets: 3, reps: 3, pct: 0.775, labelKey: 'backoff' },
+    ] },
+    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [
+      { sets: 1, reps: 2, pct: 0.85, labelKey: 'topDouble' },
+      { sets: 4, reps: 4, pct: 0.75, labelKey: 'backoff' },
+    ] },
+    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [
+      { sets: 1, reps: 2, pct: 0.85, labelKey: 'topDouble' },
+      { sets: 4, reps: 3, pct: 0.775, labelKey: 'backoff' },
+    ] },
+    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
+      { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
+      { sets: 4, reps: 3, pct: 0.80, labelKey: 'backoff' },
+    ] },
+    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [
+      { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
+      { sets: 3, reps: 3, pct: 0.80, labelKey: 'backoff' },
+    ] },
+    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
+      { sets: 1, reps: 1, pct: 0.90, labelKey: 'topSingle' },
+      { sets: 4, reps: 2, pct: 0.825, labelKey: 'backoff' },
+    ] },
 
-    { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [{ sets: 4, reps: 2, pct: 0.85 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 4, reps: 4, pct: 0.80 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [{ sets: 4, reps: 3, pct: 0.85 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 5, reps: 2, pct: 0.875 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [{ sets: 3, reps: 2, pct: 0.90 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 4, reps: 1, pct: 0.925 }] },
+    { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [
+      { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
+      { sets: 3, reps: 2, pct: 0.80, labelKey: 'backoff' },
+    ] },
+    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [
+      { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
+      { sets: 3, reps: 3, pct: 0.80, labelKey: 'backoff' },
+    ] },
+    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [
+      { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
+      { sets: 3, reps: 2, pct: 0.80, labelKey: 'backoff' },
+    ] },
+    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
+      { sets: 1, reps: 1, pct: 0.90, labelKey: 'topSingle' },
+      { sets: 3, reps: 2, pct: 0.825, labelKey: 'backoff' },
+    ] },
+    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [
+      { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
+      { sets: 3, reps: 2, pct: 0.825, labelKey: 'backoff' },
+    ] },
+    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
+      { sets: 1, reps: 1, pct: 0.90, labelKey: 'topSingle' },
+      { sets: 3, reps: 1, pct: 0.85, labelKey: 'backoff' },
+    ] },
 
     {
       lift: 'Deadlift',
@@ -799,7 +890,8 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
   );
 }
 
-function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, isActive, isReadOnly, t }) {
+function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, isActive, isReadOnly, t }) {
+const isFailed = Boolean(set.failed);
 const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(set.weight));
   const inputRef = useRef(null);
@@ -835,16 +927,16 @@ const [editing, setEditing] = useState(false);
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }}
-      style={{ display: 'flex', alignItems: 'center', padding: '14px 16px', border: `1px solid ${THEME.border}`, boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none', borderLeft: isActive && !isWarmup ? `4px solid ${THEME.primary}` : '4px solid transparent'}}>
+      style={{ display: 'flex', alignItems: 'center', padding: '14px 16px', border: `1px solid ${isFailed ? '#e74c3c' : THEME.border}`, boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none', borderLeft: isFailed ? '4px solid #e74c3c' : isActive && !isWarmup ? `4px solid ${THEME.primary}` : '4px solid transparent'}}>
       <div
   onClick={isReadOnly ? undefined : onToggle}
   style={{
     width: 34,
     height: 34,
     borderRadius: '50%',
-    border: `2px solid ${set.done ? THEME.primary : THEME.border}`,
-    background: set.done ? THEME.primary : THEME.card,
-    color: set.done ? THEME.bg : THEME.text,
+    border: `2px solid ${isFailed ? '#e74c3c' : set.done ? THEME.primary : THEME.border}`,
+    background: isFailed ? '#e74c3c' : set.done ? THEME.primary : THEME.card,
+    color: (isFailed || set.done) ? THEME.bg : THEME.text,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -856,7 +948,7 @@ const [editing, setEditing] = useState(false);
     fontWeight: 900,
   }}
 >
-        {set.done ? '✓' : ''}
+        {isFailed ? '!' : set.done ? '✓' : ''}
       </div>
       <div
         onClick={isReadOnly ? undefined : onToggle}
@@ -865,10 +957,15 @@ const [editing, setEditing] = useState(false);
           cursor: isReadOnly ? 'not-allowed' : 'pointer'
         }}
       >
-        <span style={{ fontWeight: 500, color: THEME.text, textDecoration: set.done ? 'line-through' : 'none' }}>{label}</span>
+        <span style={{ fontWeight: 500, color: THEME.text, textDecoration: set.done && !isFailed ? 'line-through' : 'none' }}>{label}</span>
 <span style={{ color: THEME.text, fontSize: 16, fontWeight: 700, marginLeft: 12 }}>
 {set.reps} {t.reps}
 </span>
+        {isFailed && set.suggestedWeight && (
+          <div style={{ color: '#e74c3c', fontSize: 12, fontWeight: 800, marginTop: 4 }}>
+            {t.setNotCompleted} · {t.reduceWeightAdvice.replace('{weight}', `${set.suggestedWeight} ${t.kg}`)}
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {editing ? (
@@ -917,6 +1014,27 @@ const [editing, setEditing] = useState(false);
     ✎
   </button>
 )}
+            {onMarkFailed && !set.done && !isReadOnly && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkFailed();
+                }}
+                style={{
+                  background: 'none',
+                  border: '1px solid #e74c3c',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  padding: '3px 6px',
+                  color: '#ffffff',
+                  borderRadius: 4,
+                  lineHeight: 1,
+                  fontWeight: 800
+                }}
+              >
+                {t.markSetFailed}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -2034,7 +2152,7 @@ function NewCycleModal({ prs, onStart, t }) {
   );
 }
 
-function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onToggleAccessorySet, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
+function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onToggleAccessorySet, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
 
   function isTimerFor(placement) {
     if (!timer || !timer.placement) return false;
@@ -2371,6 +2489,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 isActive={!isReadOnly && allWarmupsDone && i === firstIncomplete}
                 isReadOnly={isReadOnly}
                 onToggle={() => handleToggle(() => onToggleSet(i))}
+                onMarkFailed={() => handleToggle(() => onMarkSetFailed(i))}
                 onWeightChange={val => onWeightChange('set', i, val)}
                 t={t}
               />
@@ -4132,7 +4251,32 @@ function toggleSet(setIndex) {
         : {
             ...w,
             sets: w.sets.map((s, si) =>
-              si === setIndex ? { ...s, done: !s.done } : s
+              si === setIndex ? { ...s, done: !s.done, failed: false, failedWeight: null, suggestedWeight: null } : s
+            ),
+          }
+    )
+  );
+}
+
+function markSetFailed(setIndex) {
+  setTimer(null);
+
+  setWorkouts(prev =>
+    prev.map((w, wi) =>
+      wi !== selectedIndex
+        ? w
+        : {
+            ...w,
+            sets: w.sets.map((s, si) =>
+              si === setIndex
+                ? {
+                    ...s,
+                    done: true,
+                    failed: true,
+                    failedWeight: Number(s.weight) || 0,
+                    suggestedWeight: getFailedSetSuggestedWeight(s.weight),
+                  }
+                : s
             ),
           }
     )
@@ -4438,7 +4582,9 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 }
   
     if (workout.type === 'training' && ['Deadlift', 'Bench', 'Squat'].includes(workout.lift)) {
-    const sets = workout.sets || [];
+    const sets = (workout.sets || []).filter(s => !s.failed);
+
+if (sets.length > 0) {
 
 const topSet = sets.reduce(
   (best, s) => epley(s.weight, s.reps) > epley(best.weight, best.reps) ? s : best,
@@ -4511,6 +4657,7 @@ setCompletedSummary({
 
   return [...prev, newEntry];
 });
+}
 }
 
   if (workout.accessories) {
@@ -4804,6 +4951,7 @@ const latestBodyDataRows = [
           onTogglePrepItem={togglePrepItem}
           onToggleWarmup={toggleWarmup}
           onToggleSet={toggleSet}
+          onMarkSetFailed={markSetFailed}
           onToggleAccessorySet={toggleAccessorySet}
           onWeightChange={changeWeight}
           onAccessoryWeightChange={changeAccessoryWeight}
