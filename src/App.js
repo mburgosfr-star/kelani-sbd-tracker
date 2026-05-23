@@ -398,6 +398,22 @@ function getFailedSetSuggestedWeight(weight) {
   return roundMeetWeight((Number(weight) || 0) * 0.925);
 }
 
+function getSetTrainingMax(set) {
+  const originalWeight = Number(set?.originalWeight ?? set?.failedWeight ?? set?.weight) || 0;
+  const originalPct = Number(set?.originalPct ?? set?.pct) || 0;
+
+  return originalWeight > 0 && originalPct > 0
+    ? originalWeight / originalPct
+    : 0;
+}
+
+function getSetPctForWeight(set, weight) {
+  const trainingMax = getSetTrainingMax(set);
+  if (!trainingMax) return Number(set?.pct) || null;
+
+  return Number(weight) / trainingMax;
+}
+
 function getMeetPlannerAttemptWeight(attempts, lift, setIndex, fallback) {
   const key = MEET_ATTEMPT_KEYS[setIndex];
   const custom = attempts?.[lift]?.[key];
@@ -590,12 +606,16 @@ function generateProgram(s, b, d) {
 
     day.blocks.forEach(block => {
       for (let i = 0; i < block.sets; i++) {
+        const weight = round25(oneRMs[day.lift] * block.pct);
+
         sets.push({
           labelKey: block.labelKey || null,
           label: block.label || null,
           reps: block.reps,
           pct: block.pct,
-          weight: round25(oneRMs[day.lift] * block.pct),
+          weight,
+          originalWeight: weight,
+          originalPct: block.pct,
           done: false,
         });
       }
@@ -892,11 +912,8 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
 
 function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t }) {
 const isFailed = Boolean(set.failed);
-const displayPct = set.adjustedFromFailedSet && set.failedWeight && set.pct
-  ? Math.round((Number(set.weight) / (Number(set.failedWeight) / Number(set.pct))) * 100)
-  : set.pct
-  ? Math.round(set.pct * 100)
-  : null;
+const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
+const displayPct = set.pct ? Math.round(set.pct * 100) : null;
 const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(set.weight));
   const inputRef = useRef(null);
@@ -998,9 +1015,9 @@ const [editing, setEditing] = useState(false);
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontWeight: 800, fontSize: 18, color: set.adjustedFromFailedSet ? '#f39c12' : '#ffffff' }}>{set.weight} kg</span>
-            {displayPct && <span style={{ color: set.adjustedFromFailedSet ? '#f39c12' : '#ffffff', fontSize: 12 }}>{displayPct}%</span>}
-            {!isWarmup && (
+            <span style={{ fontWeight: 800, fontSize: 18, color: isAdjusted ? '#f39c12' : '#ffffff' }}>{set.weight} kg</span>
+            {displayPct && <span style={{ color: isAdjusted ? '#f39c12' : '#ffffff', fontSize: 12 }}>{displayPct}%</span>}
+            {!isWarmup && !set.done && (
   <button
     onClick={handleEditClick}
     style={{
@@ -1016,7 +1033,7 @@ const [editing, setEditing] = useState(false);
     ✎
   </button>
 )}
-            {onRestoreWeight && set.adjustedFromFailedSet && !set.done && !isReadOnly && (
+            {onRestoreWeight && !set.done && !isReadOnly && (
               <button
                 type="button"
                 title={t.restoreOriginalWeight}
@@ -4281,8 +4298,6 @@ function toggleWarmup(wIndex) {
       type: 'warmup',
       index: wIndex,
     });
-  } else {
-    setTimer(null);
   }
 
   setWorkouts(prev =>
@@ -4308,8 +4323,6 @@ function toggleSet(setIndex) {
       type: 'main',
       index: setIndex,
     });
-  } else {
-    setTimer(null);
   }
 
   setWorkouts(prev =>
@@ -4319,7 +4332,7 @@ function toggleSet(setIndex) {
         : {
             ...w,
             sets: w.sets.map((s, si) =>
-              si === setIndex ? { ...s, done: !s.done, failed: false, failedWeight: null, adjustedWeight: null, adjustedFromFailedSet: false } : s
+              si === setIndex ? { ...s, done: !s.done } : s
             ),
           }
     )
@@ -4327,8 +4340,6 @@ function toggleSet(setIndex) {
 }
 
 function markSetFailed(setIndex) {
-  setTimer(null);
-
   setWorkouts(prev =>
     prev.map((w, wi) => {
       if (wi !== selectedIndex) return w;
@@ -4341,14 +4352,26 @@ function markSetFailed(setIndex) {
         sets: w.sets.map((s, si) => {
           if (si !== setIndex) return s;
 
+          const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
+          const originalPct = Number(s.originalPct ?? s.pct) || 0;
+          const adjustedPct = getSetPctForWeight(
+            { ...s, originalWeight, originalPct },
+            adjustedWeight
+          );
+
           return {
             ...s,
             done: false,
             failed: true,
-            failedWeight: Number(s.failedWeight || s.weight) || 0,
+            failedAttempts: (Number(s.failedAttempts) || 0) + 1,
+            failedWeight: Number(s.failedWeight ?? s.weight) || 0,
             weight: adjustedWeight,
+            pct: adjustedPct || s.pct,
+            originalWeight,
+            originalPct,
             adjustedWeight,
             adjustedFromFailedSet: true,
+            adjustedFromOriginal: true,
           };
         }),
       };
@@ -4357,27 +4380,30 @@ function markSetFailed(setIndex) {
 }
 
 function restoreSetWeight(setIndex) {
-  setTimer(null);
-
   setWorkouts(prev =>
     prev.map((w, wi) =>
       wi !== selectedIndex
         ? w
         : {
             ...w,
-            sets: w.sets.map((s, si) =>
-              si === setIndex
-                ? {
-                    ...s,
-                    weight: s.failedWeight || s.weight,
-                    done: false,
-                    failed: false,
-                    failedWeight: null,
-                    adjustedWeight: null,
-                    adjustedFromFailedSet: false,
-                  }
-                : s
-            ),
+            sets: w.sets.map((s, si) => {
+              if (si !== setIndex) return s;
+
+              const restoredWeight = Number(s.failedWeight ?? s.originalWeight ?? s.weight) || s.weight;
+              const restoredPct = Number(s.originalPct ?? getSetPctForWeight(s, restoredWeight)) || s.pct;
+
+              return {
+                ...s,
+                weight: restoredWeight,
+                pct: restoredPct,
+                done: false,
+                failed: false,
+                failedWeight: null,
+                adjustedWeight: null,
+                adjustedFromFailedSet: false,
+                adjustedFromOriginal: false,
+              };
+            }),
           }
     )
   );
@@ -4393,8 +4419,6 @@ function toggleAccessorySet(accIndex, setIndex) {
       accIndex,
       index: setIndex,
     });
-  } else {
-    setTimer(null);
   }
 
   setWorkouts(prev =>
@@ -4431,7 +4455,25 @@ function changeWeight(type, index, val) {
       if (type === 'set') {
         return {
           ...w,
-          sets: w.sets.map((s, i) => i === index ? { ...s, weight: val } : s),
+          sets: w.sets.map((s, i) => {
+            if (i !== index) return s;
+
+            const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
+            const originalPct = Number(s.originalPct ?? s.pct) || 0;
+            const nextPct = getSetPctForWeight(
+              { ...s, originalWeight, originalPct },
+              val
+            );
+
+            return {
+              ...s,
+              weight: val,
+              pct: nextPct || s.pct,
+              originalWeight,
+              originalPct,
+              adjustedFromOriginal: Number(val) !== originalWeight,
+            };
+          }),
         };
       }
 
@@ -4682,7 +4724,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 }
   
     if (workout.type === 'training' && ['Deadlift', 'Bench', 'Squat'].includes(workout.lift)) {
-    const sets = (workout.sets || []).filter(s => !s.failed);
+    const sets = (workout.sets || []).filter(s => s.done);
 
 if (sets.length > 0) {
 
