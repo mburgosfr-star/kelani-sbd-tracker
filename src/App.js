@@ -9,6 +9,72 @@ import { Share } from '@capacitor/share';
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
 const REST_TIME_OPTIONS = [90, 180, 300];
 const DEFAULT_REST_TIME_SECONDS = 300;
+const AUTO_BACKUP_PATH = 'Kelani/kelani-sbd-tracker-autosave.json';
+const AUTO_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-auto-backup-status';
+
+function buildBackupSummary(data) {
+  const currentCycle = data?.currentCycle || 1;
+  const totalWorkouts = data?.inProgress?.workouts?.length || 28;
+  const selectedIndex = data?.inProgress?.selectedIndex;
+  const completedWorkoutCount = getCompletedWorkoutCount(data?.history || [], currentCycle);
+  const currentWorkout = Math.min((selectedIndex ?? completedWorkoutCount) + 1, totalWorkouts);
+
+  return {
+    backupVersion: 1,
+    programVersion: data?.inProgress?.programVersion || null,
+    currentCycle,
+    currentWorkout,
+    totalWorkouts,
+    historyEntries: Array.isArray(data?.history) ? data.history.length : 0,
+    bodyDataEntries: Array.isArray(data?.bodyWeights) ? data.bodyWeights.length : 0,
+  };
+}
+
+function buildBackupPayload(data) {
+  const exportedAt = new Date().toISOString();
+
+  return {
+    app: 'Kelani SBD Tracker',
+    backupVersion: 1,
+    appVersion: process.env.REACT_APP_VERSION ?? 'dev',
+    exportedAt,
+    storageKey: STORAGE_KEY,
+    summary: buildBackupSummary(data),
+    data,
+  };
+}
+
+async function writeAutomaticBackup(data) {
+  const backup = buildBackupPayload(data);
+  const json = JSON.stringify(backup, null, 2);
+
+  if (Capacitor.isNativePlatform()) {
+    await Filesystem.mkdir({
+      path: 'Kelani',
+      directory: Directory.Documents,
+      recursive: true,
+    }).catch(() => {});
+
+    await Filesystem.writeFile({
+      path: AUTO_BACKUP_PATH,
+      data: json,
+      directory: Directory.Documents,
+      encoding: Encoding.UTF8,
+    });
+  } else {
+    localStorage.setItem('kelani-sbd-tracker-autosave', json);
+  }
+
+  localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
+    ok: true,
+    exportedAt: backup.exportedAt,
+    path: AUTO_BACKUP_PATH,
+    summary: backup.summary,
+  }));
+
+  return backup;
+}
+
 
 const THEME = {
   bg: '#18110d',
@@ -1475,7 +1541,7 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const buildBackupSummary = data => {
+  const buildDataSectionBackupSummary = data => {
     const currentCycle = data?.currentCycle || 1;
     const totalWorkouts = data?.inProgress?.workouts?.length || 28;
     const selectedIndex = data?.inProgress?.selectedIndex;
@@ -1566,7 +1632,7 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
         data: backup.data,
         appVersion: backup.appVersion || '—',
         exportedAt: backup.exportedAt || '—',
-        summary: backup.summary || buildBackupSummary(backup.data),
+        summary: backup.summary || buildDataSectionBackupSummary(backup.data),
       });
     } catch (e) {
       setNotice(t.importDataError);
@@ -1583,6 +1649,18 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
   };
 
   const importSummary = pendingImport?.summary;
+
+  const autoBackupStatus = (() => {
+    try {
+      return JSON.parse(localStorage.getItem(AUTO_BACKUP_STATUS_KEY) || 'null');
+    } catch {
+      return null;
+    }
+  })();
+
+  const autoBackupDate = autoBackupStatus?.exportedAt
+    ? new Date(autoBackupStatus.exportedAt).toLocaleString()
+    : null;
 
   return (
     <>
@@ -1601,6 +1679,35 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
         }}>
           {t.exportDataDescription}
         </p>
+
+        <div style={{
+          border: `1px solid ${THEME.border}`,
+          borderRadius: 8,
+          padding: 10,
+          marginBottom: 12,
+          background: THEME.bg,
+          fontSize: 12,
+          lineHeight: 1.4
+        }}>
+          <div style={{ color: THEME.text, fontWeight: 800, marginBottom: 4 }}>
+            {t.automaticBackup}
+          </div>
+
+          <div style={{ color: THEME.muted, marginBottom: 6 }}>
+            {t.automaticBackupDescription}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.lastAutomaticBackup}</span>
+            <strong style={{ color: autoBackupStatus?.ok ? THEME.primary : THEME.red, textAlign: 'right' }}>
+              {autoBackupDate || t.noAutomaticBackupYet}
+            </strong>
+          </div>
+
+          <div style={{ color: THEME.muted, wordBreak: 'break-word' }}>
+            {t.automaticBackupLocation}: Documents/Kelani/kelani-sbd-tracker-autosave.json
+          </div>
+        </div>
 
         <div style={{
           display: 'grid',
@@ -3938,7 +4045,20 @@ function BottomNav({ screen, onChange, t }) {
 
 export default function App() {
   const [language, setLanguage] = useState(() => {
-    return localStorage.getItem('language') || 'nl';
+    const savedLanguage = localStorage.getItem('language');
+    const supportedLanguages = ['ca', 'en', 'nl'];
+
+    if (supportedLanguages.includes(savedLanguage)) {
+      return savedLanguage;
+    }
+
+    const systemLanguage = (navigator.language || navigator.userLanguage || '').toLowerCase();
+
+    if (systemLanguage.startsWith('ca')) return 'ca';
+    if (systemLanguage.startsWith('nl')) return 'nl';
+    if (systemLanguage.startsWith('en')) return 'en';
+
+    return 'en';
   });
 
   const [timer, setTimer] = useState(null);
@@ -4137,6 +4257,33 @@ export default function App() {
       },
     }));
   }, [history, prs, accessoryPRs, currentCycle, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, selectedIndex, workouts]);
+
+  useEffect(() => {
+    if (screen !== 'completed' || !completedWorkout) return;
+
+    const timeoutId = setTimeout(() => {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (!saved) return;
+
+        writeAutomaticBackup(JSON.parse(saved)).catch(error => {
+          console.error('Automatic backup failed', error);
+          localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
+            ok: false,
+            exportedAt: new Date().toISOString(),
+          }));
+        });
+      } catch (error) {
+        console.error('Automatic backup failed', error);
+        localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
+          ok: false,
+          exportedAt: new Date().toISOString(),
+        }));
+      }
+    }, 250);
+
+    return () => clearTimeout(timeoutId);
+  }, [screen, completedWorkout]);
 
   function handleStart(s, b, d, profile = {}, initialBodyData = null) {
     const today = new Date().toLocaleDateString('nl-NL');
