@@ -565,7 +565,7 @@ function generateProgram(s, b, d) {
     ] },
     { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
       { sets: 1, reps: 1, pct: 0.90, labelKey: 'topSingle' },
-      { sets: 3, reps: 1, pct: 0.85, labelKey: 'backoff' },
+      { sets: 3, reps: 2, pct: 0.825, labelKey: 'backoff' },
     ] },
 
     {
