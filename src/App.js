@@ -8,6 +8,7 @@ import { Share } from '@capacitor/share';
 
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
 const REST_TIME_OPTIONS = [90, 180, 300];
+const ACCESSORY_MODES = ['off', 'basic', 'full'];
 const DEFAULT_REST_TIME_SECONDS = 300;
 const AUTO_BACKUP_PATH = 'Kelani/kelani-sbd-tracker-autosave.json';
 const AUTO_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-auto-backup-status';
@@ -115,6 +116,10 @@ function sexLabel(value, t) {
   if (value === 'female') return t.female;
   if (value === 'other') return t.other;
   return '—';
+}
+
+function normalizeAccessoryMode(value) {
+  return ACCESSORY_MODES.includes(value) ? value : 'off';
 }
 
 function normalizeRestTimeSeconds(value) {
@@ -522,7 +527,90 @@ function applyMeetPlannerAttemptsToWorkouts(workouts, attempts = {}, prs = {}) {
   });
 }
 
-function generateProgram(s, b, d) {
+const ACCESSORY_TEMPLATES = {
+  Squat: [
+    { key: 'pulldown', labelKey: 'accessoryPulldown', sets: 3, reps: 10, source: 'deadlift', pct: 0.25 },
+    { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.20 },
+  ],
+  Bench: [
+    { key: 'hipThrust', labelKey: 'accessoryHipThrust', sets: 3, reps: 8, source: 'deadlift', pct: 0.40 },
+    { key: 'shoulderRotations', labelKey: 'accessoryShoulderRotations', sets: 2, reps: 15, source: 'fixed', weight: 2.5, optional: true, perSide: true },
+  ],
+  Deadlift: [
+    { key: 'row', labelKey: 'accessoryRow', sets: 3, reps: 10, source: 'deadlift', pct: 0.25 },
+    { key: 'legPressModerate', labelKey: 'accessoryLegPressModerate', sets: 2, reps: 12, source: 'squat', pct: 0.60, optional: true },
+  ],
+};
+
+function getAccessoryBaseWeight(template, oneRMs, accessoryPRs = {}) {
+  const previous = Number(accessoryPRs?.[template.key]);
+
+  if (previous > 0) {
+    return previous;
+  }
+
+  if (template.source === 'fixed') {
+    return template.weight || 2.5;
+  }
+
+  const sourceLift = {
+    squat: 'Squat',
+    bench: 'Bench',
+    deadlift: 'Deadlift',
+  }[template.source];
+
+  const sourceWeight = Number(oneRMs?.[sourceLift]) || 0;
+
+  if (!sourceWeight || !template.pct) {
+    return 20;
+  }
+
+  return Math.max(2.5, roundMeetWeight(sourceWeight * template.pct));
+}
+
+function generateAccessoriesForLift(lift, accessoryMode = 'off', accessoryPRs = {}, oneRMs = {}) {
+  if (accessoryMode === 'off') return [];
+
+  const includeOptional = accessoryMode === 'full';
+
+  return (ACCESSORY_TEMPLATES[lift] || [])
+    .filter(template => includeOptional || !template.optional)
+    .map(template => {
+      const weight = getAccessoryBaseWeight(template, oneRMs, accessoryPRs);
+
+      return {
+        key: template.key,
+        nameKey: template.labelKey,
+        name: template.labelKey,
+        reps: template.reps,
+        perSide: !!template.perSide,
+        weights: Array.from({ length: template.sets }, () => weight),
+        originalWeights: Array.from({ length: template.sets }, () => weight),
+        done: Array.from({ length: template.sets }, () => false),
+        failed: Array.from({ length: template.sets }, () => false),
+        failedWeights: Array.from({ length: template.sets }, () => null),
+        adjustedFromFailedSet: Array.from({ length: template.sets }, () => false),
+        adjustedFromOriginal: Array.from({ length: template.sets }, () => false),
+      };
+    });
+}
+
+function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedCount) {
+  return (workouts || []).map((workout, index) => {
+    if (index < completedCount) return workout;
+
+    const generated = generatedWorkouts[index];
+    if (!generated || workout.type === 'meet') return workout;
+
+    return {
+      ...workout,
+      accessories: generated.accessories || [],
+    };
+  });
+}
+
+
+function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
   function round25(w) {
     return Math.round(w / 2.5) * 2.5;
   }
@@ -702,7 +790,7 @@ function generateProgram(s, b, d) {
       prepItems: generatePrepItems(day.lift),
       warmups,
       sets,
-      accessories: [],
+      accessories: generateAccessoriesForLift(day.lift, accessoryMode, accessoryPRs, oneRMs),
     });
   });
 
@@ -1053,7 +1141,7 @@ const [editing, setEditing] = useState(false);
           {label}
         </div>
         <div style={{ color: THEME.text, fontSize: 14, fontWeight: 700, marginTop: 2 }}>
-          {set.reps} {t.reps}
+          {set.repsLabel || `${set.reps} ${t.reps}`}
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2174,6 +2262,89 @@ function RestTimeSection({ restTimeSeconds, setRestTimeSeconds, t }) {
   );
 }
 
+
+function AccessorySection({ accessoryMode, setAccessoryMode, t }) {
+  const [showOptions, setShowOptions] = useState(false);
+
+  const labels = {
+    off: t.accessoriesOff,
+    basic: t.accessoriesBasic,
+    full: t.accessoriesFull,
+  };
+
+  return (
+    <>
+      <SettingsCard
+        title={t.accessories}
+        actionLabel={labels[accessoryMode] || labels.off}
+        onAction={() => setShowOptions(true)}
+      >
+        <p style={{
+          margin: 0,
+          color: THEME.muted,
+          fontSize: 13,
+          lineHeight: 1.4
+        }}>
+          {t.accessoriesDescription}
+        </p>
+      </SettingsCard>
+
+      {showOptions && (
+        <SettingsModal
+          title={t.accessories}
+          onClose={() => setShowOptions(false)}
+        >
+          <div style={{ display: 'grid', gap: 8 }}>
+            {ACCESSORY_MODES.map(mode => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setAccessoryMode(mode);
+                  setShowOptions(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  border: `1px solid ${accessoryMode === mode ? THEME.primary : THEME.border}`,
+                  background: accessoryMode === mode ? THEME.primary : THEME.card,
+                  color: accessoryMode === mode ? THEME.bg : THEME.text,
+                  cursor: 'pointer'
+                }}
+              >
+                {labels[mode]}
+              </button>
+            ))}
+
+            <button
+              type="button"
+              onClick={() => setShowOptions(false)}
+              style={{
+                width: '100%',
+                padding: 10,
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'transparent',
+                color: THEME.text,
+                border: `1px solid ${THEME.border}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.cancel}
+            </button>
+          </div>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
+
 function LanguageSection({ language, setLanguage, t }) {
   const [isEditing, setIsEditing] = useState(false);
 
@@ -2307,7 +2478,7 @@ function NewCycleModal({ prs, onStart, t }) {
   );
 }
 
-function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
+function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
 
   function isTimerFor(placement) {
     if (!timer || !timer.placement) return false;
@@ -2711,12 +2882,10 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 padding: '8px 16px',
                 background: THEME.card,
                 borderBottom: `1px solid ${THEME.border}`,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
+                textAlign: 'center'
               }}>
                 <span style={{ fontWeight: 800, color: THEME.text }}>
-                  {acc.name}
+                  {acc.nameKey ? t[acc.nameKey] : acc.name}
                 </span>
               </div>
 
@@ -2730,7 +2899,16 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 return (
                   <SetRow
                     key={si}
-                    set={{ done, weight: acc.weights[si], reps: acc.reps }}
+                    set={{
+                      done,
+                      weight: acc.weights[si],
+                      reps: acc.reps,
+                      repsLabel: acc.perSide ? `${acc.reps} ${t.perSide}` : null,
+                      failed: !!acc.failed?.[si],
+                      failedWeight: acc.failedWeights?.[si] || null,
+                      adjustedFromFailedSet: !!acc.adjustedFromFailedSet?.[si],
+                      adjustedFromOriginal: !!acc.adjustedFromOriginal?.[si],
+                    }}
                     index={si}
                     label={`${t.set} ${si + 1}`}
                     isWarmup={false}
@@ -2742,6 +2920,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     }
                     isReadOnly={isReadOnly}
                     onToggle={() => handleToggle(() => onToggleAccessorySet(ai, si))}
+                    onMarkFailed={() => handleToggle(() => onMarkAccessorySetFailed(ai, si))}
+                    onRestoreWeight={() => handleToggle(() => onRestoreAccessoryWeight(ai, si))}
                     onWeightChange={val => onAccessoryWeightChange(ai, si, val)}
                     t={t}
                   />
@@ -4063,6 +4243,7 @@ export default function App() {
 
   const [timer, setTimer] = useState(null);
   const [restTimeSeconds, setRestTimeSeconds] = useState(DEFAULT_REST_TIME_SECONDS);
+  const [accessoryMode, setAccessoryMode] = useState('off');
 
   function startTimer(seconds, placement = null) {
     setTimer({
@@ -4183,7 +4364,7 @@ export default function App() {
 
       const savedHistory = data.history || [];
       const savedCycle = data.currentCycle || 1;
-      const generatedWorkouts = generateProgram(squat, bench, deadlift);
+      const generatedWorkouts = generateProgram(squat, bench, deadlift, normalizeAccessoryMode(data.accessoryMode), data.accessoryPRs || {});
       const savedInProgress = data.inProgress || null;
       const savedMeetPlannerAttempts = data.meetPlannerAttempts || {};
       const savedMeetPrepChecklist = data.meetPrepChecklist || {};
@@ -4220,6 +4401,7 @@ export default function App() {
       setMeetPlannerAttempts(savedMeetPlannerAttempts);
       setMeetPrepChecklist(savedMeetPrepChecklist);
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
+      setAccessoryMode(normalizeAccessoryMode(data.accessoryMode));
 
       setSelectedIndex(
         canRestoreInProgress
@@ -4249,6 +4431,7 @@ export default function App() {
       meetPlannerAttempts,
       meetPrepChecklist,
       restTimeSeconds,
+      accessoryMode,
       inProgress: {
         programVersion: PROGRAM_VERSION,
         currentCycle,
@@ -4256,7 +4439,25 @@ export default function App() {
         workouts,
       },
     }));
-  }, [history, prs, accessoryPRs, currentCycle, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, selectedIndex, workouts]);
+  }, [history, prs, accessoryPRs, currentCycle, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, accessoryMode, selectedIndex, workouts]);
+
+  useEffect(() => {
+    if (!prs.Squat || !prs.Bench || !prs.Deadlift) return;
+
+    const generatedWorkouts = generateProgram(
+      prs.Squat,
+      prs.Bench,
+      prs.Deadlift,
+      accessoryMode,
+      accessoryPRs
+    );
+
+    setWorkouts(prev => applyAccessoryPlanToWorkouts(
+      prev,
+      generatedWorkouts,
+      getCompletedWorkoutCount(history, currentCycle)
+    ));
+  }, [accessoryMode, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
 
   useEffect(() => {
     if (screen !== 'completed' || !completedWorkout) return;
@@ -4291,7 +4492,7 @@ export default function App() {
     localStorage.removeItem('kel-powerlifting');
     localStorage.removeItem('app_version');
 
-    setWorkouts(generateProgram(s, b, d));
+    setWorkouts(generateProgram(s, b, d, accessoryMode, accessoryPRs));
     setSelectedIndex(0);
     setCurrentCycle(1);
 
@@ -4369,7 +4570,7 @@ function handleStartNewCycle() {
   }
 
   const nextCycle = currentCycle + 1;
-  const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift);
+  const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift, accessoryMode, accessoryPRs);
 
   setCurrentCycle(nextCycle);
   setMeetPlannerAttempts({});
@@ -4866,6 +5067,87 @@ function changeMeetWeight(liftIndex, setIndex, val) {
   );
 }
 
+function markAccessorySetFailed(accIndex, setIndex) {
+  const workout = workouts[selectedIndex];
+
+  if (workout) {
+    startTimer(restTimeSeconds, {
+      workoutNumber: workout.number,
+      type: 'accessory',
+      accIndex,
+      index: setIndex,
+    });
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        accessories: w.accessories.map((a, ai) => {
+          if (ai !== accIndex) return a;
+
+          const currentWeight = Number(a.weights?.[setIndex]) || 0;
+          const adjustedWeight = getFailedSetSuggestedWeight(currentWeight);
+
+          return {
+            ...a,
+            weights: a.weights.map((weight, i) => {
+              const shouldLower =
+                i >= setIndex &&
+                !a.done?.[i] &&
+                Number(weight) >= adjustedWeight;
+
+              return shouldLower ? adjustedWeight : weight;
+            }),
+            originalWeights: (a.originalWeights || a.weights).map((weight, i) => weight || a.weights?.[i]),
+            failed: (a.failed || a.done.map(() => false)).map((failed, i) =>
+              i === setIndex ? true : failed
+            ),
+            failedWeights: (a.failedWeights || a.done.map(() => null)).map((weight, i) =>
+              i === setIndex ? (weight || currentWeight) : weight
+            ),
+            adjustedFromFailedSet: (a.adjustedFromFailedSet || a.done.map(() => false)).map((adjusted, i) =>
+              i === setIndex ? true : adjusted
+            ),
+            adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, i) =>
+              i >= setIndex && !a.done?.[i] && Number(a.weights?.[i]) >= adjustedWeight ? true : adjusted
+            ),
+          };
+        }),
+      };
+    })
+  );
+}
+
+function restoreAccessoryWeight(accIndex, setIndex) {
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        accessories: w.accessories.map((a, ai) => {
+          if (ai !== accIndex) return a;
+
+          const restoredWeight =
+            Number(a.failedWeights?.[setIndex] || a.originalWeights?.[setIndex] || a.weights?.[setIndex]) || 0;
+
+          return {
+            ...a,
+            weights: a.weights.map((weight, i) => i === setIndex ? restoredWeight : weight),
+            failed: (a.failed || a.done.map(() => false)).map((failed, i) => i === setIndex ? false : failed),
+            failedWeights: (a.failedWeights || a.done.map(() => null)).map((weight, i) => i === setIndex ? null : weight),
+            adjustedFromFailedSet: (a.adjustedFromFailedSet || a.done.map(() => false)).map((adjusted, i) => i === setIndex ? false : adjusted),
+            adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, i) => i === setIndex ? false : adjusted),
+          };
+        }),
+      };
+    })
+  );
+}
+
 function changeAccessoryWeight(accIndex, setIndex, val) {
   setWorkouts(prev =>
     prev.map((w, wi) => {
@@ -4876,9 +5158,15 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         accessories: w.accessories.map((a, ai) => {
           if (ai !== accIndex) return a;
 
+          const originalWeights = a.originalWeights || a.weights;
+
           return {
             ...a,
+            originalWeights,
             weights: a.weights.map((wt, i) => i === setIndex ? val : wt),
+            adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, i) =>
+              i === setIndex ? Number(val) !== Number(originalWeights?.[i]) : adjusted
+            ),
           };
         }),
       };
@@ -5062,7 +5350,7 @@ setCompletedSummary({
   if (workout.accessories) {
     workout.accessories.forEach(acc => {
       const bestWeight = Math.max(...acc.weights);
-      const name = acc.name;
+      const name = acc.key || acc.name;
 
       setAccessoryPRs(prev => {
         const current = prev[name] || 0;
@@ -5353,6 +5641,8 @@ const latestBodyDataRows = [
           onMarkSetFailed={markSetFailed}
           onRestoreSetWeight={restoreSetWeight}
           onToggleAccessorySet={toggleAccessorySet}
+          onMarkAccessorySetFailed={markAccessorySetFailed}
+          onRestoreAccessoryWeight={restoreAccessoryWeight}
           onWeightChange={changeWeight}
           onAccessoryWeightChange={changeAccessoryWeight}
           onComplete={completeWorkout}
@@ -5507,6 +5797,12 @@ const latestBodyDataRows = [
   <RestTimeSection
     restTimeSeconds={restTimeSeconds}
     setRestTimeSeconds={setRestTimeSeconds}
+    t={t}
+  />
+
+  <AccessorySection
+    accessoryMode={accessoryMode}
+    setAccessoryMode={setAccessoryMode}
     t={t}
   />
 
