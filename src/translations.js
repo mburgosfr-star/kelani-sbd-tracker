@@ -26,7 +26,7 @@ export const translations = {
     done: 'Gedaan',
 
     squat: 'Squat',
-    bench: 'Bankdrukken',
+    bench: 'Bench Press',
     deadlift: 'Deadlift',
     lifts: 'Lifts',
 
@@ -511,9 +511,9 @@ export const translations = {
     fillRequiredFields: 'Omple tots els camps obligatoris.',
     done: 'Fet',
 
-    squat: 'Esquat',
-    bench: 'Pressió sobre banc',
-    deadlift: 'Pes mort',
+    squat: 'Squat',
+    bench: 'Bench Press',
+    deadlift: 'Deadlift',
     lifts: 'Aixecaments',
 
     bodyweight: 'Pes corporal',
