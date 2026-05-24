@@ -1,0 +1,5 @@
+Added optional programmed accessories.
+Accessories can be set to Off, Basic, or Basic + optional.
+Added recommended editable accessory weights.
+Added fail and restore controls for accessory sets.
+Shoulder rotations now show reps per side.
