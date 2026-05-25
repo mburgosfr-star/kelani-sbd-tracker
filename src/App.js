@@ -723,11 +723,11 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
     ] },
     { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [
       { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 3, reps: 2, pct: 0.825, labelKey: 'backoff' },
+      { sets: 3, reps: 2, pct: 0.80, labelKey: 'backoff' },
     ] },
     { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
-      { sets: 1, reps: 1, pct: 0.90, labelKey: 'topSingle' },
-      { sets: 3, reps: 2, pct: 0.825, labelKey: 'backoff' },
+      { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
+      { sets: 3, reps: 2, pct: 0.80, labelKey: 'backoff' },
     ] },
 
     {
@@ -738,7 +738,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
         { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
         { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
         { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
-        { sets: 3, reps: 3, pct: 0.80, labelKey: 'backoff' },
+        { sets: 2, reps: 2, pct: 0.75, labelKey: 'backoff' },
       ],
     },
     {
@@ -749,7 +749,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
         { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
         { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
         { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
-        { sets: 3, reps: 3, pct: 0.80, labelKey: 'backoff' },
+        { sets: 2, reps: 2, pct: 0.75, labelKey: 'backoff' },
       ],
     },
     {
@@ -760,7 +760,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
         { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
         { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
         { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
-        { sets: 3, reps: 3, pct: 0.80, labelKey: 'backoff' },
+        { sets: 2, reps: 2, pct: 0.75, labelKey: 'backoff' },
       ],
     },
   ];
@@ -4344,7 +4344,7 @@ export default function App() {
   const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const currentIndex = getCompletedWorkoutCount(history, currentCycle);
-  const PROGRAM_VERSION = 'cube-27-v3';
+  const PROGRAM_VERSION = 'cube-27-v4';
 
   function updateMeetPlannerAttempts(next) {
     setMeetPlannerAttempts(prev => {
