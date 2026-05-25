@@ -2718,7 +2718,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       </h2>
 
       <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
-        {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts} · {getWorkoutTypeLabel(workout, t)}
+        {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts}{getWorkoutTypeLabel(workout, t) !== t.practice ? ` · ${getWorkoutTypeLabel(workout, t)}` : ''}
       </div>
 
       {(workout.prepItems || []).length > 0 && (
@@ -2889,34 +2889,36 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 const firstIncompleteAccessorySet = (acc.done || []).findIndex(d => !d);
 
                 return (
-                  <SetRow
-                    key={si}
-                    set={{
-                      done,
-                      weight: acc.weights[si],
-                      reps: acc.reps,
-                      repsLabel: acc.perSide ? `${acc.reps} ${t.perSide}` : null,
-                      failed: !!acc.failed?.[si],
-                      failedWeight: acc.failedWeights?.[si] || null,
-                      adjustedFromFailedSet: !!acc.adjustedFromFailedSet?.[si],
-                      adjustedFromOriginal: !!acc.adjustedFromOriginal?.[si],
-                    }}
-                    index={si}
-                    label={`${t.set} ${si + 1}`}
-                    isWarmup={false}
-                    isActive={
-                      !isReadOnly &&
-                      allMainSetsDone &&
-                      ai === firstIncompleteAccessoryGroup &&
-                      si === firstIncompleteAccessorySet
-                    }
-                    isReadOnly={isReadOnly}
-                    onToggle={() => handleToggle(() => onToggleAccessorySet(ai, si))}
-                    onMarkFailed={() => handleToggle(() => onMarkAccessorySetFailed(ai, si))}
-                    onRestoreWeight={() => handleToggle(() => onRestoreAccessoryWeight(ai, si))}
-                    onWeightChange={val => onAccessoryWeightChange(ai, si, val)}
-                    t={t}
-                  />
+                  <React.Fragment key={si}>
+                    <SetRow
+                      set={{
+                        done,
+                        weight: acc.weights[si],
+                        reps: acc.reps,
+                        repsLabel: acc.perSide ? `${acc.reps} ${t.perSide}` : null,
+                        failed: !!acc.failed?.[si],
+                        failedWeight: acc.failedWeights?.[si] || null,
+                        adjustedFromFailedSet: !!acc.adjustedFromFailedSet?.[si],
+                        adjustedFromOriginal: !!acc.adjustedFromOriginal?.[si],
+                      }}
+                      index={si}
+                      label={`${t.set} ${si + 1}`}
+                      isWarmup={false}
+                      isActive={
+                        !isReadOnly &&
+                        allMainSetsDone &&
+                        ai === firstIncompleteAccessoryGroup &&
+                        si === firstIncompleteAccessorySet
+                      }
+                      isReadOnly={isReadOnly}
+                      onToggle={() => handleToggle(() => onToggleAccessorySet(ai, si))}
+                      onMarkFailed={() => handleToggle(() => onMarkAccessorySetFailed(ai, si))}
+                      onRestoreWeight={() => handleToggle(() => onRestoreAccessoryWeight(ai, si))}
+                      onWeightChange={val => onAccessoryWeightChange(ai, si, val)}
+                      t={t}
+                    />
+                    {renderInlineTimer({ type: 'accessory', accIndex: ai, index: si })}
+                  </React.Fragment>
                 );
               })}
             </div>
@@ -3851,6 +3853,48 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
   );
 }
 
+function getWorkoutPlanLines(workout, t) {
+  if (!workout || workout.type === 'rest') return [];
+
+  if (workout.type === 'meet') {
+    return (workout.lifts || []).map(liftBlock => {
+      const attempts = (liftBlock.sets || [])
+        .map(set => `${set.reps}×${set.weight}`)
+        .join(' / ');
+
+      return `${liftLabel(liftBlock.lift, t)}: ${attempts} ${t.kg}`;
+    });
+  }
+
+  const groups = [];
+
+  (workout.sets || []).forEach(set => {
+    const label = set.labelKey ? t[set.labelKey] : set.label || t.set;
+    const last = groups[groups.length - 1];
+
+    if (
+      last &&
+      last.label === label &&
+      last.reps === set.reps &&
+      last.weight === set.weight
+    ) {
+      last.count += 1;
+      return;
+    }
+
+    groups.push({
+      label,
+      reps: set.reps,
+      weight: set.weight,
+      count: 1,
+    });
+  });
+
+  return groups.map(group =>
+    `${group.label}: ${group.count}×${group.reps}×${group.weight} ${t.kg}`
+  );
+}
+
 function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t }) {
   const currentWorkoutRef = useRef(null);
 
@@ -3881,6 +3925,9 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
         const isCurrent = idx === currentIndex;
         const isDone = idx < currentIndex;
         const headerBg = isCurrent ? THEME.primary : workout.type === 'rest' ? THEME.brown : THEME.border;
+        const planLines = getWorkoutPlanLines(workout, t);
+        const typeLabel = getWorkoutTypeLabel(workout, t);
+        const showTypeLabel = typeLabel && typeLabel !== t.practice;
 
         return (
           <div
@@ -3936,12 +3983,41 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
                 )}
               </div>
 
-              <div style={{ fontSize: 12, color: THEME.muted, marginTop: 2 }}>
-                {t.workoutProgress} {workout.number} / {workouts.length} · {getWorkoutTypeLabel(workout, t)}
-              </div>
+              {showTypeLabel && (
+                <div style={{ fontSize: 12, color: THEME.muted, marginTop: 2 }}>
+                  {typeLabel}
+                </div>
+              )}
             </div>
 
-            {isDone && <span style={{ color: THEME.primary, fontSize: 18 }}>✅</span>}
+            {planLines.length > 0 && (
+              <div style={{
+                marginLeft: 10,
+                display: 'grid',
+                gap: 2,
+                color: THEME.text,
+                fontSize: 11,
+                lineHeight: 1.2,
+                textAlign: 'right',
+                maxWidth: 210,
+                flexShrink: 0
+              }}>
+                {planLines.map((line, lineIndex) => (
+                  <div
+                    key={lineIndex}
+                    style={{
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}
+                  >
+                    {line}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {isDone && <span style={{ color: THEME.primary, fontSize: 18, marginLeft: 8 }}>✅</span>}
           </div>
         );
       })}
