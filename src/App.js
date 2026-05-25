@@ -2801,10 +2801,14 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
         {workout.sets.map((set, i) => {
           const allWarmupsDone = allPrepDone && (workout.warmups || []).every(w => w.done);
           const firstIncomplete = workout.sets.findIndex(s => !s.done);
+          const hasLaterSetAction = workout.sets.some((laterSet, laterIndex) =>
+            laterIndex > i && (laterSet.done || laterSet.failed || laterSet.skipped)
+          );
+          const showSetNotice = set.failed || (set.skipped && !hasLaterSetAction);
 
           return (
             <React.Fragment key={i}>
-              {(set.failed || set.skipped) && (
+              {showSetNotice && (
                 <div style={{
                   margin: 0,
                   padding: '10px 14px',
@@ -4778,7 +4782,7 @@ function toggleSet(setIndex) {
               if (si !== setIndex) return s;
 
               if (s.skipped) {
-                const restoredWeight = Number(s.failedWeight ?? s.originalWeight ?? s.weight) || s.weight;
+                const restoredWeight = Number(s.originalWeight ?? s.failedWeight ?? s.weight) || s.weight;
                 const restoredPct = Number(s.originalPct ?? getSetPctForWeight(s, restoredWeight)) || s.pct;
 
                 return {
@@ -5306,7 +5310,7 @@ function restoreAccessoryWeight(accIndex, setIndex) {
           if (ai !== accIndex) return a;
 
           const restoredWeight =
-            Number(a.failedWeights?.[setIndex] || a.originalWeights?.[setIndex] || a.weights?.[setIndex]) || 0;
+            Number(a.originalWeights?.[setIndex] || a.failedWeights?.[setIndex] || a.weights?.[setIndex]) || 0;
 
           return {
             ...a,
