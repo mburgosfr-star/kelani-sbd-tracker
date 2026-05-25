@@ -855,8 +855,6 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
   const hasBeepedRef = useRef(false);
 
   useEffect(() => {
-    const targetEndTime = endTime || Date.now() + (seconds * 1000);
-
     const clearTick = () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
