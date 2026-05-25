@@ -489,6 +489,14 @@ function isTopSetLabel(labelKey) {
   return ['heavySingle', 'topSingle', 'topDouble', 'topTriple'].includes(labelKey);
 }
 
+function isAttemptSetLabel(labelKey) {
+  return ['opener', 'secondAttempt', 'thirdAttempt'].includes(labelKey);
+}
+
+function getAdjustedAttemptWeight(weight) {
+  return Math.max(2.5, roundMeetWeight((Number(weight) || 0) - 5));
+}
+
 function getMeetPlannerAttemptWeight(attempts, lift, setIndex, fallback) {
   const key = MEET_ATTEMPT_KEYS[setIndex];
   const custom = attempts?.[lift]?.[key];
@@ -4766,15 +4774,30 @@ function markSetFailed(setIndex) {
       if (wi !== selectedIndex) return w;
 
       const failedSet = w.sets[setIndex];
-      const adjustedWeight = getFailedSetSuggestedWeight(failedSet?.weight);
       const failedAttempts = (Number(failedSet?.failedAttempts) || 0) + 1;
+      const isPreMeetWorkout = w.number >= 25 && w.number <= 27;
+      const isAttemptSet = isAttemptSetLabel(failedSet?.labelKey);
+      const isBackoff = failedSet?.labelKey === 'backoff';
+
+      const normalAdjustedWeight = getFailedSetSuggestedWeight(failedSet?.weight);
+      const attemptAdjustedWeight = getAdjustedAttemptWeight(failedSet?.weight);
+      const adjustedWeight = isPreMeetWorkout && isAttemptSet
+        ? attemptAdjustedWeight
+        : normalAdjustedWeight;
+
       const nextBackoff = (w.sets || []).find((set, index) =>
         index > setIndex && set.labelKey === 'backoff' && !set.done
       );
       const nextBackoffWeight = Number(nextBackoff?.weight) || 0;
       const isTopSet = isTopSetLabel(failedSet?.labelKey);
-      const isBackoff = failedSet?.labelKey === 'backoff';
+
+      const shouldSkipAttempt =
+        isPreMeetWorkout &&
+        isAttemptSet &&
+        failedAttempts >= 2;
+
       const shouldSkipTopSet =
+        !isPreMeetWorkout &&
         isTopSet &&
         (failedAttempts >= 2 || (nextBackoffWeight > 0 && adjustedWeight <= nextBackoffWeight));
 
@@ -4782,19 +4805,47 @@ function markSetFailed(setIndex) {
         ...w,
         sets: w.sets.map((s, si) => {
           const shouldAdjustThisSet = si === setIndex;
+
+          const shouldAdjustLaterAttempt =
+            isPreMeetWorkout &&
+            isAttemptSet &&
+            si > setIndex &&
+            isAttemptSetLabel(s.labelKey) &&
+            !s.done &&
+            !s.skipped;
+
           const shouldAdjustLaterBackoff =
-            isBackoff &&
+            (
+              isBackoff ||
+              (!isPreMeetWorkout && isTopSet)
+            ) &&
             si > setIndex &&
             s.labelKey === 'backoff' &&
             !s.done &&
             !s.skipped;
 
-          if (!shouldAdjustThisSet && !shouldAdjustLaterBackoff) return s;
+          const shouldLowerBackoffIfTooHeavy =
+            isPreMeetWorkout &&
+            isAttemptSet &&
+            si > setIndex &&
+            s.labelKey === 'backoff' &&
+            !s.done &&
+            !s.skipped &&
+            Number(s.weight) > adjustedWeight;
+
+          if (
+            !shouldAdjustThisSet &&
+            !shouldAdjustLaterAttempt &&
+            !shouldAdjustLaterBackoff &&
+            !shouldLowerBackoffIfTooHeavy
+          ) {
+            return s;
+          }
 
           const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
           const originalPct = Number(s.originalPct ?? s.pct) || 0;
 
-          if (shouldAdjustThisSet && shouldSkipTopSet) {
+          if (shouldAdjustThisSet && (shouldSkipAttempt || shouldSkipTopSet)) {
             return {
               ...s,
               done: true,
@@ -4810,7 +4861,16 @@ function markSetFailed(setIndex) {
             };
           }
 
-          const nextWeight = adjustedWeight;
+          let nextWeight = adjustedWeight;
+
+          if (shouldAdjustLaterAttempt) {
+            nextWeight = getAdjustedAttemptWeight(s.weight);
+          }
+
+          if (shouldAdjustLaterBackoff || shouldLowerBackoffIfTooHeavy) {
+            nextWeight = Math.min(Number(s.weight) || adjustedWeight, adjustedWeight);
+          }
+
           const adjustedPct = getSetPctForWeight(
             { ...s, originalWeight, originalPct },
             nextWeight
