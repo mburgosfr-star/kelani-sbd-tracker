@@ -840,14 +840,14 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
 }
 
 
-function RestTimer({ seconds, onDismiss, t }) {
-  const [remaining, setRemaining] = useState(seconds);
+function RestTimer({ seconds, endTime, onDismiss, t }) {
+  const [remaining, setRemaining] = useState(() => Math.max(0, Math.ceil(((endTime || Date.now() + seconds * 1000) - Date.now()) / 1000)));
   const intervalRef = useRef(null);
   const timeoutRef = useRef(null);
   const hasBeepedRef = useRef(false);
 
   useEffect(() => {
-    const endTime = Date.now() + (seconds * 1000);
+    const targetEndTime = endTime || Date.now() + (seconds * 1000);
 
     const clearTick = () => {
       if (intervalRef.current) {
@@ -905,7 +905,7 @@ function RestTimer({ seconds, onDismiss, t }) {
       clearFinishTimeout();
       document.removeEventListener('visibilitychange', startVisibleTick);
     };
-  }, [seconds]);
+  }, [seconds, endTime]);
 
   function playBeep() {
     try {
@@ -2490,10 +2490,15 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
   function renderInlineTimer(placement) {
     if (!isTimerFor(placement)) return null;
 
+    if (timer.endTime && Date.now() >= timer.endTime) {
+      return null;
+    }
+
     return (
       <RestTimer
         key={timer.id}
         seconds={timer.seconds}
+        endTime={timer.endTime}
         onDismiss={() => setTimer(null)}
         t={t}
       />
@@ -4249,6 +4254,7 @@ export default function App() {
     setTimer({
       id: Date.now(),
       seconds,
+      endTime: Date.now() + seconds * 1000,
       placement,
     });
   }
