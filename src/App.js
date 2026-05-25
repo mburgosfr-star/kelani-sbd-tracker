@@ -9,6 +9,8 @@ import { Share } from '@capacitor/share';
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
 const REST_TIME_OPTIONS = [90, 180, 300];
 const ACCESSORY_MODES = ['off', 'basic', 'full'];
+const SET_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'max'];
+const WORKOUT_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'tooMuch'];
 const DEFAULT_REST_TIME_SECONDS = 300;
 const AUTO_BACKUP_PATH = 'Kelani/kelani-sbd-tracker-autosave.json';
 const AUTO_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-auto-backup-status';
@@ -1074,6 +1076,85 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
   );
 }
 
+function EffortPicker({ value, onChange, t }) {
+  return (
+    <div style={{
+      background: THEME.bg,
+      borderTop: `1px solid ${THEME.border}`,
+      borderBottom: `1px solid ${THEME.border}`,
+      padding: '10px 12px',
+      display: 'grid',
+      gap: 8
+    }}>
+      <div style={{
+        color: THEME.text,
+        fontSize: 12,
+        fontWeight: 800,
+        textAlign: 'center'
+      }}>
+        {t.setEffortQuestion}
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+        gap: 6
+      }}>
+        {SET_EFFORT_OPTIONS.map(option => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onChange(option)}
+            style={{
+              padding: '7px 4px',
+              borderRadius: 8,
+              border: `1px solid ${value === option ? THEME.primary : THEME.border}`,
+              background: value === option ? THEME.primary : THEME.card,
+              color: value === option ? THEME.bg : THEME.text,
+              fontSize: 11,
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
+            {t[`setEffort${option[0].toUpperCase()}${option.slice(1)}`]}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function getSetEffortLabel(effort, t) {
+  if (!effort) return null;
+
+  return {
+    easy: t.setEffortEasy,
+    good: t.setEffortGood,
+    hard: t.setEffortHard,
+    max: t.setEffortMax,
+  }[effort] || null;
+}
+
+function getWorkoutEffortLabel(effort, t) {
+  if (!effort) return null;
+
+  return {
+    easy: t.workoutEffortEasy,
+    good: t.workoutEffortGood,
+    hard: t.workoutEffortHard,
+    tooMuch: t.workoutEffortTooMuch,
+  }[effort] || null;
+}
+
+function getWorkoutEffortText(effort, t) {
+  const label = getWorkoutEffortLabel(effort, t);
+  if (!label) return null;
+
+  return t.workoutEffortFelt
+    ? t.workoutEffortFelt.replace('{effort}', label)
+    : label;
+}
+
 function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t }) {
 const isFailed = Boolean(set.failed);
 const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
@@ -1149,6 +1230,22 @@ const [editing, setEditing] = useState(false);
         <div style={{ color: THEME.text, fontSize: 14, fontWeight: 700, marginTop: 2 }}>
           {set.repsLabel || `${set.reps} ${t.reps}`}
         </div>
+
+        {getSetEffortLabel(set.effort, t) && (
+          <div style={{
+            display: 'inline-flex',
+            marginTop: 5,
+            padding: '2px 7px',
+            borderRadius: 999,
+            border: `1px solid ${THEME.primary}`,
+            color: THEME.primary,
+            fontSize: 11,
+            fontWeight: 800,
+            lineHeight: 1.2
+          }}>
+            {getSetEffortLabel(set.effort, t)}
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {editing ? (
@@ -2464,7 +2561,7 @@ function NewCycleModal({ prs, onStart, t }) {
   );
 }
 
-function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
+function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
 
   function isTimerFor(placement) {
     if (!timer || !timer.placement) return false;
@@ -2630,25 +2727,33 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
               ))}
 
               {(liftBlock.sets || []).map((set, si) => (
-                <SetRow
-                  key={`attempt-${si}`}
-                  set={set}
-                  index={si}
-                  label={set.labelKey ? t[set.labelKey] : `${t.set} ${si + 1}`}
-                  isWarmup={false}
-                  isActive={
-                    !isReadOnly &&
-                    li === firstIncompleteLiftIndex &&
-                    allPrepDone &&
-                    allWarmupsDone &&
-                    si === firstIncompleteSet
-                  }
-                  isReadOnly={isReadOnly}
-                  onToggle={() => handleToggle(() => onToggleMeetSet(li, si))}
-                  onMarkFailed={() => handleToggle(() => onMarkMeetSetFailed(li, si))}
-                  onWeightChange={val => onMeetWeightChange(li, si, val)}
-                  t={t}
-                />
+                <React.Fragment key={`attempt-${si}`}>
+                  <SetRow
+                    set={set}
+                    index={si}
+                    label={set.labelKey ? t[set.labelKey] : `${t.set} ${si + 1}`}
+                    isWarmup={false}
+                    isActive={
+                      !isReadOnly &&
+                      li === firstIncompleteLiftIndex &&
+                      allPrepDone &&
+                      allWarmupsDone &&
+                      si === firstIncompleteSet
+                    }
+                    isReadOnly={isReadOnly}
+                    onToggle={() => handleToggle(() => onToggleMeetSet(li, si))}
+                    onMarkFailed={() => handleToggle(() => onMarkMeetSetFailed(li, si))}
+                    onWeightChange={val => onMeetWeightChange(li, si, val)}
+                    t={t}
+                  />
+                  {set.done && !set.failed && !set.skipped && !set.effort && (
+                    <EffortPicker
+                      value={set.effort}
+                      onChange={effort => handleToggle(() => onMeetSetEffortChange(li, si, effort))}
+                      t={t}
+                    />
+                  )}
+                </React.Fragment>
               ))}
             </div>
           );
@@ -2859,6 +2964,13 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 t={t}
               />
               {!set.failed && renderInlineTimer({ type: 'main', index: i })}
+              {set.done && !set.failed && !set.skipped && !set.effort && (
+                <EffortPicker
+                  value={set.effort}
+                  onChange={effort => handleToggle(() => onSetEffortChange(i, effort))}
+                  t={t}
+                />
+              )}
             </React.Fragment>
           );
         })}
@@ -4341,6 +4453,7 @@ export default function App() {
   const [completedWorkout, setCompletedWorkout] = useState(null);
   const [completedWorkoutIndex, setCompletedWorkoutIndex] = useState(null);
   const [completedSummary, setCompletedSummary] = useState(null);
+  const [showWorkoutEffortPrompt, setShowWorkoutEffortPrompt] = useState(false);
   const [currentCycle, setCurrentCycle] = useState(1);
   const [bodyWeights, setBodyWeights] = useState([]);
   const [userProfile, setUserProfile] = useState({});
@@ -4631,6 +4744,7 @@ function handleResetApp() {
   setUserProfile({});
   setMeetPlannerAttempts({});
   setShowNewCycle(false);
+  setShowWorkoutEffortPrompt(false);
   setCurrentCycle(1);
   setBodyWeights([]);
   setScreen('onboarding');
@@ -4652,6 +4766,7 @@ function handleStartNewCycle() {
   setCompletedWorkout(null);
   setCompletedSummary(null);
   setShowNewCycle(false);
+  setShowWorkoutEffortPrompt(false);
   setScreen('all');
 }
 
@@ -4810,6 +4925,7 @@ function toggleSet(setIndex) {
               return {
                 ...s,
                 done: false,
+                effort: null,
               };
             }),
           }
@@ -5065,6 +5181,43 @@ function changeWeight(type, index, val) {
   );
 }
 
+function changeSetEffort(setIndex, effort) {
+  setWorkouts(prev =>
+    prev.map((w, wi) =>
+      wi !== selectedIndex
+        ? w
+        : {
+            ...w,
+            sets: w.sets.map((s, si) =>
+              si === setIndex ? { ...s, effort } : s
+            ),
+          }
+    )
+  );
+}
+
+function changeMeetSetEffort(liftIndex, setIndex, effort) {
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: (w.lifts || []).map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
+            sets: (liftBlock.sets || []).map((s, si) =>
+              si === setIndex ? { ...s, effort } : s
+            ),
+          };
+        }),
+      };
+    })
+  );
+}
+
 function toggleMeetPrepItem(liftIndex, prepIndex) {
   setTimer(null);
 
@@ -5154,10 +5307,15 @@ function toggleMeetSet(liftIndex, setIndex) {
                   done: false,
                   failed: false,
                   skipped: false,
+                  effort: null,
                 };
               }
 
-              return { ...s, done: !s.done };
+              return {
+                ...s,
+                done: !s.done,
+                effort: s.done ? null : s.effort,
+              };
             }),
           };
         }),
@@ -5352,11 +5510,20 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   );
 }
 
-  function completeWorkout() {  
-    
+  function completeWorkout(workoutEffortOverride = null) {
+    const baseWorkout = workouts[selectedIndex];
+    const workout = workoutEffortOverride
+      ? { ...baseWorkout, workoutEffort: workoutEffortOverride }
+      : baseWorkout;
+
+    if (!workout?.workoutEffort) {
+      setShowWorkoutEffortPrompt(true);
+      return;
+    }
+
+    setShowWorkoutEffortPrompt(false);
     setTimer(null);
-    
-    const workout = workouts[selectedIndex];
+
     const finishedWorkout = JSON.parse(JSON.stringify(workout));
 
     if (workout.type === 'meet') {
@@ -5430,6 +5597,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     topReps: 1,
     e1rm: result.e1RMToday,
     date: today,
+    workoutEffort: finishedWorkout.workoutEffort,
     workoutSnapshot: finishedWorkout,
   }));
 
@@ -5513,6 +5681,7 @@ setCompletedSummary({
     topReps: sets.find(s => Number(s.weight) === oneRMToday)?.reps || topSet.reps,
     e1rm: e1RMToday,
     date: new Date().toLocaleDateString('nl-NL'),
+    workoutEffort: finishedWorkout.workoutEffort,
     workoutSnapshot: finishedWorkout,
   };
 
@@ -5824,6 +5993,7 @@ const latestBodyDataRows = [
           onMarkAccessorySetFailed={markAccessorySetFailed}
           onRestoreAccessoryWeight={restoreAccessoryWeight}
           onWeightChange={changeWeight}
+          onSetEffortChange={changeSetEffort}
           onAccessoryWeightChange={changeAccessoryWeight}
           onComplete={completeWorkout}
           onViewAll={() => setScreen('all')}
@@ -5838,6 +6008,7 @@ const latestBodyDataRows = [
           onToggleMeetSet={toggleMeetSet}
           onMarkMeetSetFailed={markMeetSetFailed}
           onMeetWeightChange={changeMeetWeight}
+          onMeetSetEffortChange={changeMeetSetEffort}
         />
       )}
 
@@ -6063,6 +6234,27 @@ const latestBodyDataRows = [
           {t.workoutAndCycleSaved}
         </p>
 
+        {getWorkoutEffortText(completedWorkout?.workoutEffort, t) && (
+          <div style={{
+            margin: '0 auto 16px',
+            padding: '10px 14px',
+            borderRadius: 10,
+            border: `1px solid ${THEME.border}`,
+            background: THEME.bg,
+            maxWidth: 260,
+            textAlign: 'center'
+          }}>
+            <div style={{
+              color: THEME.primary,
+              fontSize: 18,
+              fontWeight: 900,
+              lineHeight: 1.15
+            }}>
+              {getWorkoutEffortText(completedWorkout.workoutEffort, t)}
+            </div>
+          </div>
+        )}
+
         <div style={{
           background: THEME.card,
           border: `1px solid ${THEME.border}`,
@@ -6253,6 +6445,36 @@ const latestBodyDataRows = [
           {t.goodJobSaved}
         </p>
 
+        {getWorkoutEffortText(completedWorkout?.workoutEffort, t) && (
+          <div style={{
+            margin: '0 auto 16px',
+            padding: '10px 14px',
+            borderRadius: 10,
+            border: `1px solid ${THEME.border}`,
+            background: THEME.bg,
+            maxWidth: 260,
+            textAlign: 'center'
+          }}>
+            <div style={{
+              color: THEME.muted,
+              fontSize: 12,
+              fontWeight: 800,
+              marginBottom: 3
+            }}>
+              {t.workoutEffort}
+            </div>
+
+            <div style={{
+              color: THEME.primary,
+              fontSize: 18,
+              fontWeight: 900,
+              lineHeight: 1.1
+            }}>
+              {getWorkoutEffortText(completedWorkout.workoutEffort, t)}
+            </div>
+          </div>
+        )}
+
         <div style={{
           background: THEME.card,
           border: `1px solid ${THEME.border}`,
@@ -6414,6 +6636,92 @@ const latestBodyDataRows = [
     onStart={handleStartNewCycle}
     t={t}
   />
+)}
+
+{showWorkoutEffortPrompt && (
+  <div style={{
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.65)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 650,
+    padding: 16
+  }}>
+    <div style={{
+      background: THEME.card,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 12,
+      padding: 20,
+      maxWidth: 380,
+      width: '100%',
+      color: THEME.text
+    }}>
+      <h3 style={{
+        margin: '0 0 8px',
+        color: THEME.text,
+        textAlign: 'center'
+      }}>
+        {t.workoutEffortQuestion}
+      </h3>
+
+      <p style={{
+        margin: '0 0 16px',
+        color: THEME.muted,
+        fontSize: 13,
+        lineHeight: 1.4,
+        textAlign: 'center'
+      }}>
+        {t.workoutEffortRequired}
+      </p>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+        gap: 8
+      }}>
+        {WORKOUT_EFFORT_OPTIONS.map(option => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => completeWorkout(option)}
+            style={{
+              padding: 12,
+              borderRadius: 8,
+              border: `1px solid ${THEME.primary}`,
+              background: THEME.card,
+              color: THEME.text,
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
+            {t[`workoutEffort${option[0].toUpperCase()}${option.slice(1)}`]}
+          </button>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowWorkoutEffortPrompt(false)}
+        style={{
+          width: '100%',
+          marginTop: 10,
+          padding: 10,
+          fontSize: 14,
+          fontWeight: 700,
+          background: 'transparent',
+          color: THEME.text,
+          border: `1px solid ${THEME.border}`,
+          borderRadius: 8,
+          cursor: 'pointer'
+        }}
+      >
+        {t.cancel}
+      </button>
+    </div>
+  </div>
 )}
 
 {showResetConfirm && (
