@@ -679,12 +679,12 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
     ] },
     { lift: 'Bench', type: 'training', labelKey: 'practice', blocks: [
       { sets: 1, reps: 2, pct: 0.85, labelKey: 'topDouble' },
-      { sets: 5, reps: 3, pct: 0.775, labelKey: 'backoff' },
+      { sets: 4, reps: 4, pct: 0.75, labelKey: 'backoff' },
     ] },
 
     { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [
       { sets: 1, reps: 2, pct: 0.85, labelKey: 'topDouble' },
-      { sets: 3, reps: 3, pct: 0.775, labelKey: 'backoff' },
+      { sets: 3, reps: 4, pct: 0.75, labelKey: 'backoff' },
     ] },
     { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [
       { sets: 1, reps: 2, pct: 0.85, labelKey: 'topDouble' },
@@ -692,44 +692,44 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
     ] },
     { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [
       { sets: 1, reps: 2, pct: 0.85, labelKey: 'topDouble' },
-      { sets: 4, reps: 3, pct: 0.775, labelKey: 'backoff' },
+      { sets: 3, reps: 4, pct: 0.75, labelKey: 'backoff' },
     ] },
     { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
       { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 4, reps: 3, pct: 0.80, labelKey: 'backoff' },
+      { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' },
     ] },
     { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [
       { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 3, reps: 3, pct: 0.80, labelKey: 'backoff' },
+      { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' },
     ] },
     { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
       { sets: 1, reps: 1, pct: 0.90, labelKey: 'topSingle' },
-      { sets: 4, reps: 2, pct: 0.825, labelKey: 'backoff' },
+      { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' },
     ] },
 
     { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [
       { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 3, reps: 2, pct: 0.80, labelKey: 'backoff' },
+      { sets: 3, reps: 4, pct: 0.75, labelKey: 'backoff' },
     ] },
     { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [
       { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 3, reps: 3, pct: 0.80, labelKey: 'backoff' },
+      { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' },
     ] },
     { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [
       { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 3, reps: 2, pct: 0.80, labelKey: 'backoff' },
+      { sets: 3, reps: 4, pct: 0.75, labelKey: 'backoff' },
     ] },
     { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
       { sets: 1, reps: 1, pct: 0.90, labelKey: 'topSingle' },
-      { sets: 3, reps: 2, pct: 0.825, labelKey: 'backoff' },
+      { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' },
     ] },
     { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [
       { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 3, reps: 2, pct: 0.80, labelKey: 'backoff' },
+      { sets: 3, reps: 4, pct: 0.75, labelKey: 'backoff' },
     ] },
     { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
       { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 3, reps: 2, pct: 0.80, labelKey: 'backoff' },
+      { sets: 3, reps: 4, pct: 0.75, labelKey: 'backoff' },
     ] },
 
     {
@@ -740,7 +740,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
         { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
         { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
         { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
-        { sets: 2, reps: 2, pct: 0.75, labelKey: 'backoff' },
+        { sets: 3, reps: 5, pct: 0.75, labelKey: 'backoff' },
       ],
     },
     {
@@ -751,7 +751,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
         { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
         { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
         { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
-        { sets: 2, reps: 2, pct: 0.75, labelKey: 'backoff' },
+        { sets: 3, reps: 5, pct: 0.75, labelKey: 'backoff' },
       ],
     },
     {
@@ -762,7 +762,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
         { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
         { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
         { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
-        { sets: 2, reps: 2, pct: 0.75, labelKey: 'backoff' },
+        { sets: 3, reps: 5, pct: 0.75, labelKey: 'backoff' },
       ],
     },
   ];
@@ -2823,7 +2823,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       </h2>
 
       <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
-        {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts}{getWorkoutTypeLabel(workout, t) !== t.practice ? ` · ${getWorkoutTypeLabel(workout, t)}` : ''}
+        {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts}
       </div>
 
       {(workout.prepItems || []).length > 0 && (
@@ -4043,7 +4043,7 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
         const headerBg = isCurrent ? THEME.primary : workout.type === 'rest' ? THEME.brown : THEME.border;
         const planLines = getWorkoutPlanLines(workout, t);
         const typeLabel = getWorkoutTypeLabel(workout, t);
-        const showTypeLabel = typeLabel && typeLabel !== t.practice;
+        const showTypeLabel = false;
 
         return (
           <div
@@ -4461,7 +4461,7 @@ export default function App() {
   const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const currentIndex = getCompletedWorkoutCount(history, currentCycle);
-  const PROGRAM_VERSION = 'cube-27-v4';
+  const PROGRAM_VERSION = 'cube-27-v5';
 
   function updateMeetPlannerAttempts(next) {
     setMeetPlannerAttempts(prev => {
