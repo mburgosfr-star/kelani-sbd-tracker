@@ -250,7 +250,7 @@ function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, history, cy
     const isCompleted = index < completedCount;
     const prepDone = isCompleted;
 
-    if (workout.type === 'meet') {
+    if (workout.type === 'meet' || (workout.type === 'training' && (workout.lifts || []).length > 0)) {
       if (!isCompleted) {
         return generated;
       }
@@ -2611,8 +2611,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
     );
   }
 
-    if (workout.type === 'meet') {
+    if (workout.type === 'meet' || (workout.type === 'training' && (workout.lifts || []).length > 0)) {
 
+    const isMeetDay = workout.type === 'meet';
     const allMeetDone = (workout.lifts || []).every(liftBlock =>
       (liftBlock.sets || []).every(s => s.done)
     );
@@ -2631,13 +2632,14 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
     return (
       <div style={{ maxWidth: 500, margin: '0 auto', padding: '8px 12px 12px', paddingBottom: 16, fontFamily: 'sans-serif' }}>
         <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
-          {t.workout} {workout.number} — {t.meetDay}
+          {t.workout} {workout.number} — {isMeetDay ? t.meetDay : (workout.lifts || []).map(liftBlock => liftLabel(liftBlock.lift, t)).join(' + ')}
         </h2>
 
         <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
-          {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts} · {t.meetDay}
+          {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts}{isMeetDay ? ` · ${t.meetDay}` : ''}
         </div>
 
+{isMeetDay && (
 <div style={{
   marginBottom: 14,
   padding: 14,
@@ -2653,6 +2655,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
     {meetDayProjectedTotal ? `${meetDayProjectedTotal} ${t.kg}` : '—'}
   </div>
 </div>
+)}
 
         {(workout.lifts || []).map((liftBlock, li) => {
           const firstIncompletePrepItem = (liftBlock.prepItems || []).findIndex(item => !item.done);
@@ -5373,7 +5376,7 @@ function changeMeetWeight(liftIndex, setIndex, val) {
   const key = MEET_ATTEMPT_KEYS[setIndex];
   const roundedVal = roundMeetWeight(val);
 
-  if (lift && key) {
+  if (workout?.type === 'meet' && lift && key) {
     setMeetPlannerAttempts(prev => ({
       ...(prev || {}),
       [lift]: {
@@ -5581,7 +5584,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   });
 
   setCompletedSummary({
-    type: 'meet',
+    type: workout.type === 'meet' ? 'meet' : 'multiTraining',
     results,
     bodyWeight: latestBodyWeight,
   });
@@ -5610,7 +5613,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   setCompletedWorkout(finishedWorkout);
   setCompletedWorkoutIndex(selectedIndex);
   setSelectedIndex(Math.min(currentIndex + 1, workouts.length - 1));
-  setShowNewCycle(true);
+  setShowNewCycle(workout.type === 'meet');
   setScreen('completed');
 
   return;
