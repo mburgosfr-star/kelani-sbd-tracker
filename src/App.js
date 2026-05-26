@@ -165,16 +165,15 @@ function getWorkoutLabel(entry) {
   return `C${getEntryCycle(entry)}W${getEntryWorkoutNumber(entry)}`;
 }
 
-function getCompletedWorkoutCount(history, cycle) {
-  return new Set(
+function getCompletedWorkoutCount(history, currentCycle) {
+  const completedWorkoutNumbers = new Set(
     (history || [])
-      .filter(h =>
-        h.lift &&
-        h.workoutNumber > 0 &&
-        getEntryCycle(h) === cycle
-      )
-      .map(h => h.workoutNumber)
-  ).size;
+      .filter(entry => entry.cycle === currentCycle)
+      .map(entry => Number(entry.workoutNumber))
+      .filter(number => Number.isFinite(number))
+  );
+
+  return completedWorkoutNumbers.size;
 }
 
 function normalizeBodyWeights(data) {
@@ -672,7 +671,9 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
         const weight = round25(oneRMs[liftConfig.lift] * block.pct);
 
         sets.push({
-          labelKey: block.labelKey || null,
+          labelKey: liftConfig.isSecondaryLight && block.labelKey === 'backoff'
+            ? null
+            : block.labelKey || null,
           label: block.label || null,
           reps: block.reps,
           pct: block.pct,
@@ -695,7 +696,12 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
   }
 
   program.forEach((day, dayIndex) => {
-    const liftBlocks = day.lifts.map(buildLiftBlock);
+    const liftBlocks = day.lifts.map((liftConfig, liftIndex) =>
+      buildLiftBlock({
+        ...liftConfig,
+        isSecondaryLight: liftIndex > 0,
+      })
+    );
     const primaryLift = liftBlocks[0]?.lift;
 
     workouts.push({
@@ -2619,22 +2625,24 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
               )}
 
               {(liftBlock.warmups || []).map((w, wi) => (
-                <SetRow
-                  key={`warmup-${wi}`}
-                  set={w}
-                  index={wi}
-                  label={`${t.warmup} ${wi + 1}`}
-                  isWarmup={true}
-                  isActive={
-                    !isReadOnly &&
-                    li === firstIncompleteLiftIndex &&
-                    allPrepDone &&
-                    wi === firstIncompleteWarmup
-                  }
-                  isReadOnly={isReadOnly}
-                  onToggle={() => handleToggle(() => onToggleMeetWarmup(li, wi))}
-                  t={t}
-                />
+                <React.Fragment key={`warmup-${wi}`}>
+                  <SetRow
+                    set={w}
+                    index={wi}
+                    label={`${t.warmup} ${wi + 1}`}
+                    isWarmup={true}
+                    isActive={
+                      !isReadOnly &&
+                      li === firstIncompleteLiftIndex &&
+                      allPrepDone &&
+                      wi === firstIncompleteWarmup
+                    }
+                    isReadOnly={isReadOnly}
+                    onToggle={() => handleToggle(() => onToggleMeetWarmup(li, wi))}
+                    t={t}
+                  />
+                  {renderInlineTimer({ type: 'meetWarmup', liftIndex: li, index: wi })}
+                </React.Fragment>
               ))}
 
               {(liftBlock.sets || []).map((set, si) => (
@@ -2657,6 +2665,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     onWeightChange={val => onMeetWeightChange(li, si, val)}
                     t={t}
                   />
+                  {renderInlineTimer({ type: 'meetSet', liftIndex: li, index: si })}
                   {set.done && !set.failed && !set.skipped && !set.effort && (
                     <EffortPicker
                       value={set.effort}
@@ -3932,7 +3941,7 @@ function getWorkoutPlanLines(workout, t) {
     const onlyBackoff = groups.length > 0 && groups.every(group => group.labelKey === 'backoff');
 
     return groups.map(group => {
-      if (onlyBackoff) {
+      if (onlyBackoff || !group.labelKey) {
         return `${liftLabel(liftBlock.lift, t)}: ${group.count}×${group.reps}×${group.weight} ${t.kg}`;
       }
 
@@ -4390,7 +4399,7 @@ export default function App() {
   const [meetPlannerAttempts, setMeetPlannerAttempts] = useState({});
   const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const currentIndex = getCompletedWorkoutCount(history, currentCycle);
+  const currentIndex = Math.max(getCompletedWorkoutCount(history, currentCycle), selectedIndex);
   const PROGRAM_VERSION = 'cube-27-v5';
 
   function updateMeetPlannerAttempts(next) {
@@ -5172,7 +5181,40 @@ function toggleMeetPrepItem(liftIndex, prepIndex) {
   );
 }
 
+function hasMoreWorkAfterLiftWarmup(workout, liftIndex, warmupIndex) {
+  const liftBlock = workout?.lifts?.[liftIndex];
+  if (!liftBlock) return false;
+
+  const hasLaterWarmupsInSameLift = (liftBlock.warmups || []).some((w, wi) =>
+    wi > warmupIndex && !w.done
+  );
+
+  if (hasLaterWarmupsInSameLift) {
+    return false;
+  }
+
+  return (liftBlock.sets || []).some(s => !s.done && !s.skipped);
+}
+
 function toggleMeetWarmup(liftIndex, warmupIndex) {
+  const workout = workouts[selectedIndex];
+  const currentDone = workout?.lifts?.[liftIndex]?.warmups?.[warmupIndex]?.done;
+
+  if (currentDone === false) {
+    if (hasMoreWorkAfterLiftWarmup(workout, liftIndex, warmupIndex)) {
+      startTimer(restTimeSeconds, {
+        workoutNumber: workout.number,
+        type: 'meetWarmup',
+        liftIndex,
+        index: warmupIndex,
+      });
+    } else {
+      setTimer(null);
+    }
+  } else {
+    setTimer(null);
+  }
+
   setWorkouts(prev =>
     prev.map((w, wi) => {
       if (wi !== selectedIndex) return w;
@@ -5195,12 +5237,12 @@ function toggleMeetWarmup(liftIndex, warmupIndex) {
 }
 
 function hasMoreMeetSets(workout, liftIndex, setIndex) {
-  return (workout.lifts || []).some((liftBlock, li) => {
-    if (li < liftIndex) return false;
-    if (li > liftIndex) return (liftBlock.sets || []).some(s => !s.done);
+  const liftBlock = workout?.lifts?.[liftIndex];
+  if (!liftBlock) return false;
 
-    return (liftBlock.sets || []).some((s, si) => si > setIndex && !s.done);
-  });
+  return (liftBlock.sets || []).some((s, si) =>
+    si > setIndex && !s.done && !s.skipped
+  );
 }
 
 function toggleMeetSet(liftIndex, setIndex) {
@@ -5456,6 +5498,15 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 
     const finishedWorkout = JSON.parse(JSON.stringify(workout));
 
+    if (workout.type === 'training' && (finishedWorkout.lifts || []).length > 0) {
+      const primaryLiftBlock = finishedWorkout.lifts[0];
+
+      finishedWorkout.lift = primaryLiftBlock.lift;
+      finishedWorkout.prepItems = primaryLiftBlock.prepItems || [];
+      finishedWorkout.warmups = primaryLiftBlock.warmups || [];
+      finishedWorkout.sets = primaryLiftBlock.sets || [];
+    }
+
     if (workout.type === 'meet') {
   const today = new Date().toLocaleDateString('nl-NL');
 
@@ -5481,18 +5532,19 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       ? Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0)))
       : 0;
 
+    const previousLiftHistory = history.filter(h =>
+      h.lift === liftBlock.lift &&
+      !(h.cycle === currentCycle && h.workoutNumber === workout.number)
+    );
+
     const previousBestE1RM = Math.max(
-      0,
-      ...history
-        .filter(h => h.lift === liftBlock.lift && h.workoutNumber !== workout.number)
-        .map(h => Number(h.e1rm) || 0)
+      Number(prs[liftBlock.lift]) || 0,
+      ...previousLiftHistory.map(h => Number(h.e1rm) || 0)
     );
 
     const previousBest1RM = Math.max(
       0,
-      ...history
-        .filter(h => h.lift === liftBlock.lift && h.workoutNumber !== workout.number)
-        .map(h => Number(h.topWeight) || 0)
+      ...previousLiftHistory.map(h => Number(h.topWeight) || 0)
     );
 
     return {
@@ -5509,9 +5561,21 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     };
   });
 
+  const primaryResult = results[0];
+
   setCompletedSummary({
     type: workout.type === 'meet' ? 'meet' : 'multiTraining',
     results,
+    lift: primaryResult?.lift,
+    oneRMToday: primaryResult?.oneRMToday || 0,
+    e1RMToday: primaryResult?.e1RMToday || 0,
+    previousBest1RM: primaryResult?.previousBest1RM || 0,
+    previousBestE1RM: primaryResult?.previousBestE1RM || 0,
+    best1RM: primaryResult?.best1RM || 0,
+    bestE1RM: primaryResult?.bestE1RM || 0,
+    is1RMPR: !!primaryResult?.is1RMPR,
+    isE1RMPR: !!primaryResult?.isE1RMPR,
+    topSet: primaryResult?.topSet || null,
     bodyWeight: latestBodyWeight,
   });
 
@@ -5538,7 +5602,8 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 
   setCompletedWorkout(finishedWorkout);
   setCompletedWorkoutIndex(selectedIndex);
-  setSelectedIndex(Math.min(currentIndex + 1, workouts.length - 1));
+  const nextWorkoutIndex = Math.min(currentIndex + 1, workouts.length - 1);
+  setSelectedIndex(nextWorkoutIndex);
   setShowNewCycle(workout.type === 'meet');
   setScreen('completed');
 
@@ -5641,7 +5706,8 @@ setCompletedSummary({
   setCompletedWorkout(finishedWorkout);
   setCompletedWorkoutIndex(selectedIndex);
 
-  setSelectedIndex(Math.min(currentIndex + 1, workouts.length - 1));
+  const nextWorkoutIndex = Math.min(currentIndex + 1, workouts.length - 1);
+  setSelectedIndex(nextWorkoutIndex);
 
   setScreen('completed');
 }
@@ -6322,6 +6388,86 @@ const latestBodyDataRows = [
           {t.startNewCycle} 🚀
         </button>
 
+        {(completedWorkout?.lifts || []).length > 0 && (
+          <div style={{
+            background: THEME.card,
+            border: `1px solid ${THEME.border}`,
+            color: THEME.text,
+            borderRadius: 8,
+            padding: 16,
+            marginBottom: 20,
+            textAlign: 'left'
+          }}>
+            {(completedWorkout.lifts || []).map((liftBlock, liftIndex) => (
+              <div
+                key={`completed-lift-${liftBlock.lift}`}
+                style={{
+                  marginTop: liftIndex === 0 ? 0 : 16,
+                  paddingTop: liftIndex === 0 ? 0 : 14,
+                  borderTop: liftIndex === 0 ? 'none' : `1px solid ${THEME.border}`
+                }}
+              >
+                <div style={{
+                  color: ({
+                    Squat: THEME.red,
+                    Bench: THEME.primary,
+                    Deadlift: THEME.yellow,
+                  }[liftBlock.lift] || THEME.primary),
+                  fontSize: 16,
+                  fontWeight: 900,
+                  marginBottom: 8
+                }}>
+                  {liftLabel(liftBlock.lift, t)}
+                </div>
+
+                {(liftBlock.sets || []).map((set, i) => {
+                  const setLabel = set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`;
+                  const isInvalidSet = set.failed || set.skipped || !set.done;
+                  const effortLabel = getSetEffortLabel(set.effort, t);
+
+                  return (
+                    <div
+                      key={`${liftBlock.lift}-${i}`}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr auto',
+                        gap: 12,
+                        padding: '7px 0',
+                        borderTop: i === 0 ? 'none' : `1px solid ${THEME.border}`,
+                        opacity: isInvalidSet ? 0.75 : 1
+                      }}
+                    >
+                      <div>
+                        <div style={{ color: THEME.text, fontWeight: 800 }}>
+                          {isInvalidSet ? '✕ ' : '✓ '}
+                          {setLabel}
+                        </div>
+
+                        <div style={{
+                          color: THEME.muted,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          marginTop: 2
+                        }}>
+                          {set.reps} {t.reps}
+                          {effortLabel ? ` · ${effortLabel}` : ''}
+                        </div>
+                      </div>
+
+                      <strong style={{
+                        color: isInvalidSet ? '#e74c3c' : '#ffffff',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {set.weight} {t.kg}
+                      </strong>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+
         <button
           onClick={() => setScreen('stats')}
           style={{
@@ -6375,7 +6521,46 @@ const latestBodyDataRows = [
           {t.goodJobSaved}
         </p>
 
-        {getWorkoutEffortText(completedWorkout?.workoutEffort, t) && (
+        {(completedWorkout?.lifts || []).length > 0 && (() => {
+          const liftNames = (completedWorkout.lifts || [])
+            .map(liftBlock => liftLabel(liftBlock.lift, t))
+            .filter(Boolean)
+            .join(' + ');
+
+          const effortLabel = getWorkoutEffortLabel(completedWorkout?.workoutEffort, t);
+
+          const summaryRow = (label, value) => (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+              marginBottom: 10
+            }}>
+              <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
+              <strong style={{ color: '#ffffff', textAlign: 'right' }}>{value}</strong>
+            </div>
+          );
+
+          return (
+            <div style={{
+              background: THEME.card,
+              border: `1px solid ${THEME.border}`,
+              color: THEME.text,
+              borderRadius: 8,
+              padding: 16,
+              marginBottom: 16,
+              textAlign: 'left'
+            }}>
+              {summaryRow(t.lifts || t.lift, liftNames || '—')}
+              {summaryRow(t.workout, completedWorkout?.number || '—')}
+              {summaryRow(t.cycle, currentCycle)}
+              {summaryRow(t.workoutEffortWas || 'Ha estat', effortLabel || '—')}
+            </div>
+          );
+        })()}
+
+
+        {(completedWorkout?.lifts || []).length === 0 && getWorkoutEffortText(completedWorkout?.workoutEffort, t) && (
           <div style={{
             margin: '0 auto 16px',
             padding: '10px 14px',
@@ -6414,6 +6599,20 @@ const latestBodyDataRows = [
           marginBottom: 20,
           textAlign: 'left'
         }}>
+          <div style={{
+            color: ({
+              Squat: THEME.red,
+              Bench: THEME.primary,
+              Deadlift: THEME.yellow,
+            }[completedSummary?.results?.[0]?.lift || completedWorkout?.lift] || THEME.primary),
+            fontSize: 16,
+            fontWeight: 900,
+            marginBottom: 10,
+            textAlign: 'center'
+          }}>
+            {liftLabel(completedSummary?.results?.[0]?.lift || completedWorkout?.lift, t)} · 1RM / e1RM
+          </div>
+
           {(() => {
             const row = (label, value, isPR) => (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -6424,94 +6623,126 @@ const latestBodyDataRows = [
               </div>
             );
 
+            const primaryResult = completedSummary?.type === 'multiTraining'
+              ? completedSummary.results?.[0]
+              : null;
+
             const sets = (completedWorkout?.sets || []).filter(s => s.done && !s.failed && !s.skipped);
 
-            const oneRMToday = sets.length
+            const calculatedOneRMToday = sets.length
               ? Math.max(...sets.map(s => Number(s.weight) || 0))
               : 0;
 
-            const e1RMToday = sets.length
+            const calculatedE1RMToday = sets.length
               ? Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0)))
               : 0;
 
-            const best1RM = completedSummary?.best1RM || oneRMToday;
-            const bestE1RM = completedSummary?.bestE1RM || completedSummary?.e1rm || e1RMToday;
+            const oneRMToday = primaryResult?.oneRMToday ?? calculatedOneRMToday;
+            const e1RMToday = primaryResult?.e1RMToday ?? calculatedE1RMToday;
 
-            const is1RMPR = oneRMToday >= best1RM && oneRMToday > 0;
-            const isE1RMPR = e1RMToday >= bestE1RM && e1RMToday > 0;
+            const primaryLift = primaryResult?.lift || completedWorkout?.lift;
+
+            const previousBest1RM = Number(best1RMs?.[primaryLift]) || 0;
+            const previousBestE1RM = Number(bestE1RMs?.[primaryLift]) || Number(prs?.[primaryLift]) || 0;
+
+            const best1RM = Math.max(previousBest1RM, oneRMToday || 0);
+            const bestE1RM = Math.max(previousBestE1RM, e1RMToday || 0);
+
+            const is1RMPR = oneRMToday > previousBest1RM && oneRMToday > 0;
+            const isE1RMPR = e1RMToday > previousBestE1RM && e1RMToday > 0;
 
             return (
               <>
                 {row(t.oneRMToday, oneRMToday, is1RMPR)}
                 {row(t.e1RMToday, e1RMToday, isE1RMPR)}
-                {row(t.best1RM, Math.max(best1RM, oneRMToday), is1RMPR)}
-                {row(t.bestE1RM, Math.max(bestE1RM, e1RMToday), isE1RMPR)}
+                {row(t.best1RM, best1RM, is1RMPR)}
+                {row(t.bestE1RM, bestE1RM, isE1RMPR)}
               </>
             );
           })()}
         </div>
 
-        <div style={{ background: THEME.card,
-          border: `1px solid ${THEME.border}`,
-          color: THEME.text, borderRadius: 8, padding: 16, marginBottom: 20, textAlign: 'left' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.lift}</span>
-            <strong>{completedWorkout?.lift || '—'}</strong>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.workout}</span>
-            <strong>{completedWorkout?.number || '—'}</strong>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.cycle}</span>
-            <strong>{currentCycle}</strong>
-          </div>
-
-          <div style={{ fontSize: 16, fontWeight: 700, color: THEME.muted, marginBottom: 10 }}>
-            {completedWorkout?.lift || '—'}
-          </div>
-
-          {(completedWorkout?.sets || []).map((set, i) => {
-            const setLabel = set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`;
-            const isInvalidSet = set.failed || set.skipped;
-            const statusLabel = set.skipped
-              ? t.skipped
-              : set.failed
-              ? t.setNotCompleted
-              : null;
-
-            return (
+        {/* FORCE_MULTI_LIFT_COMPLETED_SETS_START */}
+        {(completedWorkout?.lifts || []).length > 0 && (
+          <div style={{
+            background: THEME.card,
+            border: `1px solid ${THEME.border}`,
+            color: THEME.text,
+            borderRadius: 8,
+            padding: 16,
+            marginBottom: 20,
+            textAlign: 'left'
+          }}>
+            {(completedWorkout.lifts || []).map((liftBlock, liftIndex) => (
               <div
-                key={i}
+                key={`force-completed-lift-${liftBlock.lift}`}
                 style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  padding: '10px 12px',
-                  color: '#ffffff',
-                  opacity: isInvalidSet ? 0.8 : 1,
-                  borderLeft: isInvalidSet ? '3px solid #e74c3c' : '3px solid transparent'
+                  marginTop: liftIndex === 0 ? 0 : 16,
+                  paddingTop: liftIndex === 0 ? 0 : 14,
+                  borderTop: liftIndex === 0 ? 'none' : `1px solid ${THEME.border}`
                 }}
               >
-                <span style={{ color: '#ffffff', fontWeight: 700 }}>
-                  {isInvalidSet ? '✕ ' : '✓ '}
-                  {setLabel} — {set.reps} {t.reps}
-                  {statusLabel && (
-                    <span style={{ color: '#e74c3c', fontSize: 12, marginLeft: 6 }}>
-                      {statusLabel}
-                    </span>
-                  )}
-                </span>
+                <div style={{
+                  color: ({
+                    Squat: THEME.red,
+                    Bench: THEME.primary,
+                    Deadlift: THEME.yellow,
+                  }[liftBlock.lift] || THEME.primary),
+                  fontSize: 16,
+                  fontWeight: 900,
+                  marginBottom: 8
+                }}>
+                  {liftLabel(liftBlock.lift, t)}
+                </div>
 
-                <strong style={{ color: isInvalidSet ? '#e74c3c' : '#ffffff', whiteSpace: 'nowrap' }}>
-                  {set.weight} {t.kg}
-                </strong>
+                {(liftBlock.sets || []).map((set, i) => {
+                  const setLabel = set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`;
+                  const isInvalidSet = set.failed || set.skipped || !set.done;
+                  const effortLabel = getSetEffortLabel(set.effort, t);
+
+                  return (
+                    <div
+                      key={`force-${liftBlock.lift}-${i}`}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr auto',
+                        gap: 12,
+                        padding: '7px 0',
+                        borderTop: i === 0 ? 'none' : `1px solid ${THEME.border}`,
+                        opacity: isInvalidSet ? 0.75 : 1
+                      }}
+                    >
+                      <div>
+                        <div style={{ color: THEME.text, fontWeight: 800 }}>
+                          {isInvalidSet ? '✕ ' : '✓ '}
+                          {setLabel}
+                        </div>
+
+                        <div style={{
+                          color: THEME.muted,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          marginTop: 2
+                        }}>
+                          {set.reps} {t.reps}
+                          {effortLabel ? ` · ${effortLabel}` : ''}
+                        </div>
+                      </div>
+
+                      <strong style={{
+                        color: isInvalidSet ? '#e74c3c' : '#ffffff',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {set.weight} {t.kg}
+                      </strong>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
+        {/* FORCE_MULTI_LIFT_COMPLETED_SETS_END */}
 
         <button
           onClick={() => setScreen('stats')}
