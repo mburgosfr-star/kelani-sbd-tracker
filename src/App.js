@@ -633,149 +633,43 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
   };
 
   const program = [
-    { lift: 'Deadlift', type: 'training', labelKey: 'practice', blocks: [
-      { sets: 1, reps: 3, pct: 0.75, labelKey: 'topTriple' },
-      { sets: 3, reps: 5, pct: 0.675, labelKey: 'backoff' },
-    ] },
-    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [
-      { sets: 1, reps: 3, pct: 0.75, labelKey: 'topTriple' },
-      { sets: 4, reps: 6, pct: 0.65, labelKey: 'backoff' },
-    ] },
-    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [
-      { sets: 1, reps: 3, pct: 0.75, labelKey: 'topTriple' },
-      { sets: 4, reps: 5, pct: 0.65, labelKey: 'backoff' },
-    ] },
-    { lift: 'Bench', type: 'training', labelKey: 'practice', blocks: [
-      { sets: 1, reps: 3, pct: 0.775, labelKey: 'topTriple' },
-      { sets: 5, reps: 4, pct: 0.70, labelKey: 'backoff' },
-    ] },
-    { lift: 'Squat', type: 'training', labelKey: 'practice', blocks: [
-      { sets: 1, reps: 3, pct: 0.775, labelKey: 'topTriple' },
-      { sets: 4, reps: 5, pct: 0.70, labelKey: 'backoff' },
-    ] },
-    { lift: 'Bench', type: 'training', labelKey: 'practice', blocks: [
-      { sets: 1, reps: 2, pct: 0.80, labelKey: 'topDouble' },
-      { sets: 6, reps: 3, pct: 0.725, labelKey: 'backoff' },
-    ] },
-
-    { lift: 'Deadlift', type: 'training', labelKey: 'volume', blocks: [
-      { sets: 1, reps: 3, pct: 0.80, labelKey: 'topTriple' },
-      { sets: 4, reps: 4, pct: 0.725, labelKey: 'backoff' },
-    ] },
-    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [
-      { sets: 1, reps: 3, pct: 0.80, labelKey: 'topTriple' },
-      { sets: 4, reps: 5, pct: 0.70, labelKey: 'backoff' },
-    ] },
-    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [
-      { sets: 1, reps: 3, pct: 0.80, labelKey: 'topTriple' },
-      { sets: 4, reps: 4, pct: 0.70, labelKey: 'backoff' },
-    ] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
-      { sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' },
-      { sets: 4, reps: 4, pct: 0.75, labelKey: 'backoff' },
-    ] },
-    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [
-      { sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' },
-      { sets: 4, reps: 4, pct: 0.75, labelKey: 'backoff' },
-    ] },
-    { lift: 'Bench', type: 'training', labelKey: 'practice', blocks: [
-      { sets: 1, reps: 2, pct: 0.85, labelKey: 'topDouble' },
-      { sets: 4, reps: 4, pct: 0.75, labelKey: 'backoff' },
-    ] },
-
-    { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [
-      { sets: 1, reps: 2, pct: 0.85, labelKey: 'topDouble' },
-      { sets: 3, reps: 4, pct: 0.75, labelKey: 'backoff' },
-    ] },
-    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [
-      { sets: 1, reps: 2, pct: 0.85, labelKey: 'topDouble' },
-      { sets: 4, reps: 4, pct: 0.75, labelKey: 'backoff' },
-    ] },
-    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [
-      { sets: 1, reps: 2, pct: 0.85, labelKey: 'topDouble' },
-      { sets: 3, reps: 4, pct: 0.75, labelKey: 'backoff' },
-    ] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
-      { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' },
-    ] },
-    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [
-      { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' },
-    ] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
-      { sets: 1, reps: 1, pct: 0.90, labelKey: 'topSingle' },
-      { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' },
-    ] },
-
-    { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [
-      { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 3, reps: 4, pct: 0.75, labelKey: 'backoff' },
-    ] },
-    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [
-      { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' },
-    ] },
-    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [
-      { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 3, reps: 4, pct: 0.75, labelKey: 'backoff' },
-    ] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
-      { sets: 1, reps: 1, pct: 0.90, labelKey: 'topSingle' },
-      { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' },
-    ] },
-    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [
-      { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 3, reps: 4, pct: 0.75, labelKey: 'backoff' },
-    ] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [
-      { sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' },
-      { sets: 3, reps: 4, pct: 0.75, labelKey: 'backoff' },
-    ] },
-
-    {
-      lift: 'Squat',
-      type: 'training',
-      labelKey: 'preMeet',
-      blocks: [
-        { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
-        { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
-        { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
-        { sets: 3, reps: 5, pct: 0.75, labelKey: 'backoff' },
-      ],
-    },
-{
-      lift: 'Bench',
-      type: 'training',
-      labelKey: 'preMeet',
-      blocks: [
-        { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
-        { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
-        { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
-        { sets: 3, reps: 5, pct: 0.75, labelKey: 'backoff' },
-      ],
-    },
-    {
-      lift: 'Deadlift',
-      type: 'training',
-      labelKey: 'preMeet',
-      blocks: [
-        { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
-        { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
-        { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
-        { sets: 3, reps: 5, pct: 0.75, labelKey: 'backoff' },
-      ],
-    },
-      ];
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 3, reps: 5, pct: 0.675, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 4, reps: 6, pct: 0.650, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.775, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.700, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 3, pct: 0.800, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.700, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 3, pct: 0.700, labelKey: 'topTriple' }, { sets: 3, reps: 4, pct: 0.625, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 5, pct: 0.625, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.650, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.800, labelKey: 'topDouble' }, { sets: 3, reps: 4, pct: 0.725, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 2, pct: 0.850, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.775, labelKey: 'topDouble' }, { sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 4, pct: 0.650, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 4, pct: 0.675, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.800, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 4, pct: 0.625, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 1, pct: 0.930, labelKey: 'secondAttempt' }, { sets: 1, reps: 1, pct: 0.950, labelKey: 'thirdAttempt' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 1, pct: 0.930, labelKey: 'secondAttempt' }, { sets: 1, reps: 1, pct: 0.950, labelKey: 'thirdAttempt' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 1, pct: 0.930, labelKey: 'secondAttempt' }, { sets: 1, reps: 1, pct: 0.950, labelKey: 'thirdAttempt' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.800, labelKey: 'topSingle' }, { sets: 2, reps: 4, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.600, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.750, labelKey: 'topSingle' }, { sets: 2, reps: 4, pct: 0.600, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.800, labelKey: 'topSingle' }, { sets: 2, reps: 4, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 2, reps: 4, pct: 0.600, labelKey: 'backoff' }] }] },
+  ];
 
   const workouts = [];
 
-  program.forEach((day, dayIndex) => {
+  function buildLiftBlock(liftConfig) {
     const sets = [];
 
-    day.blocks.forEach(block => {
+    liftConfig.blocks.forEach(block => {
       for (let i = 0; i < block.sets; i++) {
-        const weight = round25(oneRMs[day.lift] * block.pct);
+        const weight = round25(oneRMs[liftConfig.lift] * block.pct);
 
         sets.push({
           labelKey: block.labelKey || null,
@@ -791,17 +685,30 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
     });
 
     const firstWorkWeight = sets.length ? sets[0].weight : 20;
-    const warmups = generateWarmups(firstWorkWeight);
+
+    return {
+      lift: liftConfig.lift,
+      prepItems: generatePrepItems(liftConfig.lift),
+      warmups: generateWarmups(firstWorkWeight),
+      sets,
+    };
+  }
+
+  program.forEach((day, dayIndex) => {
+    const liftBlocks = day.lifts.map(buildLiftBlock);
+    const primaryLift = liftBlocks[0]?.lift;
 
     workouts.push({
       number: dayIndex + 1,
       type: day.type,
-      lift: day.lift,
+      lift: primaryLift,
       label: day.label,
-      prepItems: generatePrepItems(day.lift),
-      warmups,
-      sets,
-      accessories: generateAccessoriesForLift(day.lift, accessoryMode, accessoryPRs, oneRMs),
+      labelKey: day.labelKey,
+      lifts: liftBlocks,
+      prepItems: liftBlocks[0]?.prepItems || [],
+      warmups: liftBlocks[0]?.warmups || [],
+      sets: liftBlocks[0]?.sets || [],
+      accessories: generateAccessoriesForLift(primaryLift, accessoryMode, accessoryPRs, oneRMs),
     });
   });
 
@@ -3973,46 +3880,65 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
   );
 }
 
+function getWorkoutTitle(workout, t) {
+  if (!workout || workout.type === 'rest') return t.deload;
+
+  const lifts = (workout.lifts || [])
+    .map(liftBlock => liftBlock.lift)
+    .filter(Boolean);
+
+  if (lifts.length > 0) {
+    return lifts.map(lift => liftLabel(lift, t)).join(' + ');
+  }
+
+  return liftLabel(workout.lift, t);
+}
+
 function getWorkoutPlanLines(workout, t) {
   if (!workout || workout.type === 'rest') return [];
 
-  if (workout.type === 'meet') {
-    return (workout.lifts || []).map(liftBlock => {
-      const attempts = (liftBlock.sets || [])
-        .map(set => `${set.reps}×${set.weight}`)
-        .join(' / ');
+  const liftBlocks = (workout.lifts || []).length > 0
+    ? workout.lifts
+    : [{ lift: workout.lift, sets: workout.sets || [] }];
 
-      return `${liftLabel(liftBlock.lift, t)}: ${attempts} ${t.kg}`;
+  return liftBlocks.flatMap(liftBlock => {
+    const groups = [];
+
+    (liftBlock.sets || []).forEach(set => {
+      const labelKey = set.labelKey || null;
+      const label = labelKey ? t[labelKey] : set.label || t.set;
+      const last = groups[groups.length - 1];
+
+      if (
+        last &&
+        last.labelKey === labelKey &&
+        last.label === label &&
+        last.reps === set.reps &&
+        last.weight === set.weight
+      ) {
+        last.count += 1;
+        return;
+      }
+
+      groups.push({
+        labelKey,
+        label,
+        reps: set.reps,
+        weight: set.weight,
+        count: 1,
+      });
     });
-  }
 
-  const groups = [];
+    const onlyBackoff = groups.length > 0 && groups.every(group => group.labelKey === 'backoff');
 
-  (workout.sets || []).forEach(set => {
-    const label = set.labelKey ? t[set.labelKey] : set.label || t.set;
-    const last = groups[groups.length - 1];
+    return groups.map(group => {
+      if (onlyBackoff) {
+        return `${liftLabel(liftBlock.lift, t)}: ${group.count}×${group.reps}×${group.weight} ${t.kg}`;
+      }
 
-    if (
-      last &&
-      last.label === label &&
-      last.reps === set.reps &&
-      last.weight === set.weight
-    ) {
-      last.count += 1;
-      return;
-    }
-
-    groups.push({
-      label,
-      reps: set.reps,
-      weight: set.weight,
-      count: 1,
+      return `${liftLabel(liftBlock.lift, t)} · ${group.label}: ${group.count}×${group.reps}×${group.weight} ${t.kg}`;
     });
   });
-
-  return groups.map(group =>
-    `${group.label}: ${group.count}×${group.reps}×${group.weight} ${t.kg}`
-  );
 }
 
 function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t }) {
@@ -4088,7 +4014,7 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
 
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: isCurrent ? 700 : 500, color: isCurrent ? THEME.primary : '#ffffff' }}>
-                {workout.type === 'rest' ? t.deload : liftLabel(workout.lift, t)}
+                {getWorkoutTitle(workout, t)}
                 {isCurrent && (
                   <span style={{
                     fontSize: 11,
