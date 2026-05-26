@@ -11,6 +11,7 @@ const REST_TIME_OPTIONS = [90, 180, 300];
 const ACCESSORY_MODES = ['off', 'basic', 'full'];
 const SET_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'max'];
 const WORKOUT_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'tooMuch'];
+const LIFT_ORDER = ['Squat', 'Bench', 'Deadlift'];
 const DEFAULT_REST_TIME_SECONDS = 300;
 const AUTO_BACKUP_PATH = 'Kelani/kelani-sbd-tracker-autosave.json';
 const AUTO_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-auto-backup-status';
@@ -733,7 +734,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
     ] },
 
     {
-      lift: 'Deadlift',
+      lift: 'Squat',
       type: 'training',
       labelKey: 'preMeet',
       blocks: [
@@ -743,7 +744,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
         { sets: 3, reps: 5, pct: 0.75, labelKey: 'backoff' },
       ],
     },
-    {
+{
       lift: 'Bench',
       type: 'training',
       labelKey: 'preMeet',
@@ -755,7 +756,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
       ],
     },
     {
-      lift: 'Squat',
+      lift: 'Deadlift',
       type: 'training',
       labelKey: 'preMeet',
       blocks: [
@@ -765,7 +766,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
         { sets: 3, reps: 5, pct: 0.75, labelKey: 'backoff' },
       ],
     },
-  ];
+      ];
 
   const workouts = [];
 
@@ -809,7 +810,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
   type: 'meet',
   lift: 'SBD',
   labelKey: 'meetDay',
-  lifts: ['Squat', 'Bench', 'Deadlift'].map(lift => {
+  lifts: LIFT_ORDER.map(lift => {
     const sets = [
       {
         labelKey: 'opener',
@@ -2522,7 +2523,7 @@ function NewCycleModal({ prs, onStart, t }) {
           padding: 12,
           marginBottom: 20
         }}>
-          {['Deadlift', 'Bench', 'Squat'].map(lift => (
+          {LIFT_ORDER.map(lift => (
             <div
               key={lift}
               style={{
@@ -3107,7 +3108,7 @@ const sortedHistory = [...history]
 sortedHistory.forEach(entry => {
   const label = getWorkoutLabel(entry);
 
-  if (entry.lift && ['Deadlift', 'Bench', 'Squat'].includes(entry.lift)) {
+  if (entry.lift && LIFT_ORDER.includes(entry.lift)) {
     if (!liftData[entry.lift]) liftData[entry.lift] = [];
 
     bestStats[entry.lift].oneRM = Math.max(
@@ -3132,7 +3133,7 @@ sortedHistory.forEach(entry => {
 const bestPerLift = {};
 
 sortedHistory.forEach(entry => {
-  if (!entry.lift || !['Squat', 'Bench', 'Deadlift'].includes(entry.lift)) return;
+  if (!entry.lift || !LIFT_ORDER.includes(entry.lift)) return;
 
   if (!bestPerLift[entry.lift]) {
     bestPerLift[entry.lift] = { oneRM: 0, e1rm: 0 };
@@ -3278,7 +3279,7 @@ function meetAttemptValue(lift, key, fallback) {
   return custom;
 }
 
-const suggestedMeetPlan = ['Squat', 'Bench', 'Deadlift'].map(lift => {
+const suggestedMeetPlan = LIFT_ORDER.map(lift => {
   const e1rm = bestStats[lift]?.e1rm || 0;
 
   return {
@@ -3459,7 +3460,7 @@ const meetTotals = {
 
       {activescreen === 'lifts' && (
   <div>
-    {['Deadlift', 'Bench', 'Squat'].map(lift => {
+    {LIFT_ORDER.map(lift => {
   const liftLabel =
     lift === 'Deadlift' ? t.deadlift :
     lift === 'Bench' ? t.bench :
@@ -5616,7 +5617,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 
 }
   
-    if (workout.type === 'training' && ['Deadlift', 'Bench', 'Squat'].includes(workout.lift)) {
+    if (workout.type === 'training' && LIFT_ORDER.includes(workout.lift)) {
     const sets = (workout.sets || []).filter(s => s.done && !s.failed && !s.skipped);
 
 if (sets.length > 0) {
