@@ -176,6 +176,21 @@ function getCompletedWorkoutCount(history, currentCycle) {
   return completedWorkoutNumbers.size;
 }
 
+function getRestorableSelectedIndex(inProgress, currentCycle, totalWorkouts) {
+  const selectedIndex = Number(inProgress?.selectedIndex);
+
+  if (
+    !inProgress ||
+    inProgress.currentCycle !== currentCycle ||
+    !Number.isFinite(selectedIndex) ||
+    totalWorkouts <= 0
+  ) {
+    return null;
+  }
+
+  return Math.max(0, Math.min(selectedIndex, totalWorkouts - 1));
+}
+
 function normalizeBodyWeights(data) {
   const entries = [];
 
@@ -4528,11 +4543,17 @@ export default function App() {
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
       setAccessoryMode(normalizeAccessoryMode(data.accessoryMode));
 
-      setSelectedIndex(
-        canRestoreInProgress
-          ? savedInProgress.selectedIndex || 0
-          : getCompletedWorkoutCount(savedHistory, savedCycle)
+      const completedWorkoutCount = getCompletedWorkoutCount(savedHistory, savedCycle);
+      const restorableSelectedIndex = getRestorableSelectedIndex(
+        savedInProgress,
+        savedCycle,
+        generatedWorkouts.length
       );
+
+      setSelectedIndex(Math.max(
+        completedWorkoutCount,
+        restorableSelectedIndex ?? completedWorkoutCount
+      ));
 
       setShowNewCycle(false);
       setScreen('dashboard');
