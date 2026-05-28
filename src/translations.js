@@ -178,6 +178,7 @@ export const translations = {
     topDouble: 'Top double',
     topSingle: 'Top single',
     meetDay: 'SBD-wedstrijddag',
+    sbdMeetDay: 'SBD-wedstrijddag',
 
     startProgram: 'Start programma',
     completeWorkout: 'Workout voltooien',
@@ -461,6 +462,7 @@ export const translations = {
     topDouble: 'Top double',
     topSingle: 'Top single',
     meetDay: 'SBD competition day',
+    sbdMeetDay: 'SBD meet day',
 
     startProgram: 'Start program',
     completeWorkout: 'Complete workout',
@@ -744,6 +746,7 @@ export const translations = {
     topDouble: 'Doble pesada',
     topSingle: 'Single pesada',
     meetDay: 'Dia de competició SBD',
+    sbdMeetDay: 'Dia de competició SBD',
 
     startProgram: 'Inicia el programa',
     completeWorkout: "Finalitza l'entrenament",
