@@ -261,6 +261,7 @@ export const translations = {
     volume: 'Volume',
     preMeet: 'Pre-wedstrijd',
     workoutProgress: 'Training',
+    nextWorkout: 'Volgende workout',
 
     meetPrepChecklist: 'Wedstrijddag checklist',
     meetPrepChecklistHint: 'Vink af wat je klaar hebt voor de wedstrijddag.',
@@ -543,6 +544,7 @@ export const translations = {
     volume: 'Volume',
     preMeet: 'Pre-competition',
     workoutProgress: 'Training',
+    nextWorkout: 'Next workout',
 
     meetPrepChecklist: 'Meet day checklist',
     meetPrepChecklistHint: 'Check off what you have ready for meet day.',
@@ -825,6 +827,7 @@ export const translations = {
     volume: 'Volum',
     preMeet: 'Pre-competició',
     workoutProgress: 'Entrenament',
+    nextWorkout: 'Pròxim entrenament',
 
     meetPrepChecklist: 'Llista de competició',
     meetPrepChecklistHint: 'Marca el que ja tens preparat per al dia de competició.',

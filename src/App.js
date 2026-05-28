@@ -2579,13 +2579,11 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
     return (
       <div style={{ maxWidth: 500, margin: '0 auto', padding: '8px 12px 12px', paddingBottom: 16, fontFamily: 'sans-serif' }}>
-        <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
-          {t.workout} {workout.number} — {isMeetDay ? t.meetDay : (workout.lifts || []).map(liftBlock => liftLabel(liftBlock.lift, t)).join(' + ')}
-        </h2>
-
-        <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
-          {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts}{isMeetDay ? ` · ${t.meetDay}` : ''}
-        </div>
+        <AppHeader
+          t={t}
+          title={`${t.workout} ${workout.number} — ${isMeetDay ? t.meetDay : (workout.lifts || []).map(liftBlock => liftLabel(liftBlock.lift, t)).join(' + ')}`}
+          subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${workout.number} / ${totalWorkouts}${isMeetDay ? ` · ${t.meetDay}` : ''}`}
+        />
 
 {isMeetDay && (
 <div style={{
@@ -3374,12 +3372,11 @@ const meetTotals = {
 
   return (
     <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
-      <div style={{ marginBottom: 20, textAlign: 'center' }}>
-        <h2 style={{ margin: '0 0 6px' }}>{t.stats}</h2>
-        <div style={{ color: THEME.muted, fontSize: 13 }}>
-          {t.cycle} {currentCycle} · {t.workoutProgress} {Math.min(currentIndex + 1, totalWorkouts)} / {totalWorkouts}
-        </div>
-      </div>
+      <AppHeader
+        t={t}
+        title={t.stats}
+        subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${Math.min(currentIndex + 1, totalWorkouts)} / ${totalWorkouts}`}
+      />
 
       <div style={{
         display: 'grid',
@@ -3987,6 +3984,35 @@ function getWorkoutPlanLines(workout, t) {
   });
 }
 
+function AppHeader({ t, title, subtitle, children }) {
+  return (
+    <div style={{ textAlign: 'center', marginBottom: 12 }}>
+      <div style={{
+        color: THEME.primary,
+        fontSize: 12,
+        fontWeight: 900,
+        letterSpacing: 1.2,
+        textTransform: 'uppercase',
+        marginBottom: 4
+      }}>
+        {t.appName}
+      </div>
+
+      <h2 style={{ margin: 0, fontSize: 24 }}>
+        {title}
+      </h2>
+
+      {subtitle && (
+        <div style={{ color: THEME.muted, fontSize: 13, marginTop: 6 }}>
+          {subtitle}
+        </div>
+      )}
+
+      {children}
+    </div>
+  );
+}
+
 function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t }) {
   const currentWorkoutRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
@@ -4016,12 +4042,11 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
 
   return (
     <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
-      <div style={{ marginBottom: 20, textAlign: 'center' }}>
-        <h2 style={{ margin: '0 0 6px' }}>{t.program}</h2>
-        <div style={{ color: THEME.muted, fontSize: 13 }}>
-          {t.cycle} {currentCycle} · {t.workoutProgress} {Math.min(currentIndex + 1, workouts.length)} / {workouts.length}
-        </div>
-      </div>
+      <AppHeader
+        t={t}
+        title={t.program}
+        subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${Math.min(currentIndex + 1, workouts.length)} / ${workouts.length}`}
+      />
 
 
       {visibleWorkoutEntries.map(({ workout, idx }) => {
@@ -6083,10 +6108,65 @@ const latestBodyDataRows = [
 
       {screen === 'dashboard' && (
   <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, background: THEME.bg, minHeight: '100vh', color: THEME.text }}>
-    <h2 style={{ marginTop: 0, textAlign: 'center' }}>{t.dashboard}</h2>
-    <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
-      {t.cycle} {currentCycle} · {t.workoutProgress} {Math.min(currentIndex + 1, workouts.length)} / {workouts.length}
-    </div>
+    <AppHeader
+      t={t}
+      title={t.dashboard}
+      subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${Math.min(currentIndex + 1, workouts.length)} / ${workouts.length}`}
+    />
+
+    {workouts[currentIndex] && (
+      <div style={{
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 10,
+        padding: 14,
+        marginBottom: 12,
+        textAlign: 'center'
+      }}>
+        <div style={{
+          color: THEME.primary,
+          fontSize: 11,
+          fontWeight: 900,
+          letterSpacing: 0.8,
+          textTransform: 'uppercase',
+          marginBottom: 6
+        }}>
+          {t.nextWorkout} · W{workouts[currentIndex].number}
+        </div>
+
+        <div style={{
+          color: THEME.text,
+          fontSize: 17,
+          fontWeight: 900,
+          marginBottom: 8
+        }}>
+          {getWorkoutTitle(workouts[currentIndex], t)}
+        </div>
+
+        <div style={{
+          display: 'grid',
+          gap: 3,
+          color: THEME.muted,
+          fontSize: 11,
+          lineHeight: 1.25,
+          maxWidth: 360,
+          margin: '0 auto'
+        }}>
+          {getWorkoutPlanLines(workouts[currentIndex], t).slice(0, 3).map((line, index) => (
+            <div
+              key={index}
+              style={{
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              {line}
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
     <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 12 }}>
       {[
         [t.squat, THEME.red, best1RMs.Squat, bestE1RMs.Squat],
@@ -6201,7 +6281,10 @@ const latestBodyDataRows = [
 
       {screen === 'settings' && (
        <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
-  <h2 style={{ marginTop: 0, textAlign: 'center' }}>{t.settings}</h2>
+  <AppHeader
+    t={t}
+    title={t.settings}
+  />
 
   <div style={{
     background: THEME.card,
