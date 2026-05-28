@@ -3967,6 +3967,17 @@ function getWorkoutPlanLines(workout, t) {
 
 function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t }) {
   const currentWorkoutRef = useRef(null);
+  const [showAllWorkouts, setShowAllWorkouts] = useState(false);
+
+  const visibleStart = Math.max(0, currentIndex - 3);
+  const visibleEnd = Math.min(workouts.length, currentIndex + 4);
+  const visibleWorkoutEntries = showAllWorkouts
+    ? workouts.map((workout, idx) => ({ workout, idx }))
+    : workouts.slice(visibleStart, visibleEnd).map((workout, offset) => ({
+      workout,
+      idx: visibleStart + offset,
+    }));
+  const hasHiddenWorkouts = workouts.length > (visibleEnd - visibleStart);
 
   useEffect(() => {
     if (!currentWorkoutRef.current) return;
@@ -3991,7 +4002,7 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
       </div>
 
 
-      {workouts.map((workout, idx) => {
+      {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
         const isDone = idx < currentIndex;
         const headerBg = isCurrent ? THEME.primary : workout.type === 'rest' ? THEME.brown : THEME.border;
@@ -4091,6 +4102,25 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
           </div>
         );
       })}
+
+      {hasHiddenWorkouts && (
+        <button
+          onClick={() => setShowAllWorkouts(value => !value)}
+          style={{
+            width: '100%',
+            margin: '4px 0 14px',
+            padding: 10,
+            borderRadius: 8,
+            border: `1px solid ${THEME.border}`,
+            background: THEME.card,
+            color: THEME.primary,
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          {showAllWorkouts ? t.showFewerWorkouts : t.showAllWorkouts}
+        </button>
+      )}
 
       <StartNewCycleSection
         onStartNewCycle={onStartNewCycle}
