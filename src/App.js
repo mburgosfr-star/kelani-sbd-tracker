@@ -2574,7 +2574,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       <div style={{ maxWidth: 500, margin: '0 auto', padding: '8px 12px 12px', paddingBottom: 16, fontFamily: 'sans-serif' }}>
         <AppHeader
           t={t}
-          title={`${t.workout} ${workout.number} — ${isMeetDay ? t.meetDay : (workout.lifts || []).map(liftBlock => liftLabel(liftBlock.lift, t)).join(' + ')}`}
+          title={`${t.workout} ${workout.number} — ${getWorkoutTitle(workout, t)}`}
           subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${workout.number} / ${totalWorkouts}${isMeetDay ? ` · ${t.meetDay}` : ''}`}
         />
 
@@ -3918,6 +3918,7 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
 
 function getWorkoutTitle(workout, t) {
   if (!workout || workout.type === 'rest') return t.deload;
+  if (workout.type === 'meet') return t.sbdMeetDay || t.meetDay;
 
   const lifts = (workout.lifts || [])
     .map(liftBlock => liftBlock.lift)
@@ -4470,6 +4471,7 @@ export default function App() {
   const [screen, setScreen] = useState('onboarding');
   const [workouts, setWorkouts] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [currentWorkoutIndex, setCurrentWorkoutIndex] = useState(0);
   const [history, setHistory] = useState([]);
   const [prs, setPrs] = useState({});
   const [accessoryPRs, setAccessoryPRs] = useState({});
@@ -4484,7 +4486,7 @@ export default function App() {
   const [meetPlannerAttempts, setMeetPlannerAttempts] = useState({});
   const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const currentIndex = Math.max(getCompletedWorkoutCount(history, currentCycle), selectedIndex);
+  const currentIndex = Math.max(getCompletedWorkoutCount(history, currentCycle), currentWorkoutIndex);
   const PROGRAM_VERSION = 'cube-27-v5';
 
   function updateMeetPlannerAttempts(next) {
@@ -4619,10 +4621,23 @@ export default function App() {
         savedCycle,
         generatedWorkouts.length
       );
-
-      setSelectedIndex(Math.max(
+      const restorableCurrentIndex = getRestorableSelectedIndex(
+        {
+          ...savedInProgress,
+          selectedIndex: savedInProgress?.currentIndex ?? savedInProgress?.selectedIndex,
+        },
+        savedCycle,
+        generatedWorkouts.length
+      );
+      const restoredCurrentIndex = Math.max(
         completedWorkoutCount,
-        restorableSelectedIndex ?? completedWorkoutCount
+        restorableCurrentIndex ?? completedWorkoutCount
+      );
+
+      setCurrentWorkoutIndex(restoredCurrentIndex);
+      setSelectedIndex(Math.max(
+        restoredCurrentIndex,
+        restorableSelectedIndex ?? restoredCurrentIndex
       ));
 
       setShowNewCycle(false);
@@ -4651,11 +4666,12 @@ export default function App() {
       inProgress: {
         programVersion: PROGRAM_VERSION,
         currentCycle,
+        currentIndex,
         selectedIndex,
         workouts,
       },
     }));
-  }, [history, prs, accessoryPRs, currentCycle, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, accessoryMode, selectedIndex, workouts]);
+  }, [history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, accessoryMode, selectedIndex, workouts]);
 
   useEffect(() => {
     if (!prs.Squat || !prs.Bench || !prs.Deadlift) return;
@@ -4709,7 +4725,8 @@ export default function App() {
     localStorage.removeItem('app_version');
 
     setWorkouts(generateProgram(s, b, d, accessoryMode, accessoryPRs));
-    setSelectedIndex(0);
+    setCurrentWorkoutIndex(0);
+  setSelectedIndex(0);
     setCurrentCycle(1);
 
     setHistory([
@@ -4767,6 +4784,7 @@ function handleResetApp() {
   localStorage.removeItem('bodyweight_prompt_date');
 
   setWorkouts([]);
+  setCurrentWorkoutIndex(0);
   setSelectedIndex(0);
   setHistory([]);
   setPrs({});
@@ -4792,6 +4810,7 @@ function handleStartNewCycle() {
   setCurrentCycle(nextCycle);
   setMeetPlannerAttempts({});
   setWorkouts(newWorkouts);
+  setCurrentWorkoutIndex(0);
   setSelectedIndex(0);
   setCompletedWorkout(null);
   setCompletedSummary(null);
@@ -5693,7 +5712,10 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 
   setCompletedWorkout(finishedWorkout);
   setCompletedWorkoutIndex(selectedIndex);
-  const nextWorkoutIndex = Math.min(currentIndex + 1, workouts.length - 1);
+  const nextWorkoutIndex = Math.min(selectedIndex + 1, workouts.length - 1);
+  if (selectedIndex === currentIndex) {
+    setCurrentWorkoutIndex(nextWorkoutIndex);
+  }
   setSelectedIndex(nextWorkoutIndex);
   setShowNewCycle(workout.type === 'meet');
   setScreen('completed');
@@ -5701,6 +5723,101 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   return;
 
 }
+  
+    if (workout.type === 'training' && (workout.lifts || []).length > 0) {
+      const today = new Date().toLocaleDateString('nl-NL');
+
+      const results = (workout.lifts || []).map(liftBlock => {
+        const sets = (liftBlock.sets || []).filter(s => s.done && !s.failed && !s.skipped);
+
+        const topSet = sets.length
+          ? sets.reduce(
+              (best, s) =>
+                epley(Number(s.weight) || 0, Number(s.reps) || 0) >
+                epley(Number(best.weight) || 0, Number(best.reps) || 0)
+                  ? s
+                  : best,
+              sets[0]
+            )
+          : null;
+
+        const oneRMToday = sets.length
+          ? Math.max(...sets.map(s => Number(s.weight) || 0))
+          : 0;
+
+        const e1RMToday = sets.length
+          ? Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0)))
+          : 0;
+
+        const previousLiftHistory = history.filter(h =>
+          h.lift === liftBlock.lift &&
+          !(h.cycle === currentCycle && h.workoutNumber === workout.number)
+        );
+
+        const previousBestE1RM = Math.max(
+          Number(prs[liftBlock.lift]) || 0,
+          ...previousLiftHistory.map(h => Number(h.e1rm) || 0)
+        );
+
+        const previousBest1RM = Math.max(
+          0,
+          ...previousLiftHistory.map(h => Number(h.topWeight) || 0)
+        );
+
+        return {
+          lift: liftBlock.lift,
+          oneRMToday,
+          e1RMToday,
+          previousBest1RM,
+          previousBestE1RM,
+          best1RM: Math.max(previousBest1RM, oneRMToday),
+          bestE1RM: Math.max(previousBestE1RM, e1RMToday),
+          is1RMPR: oneRMToday > previousBest1RM,
+          isE1RMPR: e1RMToday > previousBestE1RM,
+          topSet,
+        };
+      });
+
+      const primaryResult = results[0];
+
+      setCompletedSummary({
+        type: 'multiTraining',
+        results,
+        lift: primaryResult?.lift,
+        oneRMToday: primaryResult?.oneRMToday || 0,
+        e1RMToday: primaryResult?.e1RMToday || 0,
+        previousBest1RM: primaryResult?.previousBest1RM || 0,
+        previousBestE1RM: primaryResult?.previousBestE1RM || 0,
+        best1RM: primaryResult?.best1RM || 0,
+        bestE1RM: primaryResult?.bestE1RM || 0,
+        is1RMPR: !!primaryResult?.is1RMPR,
+        isE1RMPR: !!primaryResult?.isE1RMPR,
+        topSet: primaryResult?.topSet || null,
+        bodyWeight: latestBodyWeight,
+      });
+
+      const withoutCurrentWorkout = history.filter(
+        h => !(h.cycle === currentCycle && h.workoutNumber === workout.number)
+      );
+
+      const newEntries = results.map(result => ({
+        workoutNumber: workout.number,
+        cycle: currentCycle,
+        lift: result.lift,
+        topWeight: result.oneRMToday,
+        topReps: result.topSet?.reps || 0,
+        e1rm: result.e1RMToday,
+        date: today,
+        workoutEffort: finishedWorkout.workoutEffort,
+        workoutSnapshot: finishedWorkout,
+      }));
+
+      const nextHistory = [...withoutCurrentWorkout, ...newEntries];
+
+      setHistory(nextHistory);
+      setPrs(calculatePrsFromHistory(nextHistory));
+    }
+
   
     if (workout.type === 'training' && LIFT_ORDER.includes(workout.lift)) {
     const sets = (workout.sets || []).filter(s => s.done && !s.failed && !s.skipped);
@@ -5797,7 +5914,10 @@ setCompletedSummary({
   setCompletedWorkout(finishedWorkout);
   setCompletedWorkoutIndex(selectedIndex);
 
-  const nextWorkoutIndex = Math.min(currentIndex + 1, workouts.length - 1);
+  const nextWorkoutIndex = Math.min(selectedIndex + 1, workouts.length - 1);
+  if (selectedIndex === currentIndex) {
+    setCurrentWorkoutIndex(nextWorkoutIndex);
+  }
   setSelectedIndex(nextWorkoutIndex);
 
   setScreen('completed');
@@ -6130,33 +6250,9 @@ const latestBodyDataRows = [
         <div style={{
           color: THEME.text,
           fontSize: 17,
-          fontWeight: 900,
-          marginBottom: 8
+          fontWeight: 900
         }}>
           {getWorkoutTitle(workouts[currentIndex], t)}
-        </div>
-
-        <div style={{
-          display: 'grid',
-          gap: 3,
-          color: THEME.muted,
-          fontSize: 11,
-          lineHeight: 1.25,
-          maxWidth: 360,
-          margin: '0 auto'
-        }}>
-          {getWorkoutPlanLines(workouts[currentIndex], t).slice(0, 3).map((line, index) => (
-            <div
-              key={index}
-              style={{
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis'
-              }}
-            >
-              {line}
-            </div>
-          ))}
         </div>
       </div>
     )}
