@@ -114,13 +114,6 @@ function calculateBmrEstimate(leanMass) {
 }
 
 
-function sexLabel(value, t) {
-  if (value === 'male') return t.male;
-  if (value === 'female') return t.female;
-  if (value === 'other') return t.other;
-  return '—';
-}
-
 function normalizeAccessoryMode(value) {
   return ACCESSORY_MODES.includes(value) ? value : 'off';
 }
@@ -3806,7 +3799,7 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
     <>
       <Toast message={notice} />
       <div style={{
-        marginTop: 14,
+        marginTop: 6,
         padding: 12,
         border: `1px solid ${THEME.border}`,
         borderRadius: 10,
@@ -4155,7 +4148,7 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
           onClick={() => setShowAllWorkouts(value => !value)}
           style={{
             width: '100%',
-            margin: '4px 0 14px',
+            margin: '4px 0 6px',
             padding: 10,
             borderRadius: 8,
             border: `1px solid ${THEME.border}`,
