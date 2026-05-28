@@ -3241,14 +3241,16 @@ const meetTotals = {
   function renderChart(data, dataKeys, colors) {
     if (!data || data.length === 0) {
       return (
-        <p style={{ color: THEME.text, textAlign: 'center', padding: 20 }}>
+        <p style={{ color: THEME.text, textAlign: 'center', padding: 14 }}>
           {t.noStatsData}
         </p>
       );
     }
 
+    const visibleData = data.length > 10 ? data.slice(-10) : data;
+
     const allXTicks = [...new Set(
-      data
+      visibleData
         .map(item => Number(item.absoluteWorkoutIndex))
         .filter(value => Number.isFinite(value))
     )];
@@ -3262,14 +3264,14 @@ const meetTotals = {
           allXTicks[allXTicks.length - 1],
         ].filter((value, index, arr) => value !== undefined && arr.indexOf(value) === index);
 
-    const labelByX = data.reduce((labels, item) => {
+    const labelByX = visibleData.reduce((labels, item) => {
       labels[item.absoluteWorkoutIndex] = item.label;
       return labels;
     }, {});
 
     return (
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={data} margin={{ top: 5, right: 16, left: 8, bottom: 5 }}>
+      <ResponsiveContainer width="100%" height={180}>
+        <LineChart data={visibleData} margin={{ top: 4, right: 12, left: 4, bottom: 2 }}>
           <CartesianGrid stroke={THEME.border} vertical={false} />
           <XAxis
             dataKey="absoluteWorkoutIndex"
@@ -3338,11 +3340,11 @@ const meetTotals = {
               background: THEME.card,
               border: `1px solid ${THEME.border}`,
               borderRadius: 8,
-              padding: 16,
-              marginBottom: 16
+              padding: 12,
+              marginBottom: 10
             }}
           >
-            <h3 style={{ margin: '0 0 12px' }}>{chart.title}</h3>
+            <h3 style={{ margin: '0 0 8px' }}>{chart.title}</h3>
             {renderChart(chart.data, [chart.key], [chart.color])}
           </div>
         ))}
@@ -3411,7 +3413,7 @@ const meetTotals = {
         marginBottom: 16
       }}
     >
-      <h3 style={{ margin: '0 0 12px', color: COLORS[lift] }}>
+      <h3 style={{ margin: '0 0 8px', color: COLORS[lift] }}>
         {liftLabel}
       </h3>
       {renderChart(
@@ -3434,7 +3436,7 @@ const meetTotals = {
             padding: 16,
             marginBottom: 16
           }}>
-            <h3 style={{ margin: '0 0 12px' }}>{t.totalSBD}</h3>
+            <h3 style={{ margin: '0 0 8px' }}>{t.totalSBD}</h3>
             {renderChart(totalData, ['oneRM', 'e1rm'], [THEME.muted, THEME.primary])}
           </div>
 
@@ -3444,7 +3446,7 @@ const meetTotals = {
             borderRadius: 8,
             padding: 16
           }}>
-            <h3 style={{ margin: '0 0 12px' }}>{t.strengthTotalBodyweight}</h3>
+            <h3 style={{ margin: '0 0 8px' }}>{t.strengthTotalBodyweight}</h3>
             {renderChart(strengthData, ['strength'], [THEME.primary])}
           </div>
         </div>
@@ -6598,8 +6600,8 @@ const latestBodyDataRows = [
               border: `1px solid ${THEME.border}`,
               color: THEME.text,
               borderRadius: 8,
-              padding: 16,
-              marginBottom: 16,
+              padding: 12,
+              marginBottom: 10,
               textAlign: 'left'
             }}>
               {summaryRow(t.lifts || t.lift, liftNames || '—')}
