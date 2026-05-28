@@ -1323,6 +1323,63 @@ function SettingsRow({ label, value }) {
   );
 }
 
+function SettingsListRow({ label, value, valueColor = THEME.text, actionLabel, onAction, actionContent, danger = false, noBorder = false, compact = false }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) auto',
+      alignItems: 'center',
+      gap: 12,
+      padding: compact ? '5px 0' : '8px 0',
+      borderBottom: noBorder ? 'none' : `1px solid ${THEME.border}`
+    }}>
+      <div style={{
+        color: danger ? THEME.red : THEME.text,
+        fontSize: 14,
+        fontWeight: 800,
+        minWidth: 0
+      }}>
+        {label}
+      </div>
+
+      <div style={{
+        color: valueColor,
+        fontSize: 13,
+        fontWeight: 800,
+        textAlign: 'center',
+        width: 132
+      }}>
+        {actionContent || (
+          actionLabel ? (
+            <button
+              type="button"
+              onClick={onAction}
+              style={{
+                width: 132,
+                padding: '6px 8px',
+                fontSize: 12,
+                fontWeight: 800,
+                background: danger ? '#8b1e1e' : THEME.card,
+                color: '#ffffff',
+                border: `1px solid ${danger ? THEME.red : THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              {actionLabel}
+            </button>
+          ) : (
+            <span>{value || '—'}</span>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SettingsActionButton({ children, onClick, variant = 'primary', style = {}, disabled = false }) {
   const isPrimary = variant === 'primary';
 
@@ -1366,7 +1423,7 @@ function SettingsModal({ title, onClose, children }) {
     }}>
       <div style={{
         background: THEME.card,
-        border: `1px solid ${THEME.border}`,
+        border: `1px solid ${THEME.primary}`,
         borderRadius: 12,
         padding: 18,
         maxWidth: 420,
@@ -1451,35 +1508,11 @@ function MeetPrepChecklistSection({ meetPrepChecklist = {}, setMeetPrepChecklist
 
   return (
     <>
-      <SettingsCard
-        title={t.meetPrepChecklist}
-        actionLabel={t.edit}
+      <SettingsListRow
+        label={t.meetPrepChecklist}
+        actionLabel={`${checkedMeetPrepItems} / ${MEET_PREP_ITEMS.length}${allMeetPrepItemsChecked ? ` · ✓ ${t.meetPrepReady}` : ''}`}
         onAction={() => setShowMeetPrepChecklist(true)}
-      >
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12
-        }}>
-          <p style={{
-            margin: 0,
-            color: THEME.muted,
-            fontSize: 13,
-            lineHeight: 1.4
-          }}>
-            {t.meetPrepChecklistHint}
-          </p>
-
-          <strong style={{
-            color: allMeetPrepItemsChecked ? THEME.primary : THEME.text,
-            fontSize: 14,
-            whiteSpace: 'nowrap'
-          }}>
-            {checkedMeetPrepItems} / {MEET_PREP_ITEMS.length}{allMeetPrepItemsChecked ? ` · ✓ ${t.meetPrepReady}` : ''}
-          </strong>
-        </div>
-      </SettingsCard>
+      />
 
       {showMeetPrepChecklist && (
         <SettingsModal
@@ -1770,80 +1803,88 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
         t={t}
       />
 
-      <SettingsCard title={t.dataManagement} centerTitle={true}>
-        <p style={{
-          margin: '0 0 10px',
-          color: THEME.muted,
-          fontSize: 13,
-          lineHeight: 1.4
-        }}>
-          {t.exportDataDescription}
-        </p>
-
-        <div style={{
-          border: `1px solid ${THEME.border}`,
-          borderRadius: 8,
-          padding: 10,
-          marginBottom: 12,
-          background: THEME.bg,
-          fontSize: 12,
-          lineHeight: 1.4
-        }}>
-          <div style={{ color: THEME.text, fontWeight: 800, marginBottom: 4 }}>
-            {t.automaticBackup}
-          </div>
-
-          <div style={{ color: THEME.muted, marginBottom: 6 }}>
-            {t.automaticBackupDescription}
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.lastAutomaticBackup}</span>
-            <strong style={{ color: autoBackupStatus?.ok ? THEME.primary : THEME.red, textAlign: 'right' }}>
-              {autoBackupDate || t.noAutomaticBackupYet}
-            </strong>
-          </div>
-
-          <div style={{ color: THEME.muted, wordBreak: 'break-word' }}>
-            {t.automaticBackupLocation}: Documents/Kelani/kelani-sbd-tracker-autosave.json
-          </div>
-        </div>
-
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-          gap: 8,
-          maxWidth: 340,
-          margin: '0 auto'
-        }}>
-          <SettingsActionButton onClick={exportData}>
-            {t.exportData}
-          </SettingsActionButton>
-
-          <SettingsActionButton onClick={() => importInputRef.current?.click()}>
-            {t.importData}
-          </SettingsActionButton>
-        </div>
-
-        <input
-          ref={importInputRef}
-          type="file"
-          accept="application/json,.json"
-          onChange={importData}
-          style={{ display: 'none' }}
-        />
-
-        {notice && (
+      <SettingsListRow
+        label={t.dataManagement}
+        noBorder={true}
+        compact={true}
+        actionContent={(
           <div style={{
-            marginTop: 8,
-            color: THEME.primary,
-            fontSize: 13,
-            fontWeight: 700
+            display: 'grid',
+            gap: 6,
+            justifyItems: 'end'
           }}>
-            {notice}
+            <button
+              type="button"
+              onClick={exportData}
+              style={{
+                width: 132,
+                padding: '6px 8px',
+                fontSize: 12,
+                fontWeight: 800,
+                background: THEME.card,
+                color: THEME.text,
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              {t.exportDataShort || t.exportData}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              style={{
+                width: 132,
+                padding: '6px 8px',
+                fontSize: 12,
+                fontWeight: 800,
+                background: THEME.card,
+                color: THEME.text,
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              {t.importDataShort || t.importData}
+            </button>
           </div>
         )}
-      </SettingsCard>
+      />
+
+      <SettingsListRow
+        label={t.lastAutomaticBackup}
+        value={autoBackupDate || t.noAutomaticBackupYet}
+        valueColor={autoBackupStatus?.ok ? THEME.primary : THEME.red}
+        compact={true}
+      />
+
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json,.json"
+        onChange={importData}
+        style={{ display: 'none' }}
+      />
+
+      {notice && (
+        <div style={{
+          padding: '7px 0',
+          color: THEME.primary,
+          fontSize: 13,
+          fontWeight: 700,
+          textAlign: 'center',
+          borderBottom: `1px solid ${THEME.border}`
+        }}>
+          {notice}
+        </div>
+      )}
 
       {pendingImport && (
         <SettingsModal
@@ -1946,15 +1987,19 @@ function SupportActionButton({ children, onClick }) {
       type="button"
       onClick={onClick}
       style={{
-        padding: '9px 8px',
-        fontSize: 12,
+        padding: '7px 6px',
+        fontSize: 11,
         fontWeight: 700,
         background: THEME.card,
         color: '#ffffff',
-        border: `1px solid ${THEME.border}`,
+        border: `1px solid ${THEME.primary}`,
         borderRadius: 8,
         cursor: 'pointer',
-        minHeight: 42
+        minHeight: 34,
+        width: 132,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis'
       }}
     >
       {children}
@@ -1965,19 +2010,19 @@ function SupportActionButton({ children, onClick }) {
 function SupportSection({ t }) {
   const links = [
     {
-      label: t.sendFeedback,
+      label: t.sendFeedbackShort || t.sendFeedback,
       url: 'mailto:mburgosfr@gmail.com?subject=Kelani%20SBD%20Tracker%20feedback',
     },
     {
-      label: t.reportBug,
+      label: t.reportBugShort || t.reportBug,
       url: 'https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new',
     },
     {
-      label: t.supportDevelopment,
+      label: t.supportDevelopmentShort || t.supportDevelopment,
       url: 'https://kelani-site.mburgosfr.workers.dev/',
     },
     {
-      label: t.joinTestingOrCoaching,
+      label: t.joinTestingOrCoachingShort || t.joinTestingOrCoaching,
       url: 'mailto:mburgosfr@gmail.com?subject=Kelani%20SBD%20Tracker%20testing%20or%20coaching%20interest',
     },
   ];
@@ -1987,24 +2032,26 @@ function SupportSection({ t }) {
   }
 
   return (
-    <SettingsCard title={t.support} centerTitle={true}>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-        gap: 8,
-        maxWidth: 360,
-        margin: '0 auto'
-      }}>
-        {links.map(item => (
-          <SupportActionButton
-            key={item.label}
-            onClick={() => openLink(item.url)}
-          >
-            {item.label}
-          </SupportActionButton>
-        ))}
-      </div>
-    </SettingsCard>
+    <SettingsListRow
+      label={t.support}
+      actionContent={(
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '132px',
+          gap: 6,
+          width: 132
+        }}>
+          {links.map(item => (
+            <SupportActionButton
+              key={item.label}
+              onClick={() => openLink(item.url)}
+            >
+              {item.label}
+            </SupportActionButton>
+          ))}
+        </div>
+      )}
+    />
   );
 }
 
@@ -2041,10 +2088,7 @@ function ProfileSection({ userProfile, onSave, t }) {
     <>
       <Toast message={notice} />
 
-      <SettingsCard title={t.profile} actionLabel={t.edit} onAction={openEdit}>
-        <SettingsRow label={t.birthDate} value={userProfile?.birthDate} />
-        <SettingsRow label={t.sex} value={sexLabel(userProfile?.sex, t)} />
-      </SettingsCard>
+      <SettingsListRow label={t.profile} actionLabel={t.editProfile || t.edit} onAction={openEdit} />
 
       {isEditing && (
         <SettingsModal
@@ -2150,17 +2194,6 @@ function BodyDataSection({ bodyData, onSave, t }) {
     setSaveNotice(t.bodyDataUpdated);
   }
 
-  const rows = [
-    [`${t.bodyweight} (${t.kg})`, previous.bodyWeight ? `${previous.bodyWeight} ${t.kg}` : null],
-    [t.bodyFatPercent, previous.bodyFat ? `${previous.bodyFat}%` : null],
-    [t.bodyWaterPercent, previous.bodyWater ? `${previous.bodyWater}%` : null],
-    [t.visceralFatRating, previous.visceralFat],
-    [t.physiqueRating, previous.physiqueRating],
-    [t.boneMassKg, previous.boneMass ? `${previous.boneMass} ${t.kg}` : null],
-    [t.leanMassKg, previous.leanMass ? `${previous.leanMass} ${t.kg}` : null],
-    [t.bmrKcal, previous.bmr],
-  ];
-
   const fields = [
     { key: 'bodyWeight', label: `${t.bodyweight} (${t.kg})` },
     { key: 'bodyFat', label: t.bodyFatPercent },
@@ -2174,11 +2207,7 @@ function BodyDataSection({ bodyData, onSave, t }) {
     <>
       <Toast message={saveNotice} />
 
-      <SettingsCard title={t.updateBodyData} actionLabel={t.edit} onAction={openEdit}>
-        {rows.map(([label, value]) => (
-          <SettingsRow key={label} label={label} value={value} />
-        ))}
-      </SettingsCard>
+      <SettingsListRow label={t.updateBodyData} actionLabel={t.editBodyData || t.edit} onAction={openEdit} />
 
       {isEditing && (
         <SettingsModal
@@ -2216,8 +2245,8 @@ function RestTimeSection({ restTimeSeconds, setRestTimeSeconds, t }) {
 
   return (
     <>
-      <SettingsCard
-        title={t.restTime}
+      <SettingsListRow
+        label={t.restTime}
         actionLabel={formatRestTime(restTimeSeconds)}
         onAction={() => setShowOptions(true)}
       />
@@ -2286,20 +2315,11 @@ function AccessorySection({ accessoryMode, setAccessoryMode, t }) {
 
   return (
     <>
-      <SettingsCard
-        title={t.accessories}
+      <SettingsListRow
+        label={t.accessories}
         actionLabel={labels[accessoryMode] || labels.off}
         onAction={() => setShowOptions(true)}
-      >
-        <p style={{
-          margin: 0,
-          color: THEME.muted,
-          fontSize: 13,
-          lineHeight: 1.4
-        }}>
-          {t.accessoriesDescription}
-        </p>
-      </SettingsCard>
+      />
 
       {showOptions && (
         <SettingsModal
@@ -2368,8 +2388,8 @@ function LanguageSection({ language, setLanguage, t }) {
 
   return (
     <>
-      <SettingsCard
-        title={t.language}
+      <SettingsListRow
+        label={t.language}
         actionLabel={languageNames[language]}
         onAction={() => setIsEditing(true)}
       />
@@ -6183,75 +6203,68 @@ const latestBodyDataRows = [
        <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
   <h2 style={{ marginTop: 0, textAlign: 'center' }}>{t.settings}</h2>
 
-  <ProfileSection
-    userProfile={userProfile}
-    onSave={setUserProfile}
-    t={t}
-  />
+  <div style={{
+    background: THEME.card,
+    border: `1px solid ${THEME.border}`,
+    borderRadius: 8,
+    padding: '5px 14px',
+    marginBottom: 10
+  }}>
+    <ProfileSection
+      userProfile={userProfile}
+      onSave={setUserProfile}
+      t={t}
+    />
 
-  <BodyDataSection
-    bodyData={latestBodyDataEntry}
-    onSave={saveBodyWeight}
-    t={t}
-  />
+    <BodyDataSection
+      bodyData={latestBodyDataEntry}
+      onSave={saveBodyWeight}
+      t={t}
+    />
 
-  <RestTimeSection
-    restTimeSeconds={restTimeSeconds}
-    setRestTimeSeconds={setRestTimeSeconds}
-    t={t}
-  />
+    <RestTimeSection
+      restTimeSeconds={restTimeSeconds}
+      setRestTimeSeconds={setRestTimeSeconds}
+      t={t}
+    />
 
-  <AccessorySection
-    accessoryMode={accessoryMode}
-    setAccessoryMode={setAccessoryMode}
-    t={t}
-  />
+    <AccessorySection
+      accessoryMode={accessoryMode}
+      setAccessoryMode={setAccessoryMode}
+      t={t}
+    />
 
-  <LanguageSection
-    language={language}
-    setLanguage={setLanguage}
-    t={t}
-  />
+    <LanguageSection
+      language={language}
+      setLanguage={setLanguage}
+      t={t}
+    />
 
-  <DataSection
-    meetPrepChecklist={meetPrepChecklist}
-    setMeetPrepChecklist={setMeetPrepChecklist}
-    t={t}
-  />
+    <DataSection
+      meetPrepChecklist={meetPrepChecklist}
+      setMeetPrepChecklist={setMeetPrepChecklist}
+      t={t}
+    />
 
-  <SupportSection t={t} />
+    <SupportSection t={t} />
+
+    <SettingsListRow
+      label={t.restart}
+      actionLabel={t.startFromScratch || t.restart}
+      onAction={() => setShowResetConfirm(true)}
+      danger={true}
+      noBorder={true}
+    />
+
+  </div>
 
   <div style={{
     marginTop: 10,
+    color: THEME.muted,
+    fontSize: 12,
     textAlign: 'center'
   }}>
-    <button
-      onClick={() => setShowResetConfirm(true)}
-      style={{
-        width: 'auto',
-        minWidth: 150,
-        padding: '8px 14px',
-        fontSize: 12,
-        fontWeight: 800,
-        background: '#8b1e1e',
-        color: '#ffffff',
-        border: `1px solid ${THEME.primary}`,
-        borderRadius: 8,
-        cursor: 'pointer'
-      }}
-    >
-      {t.restart}
-    </button>
-
-    <div style={{
-      marginTop: 14,
-      paddingTop: 10,
-      borderTop: `1px solid ${THEME.border}`,
-      color: THEME.muted,
-      fontSize: 12
-    }}>
-      {t.appName} · {process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev'}
-    </div>
+    {t.appName} · {process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev'}
   </div>
 </div>
       )}      
