@@ -1344,7 +1344,6 @@ const [editing, setEditing] = useState(false);
                   color: '#ffffff',
                   lineHeight: 1,
                   fontWeight: 900,
-                lineHeight: 1
                 }}
               >
                 ↺
@@ -1368,7 +1367,6 @@ const [editing, setEditing] = useState(false);
                   color: '#ffffff',
                   lineHeight: 1,
                   fontWeight: 900,
-                lineHeight: 1
                 }}
               >
                 ✕
