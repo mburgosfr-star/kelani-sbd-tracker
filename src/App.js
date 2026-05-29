@@ -1027,8 +1027,8 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
       display: 'flex',
       flexWrap: 'wrap',
       justifyContent: 'center',
-      columnGap: 18,
-      rowGap: 6,
+      columnGap: 6,
+      rowGap: 4,
       padding: '0 8px 8px'
     }}>
       {warmups.map((warmup, index) => {
@@ -1046,7 +1046,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
                 alignItems: 'center',
                 justifyContent: 'flex-start',
                 gap: 8,
-                width: 154,
+                width: 116,
                 minWidth: 0,
                 padding: '7px 4px',
                 border: 'none',
@@ -1081,7 +1081,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
                 <span style={{
                   display: 'block',
                   color: THEME.text,
-                  fontSize: 12,
+                  fontSize: 10,
                   fontWeight: 800,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
@@ -2560,6 +2560,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   const firstSet = entries?.[0]?.set || {};
   const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
   const allDone = entries.every(({ set }) => set.done);
+  const failedEntry = entries.find(({ set }) => set.failed || set.skipped);
   const allSameWeight = entries.every(({ set }) => Number(set.weight) === Number(firstSet.weight));
   const allSameReps = entries.every(({ set }) => Number(set.reps) === Number(firstSet.reps));
   const displayPct = firstSet.pct ? Math.round(firstSet.pct * 100) : null;
@@ -2774,6 +2775,26 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
           </>
         )}
       </div>
+
+      {failedEntry && (
+        <div style={{
+          gridColumn: '1 / -1',
+          marginTop: 2,
+          padding: '7px 9px',
+          border: '1px solid #e74c3c',
+          borderRadius: 8,
+          color: '#ffffff',
+          background: 'rgba(231, 76, 60, 0.16)',
+          fontSize: 12,
+          fontWeight: 800,
+          lineHeight: 1.3,
+          textAlign: 'center'
+        }}>
+          {failedEntry.set.skipped
+            ? t.topSetSkipped
+            : t.failedSetAdjusted.replace('{weight}', `${failedEntry.set.adjustedWeight} ${t.kg}`)}
+        </div>
+      )}
 
       {timerNode && (
         <div style={{ gridColumn: '1 / -1' }}>
@@ -6137,6 +6158,8 @@ function changeMeetWeight(liftIndex, setIndex, val) {
                 roundedVal
               );
 
+              const isBackoffSet = s.labelKey === 'backoff';
+
               return {
                 ...s,
                 weight: roundedVal,
@@ -6147,10 +6170,10 @@ function changeMeetWeight(liftIndex, setIndex, val) {
                 failedAttempts: 0,
                 failedWeight: null,
                 adjustedWeight: null,
-                originalWeight: roundedVal || originalWeight,
-                originalPct: nextPct || originalPct,
+                originalWeight: isBackoffSet ? originalWeight : (roundedVal || originalWeight),
+                originalPct: isBackoffSet ? originalPct : (nextPct || originalPct),
                 adjustedFromFailedSet: false,
-                adjustedFromOriginal: false,
+                adjustedFromOriginal: isBackoffSet ? Number(roundedVal) !== originalWeight : false,
               };
             }),
           };
