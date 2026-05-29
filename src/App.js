@@ -959,6 +959,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
     <div style={{
       display: 'flex',
       alignItems: 'center',
+      width: 210,
       minWidth: 0,
       padding: '7px 6px',
       background: 'transparent',
@@ -1017,6 +1018,104 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
     </div>
   );
 }
+
+function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, t }) {
+  if (!warmups.length) return null;
+
+  return (
+    <div style={{
+      display: 'flex',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      columnGap: 18,
+      rowGap: 6,
+      padding: '0 8px 8px'
+    }}>
+      {warmups.map((warmup, index) => {
+        const isActive = index === activeIndex;
+        const isDone = !!warmup.done;
+
+        return (
+          <React.Fragment key={index}>
+            <button
+              type="button"
+              onClick={() => onToggle(index)}
+              disabled={isReadOnly}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-start',
+                gap: 8,
+                width: 154,
+                minWidth: 0,
+                padding: '7px 4px',
+                border: 'none',
+                borderRadius: 8,
+                background: 'transparent',
+                color: THEME.text,
+                cursor: isReadOnly ? 'not-allowed' : 'pointer'
+              }}
+            >
+              <span style={{
+                width: 22,
+                height: 22,
+                borderRadius: '50%',
+                border: `2px solid ${isDone || isActive ? THEME.primary : THEME.border}`,
+                background: isDone ? THEME.primary : THEME.card,
+                color: isDone ? THEME.bg : THEME.text,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                fontWeight: 900,
+                fontSize: 12
+              }}>
+                {isDone ? '✓' : ''}
+              </span>
+
+              <span style={{
+                minWidth: 0,
+                textAlign: 'left',
+                lineHeight: 1.15
+              }}>
+                <span style={{
+                  display: 'block',
+                  color: THEME.text,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}>
+                  {t.warmup} {index + 1}
+                </span>
+
+                <span style={{
+                  display: 'block',
+                  color: THEME.muted,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}>
+                  {warmup.reps} × {warmup.weight} {t.kg}
+                </span>
+              </span>
+            </button>
+
+            {renderTimer?.(index) && (
+              <div style={{ width: '100%' }}>
+                {renderTimer(index)}
+              </div>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
 
 function EffortPicker({ value, onChange, t }) {
   return (
@@ -2577,9 +2676,10 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 <div>
 
                   <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                    columnGap: 12,
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    justifyContent: 'center',
+                    columnGap: 18,
                     rowGap: 4,
                     padding: '0 8px 6px'
                   }}>
@@ -2601,26 +2701,20 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 </div>
               )}
 
-              {(liftBlock.warmups || []).map((w, wi) => (
-                <React.Fragment key={`warmup-${wi}`}>
-                  <SetRow
-                    set={w}
-                    index={wi}
-                    label={`${t.warmup} ${wi + 1}`}
-                    isWarmup={true}
-                    isActive={
-                      !isReadOnly &&
-                      li === firstIncompleteLiftIndex &&
-                      allPrepDone &&
-                      wi === firstIncompleteWarmup
-                    }
-                    isReadOnly={isReadOnly}
-                    onToggle={() => handleToggle(() => onToggleMeetWarmup(li, wi))}
-                    t={t}
-                  />
-                  {renderInlineTimer({ type: 'meetWarmup', liftIndex: li, index: wi })}
-                </React.Fragment>
-              ))}
+              <WarmupGrid
+                warmups={liftBlock.warmups || []}
+                isReadOnly={isReadOnly}
+                activeIndex={
+                  !isReadOnly &&
+                  li === firstIncompleteLiftIndex &&
+                  allPrepDone
+                    ? firstIncompleteWarmup
+                    : -1
+                }
+                onToggle={wi => handleToggle(() => onToggleMeetWarmup(li, wi))}
+                renderTimer={wi => renderInlineTimer({ type: 'meetWarmup', liftIndex: li, index: wi })}
+                t={t}
+              />
 
               {(liftBlock.sets || []).map((set, si) => (
                 <React.Fragment key={`attempt-${si}`}>
@@ -2839,9 +2933,10 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           </div>
 
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-            columnGap: 12,
+            display: 'flex',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            columnGap: 18,
             rowGap: 4,
             padding: '0 8px 6px'
           }}>
@@ -2865,32 +2960,17 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           border: `1px solid ${THEME.border}`,
           borderRadius: 8,
           overflow: 'hidden',
-          marginBottom: 10
+          marginBottom: 10,
+          paddingTop: 8
         }}>
-          <div style={{
-            padding: '6px 10px',
-            fontSize: 16,
-            fontWeight: 700,
-            color: THEME.text,
-            textAlign: 'center'
-          }}>
-            {t.warmup}
-          </div>
-          {workout.warmups.map((w, i) => (
-            <React.Fragment key={i}>
-              <SetRow
-                set={w}
-                index={i}
-                label={`${t.warmup} ${i + 1}`}
-                isWarmup={true}
-                isActive={!isReadOnly && allPrepDone && i === workout.warmups.findIndex(wu => !wu.done)}
-                isReadOnly={isReadOnly}
-                onToggle={() => handleToggle(() => onToggleWarmup(i))}
-                t={t}
-              />
-              {renderInlineTimer({ type: 'warmup', index: i })}
-            </React.Fragment>
-          ))}
+          <WarmupGrid
+            warmups={workout.warmups || []}
+            isReadOnly={isReadOnly}
+            activeIndex={!isReadOnly && allPrepDone ? workout.warmups.findIndex(wu => !wu.done) : -1}
+            onToggle={i => handleToggle(() => onToggleWarmup(i))}
+            renderTimer={i => renderInlineTimer({ type: 'warmup', index: i })}
+            t={t}
+          />
         </div>
       )}
 
