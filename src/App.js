@@ -2555,6 +2555,236 @@ function NewCycleModal({ prs, onStart, t }) {
   );
 }
 
+function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t }) {
+  const [editing, setEditing] = useState(false);
+  const firstSet = entries?.[0]?.set || {};
+  const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
+  const allDone = entries.every(({ set }) => set.done);
+  const allSameWeight = entries.every(({ set }) => Number(set.weight) === Number(firstSet.weight));
+  const allSameReps = entries.every(({ set }) => Number(set.reps) === Number(firstSet.reps));
+  const displayPct = firstSet.pct ? Math.round(firstSet.pct * 100) : null;
+  const [inputVal, setInputVal] = useState(String(firstSet.weight || ''));
+
+  useEffect(() => {
+    if (editing) setInputVal(String(firstSet.weight || ''));
+  }, [editing, firstSet.weight]);
+
+  if (!entries?.length) return null;
+
+  function confirmEdit() {
+    const val = parseFloat(inputVal);
+
+    if (!Number.isNaN(val) && val > 0) {
+      onEditAll(val);
+    }
+
+    setEditing(false);
+  }
+
+  function handleEditClick(e) {
+    e.stopPropagation();
+    setInputVal(String(firstSet.weight || ''));
+    setEditing(true);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter') confirmEdit();
+    if (e.key === 'Escape') setEditing(false);
+  }
+
+  const timerNode = entries
+    .map(({ index }) => renderTimer?.(index))
+    .find(Boolean);
+
+  return (
+    <div style={{
+      borderTop: `1px solid ${THEME.border}`,
+      borderBottom: `1px solid ${THEME.border}`,
+      padding: '8px 10px',
+      display: 'grid',
+      gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+      alignItems: 'center',
+      gap: 10,
+      background: THEME.card
+    }}>
+      <div style={{
+        display: 'flex',
+        gap: 4,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexWrap: 'nowrap',
+        flexShrink: 0
+      }}>
+        {entries.map(({ set, index }) => {
+          const isActive = index === activeIndex;
+          const isDone = !!set.done;
+
+          return (
+            <button
+              key={index}
+              type="button"
+              onClick={() => onToggle(index)}
+              disabled={isReadOnly}
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: '50%',
+                border: `2px solid ${set.skipped ? '#e74c3c' : isDone || isActive ? THEME.primary : THEME.border}`,
+                background: set.skipped ? '#e74c3c' : isDone ? THEME.primary : THEME.card,
+                color: (set.skipped || isDone) ? THEME.bg : THEME.text,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: isReadOnly ? 'not-allowed' : 'pointer',
+                fontWeight: 900,
+                fontSize: 12,
+                padding: 0
+              }}
+            >
+              {set.skipped ? '✕' : isDone ? '✓' : ''}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ minWidth: 0, textAlign: 'left' }}>
+        <div style={{
+          color: THEME.text,
+          fontSize: 13,
+          fontWeight: 900,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        }}>
+          {t.backoff || 'Back-off'}
+        </div>
+
+        <div style={{
+          color: THEME.muted,
+          fontSize: 12,
+          fontWeight: 800,
+          marginTop: 1,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        }}>
+          {entries.length} × {allSameReps ? firstSet.reps : '—'} × {allSameWeight ? `${firstSet.weight} ${t.kg}` : t.kg}
+          {displayPct ? ` · ${displayPct}%` : ''}
+        </div>
+
+        {allDone && (
+          <div style={{
+            display: 'inline-flex',
+            marginTop: 3,
+            padding: '2px 7px',
+            borderRadius: 999,
+            border: `1px solid ${THEME.primary}`,
+            color: THEME.primary,
+            fontSize: 10,
+            fontWeight: 800,
+            lineHeight: 1.2
+          }}>
+            ✓
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {editing ? (
+          <input
+            type="number"
+            step="2.5"
+            value={inputVal}
+            autoFocus
+            onChange={e => setInputVal(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={confirmEdit}
+            style={{
+              width: 66,
+              padding: '4px 6px',
+              fontSize: 14,
+              fontWeight: 800,
+              borderRadius: 4,
+              border: `1px solid ${THEME.primary}`,
+              background: THEME.bg,
+              color: THEME.text,
+              textAlign: 'right'
+            }}
+          />
+        ) : (
+          <>
+            <button
+              type="button"
+              disabled={isReadOnly}
+              onClick={handleEditClick}
+              style={{
+                background: 'none',
+                border: `1px solid ${THEME.primary}`,
+                cursor: isReadOnly ? 'not-allowed' : 'pointer',
+                fontSize: 15,
+                padding: '2px 5px',
+                color: '#ffffff',
+                lineHeight: 1
+              }}
+            >
+              ✎
+            </button>
+
+            <button
+              type="button"
+              disabled={isReadOnly}
+              onClick={e => {
+                e.stopPropagation();
+                onRestoreAll();
+              }}
+              style={{
+                background: 'none',
+                border: '1px solid #f39c12',
+                cursor: isReadOnly ? 'not-allowed' : 'pointer',
+                fontSize: 15,
+                padding: '2px 5px',
+                color: '#ffffff',
+                lineHeight: 1,
+                fontWeight: 900
+              }}
+            >
+              ↺
+            </button>
+
+            <button
+              type="button"
+              disabled={isReadOnly}
+              onClick={e => {
+                e.stopPropagation();
+                if (firstOpenEntry) onMarkFailed(firstOpenEntry.index);
+              }}
+              style={{
+                background: 'none',
+                border: '1px solid #e74c3c',
+                cursor: isReadOnly ? 'not-allowed' : 'pointer',
+                fontSize: 15,
+                padding: '2px 5px',
+                color: '#ffffff',
+                lineHeight: 1,
+                fontWeight: 900
+              }}
+            >
+              ✕
+            </button>
+          </>
+        )}
+      </div>
+
+      {timerNode && (
+        <div style={{ gridColumn: '1 / -1' }}>
+          {timerNode}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
 
   function isTimerFor(placement) {
@@ -2716,7 +2946,41 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 t={t}
               />
 
-              {(liftBlock.sets || []).map((set, si) => (
+              {(liftBlock.sets || []).map((set, si) => {
+                const backoffSetEntries = (liftBlock.sets || [])
+                  .map((backoffSet, backoffIndex) => ({ set: backoffSet, index: backoffIndex }))
+                  .filter(({ set: backoffSet }) => backoffSet.labelKey === 'backoff');
+
+                if (set.labelKey === 'backoff') {
+                  if (backoffSetEntries[0]?.index !== si) return null;
+
+                  const firstIncompleteBackoff = backoffSetEntries.find(({ set: backoffSet }) => !backoffSet.done && !backoffSet.skipped)?.index ?? -1;
+
+                  return (
+                    <React.Fragment key={`backoff-group-${li}-${si}`}>
+                      <BackoffGroup
+                        entries={backoffSetEntries}
+                        activeIndex={
+                          !isReadOnly &&
+                          li === firstIncompleteLiftIndex &&
+                          allPrepDone &&
+                          allWarmupsDone
+                            ? firstIncompleteBackoff
+                            : -1
+                        }
+                        isReadOnly={isReadOnly}
+                        onToggle={index => handleToggle(() => onToggleMeetSet(li, index))}
+                        onEditAll={val => backoffSetEntries.forEach(({ index }) => onMeetWeightChange(li, index, val))}
+                        onRestoreAll={() => backoffSetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
+                        onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
+                        renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
+                        t={t}
+                      />
+                    </React.Fragment>
+                  );
+                }
+
+                return (
                 <React.Fragment key={`attempt-${si}`}>
                   {(set.failed || set.skipped) && (
                     <div style={{
@@ -2783,7 +3047,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     />
                   )}
                 </React.Fragment>
-              ))}
+                );
+              })}
             </div>
           );
         })}
@@ -2993,11 +3258,36 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
         {workout.sets.map((set, i) => {
           const allWarmupsDone = allPrepDone && (workout.warmups || []).every(w => w.done);
+          const backoffSetEntries = (workout.sets || [])
+            .map((backoffSet, backoffIndex) => ({ set: backoffSet, index: backoffIndex }))
+            .filter(({ set: backoffSet }) => backoffSet.labelKey === 'backoff');
           const firstIncomplete = workout.sets.findIndex(s => !s.done);
           const hasLaterSetAction = workout.sets.some((laterSet, laterIndex) =>
             laterIndex > i && (laterSet.done || laterSet.failed || laterSet.skipped)
           );
           const showSetNotice = set.failed || (set.skipped && !hasLaterSetAction);
+
+          if (set.labelKey === 'backoff') {
+            if (backoffSetEntries[0]?.index !== i) return null;
+
+            const firstIncompleteBackoff = backoffSetEntries.find(({ set: backoffSet }) => !backoffSet.done && !backoffSet.skipped)?.index ?? -1;
+
+            return (
+              <React.Fragment key={`backoff-group-${i}`}>
+                <BackoffGroup
+                  entries={backoffSetEntries}
+                  activeIndex={!isReadOnly && allWarmupsDone ? firstIncompleteBackoff : -1}
+                  isReadOnly={isReadOnly}
+                  onToggle={index => handleToggle(() => onToggleSet(index))}
+                  onEditAll={val => backoffSetEntries.forEach(({ index }) => onWeightChange('set', index, val))}
+                  onRestoreAll={() => backoffSetEntries.forEach(({ index }) => onRestoreSetWeight(index))}
+                  onMarkFailed={index => handleToggle(() => onMarkSetFailed(index))}
+                  renderTimer={index => renderInlineTimer({ type: 'main', index })}
+                  t={t}
+                />
+              </React.Fragment>
+            );
+          }
 
           return (
             <React.Fragment key={i}>
