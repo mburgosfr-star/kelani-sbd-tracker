@@ -2491,6 +2491,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
     const allMeetDone = (workout.lifts || []).every(liftBlock =>
       (liftBlock.sets || []).every(s => s.done)
     );
+    const allMainLiftSetsDone = allMeetDone;
 
     const meetDayProjectedTotal = (workout.lifts || []).reduce((total, liftBlock) => {
       const thirdAttempt = liftBlock.sets?.[2]?.weight;
@@ -2626,6 +2627,71 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             </div>
           );
         })}
+
+        {!isMeetDay && (workout.accessories || []).length > 0 && (
+          <div style={{
+            background: THEME.card,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            overflow: 'hidden',
+            marginBottom: 10
+          }}>
+            {(workout.accessories || []).map((acc, ai) => (
+              <div key={ai}>
+                <div style={{
+                  padding: '6px 10px',
+                  background: THEME.card,
+                  borderBottom: `1px solid ${THEME.border}`,
+                  textAlign: 'center'
+                }}>
+                  <span style={{ fontWeight: 800, color: THEME.text, fontSize: 13 }}>
+                    {acc.nameKey ? t[acc.nameKey] : acc.name}
+                  </span>
+                </div>
+
+                {acc.done.map((done, si) => {
+                  const firstIncompleteAccessoryGroup = (workout.accessories || []).findIndex(a =>
+                    (a.done || []).some(d => !d)
+                  );
+                  const firstIncompleteAccessorySet = (acc.done || []).findIndex(d => !d);
+
+                  return (
+                    <React.Fragment key={si}>
+                      <SetRow
+                        set={{
+                          done,
+                          weight: acc.weights[si],
+                          reps: acc.reps,
+                          repsLabel: acc.perSide ? `${acc.reps} ${t.perSide}` : null,
+                          failed: !!acc.failed?.[si],
+                          failedWeight: acc.failedWeights?.[si] || null,
+                          adjustedFromFailedSet: !!acc.adjustedFromFailedSet?.[si],
+                          adjustedFromOriginal: !!acc.adjustedFromOriginal?.[si],
+                        }}
+                        index={si}
+                        label={`${t.set} ${si + 1}`}
+                        isWarmup={false}
+                        isActive={
+                          !isReadOnly &&
+                          allMainLiftSetsDone &&
+                          ai === firstIncompleteAccessoryGroup &&
+                          si === firstIncompleteAccessorySet
+                        }
+                        isReadOnly={isReadOnly}
+                        onToggle={() => handleToggle(() => onToggleAccessorySet(ai, si))}
+                        onMarkFailed={() => handleToggle(() => onMarkAccessorySetFailed(ai, si))}
+                        onRestoreWeight={() => handleToggle(() => onRestoreAccessoryWeight(ai, si))}
+                        onWeightChange={val => onAccessoryWeightChange(ai, si, val)}
+                        t={t}
+                      />
+                      {renderInlineTimer({ type: 'accessory', accIndex: ai, index: si })}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
 
         <button
           onClick={() => {
