@@ -1195,7 +1195,7 @@ const [editing, setEditing] = useState(false);
     ✎
   </button>
 )}
-            {onRestoreWeight && !set.done && !isReadOnly && (
+            {onRestoreWeight && !isWarmup && !isReadOnly && (
               <button
                 type="button"
                 title={t.restoreOriginalWeight}
@@ -2436,7 +2436,7 @@ function NewCycleModal({ prs, onStart, t }) {
   );
 }
 
-function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
+function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
 
   function isTimerFor(placement) {
     if (!timer || !timer.placement) return false;
@@ -2596,6 +2596,43 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
               {(liftBlock.sets || []).map((set, si) => (
                 <React.Fragment key={`attempt-${si}`}>
+                  {(set.failed || set.skipped) && (
+                    <div style={{
+                      margin: 0,
+                      padding: '8px 10px',
+                      borderTop: '1px solid #e74c3c',
+                      borderBottom: '1px solid #e74c3c',
+                      color: '#ffffff',
+                      background: 'rgba(231, 76, 60, 0.16)',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      lineHeight: 1.3,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8
+                    }}>
+                      <span style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: '50%',
+                        background: '#e74c3c',
+                        color: THEME.bg,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        fontWeight: 900
+                      }}>
+                        !
+                      </span>
+                      <span>
+                        {set.skipped
+                          ? t.topSetSkipped
+                          : t.failedSetAdjusted.replace('{weight}', `${set.adjustedWeight} ${t.kg}`)}
+                      </span>
+                    </div>
+                  )}
+
                   <SetRow
                     set={set}
                     index={si}
@@ -2611,6 +2648,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     isReadOnly={isReadOnly}
                     onToggle={() => handleToggle(() => onToggleMeetSet(li, si))}
                     onMarkFailed={() => handleToggle(() => onMarkMeetSetFailed(li, si))}
+                    onRestoreWeight={() => handleToggle(() => onRestoreMeetSetWeight(li, si))}
                     onWeightChange={val => onMeetWeightChange(li, si, val)}
                     t={t}
                   />
@@ -4922,6 +4960,8 @@ function toggleSet(setIndex) {
     } else {
       setTimer(null);
     }
+  } else {
+    setTimer(null);
   }
 
   setWorkouts(prev =>
@@ -4944,6 +4984,7 @@ function toggleSet(setIndex) {
                   done: false,
                   failed: false,
                   skipped: false,
+                  failedAttempts: 0,
                   failedWeight: null,
                   adjustedWeight: null,
                   adjustedFromFailedSet: false,
@@ -4997,10 +5038,6 @@ function markSetFailed(setIndex) {
         ? attemptAdjustedWeight
         : normalAdjustedWeight;
 
-      const nextBackoff = (w.sets || []).find((set, index) =>
-        index > setIndex && set.labelKey === 'backoff' && !set.done
-      );
-      const nextBackoffWeight = Number(nextBackoff?.weight) || 0;
       const isTopSet = isTopSetLabel(failedSet?.labelKey);
 
       const shouldSkipAttempt =
@@ -5011,7 +5048,7 @@ function markSetFailed(setIndex) {
       const shouldSkipTopSet =
         !isPreMeetWorkout &&
         isTopSet &&
-        (failedAttempts >= 2 || (nextBackoffWeight > 0 && adjustedWeight <= nextBackoffWeight));
+        failedAttempts >= 2;
 
       return {
         ...w,
@@ -5101,7 +5138,7 @@ function markSetFailed(setIndex) {
             originalPct,
             adjustedWeight: shouldAdjustThisSet ? nextWeight : s.adjustedWeight ?? null,
             adjustedFromFailedSet: shouldAdjustThisSet,
-            adjustedFromOriginal: true,
+            adjustedFromOriginal: Number(nextWeight) !== originalWeight,
           };
         }),
       };
@@ -5119,6 +5156,16 @@ function restoreSetWeight(setIndex) {
             sets: w.sets.map((s, si) => {
               if (si !== setIndex) return s;
 
+              const hasRestoreTarget =
+                s.failed ||
+                s.skipped ||
+                s.adjustedFromFailedSet ||
+                s.adjustedFromOriginal ||
+                s.failedWeight ||
+                s.adjustedWeight;
+
+              if (!hasRestoreTarget) return s;
+
               const restoredWeight = Number(s.failedWeight ?? s.originalWeight ?? s.weight) || s.weight;
               const restoredPct = Number(s.originalPct ?? getSetPctForWeight(s, restoredWeight)) || s.pct;
 
@@ -5129,6 +5176,7 @@ function restoreSetWeight(setIndex) {
                 done: false,
                 failed: false,
                 skipped: false,
+                failedAttempts: 0,
                 failedWeight: null,
                 adjustedWeight: null,
                 adjustedFromFailedSet: false,
@@ -5137,6 +5185,55 @@ function restoreSetWeight(setIndex) {
             }),
           }
     )
+  );
+}
+
+function restoreMeetSetWeight(liftIndex, setIndex) {
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: (w.lifts || []).map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
+            sets: (liftBlock.sets || []).map((s, si) => {
+              if (si !== setIndex) return s;
+
+              const hasRestoreTarget =
+                s.failed ||
+                s.skipped ||
+                s.adjustedFromFailedSet ||
+                s.adjustedFromOriginal ||
+                s.failedWeight ||
+                s.adjustedWeight;
+
+              if (!hasRestoreTarget) return s;
+
+              const restoredWeight = Number(s.failedWeight ?? s.originalWeight ?? s.weight) || s.weight;
+              const restoredPct = Number(s.originalPct ?? getSetPctForWeight(s, restoredWeight)) || s.pct;
+
+              return {
+                ...s,
+                weight: restoredWeight,
+                pct: restoredPct,
+                done: false,
+                failed: false,
+                skipped: false,
+                failedAttempts: 0,
+                failedWeight: null,
+                adjustedWeight: null,
+                adjustedFromFailedSet: false,
+                adjustedFromOriginal: false,
+              };
+            }),
+          };
+        }),
+      };
+    })
   );
 }
 
@@ -5201,13 +5298,22 @@ function changeWeight(type, index, val) {
               val
             );
 
+            const nextWeight = Number(val) || originalWeight;
+
             return {
               ...s,
-              weight: val,
+              weight: nextWeight,
               pct: nextPct || s.pct,
-              originalWeight,
-              originalPct,
-              adjustedFromOriginal: Number(val) !== originalWeight,
+              done: false,
+              failed: false,
+              skipped: false,
+              failedAttempts: 0,
+              failedWeight: null,
+              adjustedWeight: null,
+              originalWeight: nextWeight,
+              originalPct: nextPct || originalPct,
+              adjustedFromFailedSet: false,
+              adjustedFromOriginal: false,
             };
           }),
         };
@@ -5338,21 +5444,35 @@ function hasMoreMeetSets(workout, liftIndex, setIndex) {
   const liftBlock = workout?.lifts?.[liftIndex];
   if (!liftBlock) return false;
 
-  return (liftBlock.sets || []).some((s, si) =>
+  const hasMoreSetsInSameLift = (liftBlock.sets || []).some((s, si) =>
     si > setIndex && !s.done && !s.skipped
   );
+
+  if (hasMoreSetsInSameLift) return true;
+
+  const hasMoreAccessories = (workout?.accessories || []).some(accessory =>
+    (accessory.done || []).some(done => !done)
+  );
+
+  return hasMoreAccessories;
 }
 
 function toggleMeetSet(liftIndex, setIndex) {
   const workout = workouts[selectedIndex];
+  const currentSet = workout?.lifts?.[liftIndex]?.sets?.[setIndex];
+  const shouldComplete = currentSet && !currentSet.done && !currentSet.skipped;
 
-  if (hasMoreMeetSets(workout, liftIndex, setIndex)) {
-    startTimer(restTimeSeconds, {
-      workoutNumber: workout.number,
-      type: 'meetSet',
-      liftIndex,
-      index: setIndex,
-    });
+  if (shouldComplete) {
+    if (hasMoreMeetSets(workout, liftIndex, setIndex)) {
+      startTimer(restTimeSeconds, {
+        workoutNumber: workout.number,
+        type: 'meetSet',
+        liftIndex,
+        index: setIndex,
+      });
+    } else {
+      setTimer(null);
+    }
   } else {
     setTimer(null);
   }
@@ -5377,6 +5497,11 @@ function toggleMeetSet(liftIndex, setIndex) {
                   done: false,
                   failed: false,
                   skipped: false,
+                  failedAttempts: 0,
+                  failedWeight: null,
+                  adjustedWeight: null,
+                  adjustedFromFailedSet: false,
+                  adjustedFromOriginal: false,
                   effort: null,
                 };
               }
@@ -5406,6 +5531,139 @@ function markMeetSetFailed(liftIndex, setIndex) {
     });
   } else {
     setTimer(null);
+  }
+
+  if (workout?.type !== 'meet') {
+    setWorkouts(prev =>
+      prev.map((w, wi) => {
+        if (wi !== selectedIndex) return w;
+
+        return {
+          ...w,
+          lifts: w.lifts.map((liftBlock, li) => {
+            if (li !== liftIndex) return liftBlock;
+
+            const failedSet = liftBlock.sets[setIndex];
+            const failedAttempts = (Number(failedSet?.failedAttempts) || 0) + 1;
+            const isPreMeetWorkout = w.number >= 25 && w.number <= 27;
+            const isAttemptSet = isAttemptSetLabel(failedSet?.labelKey);
+            const isBackoff = failedSet?.labelKey === 'backoff';
+            const isTopSet = isTopSetLabel(failedSet?.labelKey);
+
+            const normalAdjustedWeight = getFailedSetSuggestedWeight(failedSet?.weight);
+            const attemptAdjustedWeight = getAdjustedAttemptWeight(failedSet?.weight);
+            const adjustedWeight = isPreMeetWorkout && isAttemptSet
+              ? attemptAdjustedWeight
+              : normalAdjustedWeight;
+
+            const shouldSkipAttempt =
+              isPreMeetWorkout &&
+              isAttemptSet &&
+              failedAttempts >= 2;
+
+            const shouldSkipTopSet =
+              !isPreMeetWorkout &&
+              isTopSet &&
+              failedAttempts >= 2;
+
+            return {
+              ...liftBlock,
+              sets: liftBlock.sets.map((s, si) => {
+                const shouldAdjustThisSet = si === setIndex;
+
+                const shouldAdjustLaterAttempt =
+                  isPreMeetWorkout &&
+                  isAttemptSet &&
+                  si > setIndex &&
+                  isAttemptSetLabel(s.labelKey) &&
+                  !s.done &&
+                  !s.skipped;
+
+                const shouldAdjustLaterBackoff =
+                  (
+                    isBackoff ||
+                    (!isPreMeetWorkout && isTopSet)
+                  ) &&
+                  si > setIndex &&
+                  s.labelKey === 'backoff' &&
+                  !s.done &&
+                  !s.skipped;
+
+                const shouldLowerBackoffIfTooHeavy =
+                  isPreMeetWorkout &&
+                  isAttemptSet &&
+                  si > setIndex &&
+                  s.labelKey === 'backoff' &&
+                  !s.done &&
+                  !s.skipped &&
+                  Number(s.weight) > adjustedWeight;
+
+                if (
+                  !shouldAdjustThisSet &&
+                  !shouldAdjustLaterAttempt &&
+                  !shouldAdjustLaterBackoff &&
+                  !shouldLowerBackoffIfTooHeavy
+                ) {
+                  return s;
+                }
+
+                const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
+                const originalPct = Number(s.originalPct ?? s.pct) || 0;
+
+                if (shouldAdjustThisSet && (shouldSkipAttempt || shouldSkipTopSet)) {
+                  return {
+                    ...s,
+                    done: true,
+                    failed: false,
+                    skipped: true,
+                    failedAttempts,
+                    failedWeight: Number(s.failedWeight ?? s.weight) || 0,
+                    originalWeight,
+                    originalPct,
+                    adjustedWeight: null,
+                    adjustedFromFailedSet: false,
+                    adjustedFromOriginal: false,
+                  };
+                }
+
+                let nextWeight = adjustedWeight;
+
+                if (shouldAdjustLaterAttempt) {
+                  nextWeight = getAdjustedAttemptWeight(s.weight);
+                }
+
+                if (shouldAdjustLaterBackoff || shouldLowerBackoffIfTooHeavy) {
+                  nextWeight = Math.min(Number(s.weight) || adjustedWeight, adjustedWeight);
+                }
+
+                const adjustedPct = getSetPctForWeight(
+                  { ...s, originalWeight, originalPct },
+                  nextWeight
+                );
+
+                return {
+                  ...s,
+                  done: false,
+                  failed: shouldAdjustThisSet,
+                  skipped: false,
+                  failedAttempts: shouldAdjustThisSet ? failedAttempts : Number(s.failedAttempts) || 0,
+                  failedWeight: shouldAdjustThisSet ? Number(s.failedWeight ?? s.weight) || 0 : s.failedWeight ?? null,
+                  weight: nextWeight,
+                  pct: adjustedPct || s.pct,
+                  originalWeight,
+                  originalPct,
+                  adjustedWeight: shouldAdjustThisSet ? nextWeight : s.adjustedWeight ?? null,
+                  adjustedFromFailedSet: shouldAdjustThisSet,
+                  adjustedFromOriginal: Number(nextWeight) !== originalWeight,
+                };
+              }),
+            };
+          }),
+        };
+      })
+    );
+
+    return;
   }
 
   setWorkouts(prev =>
@@ -5463,9 +5721,32 @@ function changeMeetWeight(liftIndex, setIndex, val) {
 
           return {
             ...liftBlock,
-            sets: liftBlock.sets.map((s, si) =>
-              si === setIndex ? { ...s, weight: roundedVal } : s
-            ),
+            sets: liftBlock.sets.map((s, si) => {
+              if (si !== setIndex) return s;
+
+              const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
+              const originalPct = Number(s.originalPct ?? s.pct) || 0;
+              const nextPct = getSetPctForWeight(
+                { ...s, originalWeight, originalPct },
+                roundedVal
+              );
+
+              return {
+                ...s,
+                weight: roundedVal,
+                pct: nextPct || s.pct,
+                done: false,
+                failed: false,
+                skipped: false,
+                failedAttempts: 0,
+                failedWeight: null,
+                adjustedWeight: null,
+                originalWeight: roundedVal || originalWeight,
+                originalPct: nextPct || originalPct,
+                adjustedFromFailedSet: false,
+                adjustedFromOriginal: false,
+              };
+            }),
           };
         }),
       };
@@ -6202,6 +6483,7 @@ const latestBodyDataRows = [
           onToggleMeetWarmup={toggleMeetWarmup}
           onToggleMeetSet={toggleMeetSet}
           onMarkMeetSetFailed={markMeetSetFailed}
+          onRestoreMeetSetWeight={restoreMeetSetWeight}
           onMeetWeightChange={changeMeetWeight}
           onMeetSetEffortChange={changeMeetSetEffort}
         />
