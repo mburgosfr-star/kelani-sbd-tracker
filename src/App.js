@@ -94,6 +94,10 @@ const THEME = {
   
 };
 
+
+const WORKOUT_CIRCLE_SIZE = 30;
+const WORKOUT_CIRCLE_FONT_SIZE = 13;
+
 function toOptionalNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -476,7 +480,13 @@ function roundMeetWeight(weight) {
 }
 
 function getFailedSetSuggestedWeight(weight) {
-  return roundMeetWeight((Number(weight) || 0) * 0.925);
+  const currentWeight = Number(weight) || 0;
+  if (currentWeight <= 0) return 0;
+
+  const rawWeight = currentWeight - Math.max(2.5, currentWeight * 0.075);
+  const roundedWeight = Math.floor(rawWeight / 2.5) * 2.5;
+
+  return Math.max(0, Number(roundedWeight.toFixed(1)));
 }
 
 function getSetTrainingMax(set) {
@@ -954,52 +964,88 @@ function formatPrepPrescription(item, t) {
   return item.perSide ? `${item.prescription} / ${t.side}` : item.prescription;
 }
 
+function WorkoutCircle({ done = false, active = false, skipped = false, disabled = false, onClick, label }) {
+  const borderColor = skipped
+    ? '#e74c3c'
+    : done || active
+      ? THEME.primary
+      : THEME.border;
+
+  const background = skipped
+    ? '#e74c3c'
+    : done
+      ? THEME.primary
+      : THEME.card;
+
+  const color = skipped || done ? THEME.bg : THEME.text;
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={event => {
+        event.stopPropagation();
+        if (!disabled && onClick) onClick(event);
+      }}
+      disabled={disabled}
+      style={{
+        width: WORKOUT_CIRCLE_SIZE,
+        height: WORKOUT_CIRCLE_SIZE,
+        minWidth: WORKOUT_CIRCLE_SIZE,
+        flex: `0 0 ${WORKOUT_CIRCLE_SIZE}px`,
+        borderRadius: '50%',
+        border: `2px solid ${borderColor}`,
+        background,
+        color,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        fontWeight: 900,
+        fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+        lineHeight: 1,
+        padding: 0,
+        transform: 'scale(1)'
+      }}
+    >
+      {skipped ? '✕' : done ? '✓' : ''}
+    </button>
+  );
+}
+
 function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
+  const label = t[item.labelKey];
+
   return (
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      width: 210,
+      width: '100%',
       minWidth: 0,
-      padding: '7px 6px',
-      background: 'transparent',
-      boxShadow: 'none'
+      boxSizing: 'border-box',
+      padding: '7px 0',
+      background: 'transparent'
     }}>
-      <button
-        onClick={onToggle}
+      <WorkoutCircle
+        done={item.done}
+        active={isActive}
         disabled={isReadOnly}
-        style={{
-          width: 20,
-          height: 20,
-          borderRadius: '50%',
-          border: `2px solid ${item.done || isActive ? THEME.primary : THEME.border}`,
-          background: item.done ? THEME.primary : THEME.card,
-          color: item.done ? THEME.bg : THEME.text,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginRight: 8,
-          flexShrink: 0,
-          cursor: isReadOnly ? 'not-allowed' : 'pointer',
-          fontWeight: 900
-        }}
-      >
-        {item.done ? '✓' : ''}
-      </button>
+        onClick={onToggle}
+        label={label}
+      />
 
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, marginLeft: 10 }}>
         <div
-          title={t[item.labelKey]}
+          title={label}
           style={{
             color: THEME.text,
             fontWeight: 800,
             fontSize: 12,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis'
+            lineHeight: 1.15
           }}
         >
-          {t[item.labelKey]}
+          {label}
         </div>
         <div
           title={formatPrepPrescription(item, t)}
@@ -1007,9 +1053,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
             color: THEME.muted,
             fontSize: 10,
             marginTop: 1,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis'
+            lineHeight: 1.15
           }}
         >
           {formatPrepPrescription(item, t)}
@@ -1019,93 +1063,73 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
   );
 }
 
+
 function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, t }) {
   if (!warmups.length) return null;
 
+  const columnCount = warmups.length <= 2
+    ? 2
+    : warmups.length === 3
+      ? 3
+      : 4;
+
   return (
     <div style={{
-      display: 'flex',
-      flexWrap: 'wrap',
+      display: 'grid',
+      gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
       justifyContent: 'center',
-      columnGap: 6,
+      columnGap: 12,
       rowGap: 4,
-      padding: '0 8px 8px'
+      padding: '0 10px 8px'
     }}>
       {warmups.map((warmup, index) => {
+        const label = `${t.warmup} ${index + 1}`;
         const isActive = index === activeIndex;
         const isDone = !!warmup.done;
 
         return (
           <React.Fragment key={index}>
-            <button
-              type="button"
-              onClick={() => onToggle(index)}
-              disabled={isReadOnly}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-start',
-                gap: 8,
-                width: 116,
-                minWidth: 0,
-                padding: '7px 4px',
-                border: 'none',
-                borderRadius: 8,
-                background: 'transparent',
-                color: THEME.text,
-                cursor: isReadOnly ? 'not-allowed' : 'pointer'
-              }}
-            >
-              <span style={{
-                width: 22,
-                height: 22,
-                borderRadius: '50%',
-                border: `2px solid ${isDone || isActive ? THEME.primary : THEME.border}`,
-                background: isDone ? THEME.primary : THEME.card,
-                color: isDone ? THEME.bg : THEME.text,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                fontWeight: 900,
-                fontSize: 12
-              }}>
-                {isDone ? '✓' : ''}
-              </span>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              width: '100%',
+              minWidth: 0,
+              boxSizing: 'border-box',
+              padding: '7px 0',
+              background: 'transparent'
+            }}>
+              <WorkoutCircle
+                done={isDone}
+                active={isActive}
+                disabled={isReadOnly}
+                onClick={() => onToggle(index)}
+                label={label}
+              />
 
-              <span style={{
-                minWidth: 0,
-                textAlign: 'left',
-                lineHeight: 1.15
-              }}>
-                <span style={{
-                  display: 'block',
+              <div style={{ flex: 1, minWidth: 0, marginLeft: 10, textAlign: 'left', lineHeight: 1.15 }}>
+                <div style={{
                   color: THEME.text,
-                  fontSize: 10,
+                  fontSize: 12,
                   fontWeight: 800,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
+                  lineHeight: 1.15
                 }}>
-                  {t.warmup} {index + 1}
-                </span>
+                  {label}
+                </div>
 
-                <span style={{
-                  display: 'block',
+                <div style={{
                   color: THEME.muted,
                   fontSize: 11,
                   fontWeight: 700,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
+                  marginTop: 1,
+                  lineHeight: 1.15
                 }}>
                   {warmup.reps} × {warmup.weight} {t.kg}
-                </span>
-              </span>
-            </button>
+                </div>
+              </div>
+            </div>
 
             {renderTimer?.(index) && (
-              <div style={{ width: '100%' }}>
+              <div style={{ gridColumn: '1 / -1' }}>
                 {renderTimer(index)}
               </div>
             )}
@@ -1234,28 +1258,16 @@ const [editing, setEditing] = useState(false);
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }}
-      style={{ display: 'flex', alignItems: 'center', padding: '8px 10px', border: `1px solid ${THEME.border}`, boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none', borderLeft: isActive && !isWarmup ? `4px solid ${THEME.primary}` : '4px solid transparent'}}>
-      <div
-  onClick={isReadOnly ? undefined : onToggle}
-  style={{
-    width: 28,
-    height: 28,
-    borderRadius: '50%',
-    border: `2px solid ${set.skipped ? '#e74c3c' : set.done ? THEME.primary : THEME.border}`,
-    background: set.skipped ? '#e74c3c' : set.done ? THEME.primary : THEME.card,
-    color: (set.skipped || set.done) ? THEME.bg : THEME.text,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-    flexShrink: 0,
-    cursor: isReadOnly ? 'not-allowed' : 'pointer',
-    transition: 'all 0.15s ease',
-    transform: set.done ? 'scale(1.08)' : 'scale(1)',
-    fontWeight: 900,
-  }}
->
-        {set.skipped ? '✕' : set.done ? '✓' : ''}
+      style={{ display: 'flex', alignItems: 'center', padding: '8px 10px 8px 6px', border: `1px solid ${THEME.border}`, boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none', borderLeft: isActive && !isWarmup ? `4px solid ${THEME.primary}` : '4px solid transparent'}}>
+      <div style={{ marginRight: 10, flexShrink: 0 }}>
+        <WorkoutCircle
+          done={set.done}
+          active={isActive}
+          skipped={set.skipped}
+          disabled={isReadOnly}
+          onClick={onToggle}
+          label={label}
+        />
       </div>
       <div
         onClick={isReadOnly ? undefined : onToggle}
@@ -1264,10 +1276,10 @@ const [editing, setEditing] = useState(false);
           cursor: isReadOnly ? 'not-allowed' : 'pointer'
         }}
       >
-        <div style={{ fontWeight: 700, color: THEME.text, fontSize: 13, textDecoration: 'none' }}>
+        <div style={{ fontWeight: 700, color: THEME.text, fontSize: WORKOUT_CIRCLE_FONT_SIZE, textDecoration: 'none' }}>
           {label}
         </div>
-        <div style={{ color: THEME.text, fontSize: 12, fontWeight: 800, marginTop: 1 }}>
+        <div style={{ color: THEME.text, fontSize: WORKOUT_CIRCLE_FONT_SIZE, fontWeight: 800, marginTop: 1 }}>
           {set.repsLabel || `${set.reps} ${t.reps}`}
         </div>
 
@@ -1279,7 +1291,7 @@ const [editing, setEditing] = useState(false);
             borderRadius: 999,
             border: `1px solid ${THEME.primary}`,
             color: THEME.primary,
-            fontSize: 11,
+            fontSize: WORKOUT_CIRCLE_FONT_SIZE,
             fontWeight: 800,
             lineHeight: 1.2
           }}>
@@ -1291,8 +1303,8 @@ const [editing, setEditing] = useState(false);
         {editing ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <input ref={inputRef} type="number" step="2.5" value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={handleKeyDown} onBlur={handleConfirm}
-              style={{ width: 70, padding: '4px 8px', fontSize: 16, fontWeight: 700, borderRadius: 4, border: '2px solid #e74c3c', textAlign: 'right' }} />
-            <span style={{ fontSize: 16, color: THEME.text }}>{t.kg}</span>
+              style={{ width: 70, padding: '4px 8px', fontSize: WORKOUT_CIRCLE_FONT_SIZE, fontWeight: 700, borderRadius: 4, border: '2px solid #e74c3c', textAlign: 'right' }} />
+            <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>{t.kg}</span>
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1305,7 +1317,7 @@ const [editing, setEditing] = useState(false);
       background: 'none',
       border: `1px solid ${THEME.primary}`,
       cursor: 'pointer',
-      fontSize: 16,
+      fontSize: WORKOUT_CIRCLE_FONT_SIZE,
       padding: '2px 4px',
       color: '#ffffff',
       lineHeight: 1
@@ -1327,11 +1339,12 @@ const [editing, setEditing] = useState(false);
                   background: 'none',
                   border: '1px solid #f39c12',
                   cursor: 'pointer',
-                  fontSize: 16,
+                  fontSize: 15,
                   padding: '2px 5px',
                   color: '#ffffff',
                   lineHeight: 1,
-                  fontWeight: 900
+                  fontWeight: 900,
+                lineHeight: 1
                 }}
               >
                 ↺
@@ -1350,11 +1363,12 @@ const [editing, setEditing] = useState(false);
                   background: 'none',
                   border: '1px solid #e74c3c',
                   cursor: 'pointer',
-                  fontSize: 16,
+                  fontSize: 15,
                   padding: '2px 5px',
                   color: '#ffffff',
                   lineHeight: 1,
-                  fontWeight: 900
+                  fontWeight: 900,
+                lineHeight: 1
                 }}
               >
                 ✕
@@ -2559,7 +2573,6 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
   const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
-  const allDone = entries.every(({ set }) => set.done);
   const failedEntry = entries.find(({ set }) => set.failed || set.skipped);
   const allSameWeight = entries.every(({ set }) => Number(set.weight) === Number(firstSet.weight));
   const allSameReps = entries.every(({ set }) => Number(set.reps) === Number(firstSet.reps));
@@ -2610,42 +2623,23 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
     }}>
       <div style={{
         display: 'flex',
-        gap: 4,
+        gap: 5,
         alignItems: 'center',
         justifyContent: 'center',
         flexWrap: 'nowrap',
         flexShrink: 0
       }}>
-        {entries.map(({ set, index }) => {
-          const isActive = index === activeIndex;
-          const isDone = !!set.done;
-
-          return (
-            <button
-              key={index}
-              type="button"
-              onClick={() => onToggle(index)}
-              disabled={isReadOnly}
-              style={{
-                width: 22,
-                height: 22,
-                borderRadius: '50%',
-                border: `2px solid ${set.skipped ? '#e74c3c' : isDone || isActive ? THEME.primary : THEME.border}`,
-                background: set.skipped ? '#e74c3c' : isDone ? THEME.primary : THEME.card,
-                color: (set.skipped || isDone) ? THEME.bg : THEME.text,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: isReadOnly ? 'not-allowed' : 'pointer',
-                fontWeight: 900,
-                fontSize: 12,
-                padding: 0
-              }}
-            >
-              {set.skipped ? '✕' : isDone ? '✓' : ''}
-            </button>
-          );
-        })}
+        {entries.map(({ set, index }) => (
+          <WorkoutCircle
+            key={index}
+            done={set.done}
+            active={index === activeIndex}
+            skipped={set.skipped}
+            disabled={isReadOnly}
+            onClick={() => onToggle(index)}
+            label={`${t.backoff || 'Back-off'} ${index + 1}`}
+          />
+        ))}
       </div>
 
       <div style={{ minWidth: 0, textAlign: 'left' }}>
@@ -2653,9 +2647,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
           color: THEME.text,
           fontSize: 13,
           fontWeight: 900,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis'
+          lineHeight: 1.15
         }}>
           {t.backoff || 'Back-off'}
         </div>
@@ -2665,29 +2657,11 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
           fontSize: 12,
           fontWeight: 800,
           marginTop: 1,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis'
+          lineHeight: 1.15
         }}>
           {entries.length} × {allSameReps ? firstSet.reps : '—'} × {allSameWeight ? `${firstSet.weight} ${t.kg}` : t.kg}
           {displayPct ? ` · ${displayPct}%` : ''}
         </div>
-
-        {allDone && (
-          <div style={{
-            display: 'inline-flex',
-            marginTop: 3,
-            padding: '2px 7px',
-            borderRadius: 999,
-            border: `1px solid ${THEME.primary}`,
-            color: THEME.primary,
-            fontSize: 10,
-            fontWeight: 800,
-            lineHeight: 1.2
-          }}>
-            ✓
-          </div>
-        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -2714,64 +2688,9 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
           />
         ) : (
           <>
-            <button
-              type="button"
-              disabled={isReadOnly}
-              onClick={handleEditClick}
-              style={{
-                background: 'none',
-                border: `1px solid ${THEME.primary}`,
-                cursor: isReadOnly ? 'not-allowed' : 'pointer',
-                fontSize: 15,
-                padding: '2px 5px',
-                color: '#ffffff',
-                lineHeight: 1
-              }}
-            >
-              ✎
-            </button>
-
-            <button
-              type="button"
-              disabled={isReadOnly}
-              onClick={e => {
-                e.stopPropagation();
-                onRestoreAll();
-              }}
-              style={{
-                background: 'none',
-                border: '1px solid #f39c12',
-                cursor: isReadOnly ? 'not-allowed' : 'pointer',
-                fontSize: 15,
-                padding: '2px 5px',
-                color: '#ffffff',
-                lineHeight: 1,
-                fontWeight: 900
-              }}
-            >
-              ↺
-            </button>
-
-            <button
-              type="button"
-              disabled={isReadOnly}
-              onClick={e => {
-                e.stopPropagation();
-                if (firstOpenEntry) onMarkFailed(firstOpenEntry.index);
-              }}
-              style={{
-                background: 'none',
-                border: '1px solid #e74c3c',
-                cursor: isReadOnly ? 'not-allowed' : 'pointer',
-                fontSize: 15,
-                padding: '2px 5px',
-                color: '#ffffff',
-                lineHeight: 1,
-                fontWeight: 900
-              }}
-            >
-              ✕
-            </button>
+            <button type="button" disabled={isReadOnly} onClick={handleEditClick} style={{ background: 'none', border: `1px solid ${THEME.primary}`, cursor: isReadOnly ? 'not-allowed' : 'pointer', fontSize: 15, padding: '2px 5px', color: '#ffffff', lineHeight: 1 }}>✎</button>
+            <button type="button" disabled={isReadOnly} onClick={e => { e.stopPropagation(); onRestoreAll(); }} style={{ background: 'none', border: '1px solid #f39c12', cursor: isReadOnly ? 'not-allowed' : 'pointer', fontSize: 15, padding: '2px 5px', color: '#ffffff', lineHeight: 1, fontWeight: 900 }}>↺</button>
+            <button type="button" disabled={isReadOnly} onClick={e => { e.stopPropagation(); if (firstOpenEntry) onMarkFailed(firstOpenEntry.index); }} style={{ background: 'none', border: '1px solid #e74c3c', cursor: isReadOnly ? 'not-allowed' : 'pointer', fontSize: 15, padding: '2px 5px', color: '#ffffff', lineHeight: 1, fontWeight: 900 }}>✕</button>
           </>
         )}
       </div>
@@ -2793,6 +2712,159 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
           {failedEntry.set.skipped
             ? t.topSetSkipped
             : t.failedSetAdjusted.replace('{weight}', `${failedEntry.set.adjustedWeight} ${t.kg}`)}
+        </div>
+      )}
+
+      {timerNode && (
+        <div style={{ gridColumn: '1 / -1' }}>
+          {timerNode}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAccessoryWork, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t }) {
+  const [editing, setEditing] = useState(false);
+  const firstWeight = acc.weights?.[0] || 0;
+  const allSameWeight = (acc.weights || []).every(weight => Number(weight) === Number(firstWeight));
+  const firstOpenIndex = (acc.done || []).findIndex(done => !done);
+  const firstSkippedIndex = (acc.skipped || []).findIndex(Boolean);
+  const firstFailedIndex = (acc.failed || []).findIndex(Boolean);
+  const feedbackIndex = firstSkippedIndex !== -1 ? firstSkippedIndex : firstFailedIndex;
+  const [inputVal, setInputVal] = useState(String(firstWeight || ''));
+
+  useEffect(() => {
+    if (editing) setInputVal(String(firstWeight || ''));
+  }, [editing, firstWeight]);
+
+  function confirmEdit() {
+    const val = parseFloat(inputVal);
+
+    if (!Number.isNaN(val) && val > 0) {
+      onEditAll(val);
+    }
+
+    setEditing(false);
+  }
+
+  function handleEditClick(e) {
+    e.stopPropagation();
+    setInputVal(String(firstWeight || ''));
+    setEditing(true);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter') confirmEdit();
+    if (e.key === 'Escape') setEditing(false);
+  }
+
+  const timerNode = (acc.done || [])
+    .map((_, index) => renderTimer?.(index))
+    .find(Boolean);
+
+  return (
+    <div style={{
+      borderTop: `1px solid ${THEME.border}`,
+      borderBottom: `1px solid ${THEME.border}`,
+      padding: '8px 10px',
+      display: 'grid',
+      gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+      alignItems: 'center',
+      gap: 10,
+      background: THEME.card
+    }}>
+      <div style={{
+        display: 'flex',
+        gap: 5,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexWrap: 'nowrap',
+        flexShrink: 0
+      }}>
+        {(acc.done || []).map((done, index) => (
+          <WorkoutCircle
+            key={index}
+            done={done}
+            active={isActiveGroup && index === firstOpenIndex}
+            skipped={!!acc.skipped?.[index]}
+            disabled={isReadOnly}
+            onClick={() => onToggle(index)}
+            label={`${acc.nameKey ? t[acc.nameKey] : acc.name} ${index + 1}`}
+          />
+        ))}
+      </div>
+
+      <div style={{ minWidth: 0, textAlign: 'left' }}>
+        <div style={{
+          color: THEME.text,
+          fontSize: 13,
+          fontWeight: 900,
+          lineHeight: 1.15
+        }}>
+          {acc.nameKey ? t[acc.nameKey] : acc.name}
+        </div>
+
+        <div style={{
+          color: THEME.muted,
+          fontSize: 12,
+          fontWeight: 800,
+          marginTop: 1,
+          lineHeight: 1.15
+        }}>
+          {(acc.done || []).length} × {acc.reps}{acc.perSide ? ` ${t.perSide}` : ''} × {allSameWeight ? `${firstWeight} ${t.kg}` : t.kg}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {editing ? (
+          <input
+            type="number"
+            step="2.5"
+            value={inputVal}
+            autoFocus
+            onChange={e => setInputVal(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={confirmEdit}
+            style={{
+              width: 66,
+              padding: '4px 6px',
+              fontSize: 14,
+              fontWeight: 800,
+              borderRadius: 4,
+              border: `1px solid ${THEME.primary}`,
+              background: THEME.bg,
+              color: THEME.text,
+              textAlign: 'right'
+            }}
+          />
+        ) : (
+          <>
+            <button type="button" disabled={isReadOnly} onClick={handleEditClick} style={{ background: 'none', border: `1px solid ${THEME.primary}`, cursor: isReadOnly ? 'not-allowed' : 'pointer', fontSize: 15, padding: '2px 5px', color: '#ffffff', lineHeight: 1 }}>✎</button>
+            <button type="button" disabled={isReadOnly} onClick={e => { e.stopPropagation(); onRestoreAll(); }} style={{ background: 'none', border: '1px solid #f39c12', cursor: isReadOnly ? 'not-allowed' : 'pointer', fontSize: 15, padding: '2px 5px', color: '#ffffff', lineHeight: 1, fontWeight: 900 }}>↺</button>
+            <button type="button" disabled={isReadOnly || firstOpenIndex === -1} onClick={e => { e.stopPropagation(); if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex); }} style={{ background: 'none', border: '1px solid #e74c3c', cursor: isReadOnly || firstOpenIndex === -1 ? 'not-allowed' : 'pointer', fontSize: 15, padding: '2px 5px', color: '#ffffff', lineHeight: 1, fontWeight: 900 }}>✕</button>
+          </>
+        )}
+      </div>
+
+      {feedbackIndex !== -1 && (
+        <div style={{
+          gridColumn: '1 / -1',
+          marginTop: 2,
+          padding: '7px 9px',
+          border: '1px solid #e74c3c',
+          borderRadius: 8,
+          color: '#ffffff',
+          background: 'rgba(231, 76, 60, 0.16)',
+          fontSize: 12,
+          fontWeight: 800,
+          lineHeight: 1.3,
+          textAlign: 'center'
+        }}>
+          {firstSkippedIndex !== -1
+            ? (hasMoreAccessoryWork ? t.accessorySkippedContinue : t.accessorySkippedComplete)
+            : t.failedSetAdjusted.replace('{weight}', `${acc.weights?.[firstFailedIndex]} ${t.kg}`)}
         </div>
       )}
 
@@ -2927,12 +2999,12 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 <div>
 
                   <div style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
                     justifyContent: 'center',
-                    columnGap: 18,
+                    columnGap: 12,
                     rowGap: 4,
-                    padding: '0 8px 6px'
+                    padding: '0 10px 8px'
                   }}>
                     {(liftBlock.prepItems || []).map((item, pi) => (
                       <PrepRow
@@ -3082,60 +3154,43 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             overflow: 'hidden',
             marginBottom: 10
           }}>
-            {(workout.accessories || []).map((acc, ai) => (
-              <div key={ai}>
-                <div style={{
-                  padding: '6px 10px',
-                  background: THEME.card,
-                  borderBottom: `1px solid ${THEME.border}`,
-                  textAlign: 'center'
-                }}>
-                  <span style={{ fontWeight: 800, color: THEME.text, fontSize: 13 }}>
-                    {acc.nameKey ? t[acc.nameKey] : acc.name}
-                  </span>
-                </div>
+            <div style={{
+              padding: '6px 10px',
+              fontSize: 13,
+              fontWeight: 900,
+              color: THEME.text,
+              textAlign: 'center',
+              borderBottom: `1px solid ${THEME.border}`
+            }}>
+              {t.accessories}
+            </div>
 
-                {acc.done.map((done, si) => {
-                  const firstIncompleteAccessoryGroup = (workout.accessories || []).findIndex(a =>
-                    (a.done || []).some(d => !d)
-                  );
-                  const firstIncompleteAccessorySet = (acc.done || []).findIndex(d => !d);
+            {(workout.accessories || []).map((acc, ai) => {
+              const firstIncompleteAccessoryGroup = (workout.accessories || []).findIndex(a =>
+                (a.done || []).some(done => !done)
+              );
+              const hasMoreAccessoryWork = (acc.done || []).some((done, si) => si > -1 && !done) ||
+                (workout.accessories || []).some((nextAccessory, nextIndex) =>
+                  nextIndex > ai && (nextAccessory.done || []).some(done => !done)
+                );
 
-                  return (
-                    <React.Fragment key={si}>
-                      <SetRow
-                        set={{
-                          done,
-                          weight: acc.weights[si],
-                          reps: acc.reps,
-                          repsLabel: acc.perSide ? `${acc.reps} ${t.perSide}` : null,
-                          failed: !!acc.failed?.[si],
-                          failedWeight: acc.failedWeights?.[si] || null,
-                          adjustedFromFailedSet: !!acc.adjustedFromFailedSet?.[si],
-                          adjustedFromOriginal: !!acc.adjustedFromOriginal?.[si],
-                        }}
-                        index={si}
-                        label={`${t.set} ${si + 1}`}
-                        isWarmup={false}
-                        isActive={
-                          !isReadOnly &&
-                          allMainLiftSetsDone &&
-                          ai === firstIncompleteAccessoryGroup &&
-                          si === firstIncompleteAccessorySet
-                        }
-                        isReadOnly={isReadOnly}
-                        onToggle={() => handleToggle(() => onToggleAccessorySet(ai, si))}
-                        onMarkFailed={() => handleToggle(() => onMarkAccessorySetFailed(ai, si))}
-                        onRestoreWeight={() => handleToggle(() => onRestoreAccessoryWeight(ai, si))}
-                        onWeightChange={val => onAccessoryWeightChange(ai, si, val)}
-                        t={t}
-                      />
-                      {renderInlineTimer({ type: 'accessory', accIndex: ai, index: si })}
-                    </React.Fragment>
-                  );
-                })}
-              </div>
-            ))}
+              return (
+                <AccessoryGroup
+                  key={ai}
+                  acc={acc}
+                  accIndex={ai}
+                  isActiveGroup={!isReadOnly && allMainLiftSetsDone && ai === firstIncompleteAccessoryGroup}
+                  isReadOnly={isReadOnly}
+                  hasMoreAccessoryWork={hasMoreAccessoryWork}
+                  onToggle={si => handleToggle(() => onToggleAccessorySet(ai, si))}
+                  onEditAll={val => (acc.done || []).forEach((_, si) => onAccessoryWeightChange(ai, si, val))}
+                  onRestoreAll={() => (acc.done || []).forEach((_, si) => onRestoreAccessoryWeight(ai, si))}
+                  onMarkFailed={si => handleToggle(() => onMarkAccessorySetFailed(ai, si))}
+                  renderTimer={si => renderInlineTimer({ type: 'accessory', accIndex: ai, index: si })}
+                  t={t}
+                />
+              );
+            })}
           </div>
         )}
 
@@ -3219,12 +3274,12 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           </div>
 
           <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-            columnGap: 18,
-            rowGap: 4,
-            padding: '0 8px 6px'
+            display: 'grid',
+                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                    justifyContent: 'center',
+                    columnGap: 12,
+                    rowGap: 4,
+                    padding: '0 10px 8px'
           }}>
             {workout.prepItems.map((item, i) => (
               <PrepRow
@@ -3383,61 +3438,44 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           overflow: 'hidden',
           marginBottom: 10
         }}>
-          {workout.accessories.map((acc, ai) => (
-            <div key={ai}>
-              <div style={{
-                padding: '6px 10px',
-                background: THEME.card,
-                borderBottom: `1px solid ${THEME.border}`,
-                textAlign: 'center'
-              }}>
-                <span style={{ fontWeight: 800, color: THEME.text }}>
-                  {acc.nameKey ? t[acc.nameKey] : acc.name}
-                </span>
-              </div>
+          <div style={{
+            padding: '6px 10px',
+            fontSize: 13,
+            fontWeight: 900,
+            color: THEME.text,
+            textAlign: 'center',
+            borderBottom: `1px solid ${THEME.border}`
+          }}>
+            {t.accessories}
+          </div>
 
-              {acc.done.map((done, si) => {
-                const allMainSetsDone = (workout.sets || []).every(s => s.done);
-                const firstIncompleteAccessoryGroup = (workout.accessories || []).findIndex(a =>
-                  (a.done || []).some(d => !d)
-                );
-                const firstIncompleteAccessorySet = (acc.done || []).findIndex(d => !d);
+          {workout.accessories.map((acc, ai) => {
+            const allMainSetsDone = (workout.sets || []).every(s => s.done);
+            const firstIncompleteAccessoryGroup = (workout.accessories || []).findIndex(a =>
+              (a.done || []).some(done => !done)
+            );
+            const hasMoreAccessoryWork = (acc.done || []).some((done, si) => si > -1 && !done) ||
+              (workout.accessories || []).some((nextAccessory, nextIndex) =>
+                nextIndex > ai && (nextAccessory.done || []).some(done => !done)
+              );
 
-                return (
-                  <React.Fragment key={si}>
-                    <SetRow
-                      set={{
-                        done,
-                        weight: acc.weights[si],
-                        reps: acc.reps,
-                        repsLabel: acc.perSide ? `${acc.reps} ${t.perSide}` : null,
-                        failed: !!acc.failed?.[si],
-                        failedWeight: acc.failedWeights?.[si] || null,
-                        adjustedFromFailedSet: !!acc.adjustedFromFailedSet?.[si],
-                        adjustedFromOriginal: !!acc.adjustedFromOriginal?.[si],
-                      }}
-                      index={si}
-                      label={`${t.set} ${si + 1}`}
-                      isWarmup={false}
-                      isActive={
-                        !isReadOnly &&
-                        allMainSetsDone &&
-                        ai === firstIncompleteAccessoryGroup &&
-                        si === firstIncompleteAccessorySet
-                      }
-                      isReadOnly={isReadOnly}
-                      onToggle={() => handleToggle(() => onToggleAccessorySet(ai, si))}
-                      onMarkFailed={() => handleToggle(() => onMarkAccessorySetFailed(ai, si))}
-                      onRestoreWeight={() => handleToggle(() => onRestoreAccessoryWeight(ai, si))}
-                      onWeightChange={val => onAccessoryWeightChange(ai, si, val)}
-                      t={t}
-                    />
-                    {renderInlineTimer({ type: 'accessory', accIndex: ai, index: si })}
-                  </React.Fragment>
-                );
-              })}
-            </div>
-          ))}
+            return (
+              <AccessoryGroup
+                key={ai}
+                acc={acc}
+                accIndex={ai}
+                isActiveGroup={!isReadOnly && allMainSetsDone && ai === firstIncompleteAccessoryGroup}
+                isReadOnly={isReadOnly}
+                hasMoreAccessoryWork={hasMoreAccessoryWork}
+                onToggle={si => handleToggle(() => onToggleAccessorySet(ai, si))}
+                onEditAll={val => (acc.done || []).forEach((_, si) => onAccessoryWeightChange(ai, si, val))}
+                onRestoreAll={() => (acc.done || []).forEach((_, si) => onRestoreAccessoryWeight(ai, si))}
+                onMarkFailed={si => handleToggle(() => onMarkAccessorySetFailed(ai, si))}
+                renderTimer={si => renderInlineTimer({ type: 'accessory', accIndex: ai, index: si })}
+                t={t}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -5458,6 +5496,7 @@ function markSetFailed(setIndex) {
       const isPreMeetWorkout = w.number >= 25 && w.number <= 27;
       const isAttemptSet = isAttemptSetLabel(failedSet?.labelKey);
       const isBackoff = failedSet?.labelKey === 'backoff';
+      const isZeroWeightFailure = Number(failedSet?.weight) <= 0;
 
       const normalAdjustedWeight = getFailedSetSuggestedWeight(failedSet?.weight);
       const attemptAdjustedWeight = getAdjustedAttemptWeight(failedSet?.weight);
@@ -5521,7 +5560,7 @@ function markSetFailed(setIndex) {
           const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
           const originalPct = Number(s.originalPct ?? s.pct) || 0;
 
-          if (shouldAdjustThisSet && (shouldSkipAttempt || shouldSkipTopSet)) {
+          if (shouldAdjustThisSet && (isZeroWeightFailure || shouldSkipAttempt || shouldSkipTopSet)) {
             return {
               ...s,
               done: true,
@@ -5690,9 +5729,26 @@ function toggleAccessorySet(accIndex, setIndex) {
         accessories: w.accessories.map((a, ai) => {
           if (ai !== accIndex) return a;
 
+          const isCurrentlyDone = !!a.done?.[setIndex];
+
           return {
             ...a,
             done: a.done.map((d, di) => (di === setIndex ? !d : d)),
+            failed: (a.failed || a.done.map(() => false)).map((failed, di) =>
+              di === setIndex ? false : failed
+            ),
+            failedWeights: (a.failedWeights || a.done.map(() => null)).map((weight, di) =>
+              di === setIndex ? null : weight
+            ),
+            skipped: (a.skipped || a.done.map(() => false)).map((skipped, di) =>
+              di === setIndex ? false : skipped
+            ),
+            adjustedFromFailedSet: (a.adjustedFromFailedSet || a.done.map(() => false)).map((adjusted, di) =>
+              di === setIndex ? false : adjusted
+            ),
+            adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, di) =>
+              di === setIndex && !isCurrentlyDone ? false : adjusted
+            ),
           };
         }),
       };
@@ -5918,7 +5974,19 @@ function toggleMeetSet(liftIndex, setIndex) {
             sets: liftBlock.sets.map((s, si) => {
               if (si !== setIndex) return s;
 
-              if (s.failed || s.skipped) {
+              if (s.failed && !s.skipped) {
+                return {
+                  ...s,
+                  done: true,
+                  failed: false,
+                  skipped: false,
+                  adjustedWeight: null,
+                  adjustedFromFailedSet: false,
+                  effort: null,
+                };
+              }
+
+              if (s.skipped) {
                 return {
                   ...s,
                   done: false,
@@ -5936,6 +6004,10 @@ function toggleMeetSet(liftIndex, setIndex) {
               return {
                 ...s,
                 done: !s.done,
+                failed: false,
+                skipped: false,
+                adjustedWeight: s.done ? null : s.adjustedWeight,
+                adjustedFromFailedSet: s.done ? false : s.adjustedFromFailedSet,
                 effort: s.done ? null : s.effort,
               };
             }),
@@ -5975,6 +6047,7 @@ function markMeetSetFailed(liftIndex, setIndex) {
             const isPreMeetWorkout = w.number >= 25 && w.number <= 27;
             const isAttemptSet = isAttemptSetLabel(failedSet?.labelKey);
             const isBackoff = failedSet?.labelKey === 'backoff';
+            const isZeroWeightFailure = Number(failedSet?.weight) <= 0;
             const isTopSet = isTopSetLabel(failedSet?.labelKey);
 
             const normalAdjustedWeight = getFailedSetSuggestedWeight(failedSet?.weight);
@@ -6037,7 +6110,7 @@ function markMeetSetFailed(liftIndex, setIndex) {
                 const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
                 const originalPct = Number(s.originalPct ?? s.pct) || 0;
 
-                if (shouldAdjustThisSet && (shouldSkipAttempt || shouldSkipTopSet)) {
+                if (shouldAdjustThisSet && (isZeroWeightFailure || shouldSkipAttempt || shouldSkipTopSet)) {
                   return {
                     ...s,
                     done: true,
@@ -6183,16 +6256,39 @@ function changeMeetWeight(liftIndex, setIndex, val) {
   );
 }
 
+function hasMoreWorkAfterAccessoryFailure(workout, accIndex, setIndex) {
+  const accessory = workout?.accessories?.[accIndex];
+  if (!accessory) return false;
+
+  const currentWeight = Number(accessory.weights?.[setIndex]) || 0;
+
+  // If weight can still be lowered, the same set must be retried.
+  if (currentWeight > 0) return true;
+
+  const hasLaterSetsInSameAccessory = (accessory.done || []).some((done, index) =>
+    index > setIndex && !done
+  );
+
+  if (hasLaterSetsInSameAccessory) return true;
+
+  return (workout.accessories || []).some((nextAccessory, index) =>
+    index > accIndex &&
+    (nextAccessory.done || []).some(done => !done)
+  );
+}
+
 function markAccessorySetFailed(accIndex, setIndex) {
   const workout = workouts[selectedIndex];
 
-  if (workout) {
+  if (workout && hasMoreWorkAfterAccessoryFailure(workout, accIndex, setIndex)) {
     startTimer(restTimeSeconds, {
       workoutNumber: workout.number,
       type: 'accessory',
       accIndex,
       index: setIndex,
     });
+  } else {
+    setTimer(null);
   }
 
   setWorkouts(prev =>
@@ -6206,26 +6302,31 @@ function markAccessorySetFailed(accIndex, setIndex) {
 
           const currentWeight = Number(a.weights?.[setIndex]) || 0;
           const adjustedWeight = getFailedSetSuggestedWeight(currentWeight);
+          const shouldSkipAccessory = currentWeight <= 0;
 
           return {
             ...a,
+            done: a.done.map((done, i) => i === setIndex && shouldSkipAccessory ? true : done),
+            skipped: (a.skipped || a.done.map(() => false)).map((skipped, i) =>
+              i === setIndex ? shouldSkipAccessory : skipped
+            ),
             weights: a.weights.map((weight, i) => {
               const shouldLower =
                 i >= setIndex &&
                 !a.done?.[i] &&
                 Number(weight) >= adjustedWeight;
 
-              return shouldLower ? adjustedWeight : weight;
+              return shouldSkipAccessory ? weight : shouldLower ? adjustedWeight : weight;
             }),
             originalWeights: (a.originalWeights || a.weights).map((weight, i) => weight || a.weights?.[i]),
             failed: (a.failed || a.done.map(() => false)).map((failed, i) =>
-              i === setIndex ? true : failed
+              i === setIndex ? !shouldSkipAccessory : failed
             ),
             failedWeights: (a.failedWeights || a.done.map(() => null)).map((weight, i) =>
-              i === setIndex ? (weight || currentWeight) : weight
+              i === setIndex ? (shouldSkipAccessory ? null : (weight || currentWeight)) : weight
             ),
             adjustedFromFailedSet: (a.adjustedFromFailedSet || a.done.map(() => false)).map((adjusted, i) =>
-              i === setIndex ? true : adjusted
+              i === setIndex ? !shouldSkipAccessory : adjusted
             ),
             adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, i) =>
               i >= setIndex && !a.done?.[i] && Number(a.weights?.[i]) >= adjustedWeight ? true : adjusted
@@ -6255,6 +6356,7 @@ function restoreAccessoryWeight(accIndex, setIndex) {
             weights: a.weights.map((weight, i) => i === setIndex ? restoredWeight : weight),
             failed: (a.failed || a.done.map(() => false)).map((failed, i) => i === setIndex ? false : failed),
             failedWeights: (a.failedWeights || a.done.map(() => null)).map((weight, i) => i === setIndex ? null : weight),
+            skipped: (a.skipped || a.done.map(() => false)).map((skipped, i) => i === setIndex ? false : skipped),
             adjustedFromFailedSet: (a.adjustedFromFailedSet || a.done.map(() => false)).map((adjusted, i) => i === setIndex ? false : adjusted),
             adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, i) => i === setIndex ? false : adjusted),
           };
