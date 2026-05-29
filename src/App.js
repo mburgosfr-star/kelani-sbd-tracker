@@ -959,7 +959,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      padding: '12px 16px',
+      padding: '8px 12px',
       borderTop: `1px solid ${THEME.border}`,
       background: item.done ? 'rgba(255, 138, 61, 0.08)' : THEME.card,
       boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none'
@@ -968,8 +968,8 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
         onClick={onToggle}
         disabled={isReadOnly}
         style={{
-          width: 26,
-          height: 26,
+          width: 22,
+          height: 22,
           borderRadius: '50%',
           border: `2px solid ${item.done ? THEME.primary : THEME.border}`,
           background: item.done ? THEME.primary : THEME.card,
@@ -977,7 +977,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          marginRight: 12,
+          marginRight: 10,
           flexShrink: 0,
           cursor: isReadOnly ? 'not-allowed' : 'pointer',
           fontWeight: 900
@@ -987,10 +987,10 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
       </button>
 
       <div style={{ flex: 1 }}>
-        <div style={{ color: THEME.text, fontWeight: 800, fontSize: 14 }}>
+        <div style={{ color: THEME.text, fontWeight: 800, fontSize: 13 }}>
           {t[item.labelKey]}
         </div>
-        <div style={{ color: THEME.muted, fontSize: 12, marginTop: 2 }}>
+        <div style={{ color: THEME.muted, fontSize: 11, marginTop: 1 }}>
           {formatPrepPrescription(item, t)}
         </div>
       </div>
@@ -1004,9 +1004,9 @@ function EffortPicker({ value, onChange, t }) {
       background: THEME.bg,
       borderTop: `1px solid ${THEME.border}`,
       borderBottom: `1px solid ${THEME.border}`,
-      padding: '10px 12px',
+      padding: '7px 10px',
       display: 'grid',
-      gap: 8
+      gap: 6
     }}>
       <div style={{
         color: THEME.text,
@@ -1028,7 +1028,7 @@ function EffortPicker({ value, onChange, t }) {
             type="button"
             onClick={() => onChange(option)}
             style={{
-              padding: '7px 4px',
+              padding: '6px 3px',
               borderRadius: 8,
               border: `1px solid ${value === option ? THEME.primary : THEME.border}`,
               background: value === option ? THEME.primary : THEME.card,
@@ -1078,7 +1078,6 @@ function getWorkoutEffortText(effort, t) {
 }
 
 function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t }) {
-const isFailed = Boolean(set.failed);
 const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
 const displayPct = set.pct ? Math.round(set.pct * 100) : null;
 const [editing, setEditing] = useState(false);
@@ -1116,12 +1115,12 @@ const [editing, setEditing] = useState(false);
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }}
-      style={{ display: 'flex', alignItems: 'center', padding: '14px 16px', border: `1px solid ${THEME.border}`, boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none', borderLeft: isActive && !isWarmup ? `4px solid ${THEME.primary}` : '4px solid transparent'}}>
+      style={{ display: 'flex', alignItems: 'center', padding: '8px 10px', border: `1px solid ${THEME.border}`, boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none', borderLeft: isActive && !isWarmup ? `4px solid ${THEME.primary}` : '4px solid transparent'}}>
       <div
   onClick={isReadOnly ? undefined : onToggle}
   style={{
-    width: 34,
-    height: 34,
+    width: 28,
+    height: 28,
     borderRadius: '50%',
     border: `2px solid ${set.skipped ? '#e74c3c' : set.done ? THEME.primary : THEME.border}`,
     background: set.skipped ? '#e74c3c' : set.done ? THEME.primary : THEME.card,
@@ -1129,7 +1128,7 @@ const [editing, setEditing] = useState(false);
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
+    marginRight: 10,
     flexShrink: 0,
     cursor: isReadOnly ? 'not-allowed' : 'pointer',
     transition: 'all 0.15s ease',
@@ -1146,17 +1145,17 @@ const [editing, setEditing] = useState(false);
           cursor: isReadOnly ? 'not-allowed' : 'pointer'
         }}
       >
-        <div style={{ fontWeight: 500, color: THEME.text, textDecoration: set.done && !isFailed && !set.skipped ? 'line-through' : 'none' }}>
+        <div style={{ fontWeight: 700, color: THEME.text, fontSize: 13, textDecoration: 'none' }}>
           {label}
         </div>
-        <div style={{ color: THEME.text, fontSize: 14, fontWeight: 700, marginTop: 2 }}>
+        <div style={{ color: THEME.text, fontSize: 12, fontWeight: 800, marginTop: 1 }}>
           {set.repsLabel || `${set.reps} ${t.reps}`}
         </div>
 
         {getSetEffortLabel(set.effort, t) && (
           <div style={{
             display: 'inline-flex',
-            marginTop: 5,
+            marginTop: 3,
             padding: '2px 7px',
             borderRadius: 999,
             border: `1px solid ${THEME.primary}`,
@@ -1510,7 +1509,7 @@ function MeetPrepChecklistSection({ meetPrepChecklist = {}, setMeetPrepChecklist
                   <span style={{
                     fontSize: 14,
                     fontWeight: checked ? 700 : 500,
-                    textDecoration: checked ? 'line-through' : 'none'
+                    textDecoration: 'none'
                   }}>
                     {t[labelKey]}
                   </span>
@@ -2479,7 +2478,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           <h2>{t.deload}</h2>
           <p style={{ color: THEME.muted }}>{t.restReadyNextCycle}</p>
         </div>
-        <button onClick={onStartNewCycle} style={{ marginTop: 16, width: '100%', padding: 14, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+        <button onClick={onStartNewCycle} style={{ marginTop: 16, width: '100%', padding: 10, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
           {t.startNewCycle}
         </button>
       </div>
@@ -2505,7 +2504,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
     );
 
     return (
-      <div style={{ maxWidth: 500, margin: '0 auto', padding: '8px 12px 12px', paddingBottom: 16, fontFamily: 'sans-serif' }}>
+      <div style={{ maxWidth: 500, margin: '0 auto', padding: '6px 10px 10px', paddingBottom: 12, fontFamily: 'sans-serif' }}>
         <AppHeader
           t={t}
           title={`${t.workout} ${workout.number} — ${getWorkoutTitle(workout, t)}`}
@@ -2514,8 +2513,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
 {isMeetDay && (
 <div style={{
-  marginBottom: 14,
-  padding: 14,
+  marginBottom: 10,
+  padding: 10,
   border: `1px solid ${THEME.primary}`,
   borderRadius: 10,
   background: THEME.card,
@@ -2524,7 +2523,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
   <div style={{ color: THEME.muted, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
     {t.projectedTotal}
   </div>
-  <div style={{ color: THEME.text, fontSize: 26, fontWeight: 900, lineHeight: 1 }}>
+  <div style={{ color: THEME.text, fontSize: 22, fontWeight: 900, lineHeight: 1 }}>
     {meetDayProjectedTotal ? `${meetDayProjectedTotal} ${t.kg}` : '—'}
   </div>
 </div>
@@ -2540,11 +2539,11 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           return (
             <div
               key={liftBlock.lift}
-              style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}
+              style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}
             >
               <div style={{
-                padding: '8px 16px',
-                fontSize: 16,
+                padding: '6px 10px',
+                fontSize: 14,
                 fontWeight: 800,
                 color: THEME.text,
                 textAlign: 'center',
@@ -2555,17 +2554,6 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
               {(liftBlock.prepItems || []).length > 0 && (
                 <div>
-                  <div style={{
-                    padding: '8px 16px',
-                    fontSize: 14,
-                    fontWeight: 800,
-                    color: THEME.text,
-                    textAlign: 'center',
-                    borderTop: `1px solid ${THEME.border}`,
-                    background: THEME.card
-                  }}>
-                    {t.prepTitle}
-                  </div>
 
                   {(liftBlock.prepItems || []).map((item, pi) => (
                     <PrepRow
@@ -2647,7 +2635,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           disabled={!allMeetDone || isReadOnly}
           style={{
             width: '100%',
-            padding: 14,
+            padding: 10,
             fontSize: 16,
             fontWeight: 600,
             background: THEME.card,
@@ -2707,9 +2695,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       </div>
 
       {(workout.prepItems || []).length > 0 && (
-        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
           <div style={{
-            padding: '8px 16px',
+            padding: '6px 10px',
             fontSize: 16,
             fontWeight: 700,
             color: THEME.text,
@@ -2737,10 +2725,10 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           border: `1px solid ${THEME.border}`,
           borderRadius: 8,
           overflow: 'hidden',
-          marginBottom: 16
+          marginBottom: 10
         }}>
           <div style={{
-            padding: '8px 16px',
+            padding: '6px 10px',
             fontSize: 16,
             fontWeight: 700,
             color: THEME.text,
@@ -2771,10 +2759,10 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
         border: `1px solid ${THEME.border}`,
         borderRadius: 8,
         overflow: 'hidden',
-        marginBottom: 16
+        marginBottom: 10
       }}>
         <div style={{
-          padding: '8px 16px',
+          padding: '6px 10px',
           fontSize: 16,
           fontWeight: 700,
           color: THEME.text,
@@ -2862,12 +2850,12 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           border: `1px solid ${THEME.border}`,
           borderRadius: 8,
           overflow: 'hidden',
-          marginBottom: 16
+          marginBottom: 10
         }}>
           {workout.accessories.map((acc, ai) => (
             <div key={ai}>
               <div style={{
-                padding: '8px 16px',
+                padding: '6px 10px',
                 background: THEME.card,
                 borderBottom: `1px solid ${THEME.border}`,
                 textAlign: 'center'
@@ -2930,7 +2918,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
         disabled={!allDone || isReadOnly}
         style={{
           width: '100%',
-          padding: 14,
+          padding: 10,
           fontSize: 16,
           fontWeight: 600,
           background: THEME.card,
