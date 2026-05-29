@@ -959,25 +959,25 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      padding: '8px 12px',
-      borderTop: `1px solid ${THEME.border}`,
-      background: item.done ? 'rgba(255, 138, 61, 0.08)' : THEME.card,
-      boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none'
+      minWidth: 0,
+      padding: '7px 6px',
+      background: 'transparent',
+      boxShadow: 'none'
     }}>
       <button
         onClick={onToggle}
         disabled={isReadOnly}
         style={{
-          width: 22,
-          height: 22,
+          width: 20,
+          height: 20,
           borderRadius: '50%',
-          border: `2px solid ${item.done ? THEME.primary : THEME.border}`,
+          border: `2px solid ${item.done || isActive ? THEME.primary : THEME.border}`,
           background: item.done ? THEME.primary : THEME.card,
           color: item.done ? THEME.bg : THEME.text,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          marginRight: 10,
+          marginRight: 8,
           flexShrink: 0,
           cursor: isReadOnly ? 'not-allowed' : 'pointer',
           fontWeight: 900
@@ -986,11 +986,31 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
         {item.done ? '✓' : ''}
       </button>
 
-      <div style={{ flex: 1 }}>
-        <div style={{ color: THEME.text, fontWeight: 800, fontSize: 13 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          title={t[item.labelKey]}
+          style={{
+            color: THEME.text,
+            fontWeight: 800,
+            fontSize: 12,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}
+        >
           {t[item.labelKey]}
         </div>
-        <div style={{ color: THEME.muted, fontSize: 11, marginTop: 1 }}>
+        <div
+          title={formatPrepPrescription(item, t)}
+          style={{
+            color: THEME.muted,
+            fontSize: 10,
+            marginTop: 1,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}
+        >
           {formatPrepPrescription(item, t)}
         </div>
       </div>
@@ -2556,20 +2576,28 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
               {(liftBlock.prepItems || []).length > 0 && (
                 <div>
 
-                  {(liftBlock.prepItems || []).map((item, pi) => (
-                    <PrepRow
-                      key={`prep-${pi}`}
-                      item={item}
-                      isActive={
-                        !isReadOnly &&
-                        li === firstIncompleteLiftIndex &&
-                        pi === firstIncompletePrepItem
-                      }
-                      isReadOnly={isReadOnly}
-                      onToggle={() => handleToggle(() => onToggleMeetPrepItem(li, pi))}
-                      t={t}
-                    />
-                  ))}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                    columnGap: 12,
+                    rowGap: 4,
+                    padding: '0 8px 6px'
+                  }}>
+                    {(liftBlock.prepItems || []).map((item, pi) => (
+                      <PrepRow
+                        key={`prep-${pi}`}
+                        item={item}
+                        isActive={
+                          !isReadOnly &&
+                          li === firstIncompleteLiftIndex &&
+                          pi === firstIncompletePrepItem
+                        }
+                        isReadOnly={isReadOnly}
+                        onToggle={() => handleToggle(() => onToggleMeetPrepItem(li, pi))}
+                        t={t}
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -2810,16 +2838,24 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             {t.prepTitle}
           </div>
 
-          {workout.prepItems.map((item, i) => (
-            <PrepRow
-              key={i}
-              item={item}
-              isActive={!isReadOnly && i === workout.prepItems.findIndex(prep => !prep.done)}
-              isReadOnly={isReadOnly}
-              onToggle={() => handleToggle(() => onTogglePrepItem(i))}
-              t={t}
-            />
-          ))}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            columnGap: 12,
+            rowGap: 4,
+            padding: '0 8px 6px'
+          }}>
+            {workout.prepItems.map((item, i) => (
+              <PrepRow
+                key={i}
+                item={item}
+                isActive={!isReadOnly && i === workout.prepItems.findIndex(prep => !prep.done)}
+                isReadOnly={isReadOnly}
+                onToggle={() => handleToggle(() => onTogglePrepItem(i))}
+                t={t}
+              />
+            ))}
+          </div>
         </div>
       )}
 
