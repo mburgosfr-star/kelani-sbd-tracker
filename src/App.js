@@ -1259,7 +1259,13 @@ const [editing, setEditing] = useState(false);
   }
 }}
       style={{ display: 'flex', alignItems: 'center', padding: '8px 10px 8px 6px', border: `1px solid ${THEME.border}`, boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none', borderLeft: isActive && !isWarmup ? `4px solid ${THEME.primary}` : '4px solid transparent'}}>
-      <div style={{ marginRight: 10, flexShrink: 0 }}>
+      <div style={{
+        marginRight: 10,
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        alignSelf: 'center'
+      }}>
         <WorkoutCircle
           done={set.done}
           active={isActive}
@@ -1537,14 +1543,16 @@ const MEET_PREP_ITEMS = [
     ['id', 'meetPrepId'],
     ['registration', 'meetPrepRegistration'],
     ['bodyweight', 'meetPrepBodyweight'],
+    ['clothing', 'meetPrepClothing'],
     ['shoes', 'meetPrepShoes'],
     ['socks', 'meetPrepSocks'],
-    ['clothing', 'meetPrepClothing'],
+    ['equipment', 'meetPrepEquipment'],
     ['food', 'meetPrepFood'],
     ['attempts', 'meetPrepAttempts'],
     ['rackHeights', 'meetPrepRackHeights'],
     ['pen', 'meetPrepPen'],
     ['phone', 'meetPrepPhone'],
+    ['travel', 'meetPrepTravel'],
 ];
 
 function MeetPrepChecklistSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, t }) {
@@ -3002,7 +3010,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     justifyContent: 'center',
                     columnGap: 12,
                     rowGap: 4,
-                    padding: '0 10px 8px'
+                    padding: '0 10px 4px'
                   }}>
                     {(liftBlock.prepItems || []).map((item, pi) => (
                       <PrepRow
@@ -3299,8 +3307,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           border: `1px solid ${THEME.border}`,
           borderRadius: 8,
           overflow: 'hidden',
-          marginBottom: 10,
-          paddingTop: 8
+          marginBottom: 10
         }}>
           <WarmupGrid
             warmups={workout.warmups || []}
