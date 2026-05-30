@@ -217,7 +217,7 @@ export const translations = {
     languageCatalan: 'Catalaans',
     continue: 'Doorgaan',
     restart: 'Opnieuw beginnen',
-    startFromScratch: 'Start from scratch',
+    startFromScratch: 'Begin opnieuw',
     dataManagement: 'Data',
     exportData: 'Data exporteren',
     exportDataDescription: 'Exporteer je lokale appdata als JSON-back-up of herstel een eerdere back-up.',
