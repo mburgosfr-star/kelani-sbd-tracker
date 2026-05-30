@@ -7175,6 +7175,16 @@ const latestBodyDataRows = [
   />
 
   <div style={{
+    marginTop: -4,
+    marginBottom: 10,
+    color: THEME.muted,
+    fontSize: 12,
+    textAlign: 'center'
+  }}>
+    {t.appName} · {process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev'}
+  </div>
+
+  <div style={{
     background: THEME.card,
     border: `1px solid ${THEME.border}`,
     borderRadius: 8,
@@ -7229,14 +7239,6 @@ const latestBodyDataRows = [
 
   </div>
 
-  <div style={{
-    marginTop: 10,
-    color: THEME.muted,
-    fontSize: 12,
-    textAlign: 'center'
-  }}>
-    {t.appName} · {process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev'}
-  </div>
 </div>
       )}      
     {screen === 'completed' && (
