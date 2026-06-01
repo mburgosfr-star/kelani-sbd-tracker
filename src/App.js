@@ -681,7 +681,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
 
   const workouts = [];
 
-  function buildLiftBlock(liftConfig) {
+  function buildLiftBlock(liftConfig, liftIndex = 0) {
     const sets = [];
 
     liftConfig.blocks.forEach(block => {
@@ -707,7 +707,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
 
     return {
       lift: liftConfig.lift,
-      prepItems: generatePrepItems(liftConfig.lift),
+      prepItems: liftIndex === 0 ? generatePrepItems(liftConfig.lift) : [],
       warmups: generateWarmups(firstWorkWeight),
       sets,
     };
@@ -718,7 +718,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
       buildLiftBlock({
         ...liftConfig,
         isSecondaryLight: liftIndex > 0,
-      })
+      }, liftIndex)
     );
     const primaryLift = liftBlocks[0]?.lift;
 
@@ -3069,8 +3069,11 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       return total + (Number(thirdAttempt) || 0);
     }, 0);
 
-    const firstIncompleteLiftIndex = (workout.lifts || []).findIndex(liftBlock =>
-      (liftBlock.prepItems || []).some(item => !item.done) ||
+    const getVisiblePrepItems = (liftBlock, liftIndex) =>
+      isMeetDay || liftIndex === 0 ? (liftBlock.prepItems || []) : [];
+
+    const firstIncompleteLiftIndex = (workout.lifts || []).findIndex((liftBlock, liftIndex) =>
+      getVisiblePrepItems(liftBlock, liftIndex).some(item => !item.done) ||
       (liftBlock.warmups || []).some(w => !w.done) ||
       (liftBlock.sets || []).some(s => !s.done)
     );
@@ -3104,10 +3107,11 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 )}
 
         {(workout.lifts || []).map((liftBlock, li) => {
-          const firstIncompletePrepItem = (liftBlock.prepItems || []).findIndex(item => !item.done);
+          const visiblePrepItems = getVisiblePrepItems(liftBlock, li);
+          const firstIncompletePrepItem = visiblePrepItems.findIndex(item => !item.done);
           const firstIncompleteWarmup = (liftBlock.warmups || []).findIndex(w => !w.done);
           const firstIncompleteSet = (liftBlock.sets || []).findIndex(s => !s.done);
-          const allPrepDone = (liftBlock.prepItems || []).every(item => item.done);
+          const allPrepDone = visiblePrepItems.every(item => item.done);
           const allWarmupsDone = (liftBlock.warmups || []).every(w => w.done);
 
           return (
@@ -3126,7 +3130,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 {liftLabel(liftBlock.lift, t)}
               </div>
 
-              {(liftBlock.prepItems || []).length > 0 && (
+              {visiblePrepItems.length > 0 && (
                 <div>
 
                   <div style={{
@@ -3137,7 +3141,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     rowGap: 4,
                     padding: '0 10px 4px'
                   }}>
-                    {(liftBlock.prepItems || []).map((item, pi) => (
+                    {visiblePrepItems.map((item, pi) => (
                       <PrepRow
                         key={`prep-${pi}`}
                         item={item}
