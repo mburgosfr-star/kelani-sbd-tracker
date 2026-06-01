@@ -1080,7 +1080,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
       justifyContent: 'center',
       columnGap: 12,
       rowGap: 4,
-      padding: '0 10px 8px'
+      padding: '4px 10px 8px'
     }}>
       {warmups.map((warmup, index) => {
         const label = `${t.warmup} ${index + 1}`;
@@ -2579,7 +2579,7 @@ function NewCycleModal({ prs, onStart, t }) {
   );
 }
 
-function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t }) {
+function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, label, t }) {
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
   const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
@@ -2619,6 +2619,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   const timerNode = entries
     .map(({ index }) => renderTimer?.(index))
     .find(Boolean);
+  const groupLabel = label || t.backoff || 'Back-off';
 
   return (
     <div style={{
@@ -2647,7 +2648,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
             skipped={set.skipped}
             disabled={isReadOnly}
             onClick={() => onToggle(index)}
-            label={`${t.backoff || 'Back-off'} ${index + 1}`}
+            label={`${groupLabel} ${index + 1}`}
           />
         ))}
       </div>
@@ -2659,7 +2660,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
           fontWeight: 900,
           lineHeight: 1.15
         }}>
-          {t.backoff || 'Back-off'}
+          {groupLabel}
         </div>
 
         <div style={{
@@ -3139,7 +3140,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     justifyContent: 'center',
                     columnGap: 12,
                     rowGap: 4,
-                    padding: '0 10px 4px'
+                    padding: '4px 10px'
                   }}>
                     {visiblePrepItems.map((item, pi) => (
                       <PrepRow
@@ -3178,6 +3179,43 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 const backoffSetEntries = (liftBlock.sets || [])
                   .map((backoffSet, backoffIndex) => ({ set: backoffSet, index: backoffIndex }))
                   .filter(({ set: backoffSet }) => backoffSet.labelKey === 'backoff');
+
+                const secondarySetEntries = (liftBlock.sets || [])
+                  .map((secondarySet, secondaryIndex) => ({ set: secondarySet, index: secondaryIndex }));
+
+                const isSecondaryTrainingLift = !isMeetDay && li > 0 && secondarySetEntries.length > 1;
+
+                if (isSecondaryTrainingLift) {
+                  if (si !== 0) return null;
+
+                  const firstIncompleteSecondarySet = secondarySetEntries.find(({ set: secondarySet }) =>
+                    !secondarySet.done && !secondarySet.skipped
+                  )?.index ?? -1;
+
+                  return (
+                    <React.Fragment key={`secondary-set-group-${li}`}>
+                      <BackoffGroup
+                        entries={secondarySetEntries}
+                        label={t.workSets || t.set}
+                        activeIndex={
+                          !isReadOnly &&
+                          li === firstIncompleteLiftIndex &&
+                          allPrepDone &&
+                          allWarmupsDone
+                            ? firstIncompleteSecondarySet
+                            : -1
+                        }
+                        isReadOnly={isReadOnly}
+                        onToggle={index => handleToggle(() => onToggleMeetSet(li, index))}
+                        onEditAll={val => secondarySetEntries.forEach(({ index }) => onMeetWeightChange(li, index, val))}
+                        onRestoreAll={() => secondarySetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
+                        onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
+                        renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
+                        t={t}
+                      />
+                    </React.Fragment>
+                  );
+                }
 
                 if (set.labelKey === 'backoff') {
                   if (backoffSetEntries[0]?.index !== si) return null;
@@ -3419,7 +3457,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     justifyContent: 'center',
                     columnGap: 12,
                     rowGap: 4,
-                    padding: '0 10px 8px'
+                    padding: '4px 10px 8px'
           }}>
             {workout.prepItems.map((item, i) => (
               <PrepRow
