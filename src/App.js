@@ -95,8 +95,8 @@ const THEME = {
 };
 
 
-const WORKOUT_CIRCLE_SIZE = 30;
-const WORKOUT_CIRCLE_FONT_SIZE = 13;
+const WORKOUT_CIRCLE_SIZE = 34;
+const WORKOUT_CIRCLE_FONT_SIZE = 14;
 
 function toOptionalNumber(value) {
   const parsed = Number(value);
@@ -1064,7 +1064,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
 }
 
 
-function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, t }) {
+function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, t }) {
   if (!warmups.length) return null;
 
   const columnCount = warmups.length <= 2
@@ -1080,7 +1080,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
       justifyContent: 'center',
       columnGap: 12,
       rowGap: 4,
-      padding: '4px 10px 8px'
+      padding: followsPrep ? '0 10px 8px' : '6px 10px 8px'
     }}>
       {warmups.map((warmup, index) => {
         const label = `${t.warmup} ${index + 1}`;
@@ -1291,7 +1291,16 @@ const [editing, setEditing] = useState(false);
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }}
-      style={{ display: 'flex', alignItems: 'center', padding: '8px 10px 8px 6px', border: `1px solid ${THEME.border}`, boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none', borderLeft: isActive && !isWarmup ? `4px solid ${THEME.primary}` : '4px solid transparent'}}>
+      style={{
+        display: 'grid',
+        gridTemplateColumns: `auto minmax(0, 1fr) ${WORKOUT_CIRCLE_SIZE * 3 + 16}px`,
+        alignItems: 'center',
+        gap: 10,
+        padding: '8px 10px 8px 6px',
+        border: `1px solid ${THEME.border}`,
+        boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none',
+        borderLeft: isActive && !isWarmup ? `4px solid ${THEME.primary}` : '4px solid transparent'
+      }}>
       <div style={{
         marginRight: 10,
         flexShrink: 0,
@@ -1318,8 +1327,24 @@ const [editing, setEditing] = useState(false);
         <div style={{ fontWeight: 700, color: THEME.text, fontSize: WORKOUT_CIRCLE_FONT_SIZE, textDecoration: 'none' }}>
           {label}
         </div>
-        <div style={{ color: THEME.text, fontSize: WORKOUT_CIRCLE_FONT_SIZE, fontWeight: 800, marginTop: 1 }}>
-          {set.repsLabel || `${set.reps} ${t.reps}`}
+        <div style={{
+          color: isAdjusted ? '#f39c12' : THEME.text,
+          fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+          fontWeight: 800,
+          marginTop: 1,
+          lineHeight: 1.15
+        }}>
+          1 × {set.reps} × {set.weight} {t.kg}
+          {displayPct ? (
+            <span style={{
+              color: isAdjusted ? '#f39c12' : THEME.muted,
+              fontSize: 12,
+              fontWeight: 800,
+              marginLeft: 6
+            }}>
+              · {displayPct}%
+            </span>
+          ) : null}
         </div>
 
         {getSetEffortLabel(set.effort, t) && (
@@ -1338,7 +1363,13 @@ const [editing, setEditing] = useState(false);
           </div>
         )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 8,
+        minWidth: WORKOUT_CIRCLE_SIZE * 3 + 16
+      }}>
         {editing ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <input ref={inputRef} type="number" step="2.5" value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={handleKeyDown} onBlur={handleConfirm}
@@ -1346,9 +1377,13 @@ const [editing, setEditing] = useState(false);
             <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>{t.kg}</span>
           </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontWeight: 800, fontSize: 18, color: isAdjusted ? '#f39c12' : '#ffffff' }}>{set.weight} kg</span>
-            {displayPct && <span style={{ color: isAdjusted ? '#f39c12' : '#ffffff', fontSize: 12 }}>{displayPct}%</span>}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 8,
+            minWidth: WORKOUT_CIRCLE_SIZE * 3 + 16
+          }}>
             {!isWarmup && !set.done && !isReadOnly && (
               <SetActionButton
                 title={t.edit}
@@ -3172,6 +3207,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 }
                 onToggle={wi => handleToggle(() => onToggleMeetWarmup(li, wi))}
                 renderTimer={wi => renderInlineTimer({ type: 'meetWarmup', liftIndex: li, index: wi })}
+                followsPrep={visiblePrepItems.length > 0}
                 t={t}
               />
 
@@ -3457,7 +3493,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     justifyContent: 'center',
                     columnGap: 12,
                     rowGap: 4,
-                    padding: '4px 10px 8px'
+                    padding: '0 10px 8px'
           }}>
             {workout.prepItems.map((item, i) => (
               <PrepRow
@@ -3487,6 +3523,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             activeIndex={!isReadOnly && allPrepDone ? workout.warmups.findIndex(wu => !wu.done) : -1}
             onToggle={i => handleToggle(() => onToggleWarmup(i))}
             renderTimer={i => renderInlineTimer({ type: 'warmup', index: i })}
+            followsPrep={(workout.prepItems || []).length > 0}
             t={t}
           />
         </div>
