@@ -1220,6 +1220,39 @@ function getWorkoutEffortText(effort, t) {
     : label;
 }
 
+function SetActionButton({ title, onClick, borderColor, disabled = false, children }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        width: WORKOUT_CIRCLE_SIZE,
+        height: WORKOUT_CIRCLE_SIZE,
+        minWidth: WORKOUT_CIRCLE_SIZE,
+        borderRadius: '50%',
+        border: `2px solid ${borderColor}`,
+        background: 'transparent',
+        color: '#ffffff',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+        fontWeight: 900,
+        lineHeight: 1,
+        padding: 0,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.45 : 1,
+        flexShrink: 0
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t }) {
 const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
 const displayPct = set.pct ? Math.round(set.pct * 100) : null;
@@ -1316,67 +1349,38 @@ const [editing, setEditing] = useState(false);
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontWeight: 800, fontSize: 18, color: isAdjusted ? '#f39c12' : '#ffffff' }}>{set.weight} kg</span>
             {displayPct && <span style={{ color: isAdjusted ? '#f39c12' : '#ffffff', fontSize: 12 }}>{displayPct}%</span>}
-            {!isWarmup && !set.done && (
-  <button
-    onClick={handleEditClick}
-    style={{
-      background: 'none',
-      border: `1px solid ${THEME.primary}`,
-      cursor: 'pointer',
-      fontSize: WORKOUT_CIRCLE_FONT_SIZE,
-      padding: '2px 4px',
-      color: '#ffffff',
-      lineHeight: 1
-    }}
-  >
-    ✎
-  </button>
-)}
+            {!isWarmup && !set.done && !isReadOnly && (
+              <SetActionButton
+                title={t.edit}
+                borderColor={THEME.primary}
+                onClick={handleEditClick}
+              >
+                ✎
+              </SetActionButton>
+            )}
             {onRestoreWeight && !isWarmup && !isReadOnly && (
-              <button
-                type="button"
+              <SetActionButton
                 title={t.restoreOriginalWeight}
-                aria-label={t.restoreOriginalWeight}
+                borderColor="#f39c12"
                 onClick={(e) => {
                   e.stopPropagation();
                   onRestoreWeight();
                 }}
-                style={{
-                  background: 'none',
-                  border: '1px solid #f39c12',
-                  cursor: 'pointer',
-                  fontSize: 15,
-                  padding: '2px 5px',
-                  color: '#ffffff',
-                  lineHeight: 1,
-                  fontWeight: 900,
-                }}
               >
                 ↺
-              </button>
+              </SetActionButton>
             )}
             {onMarkFailed && !set.done && !isReadOnly && (
-              <button
-                type="button"
+              <SetActionButton
                 title={t.markSetFailed}
-                aria-label={t.markSetFailed}
+                borderColor="#e74c3c"
                 onClick={(e) => {
                   e.stopPropagation();
                   onMarkFailed();
                 }}
-                style={{
-                  background: 'none',
-                  border: '1px solid #e74c3c',
-                  cursor: 'pointer',
-                  fontSize: 15,
-                  padding: '2px 5px',
-                  color: '#ffffff',
-                  lineHeight: 1,
-                  fontWeight: 900,
-                }}
               >
                 ✕
-              </button>
+              </SetActionButton>
             )}
           </div>
         )}
@@ -2694,9 +2698,9 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
           />
         ) : (
           <>
-            <button type="button" disabled={isReadOnly} onClick={handleEditClick} style={{ background: 'none', border: `1px solid ${THEME.primary}`, cursor: isReadOnly ? 'not-allowed' : 'pointer', fontSize: 15, padding: '2px 5px', color: '#ffffff', lineHeight: 1 }}>✎</button>
-            <button type="button" disabled={isReadOnly} onClick={e => { e.stopPropagation(); onRestoreAll(); }} style={{ background: 'none', border: '1px solid #f39c12', cursor: isReadOnly ? 'not-allowed' : 'pointer', fontSize: 15, padding: '2px 5px', color: '#ffffff', lineHeight: 1, fontWeight: 900 }}>↺</button>
-            <button type="button" disabled={isReadOnly} onClick={e => { e.stopPropagation(); if (firstOpenEntry) onMarkFailed(firstOpenEntry.index); }} style={{ background: 'none', border: '1px solid #e74c3c', cursor: isReadOnly ? 'not-allowed' : 'pointer', fontSize: 15, padding: '2px 5px', color: '#ffffff', lineHeight: 1, fontWeight: 900 }}>✕</button>
+            <SetActionButton title={t.edit} disabled={isReadOnly} borderColor={THEME.primary} onClick={handleEditClick}>✎</SetActionButton>
+            <SetActionButton title={t.restoreOriginalWeight} disabled={isReadOnly} borderColor="#f39c12" onClick={e => { e.stopPropagation(); onRestoreAll(); }}>↺</SetActionButton>
+            <SetActionButton title={t.markSetFailed} disabled={isReadOnly} borderColor="#e74c3c" onClick={e => { e.stopPropagation(); if (firstOpenEntry) onMarkFailed(firstOpenEntry.index); }}>✕</SetActionButton>
           </>
         )}
       </div>
@@ -2847,9 +2851,9 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
           />
         ) : (
           <>
-            <button type="button" disabled={isReadOnly} onClick={handleEditClick} style={{ background: 'none', border: `1px solid ${THEME.primary}`, cursor: isReadOnly ? 'not-allowed' : 'pointer', fontSize: 15, padding: '2px 5px', color: '#ffffff', lineHeight: 1 }}>✎</button>
-            <button type="button" disabled={isReadOnly} onClick={e => { e.stopPropagation(); onRestoreAll(); }} style={{ background: 'none', border: '1px solid #f39c12', cursor: isReadOnly ? 'not-allowed' : 'pointer', fontSize: 15, padding: '2px 5px', color: '#ffffff', lineHeight: 1, fontWeight: 900 }}>↺</button>
-            <button type="button" disabled={isReadOnly || firstOpenIndex === -1} onClick={e => { e.stopPropagation(); if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex); }} style={{ background: 'none', border: '1px solid #e74c3c', cursor: isReadOnly || firstOpenIndex === -1 ? 'not-allowed' : 'pointer', fontSize: 15, padding: '2px 5px', color: '#ffffff', lineHeight: 1, fontWeight: 900 }}>✕</button>
+            <SetActionButton title={t.edit} disabled={isReadOnly} borderColor={THEME.primary} onClick={handleEditClick}>✎</SetActionButton>
+            <SetActionButton title={t.restoreOriginalWeight} disabled={isReadOnly} borderColor="#f39c12" onClick={e => { e.stopPropagation(); onRestoreAll(); }}>↺</SetActionButton>
+            <SetActionButton title={t.markSetFailed} disabled={isReadOnly || firstOpenIndex === -1} borderColor="#e74c3c" onClick={e => { e.stopPropagation(); if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex); }}>✕</SetActionButton>
           </>
         )}
       </div>
@@ -3200,9 +3204,25 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   );
                 }
 
+                const hasLaterMeetSetAction = (liftBlock.sets || []).some((laterSet, laterIndex) =>
+                  laterIndex > si && (laterSet.done || laterSet.failed || laterSet.skipped)
+                );
+
+                const hasLaterMeetLiftAction = (workout.lifts || []).some((laterLiftBlock, laterLiftIndex) =>
+                  laterLiftIndex > li &&
+                  (laterLiftBlock.sets || []).some(laterSet =>
+                    laterSet.done || laterSet.failed || laterSet.skipped
+                  )
+                );
+
+                const showMeetSetNotice =
+                  (set.failed || set.skipped) &&
+                  !hasLaterMeetSetAction &&
+                  !hasLaterMeetLiftAction;
+
                 return (
                 <React.Fragment key={`attempt-${si}`}>
-                  {(set.failed || set.skipped) && (
+                  {showMeetSetNotice && (
                     <div style={{
                       margin: 0,
                       padding: '8px 10px',
@@ -7417,6 +7437,94 @@ const latestBodyDataRows = [
           </div>
         )}
 
+        {(() => {
+          const achievedLiftResults = (completedWorkout?.lifts || []).map(liftBlock => {
+            const successfulSets = (liftBlock.sets || []).filter(set =>
+              set.done && !set.failed && !set.skipped
+            );
+
+            const bestSet = successfulSets.reduce((best, set) => {
+              if (!best) return set;
+              return Number(set.weight) > Number(best.weight) ? set : best;
+            }, null);
+
+            return {
+              lift: liftBlock.lift,
+              weight: Number(bestSet?.weight) || 0,
+            };
+          });
+
+          const achievedTotal = achievedLiftResults.reduce(
+            (total, result) => total + result.weight,
+            0
+          );
+
+          return (
+            <div style={{
+              background: THEME.bg,
+              border: `1px solid ${THEME.primary}`,
+              color: THEME.text,
+              borderRadius: 10,
+              padding: 16,
+              marginBottom: 16,
+              textAlign: 'center'
+            }}>
+              <div style={{
+                color: THEME.muted,
+                fontSize: 13,
+                fontWeight: 800,
+                marginBottom: 4
+              }}>
+                {t.achievedTotal || t.total}
+              </div>
+
+              <div style={{
+                color: THEME.primary,
+                fontSize: 28,
+                fontWeight: 900,
+                lineHeight: 1,
+                marginBottom: 12
+              }}>
+                {achievedTotal ? `${achievedTotal} ${t.kg}` : '—'}
+              </div>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr',
+                gap: 8
+              }}>
+                {achievedLiftResults.map(result => (
+                  <div
+                    key={`achieved-${result.lift}`}
+                    style={{
+                      padding: '8px 6px',
+                      borderRadius: 8,
+                      border: `1px solid ${THEME.border}`,
+                      background: THEME.card
+                    }}
+                  >
+                    <div style={{
+                      color: THEME.muted,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      marginBottom: 3
+                    }}>
+                      {liftLabel(result.lift, t)}
+                    </div>
+                    <div style={{
+                      color: '#ffffff',
+                      fontSize: 13,
+                      fontWeight: 900
+                    }}>
+                      {result.weight ? `${result.weight} ${t.kg}` : '—'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         <div style={{
           background: THEME.card,
           border: `1px solid ${THEME.border}`,
@@ -7553,86 +7661,6 @@ const latestBodyDataRows = [
         >
           {t.startNewCycle} 🚀
         </button>
-
-        {(completedWorkout?.lifts || []).length > 0 && (
-          <div style={{
-            background: THEME.card,
-            border: `1px solid ${THEME.border}`,
-            color: THEME.text,
-            borderRadius: 8,
-            padding: 16,
-            marginBottom: 20,
-            textAlign: 'left'
-          }}>
-            {(completedWorkout.lifts || []).map((liftBlock, liftIndex) => (
-              <div
-                key={`completed-lift-${liftBlock.lift}`}
-                style={{
-                  marginTop: liftIndex === 0 ? 0 : 16,
-                  paddingTop: liftIndex === 0 ? 0 : 14,
-                  borderTop: liftIndex === 0 ? 'none' : `1px solid ${THEME.border}`
-                }}
-              >
-                <div style={{
-                  color: ({
-                    Squat: THEME.red,
-                    Bench: THEME.primary,
-                    Deadlift: THEME.yellow,
-                  }[liftBlock.lift] || THEME.primary),
-                  fontSize: 16,
-                  fontWeight: 900,
-                  marginBottom: 8
-                }}>
-                  {liftLabel(liftBlock.lift, t)}
-                </div>
-
-                {(liftBlock.sets || []).map((set, i) => {
-                  const setLabel = set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`;
-                  const isInvalidSet = set.failed || set.skipped || !set.done;
-                  const effortLabel = getSetEffortLabel(set.effort, t);
-
-                  return (
-                    <div
-                      key={`${liftBlock.lift}-${i}`}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr auto',
-                        gap: 12,
-                        padding: '7px 0',
-                        borderTop: i === 0 ? 'none' : `1px solid ${THEME.border}`,
-                        opacity: isInvalidSet ? 0.75 : 1
-                      }}
-                    >
-                      <div>
-                        <div style={{ color: THEME.text, fontWeight: 800 }}>
-                          {isInvalidSet ? '✕ ' : '✓ '}
-                          {setLabel}
-                        </div>
-
-                        <div style={{
-                          color: THEME.muted,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          marginTop: 2
-                        }}>
-                          {set.reps} {t.reps}
-                          {effortLabel ? ` · ${effortLabel}` : ''}
-                        </div>
-                      </div>
-
-                      <strong style={{
-                        color: isInvalidSet ? '#e74c3c' : '#ffffff',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {set.weight} {t.kg}
-                      </strong>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        )}
 
         <button
           onClick={() => setScreen('stats')}
