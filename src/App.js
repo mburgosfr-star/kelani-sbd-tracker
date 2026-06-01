@@ -2884,7 +2884,8 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
 }
 
 
-function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
+function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
+  const [showActivateConfirm, setShowActivateConfirm] = useState(false);
 
   function isTimerFor(placement) {
     if (!timer || !timer.placement) return false;
@@ -2908,6 +2909,124 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
         onDismiss={() => setTimer(null)}
         t={t}
       />
+    );
+  }
+
+
+  function renderActivateWorkoutCard() {
+    if (!isReadOnly) return null;
+
+    const workoutNumber = workout?.number || '—';
+    const confirmText = (t.activateWorkoutConfirmText || 'This makes Workout {workout} your active workout. Your history stays saved.')
+      .replaceAll('{workout}', workoutNumber);
+
+    return (
+      <div style={{
+        marginBottom: 10,
+        padding: '8px 10px',
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 8,
+        background: THEME.card,
+        color: THEME.muted,
+        fontSize: 12,
+        fontWeight: 800,
+        textAlign: 'center'
+      }}>
+        <div>{t.preview}</div>
+
+        {!showActivateConfirm && onActivateWorkout && (
+          <button
+            type="button"
+            onClick={() => setShowActivateConfirm(true)}
+            style={{
+              marginTop: 8,
+              padding: '6px 10px',
+              borderRadius: 6,
+              border: `1px solid ${THEME.primary}`,
+              background: THEME.primary,
+              color: THEME.bg,
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
+            {t.activateWorkout}
+          </button>
+        )}
+
+        {showActivateConfirm && (
+          <div style={{
+            marginTop: 10,
+            padding: 10,
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 8,
+            background: THEME.bg,
+            color: THEME.text,
+            textAlign: 'left',
+            lineHeight: 1.35
+          }}>
+            <div style={{
+              color: THEME.text,
+              fontSize: 14,
+              fontWeight: 900,
+              marginBottom: 6,
+              textAlign: 'center'
+            }}>
+              {t.activateWorkoutConfirmTitle}
+            </div>
+
+            <div style={{
+              color: THEME.muted,
+              fontSize: 12,
+              fontWeight: 700,
+              marginBottom: 10,
+              textAlign: 'center'
+            }}>
+              {confirmText}
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 8
+            }}>
+              <button
+                type="button"
+                onClick={() => setShowActivateConfirm(false)}
+                style={{
+                  padding: '7px 10px',
+                  borderRadius: 6,
+                  border: `1px solid ${THEME.border}`,
+                  background: 'transparent',
+                  color: THEME.text,
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                {t.cancel}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowActivateConfirm(false);
+                  onActivateWorkout();
+                }}
+                style={{
+                  padding: '7px 10px',
+                  borderRadius: 6,
+                  border: `1px solid ${THEME.primary}`,
+                  background: THEME.primary,
+                  color: THEME.bg,
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
+              >
+                {t.activateWorkout}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -2959,6 +3078,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           title={`${t.workout} ${workout.number} — ${getWorkoutTitle(workout, t)}`}
           subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${workout.number} / ${totalWorkouts}${isMeetDay ? ` · ${t.meetDay}` : ''}`}
         />
+
+        {renderActivateWorkoutCard()}
 
 {isMeetDay && (
 <div style={{
@@ -3248,24 +3369,13 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
     }}>
       <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
         {t.workout} {workout.number} — {liftLabel(workout.lift, t)}
-
-        {isReadOnly && (
-          <span style={{
-            marginLeft: 8,
-            fontSize: 12,
-            background: '#999',
-            color: 'white',
-            padding: '2px 6px',
-            borderRadius: 4
-          }}>
-            {t.preview}
-          </span>
-        )}
       </h2>
 
       <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
         {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts}
       </div>
+
+      {renderActivateWorkoutCard()}
 
       {(workout.prepItems || []).length > 0 && (
         <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
@@ -4503,7 +4613,7 @@ function AppHeader({ t, title, subtitle, children }) {
   );
 }
 
-function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t }) {
+function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t }) {
   const currentWorkoutRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
 
@@ -4541,7 +4651,7 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
 
       {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
-        const isDone = idx < currentIndex;
+        const isDone = idx < completedWorkoutCount;
         const headerBg = isCurrent ? THEME.primary : workout.type === 'rest' ? THEME.brown : THEME.border;
         const planLines = getWorkoutPlanLines(workout, t);
         const typeLabel = getWorkoutTypeLabel(workout, t);
@@ -4982,7 +5092,8 @@ export default function App() {
   const [meetPlannerAttempts, setMeetPlannerAttempts] = useState({});
   const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const currentIndex = Math.max(getCompletedWorkoutCount(history, currentCycle), currentWorkoutIndex);
+  const completedWorkoutCount = getCompletedWorkoutCount(history, currentCycle);
+  const currentIndex = Math.max(completedWorkoutCount, currentWorkoutIndex);
   const PROGRAM_VERSION = 'cube-27-v5';
 
   function updateMeetPlannerAttempts(next) {
@@ -6734,6 +6845,13 @@ if (screen !== 'onboarding' && !workouts.length) {
   return <Onboarding onStart={handleStart} t={t}/>;
 }
 
+function activateSelectedWorkout() {
+  if (selectedIndex <= currentIndex) return;
+
+  setCurrentWorkoutIndex(selectedIndex);
+  setSelectedIndex(selectedIndex);
+}
+
 if (screen === 'current' && !workouts[selectedIndex]) {
   return <Onboarding onStart={handleStart} t={t}/>;
 }
@@ -7009,6 +7127,7 @@ const latestBodyDataRows = [
           onAccessoryWeightChange={changeAccessoryWeight}
           onComplete={completeWorkout}
           onViewAll={() => setScreen('all')}
+          onActivateWorkout={activateSelectedWorkout}
           showNewCycle={showNewCycle}
           newCyclePRs={prs}
           onStartNewCycle={handleStartNewCycle}
@@ -7148,6 +7267,7 @@ const latestBodyDataRows = [
         <AllWorkouts
           workouts={workouts}
           currentIndex={currentIndex}
+          completedWorkoutCount={completedWorkoutCount}
           currentCycle={currentCycle}
           onSelect={(idx) => {
             setSelectedIndex(idx);
@@ -7600,7 +7720,7 @@ const latestBodyDataRows = [
               {summaryRow(t.lifts || t.lift, liftNames || '—')}
               {summaryRow(t.workout, completedWorkout?.number || '—')}
               {summaryRow(t.cycle, currentCycle)}
-              {summaryRow(t.workoutEffortWas || 'Ha estat', effortLabel || '—')}
+              {summaryRow(t.workoutEffortWas || 'It felt', effortLabel || '—')}
             </div>
           );
         })()}
