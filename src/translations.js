@@ -187,6 +187,9 @@ export const translations = {
 
     startProgram: 'Start programma',
     completeWorkout: 'Workout voltooien',
+    cooldownTitle: 'Cooling-down',
+    cooldownBreathe: 'Adem rustig uit',
+    cooldownFoamRoll: 'Foamrollen waar nodig',
     workoutCompleted: 'Workout voltooid',
     workoutEffortWas: 'Het voelde',
     workoutAndCycleCompleted: 'Workout en cyclus voltooid',
@@ -482,6 +485,9 @@ export const translations = {
 
     startProgram: 'Start program',
     completeWorkout: 'Complete workout',
+    cooldownTitle: 'Cooldown',
+    cooldownBreathe: 'Breathe and slow down',
+    cooldownFoamRoll: 'Foam roll where needed',
     workoutCompleted: 'Workout completed',
     workoutEffortWas: 'It felt',
     workoutAndCycleCompleted: 'Workout and cycle completed',
@@ -777,6 +783,9 @@ export const translations = {
 
     startProgram: 'Inicia el programa',
     completeWorkout: "Finalitza l'entrenament",
+    cooldownTitle: 'Tornada a la calma',
+    cooldownBreathe: 'Respira i abaixa el ritme',
+    cooldownFoamRoll: 'Foam rolling si cal',
     workoutCompleted: 'Entrenament finalitzat',
     workoutEffortWas: 'Ha estat',
     workoutAndCycleCompleted: 'Entrenament i cicle completats',

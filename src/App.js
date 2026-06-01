@@ -1141,6 +1141,43 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
 }
 
 
+function CooldownBlock({ t }) {
+  return (
+    <div style={{
+      background: THEME.card,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 8,
+      overflow: 'hidden',
+      marginBottom: 10
+    }}>
+      <div style={{
+        padding: '5px 10px',
+        fontSize: 13,
+        fontWeight: 900,
+        color: THEME.text,
+        textAlign: 'center',
+        borderBottom: `1px solid ${THEME.border}`
+      }}>
+        {t.cooldownTitle}
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 8,
+        padding: '8px 10px',
+        color: THEME.muted,
+        fontSize: 12,
+        fontWeight: 800,
+        textAlign: 'center'
+      }}>
+        <div>{t.cooldownBreathe}</div>
+        <div>{t.cooldownFoamRoll}</div>
+      </div>
+    </div>
+  );
+}
+
 function EffortPicker({ value, onChange, t }) {
   return (
     <div style={{
@@ -3419,6 +3456,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           </div>
         )}
 
+        {!isMeetDay && <CooldownBlock t={t} />}
+
         <button
           onClick={() => {
             if (isReadOnly) return;
@@ -3692,6 +3731,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           })}
         </div>
       )}
+
+      <CooldownBlock t={t} />
 
       <button
         onClick={() => {
