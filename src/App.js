@@ -7990,7 +7990,7 @@ const latestBodyDataRows = [
               {summaryRow(t.lifts || t.lift, liftNames || '—')}
               {summaryRow(t.workout, completedWorkout?.number || '—')}
               {summaryRow(t.cycle, currentCycle)}
-              {summaryRow(t.workoutEffortWas || 'It felt', effortLabel || '—')}
+              {summaryRow(t.workoutEffortWas, effortLabel || '—')}
             </div>
           );
         })()}
