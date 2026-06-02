@@ -6608,8 +6608,6 @@ function changeMeetWeight(liftIndex, setIndex, val) {
                 roundedVal
               );
 
-              const isBackoffSet = s.labelKey === 'backoff';
-
               return {
                 ...s,
                 weight: roundedVal,
