@@ -10,15 +10,18 @@ Website: https://kelani-site.mburgosfr.workers.dev/
 
 ## Features
 
-- Structured SBD training programs
+- Structured Squat, Bench Press and Deadlift training cycles
+- Workout tracking with warm-ups, main work, back-offs and optional accessories
 - Automatic progression based on performance
+- Rest timer with audio signals
 - Meet Planner for planning squat, bench press and deadlift attempts before competition day
 - Meet prep checklist for practical competition-day preparation
-- Rest timer with audio signals
-- Bodyweight tracking
-- Strength ratio tracking
-- Detailed statistics and graphs
+- Bodyweight and body composition logging
+- 1RM, estimated 1RM and strength statistics
+- Perceived effort tracking for sets and completed workouts
+- Local data export and import
 - Offline-first: no internet required
+- No accounts
 - No ads
 - No tracking
 - Multilingual interface: English, Catalan and Dutch
