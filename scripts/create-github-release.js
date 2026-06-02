@@ -70,7 +70,7 @@ if (process.argv.length > 2) {
 }
 
 try {
-  run('command', ['-v', 'gh'], { stdio: 'ignore' });
+  run('gh', ['--version'], { stdio: 'ignore' });
 } catch {
   fail('GitHub CLI is not installed. Install it with: sudo apt install gh');
 }
