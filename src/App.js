@@ -97,6 +97,8 @@ const THEME = {
 
 const WORKOUT_CIRCLE_SIZE = 34;
 const WORKOUT_CIRCLE_FONT_SIZE = 14;
+const WORKOUT_ROW_PADDING_Y = 6;
+const WORKOUT_PREP_WARMUP_PADDING_Y = WORKOUT_ROW_PADDING_Y;
 
 function toOptionalNumber(value) {
   const parsed = Number(value);
@@ -1024,7 +1026,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
       width: '100%',
       minWidth: 0,
       boxSizing: 'border-box',
-      padding: '7px 0',
+      padding: `${WORKOUT_PREP_WARMUP_PADDING_Y}px 0`,
       background: 'transparent'
     }}>
       <WorkoutCircle
@@ -1079,8 +1081,8 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
       gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
       justifyContent: 'center',
       columnGap: 12,
-      rowGap: 4,
-      padding: followsPrep ? '0 10px 8px' : '6px 10px 8px'
+      rowGap: 0,
+      padding: '0 10px'
     }}>
       {warmups.map((warmup, index) => {
         const label = `${t.warmup} ${index + 1}`;
@@ -1095,7 +1097,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
               width: '100%',
               minWidth: 0,
               boxSizing: 'border-box',
-              padding: '7px 0',
+              padding: `${WORKOUT_PREP_WARMUP_PADDING_Y}px 0`,
               background: 'transparent'
             }}>
               <WorkoutCircle
@@ -1290,14 +1292,123 @@ function SetActionButton({ title, onClick, borderColor, disabled = false, childr
   );
 }
 
+function WorkoutActionRow({
+  rowRef,
+  left,
+  title,
+  detail,
+  meta,
+  actions,
+  feedback,
+  timerNode,
+  onBodyClick,
+  isReadOnly = false,
+  active = false,
+  activeBorder = false,
+  borderMode = 'full',
+  leftOffset = 0,
+}) {
+  const borderStyle = borderMode === 'group'
+    ? {}
+    : {
+      border: `1px solid ${THEME.border}`,
+    };
+
+  return (
+    <div
+      ref={rowRef}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: `auto minmax(0, 1fr) ${WORKOUT_CIRCLE_SIZE * 3 + 16}px`,
+        alignItems: 'center',
+        gap: 10,
+        padding: `${WORKOUT_ROW_PADDING_Y}px 10px ${WORKOUT_ROW_PADDING_Y}px 6px`,
+        background: THEME.card,
+        boxShadow: active ? 'inset 0 0 0 1px #f39c12' : 'none',
+        borderLeft: activeBorder ? `4px solid ${THEME.primary}` : '4px solid transparent',
+        ...borderStyle,
+      }}
+    >
+      <div style={{
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transform: leftOffset ? `translateX(${leftOffset}px)` : 'none',
+      }}>
+        {left}
+      </div>
+
+      <div
+        onClick={isReadOnly ? undefined : onBodyClick}
+        style={{
+          minWidth: 0,
+          textAlign: 'left',
+          cursor: isReadOnly || !onBodyClick ? 'default' : 'pointer',
+        }}
+      >
+        <div style={{
+          color: THEME.text,
+          fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+          fontWeight: 900,
+          lineHeight: 1.15,
+        }}>
+          {title}
+        </div>
+
+        {detail && (
+          <div style={{
+            color: THEME.muted,
+            fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+            fontWeight: 800,
+            marginTop: 1,
+            lineHeight: 1.15,
+          }}>
+            {detail}
+          </div>
+        )}
+
+        {meta}
+      </div>
+
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 8,
+        minWidth: WORKOUT_CIRCLE_SIZE * 3 + 16,
+      }}>
+        {actions}
+      </div>
+
+      {feedback && (
+        <div style={{ gridColumn: '1 / -1' }}>
+          {feedback}
+        </div>
+      )}
+
+      {timerNode && (
+        <div style={{ gridColumn: '1 / -1' }}>
+          {timerNode}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t }) {
-const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
-const displayPct = set.pct ? Math.round(set.pct * 100) : null;
-const [editing, setEditing] = useState(false);
+  const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
+  const displayPct = set.pct ? Math.round(set.pct * 100) : null;
+  const effortLabel = getSetEffortLabel(set.effort, t);
+  const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(set.weight));
   const inputRef = useRef(null);
-  useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
-  
+
+  useEffect(() => {
+    if (editing && inputRef.current) inputRef.current.focus();
+  }, [editing]);
+
   function handleEditClick(e) {
     e.stopPropagation();
     setInputVal(String(set.weight));
@@ -1320,31 +1431,112 @@ const [editing, setEditing] = useState(false);
     if (e.key === 'Enter') handleConfirm();
     if (e.key === 'Escape') setEditing(false);
   }
+
+  const detail = (
+    <>
+      <span style={{ color: isAdjusted ? '#f39c12' : THEME.muted }}>
+        1 × {set.reps} × {set.weight} {t.kg}
+      </span>
+      {displayPct ? (
+        <span style={{
+          color: isAdjusted ? '#f39c12' : THEME.muted,
+          fontSize: 12,
+          fontWeight: 800,
+          marginLeft: 6,
+        }}>
+          · {displayPct}%
+        </span>
+      ) : null}
+    </>
+  );
+
+  const meta = effortLabel ? (
+    <div style={{
+      display: 'inline-flex',
+      marginTop: 3,
+      padding: '2px 7px',
+      borderRadius: 999,
+      border: `1px solid ${THEME.primary}`,
+      color: THEME.primary,
+      fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+      fontWeight: 800,
+      lineHeight: 1.2,
+    }}>
+      {effortLabel}
+    </div>
+  ) : null;
+
+  const actions = editing ? (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <input
+        ref={inputRef}
+        type="number"
+        step="2.5"
+        value={inputVal}
+        onChange={e => setInputVal(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={handleConfirm}
+        style={{
+          width: 70,
+          padding: '4px 8px',
+          fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+          fontWeight: 700,
+          borderRadius: 4,
+          border: '2px solid #e74c3c',
+          textAlign: 'right',
+        }}
+      />
+      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>{t.kg}</span>
+    </div>
+  ) : (
+    <>
+      {!isWarmup && !set.done && !isReadOnly && (
+        <SetActionButton
+          title={t.edit}
+          borderColor={THEME.primary}
+          onClick={handleEditClick}
+        >
+          ✎
+        </SetActionButton>
+      )}
+
+      {onRestoreWeight && !isWarmup && !isReadOnly && (
+        <SetActionButton
+          title={t.restoreOriginalWeight}
+          borderColor="#f39c12"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRestoreWeight();
+          }}
+        >
+          ↺
+        </SetActionButton>
+      )}
+
+      {onMarkFailed && !set.done && !isReadOnly && (
+        <SetActionButton
+          title={t.markSetFailed}
+          borderColor="#e74c3c"
+          onClick={(e) => {
+            e.stopPropagation();
+            onMarkFailed();
+          }}
+        >
+          ✕
+        </SetActionButton>
+      )}
+    </>
+  );
+
   return (
-    <div
-      ref={el => {
-  if (isActive && el && !el.dataset.scrolled) {
-    el.dataset.scrolled = 'true';
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-}}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: `auto minmax(0, 1fr) ${WORKOUT_CIRCLE_SIZE * 3 + 16}px`,
-        alignItems: 'center',
-        gap: 10,
-        padding: '8px 10px 8px 6px',
-        border: `1px solid ${THEME.border}`,
-        boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none',
-        borderLeft: isActive && !isWarmup ? `4px solid ${THEME.primary}` : '4px solid transparent'
-      }}>
-      <div style={{
-        marginRight: 10,
-        flexShrink: 0,
-        display: 'flex',
-        alignItems: 'center',
-        alignSelf: 'center'
-      }}>
+    <WorkoutActionRow
+      rowRef={el => {
+        if (isActive && el && !el.dataset.scrolled) {
+          el.dataset.scrolled = 'true';
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }}
+      left={(
         <WorkoutCircle
           done={set.done}
           active={isActive}
@@ -1353,114 +1545,19 @@ const [editing, setEditing] = useState(false);
           onClick={onToggle}
           label={label}
         />
-      </div>
-      <div
-        onClick={isReadOnly ? undefined : onToggle}
-        style={{
-          flex: 1,
-          cursor: isReadOnly ? 'not-allowed' : 'pointer'
-        }}
-      >
-        <div style={{ fontWeight: 700, color: THEME.text, fontSize: WORKOUT_CIRCLE_FONT_SIZE, textDecoration: 'none' }}>
-          {label}
-        </div>
-        <div style={{
-          color: isAdjusted ? '#f39c12' : THEME.text,
-          fontSize: WORKOUT_CIRCLE_FONT_SIZE,
-          fontWeight: 800,
-          marginTop: 1,
-          lineHeight: 1.15
-        }}>
-          1 × {set.reps} × {set.weight} {t.kg}
-          {displayPct ? (
-            <span style={{
-              color: isAdjusted ? '#f39c12' : THEME.muted,
-              fontSize: 12,
-              fontWeight: 800,
-              marginLeft: 6
-            }}>
-              · {displayPct}%
-            </span>
-          ) : null}
-        </div>
-
-        {getSetEffortLabel(set.effort, t) && (
-          <div style={{
-            display: 'inline-flex',
-            marginTop: 3,
-            padding: '2px 7px',
-            borderRadius: 999,
-            border: `1px solid ${THEME.primary}`,
-            color: THEME.primary,
-            fontSize: WORKOUT_CIRCLE_FONT_SIZE,
-            fontWeight: 800,
-            lineHeight: 1.2
-          }}>
-            {getSetEffortLabel(set.effort, t)}
-          </div>
-        )}
-      </div>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        gap: 8,
-        minWidth: WORKOUT_CIRCLE_SIZE * 3 + 16
-      }}>
-        {editing ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input ref={inputRef} type="number" step="2.5" value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={handleKeyDown} onBlur={handleConfirm}
-              style={{ width: 70, padding: '4px 8px', fontSize: WORKOUT_CIRCLE_FONT_SIZE, fontWeight: 700, borderRadius: 4, border: '2px solid #e74c3c', textAlign: 'right' }} />
-            <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>{t.kg}</span>
-          </div>
-        ) : (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            gap: 8,
-            minWidth: WORKOUT_CIRCLE_SIZE * 3 + 16
-          }}>
-            {!isWarmup && !set.done && !isReadOnly && (
-              <SetActionButton
-                title={t.edit}
-                borderColor={THEME.primary}
-                onClick={handleEditClick}
-              >
-                ✎
-              </SetActionButton>
-            )}
-            {onRestoreWeight && !isWarmup && !isReadOnly && (
-              <SetActionButton
-                title={t.restoreOriginalWeight}
-                borderColor="#f39c12"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRestoreWeight();
-                }}
-              >
-                ↺
-              </SetActionButton>
-            )}
-            {onMarkFailed && !set.done && !isReadOnly && (
-              <SetActionButton
-                title={t.markSetFailed}
-                borderColor="#e74c3c"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onMarkFailed();
-                }}
-              >
-                ✕
-              </SetActionButton>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+      )}
+      title={label}
+      detail={detail}
+      meta={meta}
+      actions={actions}
+      onBodyClick={onToggle}
+      isReadOnly={isReadOnly}
+      active={isActive}
+      activeBorder={isActive && !isWarmup}
+      borderMode="group"
+    />
   );
 }
-
 
 function SettingsListRow({ label, value, valueColor = THEME.text, actionLabel, onAction, actionContent, danger = false, noBorder = false, compact = false }) {
   return (
@@ -2691,122 +2788,135 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   const timerNode = entries
     .map(({ index }) => renderTimer?.(index))
     .find(Boolean);
+
   const groupLabel = label || t.backoff || 'Back-off';
 
-  return (
-    <div style={{
-      borderTop: `1px solid ${THEME.border}`,
-      borderBottom: `1px solid ${THEME.border}`,
-      padding: '8px 10px',
-      display: 'grid',
-      gridTemplateColumns: 'auto minmax(0, 1fr) auto',
-      alignItems: 'center',
-      gap: 10,
-      background: THEME.card
-    }}>
-      <div style={{
-        display: 'flex',
-        gap: 5,
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexWrap: 'nowrap',
-        flexShrink: 0
-      }}>
-        {entries.map(({ set, index }) => (
-          <WorkoutCircle
-            key={index}
-            done={set.done}
-            active={index === activeIndex}
-            skipped={set.skipped}
-            disabled={isReadOnly}
-            onClick={() => onToggle(index)}
-            label={`${groupLabel} ${index + 1}`}
-          />
-        ))}
-      </div>
-
-      <div style={{ minWidth: 0, textAlign: 'left' }}>
-        <div style={{
-          color: THEME.text,
-          fontSize: 13,
-          fontWeight: 900,
-          lineHeight: 1.15
-        }}>
-          {groupLabel}
-        </div>
-
-        <div style={{
+  const detail = (
+    <>
+      {entries.length} × {allSameReps ? firstSet.reps : '—'} × {allSameWeight ? `${firstSet.weight} ${t.kg}` : t.kg}
+      {displayPct ? (
+        <span style={{
           color: THEME.muted,
           fontSize: 12,
           fontWeight: 800,
-          marginTop: 1,
-          lineHeight: 1.15
+          marginLeft: 6,
         }}>
-          {entries.length} × {allSameReps ? firstSet.reps : '—'} × {allSameWeight ? `${firstSet.weight} ${t.kg}` : t.kg}
-          {displayPct ? ` · ${displayPct}%` : ''}
-        </div>
-      </div>
+          · {displayPct}%
+        </span>
+      ) : null}
+    </>
+  );
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {editing ? (
-          <input
-            type="number"
-            step="2.5"
-            value={inputVal}
-            autoFocus
-            onChange={e => setInputVal(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onBlur={confirmEdit}
-            style={{
-              width: 66,
-              padding: '4px 6px',
-              fontSize: 14,
-              fontWeight: 800,
-              borderRadius: 4,
-              border: `1px solid ${THEME.primary}`,
-              background: THEME.bg,
-              color: THEME.text,
-              textAlign: 'right'
-            }}
-          />
-        ) : (
-          <>
-            <SetActionButton title={t.edit} disabled={isReadOnly} borderColor={THEME.primary} onClick={handleEditClick}>✎</SetActionButton>
-            <SetActionButton title={t.restoreOriginalWeight} disabled={isReadOnly} borderColor="#f39c12" onClick={e => { e.stopPropagation(); onRestoreAll(); }}>↺</SetActionButton>
-            <SetActionButton title={t.markSetFailed} disabled={isReadOnly} borderColor="#e74c3c" onClick={e => { e.stopPropagation(); if (firstOpenEntry) onMarkFailed(firstOpenEntry.index); }}>✕</SetActionButton>
-          </>
-        )}
-      </div>
+  const actions = editing ? (
+    <input
+      type="number"
+      step="2.5"
+      value={inputVal}
+      autoFocus
+      onChange={e => setInputVal(e.target.value)}
+      onKeyDown={handleKeyDown}
+      onBlur={confirmEdit}
+      style={{
+        width: 66,
+        padding: '4px 6px',
+        fontSize: 14,
+        fontWeight: 800,
+        borderRadius: 4,
+        border: `1px solid ${THEME.primary}`,
+        background: THEME.bg,
+        color: THEME.text,
+        textAlign: 'right',
+      }}
+    />
+  ) : (
+    <>
+      <SetActionButton
+        title={t.edit}
+        disabled={isReadOnly}
+        borderColor={THEME.primary}
+        onClick={handleEditClick}
+      >
+        ✎
+      </SetActionButton>
 
-      {failedEntry && (
-        <div style={{
-          gridColumn: '1 / -1',
-          marginTop: 2,
-          padding: '7px 9px',
-          border: '1px solid #e74c3c',
-          borderRadius: 8,
-          color: '#ffffff',
-          background: 'rgba(231, 76, 60, 0.16)',
-          fontSize: 12,
-          fontWeight: 800,
-          lineHeight: 1.3,
-          textAlign: 'center'
-        }}>
-          {failedEntry.set.skipped
-            ? t.topSetSkipped
-            : t.failedSetAdjusted.replace('{weight}', `${failedEntry.set.adjustedWeight} ${t.kg}`)}
-        </div>
-      )}
+      <SetActionButton
+        title={t.restoreOriginalWeight}
+        disabled={isReadOnly}
+        borderColor="#f39c12"
+        onClick={e => {
+          e.stopPropagation();
+          onRestoreAll();
+        }}
+      >
+        ↺
+      </SetActionButton>
 
-      {timerNode && (
-        <div style={{ gridColumn: '1 / -1' }}>
-          {timerNode}
-        </div>
-      )}
+      <SetActionButton
+        title={t.markSetFailed}
+        disabled={isReadOnly}
+        borderColor="#e74c3c"
+        onClick={e => {
+          e.stopPropagation();
+          if (firstOpenEntry) onMarkFailed(firstOpenEntry.index);
+        }}
+      >
+        ✕
+      </SetActionButton>
+    </>
+  );
+
+  const feedback = failedEntry ? (
+    <div style={{
+      marginTop: 2,
+      padding: '7px 9px',
+      border: '1px solid #e74c3c',
+      borderRadius: 8,
+      color: '#ffffff',
+      background: 'rgba(231, 76, 60, 0.16)',
+      fontSize: 12,
+      fontWeight: 800,
+      lineHeight: 1.3,
+      textAlign: 'center',
+    }}>
+      {failedEntry.set.skipped
+        ? t.topSetSkipped
+        : t.failedSetAdjusted.replace('{weight}', `${failedEntry.set.adjustedWeight} ${t.kg}`)}
     </div>
+  ) : null;
+
+  return (
+    <WorkoutActionRow
+      left={(
+        <div style={{
+          display: 'flex',
+          gap: 5,
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexWrap: 'nowrap',
+        }}>
+          {entries.map(({ set, index }) => (
+            <WorkoutCircle
+              key={index}
+              done={set.done}
+              active={index === activeIndex}
+              skipped={set.skipped}
+              disabled={isReadOnly}
+              onClick={() => onToggle(index)}
+              label={`${groupLabel} ${index + 1}`}
+            />
+          ))}
+        </div>
+      )}
+      title={groupLabel}
+      detail={detail}
+      actions={actions}
+      feedback={feedback}
+      timerNode={timerNode}
+      isReadOnly={isReadOnly}
+      borderMode="group"
+    />
   );
 }
-
 
 function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAccessoryWork, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t }) {
   const [editing, setEditing] = useState(false);
@@ -2847,119 +2957,127 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
     .map((_, index) => renderTimer?.(index))
     .find(Boolean);
 
-  return (
+  const accessoryLabel = acc.nameKey ? t[acc.nameKey] : acc.name;
+
+  const detail = (
+    <>
+      {(acc.done || []).length} × {acc.reps}{acc.perSide ? ` ${t.perSide}` : ''} × {allSameWeight ? `${firstWeight} ${t.kg}` : t.kg}
+    </>
+  );
+
+  const actions = editing ? (
+    <input
+      type="number"
+      step="2.5"
+      value={inputVal}
+      autoFocus
+      onChange={e => setInputVal(e.target.value)}
+      onKeyDown={handleKeyDown}
+      onBlur={confirmEdit}
+      style={{
+        width: 66,
+        padding: '4px 6px',
+        fontSize: 14,
+        fontWeight: 800,
+        borderRadius: 4,
+        border: `1px solid ${THEME.primary}`,
+        background: THEME.bg,
+        color: THEME.text,
+        textAlign: 'right',
+      }}
+    />
+  ) : (
+    <>
+      <SetActionButton
+        title={t.edit}
+        disabled={isReadOnly}
+        borderColor={THEME.primary}
+        onClick={handleEditClick}
+      >
+        ✎
+      </SetActionButton>
+
+      <SetActionButton
+        title={t.restoreOriginalWeight}
+        disabled={isReadOnly}
+        borderColor="#f39c12"
+        onClick={e => {
+          e.stopPropagation();
+          onRestoreAll();
+        }}
+      >
+        ↺
+      </SetActionButton>
+
+      <SetActionButton
+        title={t.markSetFailed}
+        disabled={isReadOnly || firstOpenIndex === -1}
+        borderColor="#e74c3c"
+        onClick={e => {
+          e.stopPropagation();
+          if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex);
+        }}
+      >
+        ✕
+      </SetActionButton>
+    </>
+  );
+
+  const feedback = feedbackIndex !== -1 ? (
     <div style={{
-      borderTop: `1px solid ${THEME.border}`,
-      borderBottom: `1px solid ${THEME.border}`,
-      padding: '8px 10px',
-      display: 'grid',
-      gridTemplateColumns: 'auto minmax(0, 1fr) auto',
-      alignItems: 'center',
-      gap: 10,
-      background: THEME.card
+      marginTop: 2,
+      padding: '7px 9px',
+      border: '1px solid #e74c3c',
+      borderRadius: 8,
+      color: '#ffffff',
+      background: 'rgba(231, 76, 60, 0.16)',
+      fontSize: 12,
+      fontWeight: 800,
+      lineHeight: 1.3,
+      textAlign: 'center',
     }}>
-      <div style={{
-        display: 'flex',
-        gap: 5,
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexWrap: 'nowrap',
-        flexShrink: 0
-      }}>
-        {(acc.done || []).map((done, index) => (
-          <WorkoutCircle
-            key={index}
-            done={done}
-            active={isActiveGroup && index === firstOpenIndex}
-            skipped={!!acc.skipped?.[index]}
-            disabled={isReadOnly}
-            onClick={() => onToggle(index)}
-            label={`${acc.nameKey ? t[acc.nameKey] : acc.name} ${index + 1}`}
-          />
-        ))}
-      </div>
-
-      <div style={{ minWidth: 0, textAlign: 'left' }}>
-        <div style={{
-          color: THEME.text,
-          fontSize: 13,
-          fontWeight: 900,
-          lineHeight: 1.15
-        }}>
-          {acc.nameKey ? t[acc.nameKey] : acc.name}
-        </div>
-
-        <div style={{
-          color: THEME.muted,
-          fontSize: 12,
-          fontWeight: 800,
-          marginTop: 1,
-          lineHeight: 1.15
-        }}>
-          {(acc.done || []).length} × {acc.reps}{acc.perSide ? ` ${t.perSide}` : ''} × {allSameWeight ? `${firstWeight} ${t.kg}` : t.kg}
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {editing ? (
-          <input
-            type="number"
-            step="2.5"
-            value={inputVal}
-            autoFocus
-            onChange={e => setInputVal(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onBlur={confirmEdit}
-            style={{
-              width: 66,
-              padding: '4px 6px',
-              fontSize: 14,
-              fontWeight: 800,
-              borderRadius: 4,
-              border: `1px solid ${THEME.primary}`,
-              background: THEME.bg,
-              color: THEME.text,
-              textAlign: 'right'
-            }}
-          />
-        ) : (
-          <>
-            <SetActionButton title={t.edit} disabled={isReadOnly} borderColor={THEME.primary} onClick={handleEditClick}>✎</SetActionButton>
-            <SetActionButton title={t.restoreOriginalWeight} disabled={isReadOnly} borderColor="#f39c12" onClick={e => { e.stopPropagation(); onRestoreAll(); }}>↺</SetActionButton>
-            <SetActionButton title={t.markSetFailed} disabled={isReadOnly || firstOpenIndex === -1} borderColor="#e74c3c" onClick={e => { e.stopPropagation(); if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex); }}>✕</SetActionButton>
-          </>
+      {acc.skipped?.[feedbackIndex]
+        ? t.topSetSkipped
+        : t.failedSetAdjusted.replace(
+          '{weight}',
+          `${acc.adjustedWeights?.[feedbackIndex] ?? acc.weights?.[feedbackIndex] ?? firstWeight} ${t.kg}`
         )}
-      </div>
-
-      {feedbackIndex !== -1 && (
-        <div style={{
-          gridColumn: '1 / -1',
-          marginTop: 2,
-          padding: '7px 9px',
-          border: '1px solid #e74c3c',
-          borderRadius: 8,
-          color: '#ffffff',
-          background: 'rgba(231, 76, 60, 0.16)',
-          fontSize: 12,
-          fontWeight: 800,
-          lineHeight: 1.3,
-          textAlign: 'center'
-        }}>
-          {firstSkippedIndex !== -1
-            ? (hasMoreAccessoryWork ? t.accessorySkippedContinue : t.accessorySkippedComplete)
-            : t.failedSetAdjusted.replace('{weight}', `${acc.weights?.[firstFailedIndex]} ${t.kg}`)}
-        </div>
-      )}
-
-      {timerNode && (
-        <div style={{ gridColumn: '1 / -1' }}>
-          {timerNode}
-        </div>
-      )}
     </div>
+  ) : null;
+
+  return (
+    <WorkoutActionRow
+      left={(
+        <div style={{
+          display: 'flex',
+          gap: 5,
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexWrap: 'nowrap',
+        }}>
+          {(acc.done || []).map((done, index) => (
+            <WorkoutCircle
+              key={index}
+              done={done}
+              active={isActiveGroup && index === firstOpenIndex}
+              skipped={!!acc.skipped?.[index]}
+              disabled={isReadOnly}
+              onClick={() => onToggle(index)}
+              label={`${accessoryLabel} ${index + 1}`}
+            />
+          ))}
+        </div>
+      )}
+      title={accessoryLabel}
+      detail={detail}
+      actions={actions}
+      feedback={feedback}
+      timerNode={timerNode}
+      isReadOnly={isReadOnly}
+      borderMode="group"
+    />
   );
 }
-
 
 function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
@@ -3214,8 +3332,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
                     justifyContent: 'center',
                     columnGap: 12,
-                    rowGap: 4,
-                    padding: '4px 10px'
+                    rowGap: 0,
+                    padding: '0 10px'
                   }}>
                     {visiblePrepItems.map((item, pi) => (
                       <PrepRow
@@ -3534,8 +3652,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
                     justifyContent: 'center',
                     columnGap: 12,
-                    rowGap: 4,
-                    padding: '0 10px 8px'
+                    rowGap: 0,
+                    padding: '0 10px'
           }}>
             {workout.prepItems.map((item, i) => (
               <PrepRow
@@ -6052,10 +6170,10 @@ function changeWeight(type, index, val) {
               failedAttempts: 0,
               failedWeight: null,
               adjustedWeight: null,
-              originalWeight: nextWeight,
-              originalPct: nextPct || originalPct,
+              originalWeight,
+              originalPct,
               adjustedFromFailedSet: false,
-              adjustedFromOriginal: false,
+              adjustedFromOriginal: Number(nextWeight) !== originalWeight,
             };
           }),
         };
@@ -6502,10 +6620,10 @@ function changeMeetWeight(liftIndex, setIndex, val) {
                 failedAttempts: 0,
                 failedWeight: null,
                 adjustedWeight: null,
-                originalWeight: isBackoffSet ? originalWeight : (roundedVal || originalWeight),
-                originalPct: isBackoffSet ? originalPct : (nextPct || originalPct),
+                originalWeight,
+                originalPct,
                 adjustedFromFailedSet: false,
-                adjustedFromOriginal: isBackoffSet ? Number(roundedVal) !== originalWeight : false,
+                adjustedFromOriginal: Number(roundedVal) !== originalWeight,
               };
             }),
           };
