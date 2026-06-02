@@ -1041,7 +1041,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
           style={{
             color: THEME.text,
             fontWeight: 800,
-            fontSize: 12,
+            fontSize: 13,
             lineHeight: 1.15
           }}
         >
@@ -1051,7 +1051,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
           title={formatPrepPrescription(item, t)}
           style={{
             color: THEME.muted,
-            fontSize: 10,
+            fontSize: 12,
             marginTop: 1,
             lineHeight: 1.15
           }}
@@ -1109,7 +1109,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
               <div style={{ flex: 1, minWidth: 0, marginLeft: 10, textAlign: 'left', lineHeight: 1.15 }}>
                 <div style={{
                   color: THEME.text,
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight: 800,
                   lineHeight: 1.15
                 }}>
@@ -1118,7 +1118,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
 
                 <div style={{
                   color: THEME.muted,
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: 700,
                   marginTop: 1,
                   lineHeight: 1.15
@@ -1469,12 +1469,12 @@ function SettingsListRow({ label, value, valueColor = THEME.text, actionLabel, o
       gridTemplateColumns: 'minmax(0, 1fr) auto',
       alignItems: 'center',
       gap: 12,
-      padding: compact ? '5px 0' : '8px 0',
+      padding: compact ? '6px 0' : '10px 0',
       borderBottom: noBorder ? 'none' : `1px solid ${THEME.border}`
     }}>
       <div style={{
         color: danger ? THEME.red : THEME.text,
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: 800,
         minWidth: 0
       }}>
@@ -1483,10 +1483,10 @@ function SettingsListRow({ label, value, valueColor = THEME.text, actionLabel, o
 
       <div style={{
         color: valueColor,
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: 800,
         textAlign: 'center',
-        width: 132
+        width: 148
       }}>
         {actionContent || (
           actionLabel ? (
@@ -1494,9 +1494,9 @@ function SettingsListRow({ label, value, valueColor = THEME.text, actionLabel, o
               type="button"
               onClick={onAction}
               style={{
-                width: 132,
-                padding: '6px 8px',
-                fontSize: 12,
+                width: 148,
+                padding: '8px 10px',
+                fontSize: 14,
                 fontWeight: 800,
                 background: danger ? '#8b1e1e' : THEME.card,
                 color: '#ffffff',
@@ -1529,8 +1529,8 @@ function SettingsActionButton({ children, onClick, variant = 'primary', style = 
       disabled={disabled}
       style={{
         width: '100%',
-        padding: 10,
-        fontSize: 14,
+        padding: 11,
+        fontSize: 15,
         fontWeight: 800,
         background: isPrimary ? THEME.card : THEME.bg,
         color: disabled ? THEME.muted : THEME.text,
@@ -1958,9 +1958,9 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
               type="button"
               onClick={exportData}
               style={{
-                width: 132,
-                padding: '6px 8px',
-                fontSize: 12,
+                width: 148,
+                padding: '8px 10px',
+                fontSize: 14,
                 fontWeight: 800,
                 background: THEME.card,
                 color: THEME.text,
@@ -1979,9 +1979,9 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
               type="button"
               onClick={() => importInputRef.current?.click()}
               style={{
-                width: 132,
-                padding: '6px 8px',
-                fontSize: 12,
+                width: 148,
+                padding: '8px 10px',
+                fontSize: 14,
                 fontWeight: 800,
                 background: THEME.card,
                 color: THEME.text,
@@ -2128,16 +2128,16 @@ function SupportActionButton({ children, onClick }) {
       type="button"
       onClick={onClick}
       style={{
-        padding: '7px 6px',
-        fontSize: 11,
-        fontWeight: 700,
+        padding: '8px 10px',
+        fontSize: 14,
+        fontWeight: 800,
         background: THEME.card,
         color: '#ffffff',
         border: `1px solid ${THEME.primary}`,
         borderRadius: 8,
         cursor: 'pointer',
-        minHeight: 34,
-        width: 132,
+        minHeight: 38,
+        width: 148,
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis'
@@ -2178,9 +2178,9 @@ function SupportSection({ t }) {
       actionContent={(
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '132px',
+          gridTemplateColumns: '148px',
           gap: 6,
-          width: 132
+          width: 148
         }}>
           {links.map(item => (
             <SupportActionButton
@@ -3017,11 +3017,12 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             onClick={() => setShowActivateConfirm(true)}
             style={{
               marginTop: 8,
-              padding: '6px 10px',
+              padding: '7px 11px',
               borderRadius: 6,
               border: `1px solid ${THEME.primary}`,
               background: THEME.primary,
               color: THEME.bg,
+              fontSize: 14,
               fontWeight: 800,
               cursor: 'pointer'
             }}
@@ -3070,11 +3071,12 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 type="button"
                 onClick={() => setShowActivateConfirm(false)}
                 style={{
-                  padding: '7px 10px',
+                  padding: '8px 10px',
                   borderRadius: 6,
                   border: `1px solid ${THEME.border}`,
                   background: 'transparent',
                   color: THEME.text,
+                  fontSize: 14,
                   fontWeight: 800,
                   cursor: 'pointer'
                 }}
@@ -3089,11 +3091,12 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   onActivateWorkout();
                 }}
                 style={{
-                  padding: '7px 10px',
+                  padding: '8px 10px',
                   borderRadius: 6,
                   border: `1px solid ${THEME.primary}`,
                   background: THEME.primary,
                   color: THEME.bg,
+                  fontSize: 14,
                   fontWeight: 900,
                   cursor: 'pointer'
                 }}
