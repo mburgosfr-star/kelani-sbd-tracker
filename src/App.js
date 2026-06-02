@@ -95,9 +95,12 @@ const THEME = {
 };
 
 
-const WORKOUT_CIRCLE_SIZE = 34;
-const WORKOUT_CIRCLE_FONT_SIZE = 14;
-const WORKOUT_ROW_PADDING_Y = 6;
+const WORKOUT_CIRCLE_SIZE = 40;
+const WORKOUT_CIRCLE_FONT_SIZE = 16;
+const WORKOUT_SECTION_TITLE_FONT_SIZE = 18;
+const WORKOUT_TITLE_FONT_SIZE = 16;
+const WORKOUT_TEXT_FONT_SIZE = 15;
+const WORKOUT_ROW_PADDING_Y = 8;
 const WORKOUT_PREP_WARMUP_PADDING_Y = WORKOUT_ROW_PADDING_Y;
 
 function toOptionalNumber(value) {
@@ -1043,7 +1046,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
           style={{
             color: THEME.text,
             fontWeight: 800,
-            fontSize: 13,
+            fontSize: WORKOUT_TEXT_FONT_SIZE,
             lineHeight: 1.15
           }}
         >
@@ -1053,7 +1056,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
           title={formatPrepPrescription(item, t)}
           style={{
             color: THEME.muted,
-            fontSize: 12,
+            fontSize: WORKOUT_TEXT_FONT_SIZE,
             marginTop: 1,
             lineHeight: 1.15
           }}
@@ -1111,7 +1114,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
               <div style={{ flex: 1, minWidth: 0, marginLeft: 10, textAlign: 'left', lineHeight: 1.15 }}>
                 <div style={{
                   color: THEME.text,
-                  fontSize: 13,
+                  fontSize: WORKOUT_TEXT_FONT_SIZE,
                   fontWeight: 800,
                   lineHeight: 1.15
                 }}>
@@ -1120,7 +1123,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
 
                 <div style={{
                   color: THEME.muted,
-                  fontSize: 12,
+                  fontSize: WORKOUT_TEXT_FONT_SIZE,
                   fontWeight: 700,
                   marginTop: 1,
                   lineHeight: 1.15
@@ -1154,7 +1157,7 @@ function CooldownBlock({ t }) {
     }}>
       <div style={{
         padding: '5px 10px',
-        fontSize: 13,
+        fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
         fontWeight: 900,
         color: THEME.text,
         textAlign: 'center',
@@ -1168,8 +1171,8 @@ function CooldownBlock({ t }) {
         gridTemplateColumns: '1fr 1fr',
         gap: 8,
         padding: '8px 10px',
-        color: THEME.muted,
-        fontSize: 12,
+        color: THEME.text,
+        fontSize: WORKOUT_TEXT_FONT_SIZE,
         fontWeight: 800,
         textAlign: 'center'
       }}>
@@ -1349,7 +1352,7 @@ function WorkoutActionRow({
       >
         <div style={{
           color: THEME.text,
-          fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+          fontSize: WORKOUT_TITLE_FONT_SIZE,
           fontWeight: 900,
           lineHeight: 1.15,
         }}>
@@ -1359,7 +1362,7 @@ function WorkoutActionRow({
         {detail && (
           <div style={{
             color: THEME.muted,
-            fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+            fontSize: WORKOUT_TEXT_FONT_SIZE,
             fontWeight: 800,
             marginTop: 1,
             lineHeight: 1.15,
@@ -1440,7 +1443,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
       {displayPct ? (
         <span style={{
           color: isAdjusted ? '#f39c12' : THEME.muted,
-          fontSize: 12,
+          fontSize: WORKOUT_TEXT_FONT_SIZE,
           fontWeight: 800,
           marginLeft: 6,
         }}>
@@ -1571,7 +1574,7 @@ function SettingsListRow({ label, value, valueColor = THEME.text, actionLabel, o
     }}>
       <div style={{
         color: danger ? THEME.red : THEME.text,
-        fontSize: 15,
+        fontSize: 16,
         fontWeight: 800,
         minWidth: 0
       }}>
@@ -1580,10 +1583,10 @@ function SettingsListRow({ label, value, valueColor = THEME.text, actionLabel, o
 
       <div style={{
         color: valueColor,
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: 800,
         textAlign: 'center',
-        width: 148
+        width: 160
       }}>
         {actionContent || (
           actionLabel ? (
@@ -1591,9 +1594,9 @@ function SettingsListRow({ label, value, valueColor = THEME.text, actionLabel, o
               type="button"
               onClick={onAction}
               style={{
-                width: 148,
-                padding: '8px 10px',
-                fontSize: 14,
+                width: 160,
+                padding: '9px 11px',
+                fontSize: 15,
                 fontWeight: 800,
                 background: danger ? '#8b1e1e' : THEME.card,
                 color: '#ffffff',
@@ -1626,8 +1629,8 @@ function SettingsActionButton({ children, onClick, variant = 'primary', style = 
       disabled={disabled}
       style={{
         width: '100%',
-        padding: 11,
-        fontSize: 15,
+        padding: 12,
+        fontSize: 16,
         fontWeight: 800,
         background: isPrimary ? THEME.card : THEME.bg,
         color: disabled ? THEME.muted : THEME.text,
@@ -2055,9 +2058,9 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
               type="button"
               onClick={exportData}
               style={{
-                width: 148,
-                padding: '8px 10px',
-                fontSize: 14,
+                width: 160,
+                padding: '9px 11px',
+                fontSize: 15,
                 fontWeight: 800,
                 background: THEME.card,
                 color: THEME.text,
@@ -2076,9 +2079,9 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
               type="button"
               onClick={() => importInputRef.current?.click()}
               style={{
-                width: 148,
-                padding: '8px 10px',
-                fontSize: 14,
+                width: 160,
+                padding: '9px 11px',
+                fontSize: 15,
                 fontWeight: 800,
                 background: THEME.card,
                 color: THEME.text,
@@ -2225,16 +2228,16 @@ function SupportActionButton({ children, onClick }) {
       type="button"
       onClick={onClick}
       style={{
-        padding: '8px 10px',
-        fontSize: 14,
+        padding: '9px 11px',
+        fontSize: 15,
         fontWeight: 800,
         background: THEME.card,
         color: '#ffffff',
         border: `1px solid ${THEME.primary}`,
         borderRadius: 8,
         cursor: 'pointer',
-        minHeight: 38,
-        width: 148,
+        minHeight: 42,
+        width: 160,
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis'
@@ -2275,9 +2278,9 @@ function SupportSection({ t }) {
       actionContent={(
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '148px',
-          gap: 6,
-          width: 148
+          gridTemplateColumns: '160px',
+          gap: 8,
+          width: 160
         }}>
           {links.map(item => (
             <SupportActionButton
@@ -2797,7 +2800,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
       {displayPct ? (
         <span style={{
           color: THEME.muted,
-          fontSize: 12,
+          fontSize: WORKOUT_TEXT_FONT_SIZE,
           fontWeight: 800,
           marginLeft: 6,
         }}>
@@ -3315,8 +3318,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             >
               <div style={{
                 padding: '6px 10px',
-                fontSize: 14,
-                fontWeight: 800,
+                fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+                fontWeight: 900,
                 color: THEME.text,
                 textAlign: 'center',
                 borderBottom: `1px solid ${THEME.border}`,
@@ -3539,7 +3542,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           }}>
             <div style={{
               padding: '6px 10px',
-              fontSize: 13,
+              fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
               fontWeight: 900,
               color: THEME.text,
               textAlign: 'center',
@@ -3639,8 +3642,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
         <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
           <div style={{
             padding: '6px 10px',
-            fontSize: 16,
-            fontWeight: 700,
+            fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+            fontWeight: 900,
             color: THEME.text,
             textAlign: 'center'
           }}>
@@ -3814,7 +3817,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
         }}>
           <div style={{
             padding: '6px 10px',
-            fontSize: 13,
+            fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
             fontWeight: 900,
             color: THEME.text,
             textAlign: 'center',
