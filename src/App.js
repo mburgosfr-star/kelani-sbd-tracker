@@ -2792,7 +2792,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
     .map(({ index }) => renderTimer?.(index))
     .find(Boolean);
 
-  const groupLabel = label || t.backoff || 'Back-off';
+  const groupLabel = label || t.backoff;
 
   const detail = (
     <>
@@ -3115,7 +3115,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
     if (!isReadOnly) return null;
 
     const workoutNumber = workout?.number || '—';
-    const confirmText = (t.activateWorkoutConfirmText || 'This makes Workout {workout} your active workout. Your history stays saved.')
+    const confirmText = t.activateWorkoutConfirmText
       .replaceAll('{workout}', workoutNumber);
 
     return (
