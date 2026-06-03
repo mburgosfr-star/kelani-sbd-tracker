@@ -1402,7 +1402,7 @@ function WorkoutActionRow({
 
 function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t }) {
   const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
-  const displayPct = set.pct ? Math.round(set.pct * 100) : null;
+  const displayPct = set.pct ? Number((set.pct * 100).toFixed(1)) : null;
   const effortLabel = getSetEffortLabel(set.effort, t);
   const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(set.weight));
@@ -1437,19 +1437,12 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
 
   const detail = (
     <>
-      <span style={{ color: isAdjusted ? '#f39c12' : THEME.muted }}>
-        1 × {set.reps} × {set.weight} {t.kg}
-      </span>
-      {displayPct ? (
-        <span style={{
-          color: isAdjusted ? '#f39c12' : THEME.muted,
-          fontSize: WORKOUT_TEXT_FONT_SIZE,
-          fontWeight: 800,
-          marginLeft: 6,
-        }}>
-          · {displayPct}%
-        </span>
-      ) : null}
+      <div style={{ color: isAdjusted ? '#f39c12' : THEME.muted }}>
+        1 × {set.reps}
+      </div>
+      <div style={{ color: isAdjusted ? '#f39c12' : THEME.muted }}>
+        {set.weight} {t.kg}{displayPct ? ` (${displayPct}%)` : ''}
+      </div>
     </>
   );
 
@@ -2758,7 +2751,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   const failedEntry = entries.find(({ set }) => set.failed || set.skipped);
   const allSameWeight = entries.every(({ set }) => Number(set.weight) === Number(firstSet.weight));
   const allSameReps = entries.every(({ set }) => Number(set.reps) === Number(firstSet.reps));
-  const displayPct = firstSet.pct ? Math.round(firstSet.pct * 100) : null;
+  const displayPct = firstSet.pct ? Number((firstSet.pct * 100).toFixed(1)) : null;
   const [inputVal, setInputVal] = useState(String(firstSet.weight || ''));
 
   useEffect(() => {
@@ -2796,17 +2789,12 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
 
   const detail = (
     <>
-      {entries.length} × {allSameReps ? firstSet.reps : '—'} × {allSameWeight ? `${firstSet.weight} ${t.kg}` : t.kg}
-      {displayPct ? (
-        <span style={{
-          color: THEME.muted,
-          fontSize: WORKOUT_TEXT_FONT_SIZE,
-          fontWeight: 800,
-          marginLeft: 6,
-        }}>
-          · {displayPct}%
-        </span>
-      ) : null}
+      <div>
+        {entries.length} × {allSameReps ? firstSet.reps : '—'}
+      </div>
+      <div>
+        {allSameWeight ? `${firstSet.weight} ${t.kg}` : t.kg}{displayPct ? ` (${displayPct}%)` : ''}
+      </div>
     </>
   );
 
@@ -3276,7 +3264,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
     );
 
     return (
-      <div style={{ maxWidth: 500, margin: '0 auto', padding: '6px 10px 10px', paddingBottom: 12, fontFamily: 'sans-serif' }}>
+      <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
         <AppHeader
           t={t}
           title={`${t.workout} ${workout.number} — ${getWorkoutTitle(workout, t)}`}
@@ -4128,11 +4116,14 @@ const meetTotals = {
       );
     }
 
-    const visibleData = data.length > 10 ? data.slice(-10) : data;
+    const visibleData = (data.length > 10 ? data.slice(-10) : data).map((item, index) => ({
+      ...item,
+      chartIndex: index + 1,
+    }));
 
     const allXTicks = [...new Set(
       visibleData
-        .map(item => Number(item.absoluteWorkoutIndex))
+        .map(item => Number(item.chartIndex))
         .filter(value => Number.isFinite(value))
     )];
 
@@ -4146,7 +4137,7 @@ const meetTotals = {
         ].filter((value, index, arr) => value !== undefined && arr.indexOf(value) === index);
 
     const labelByX = visibleData.reduce((labels, item) => {
-      labels[item.absoluteWorkoutIndex] = item.label;
+      labels[item.chartIndex] = item.label;
       return labels;
     }, {});
 
@@ -4155,9 +4146,9 @@ const meetTotals = {
         <LineChart data={visibleData} margin={{ top: 4, right: 12, left: 4, bottom: 2 }}>
           <CartesianGrid stroke={THEME.border} vertical={false} />
           <XAxis
-            dataKey="absoluteWorkoutIndex"
+            dataKey="chartIndex"
             type="number"
-            domain={['dataMin', 'dataMax']}
+            domain={[1, visibleData.length]}
             ticks={xTicks}
             tickFormatter={(value) => labelByX[value] || ''}
             allowDecimals={false}
@@ -4234,7 +4225,7 @@ const meetTotals = {
   }
 
   return (
-    <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
+    <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
       <AppHeader
         t={t}
         title={t.stats}
@@ -4253,19 +4244,19 @@ const meetTotals = {
             onClick={() => setActivescreen(tab.key)}
             style={{
               width: '100%',
-              minHeight: 38,
-              padding: '8px 4px',
-              fontSize: 13,
-              lineHeight: 1.15,
+              minHeight: 44,
+              padding: '10px 6px',
+              fontSize: 15,
+              lineHeight: 1.2,
               background: THEME.card,
               color: activescreen === tab.key ? THEME.primary : THEME.text,
               border: `1px solid ${THEME.border}`,
               borderTop: activescreen === tab.key
                 ? `2px solid ${THEME.primary}`
                 : `2px solid ${THEME.border}`,
-              borderRadius: 4,
+              borderRadius: 8,
               cursor: 'pointer',
-              fontWeight: activescreen === tab.key ? 700 : 500,
+              fontWeight: activescreen === tab.key ? 800 : 700,
               textAlign: 'center'
             }}
           >
@@ -4848,27 +4839,50 @@ function getWorkoutPlanLines(workout, t) {
   });
 }
 
-function AppHeader({ t, title, subtitle, children }) {
+function AppHeader({ t, title, subtitle, meta, children }) {
   return (
-    <div style={{ textAlign: 'center', marginBottom: 12 }}>
+    <div style={{ textAlign: 'center', marginBottom: 16 }}>
       <div style={{
         color: THEME.primary,
-        fontSize: 12,
+        fontSize: 15,
         fontWeight: 900,
         letterSpacing: 1.2,
         textTransform: 'uppercase',
-        marginBottom: 4
+        marginBottom: 6
       }}>
         {t.appName}
       </div>
 
-      <h2 style={{ margin: 0, fontSize: 24 }}>
+      <h2 style={{
+        margin: 0,
+        fontSize: 30,
+        fontWeight: 900,
+        lineHeight: 1.15
+      }}>
         {title}
       </h2>
 
       {subtitle && (
-        <div style={{ color: THEME.muted, fontSize: 13, marginTop: 6 }}>
+        <div style={{
+          color: THEME.muted,
+          fontSize: 15,
+          fontWeight: 700,
+          lineHeight: 1.35,
+          marginTop: 6
+        }}>
           {subtitle}
+        </div>
+      )}
+
+      {meta && (
+        <div style={{
+          color: THEME.muted,
+          fontSize: 15,
+          fontWeight: 700,
+          lineHeight: 1.35,
+          marginTop: 6
+        }}>
+          {meta}
         </div>
       )}
 
@@ -4905,7 +4919,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCyc
   }, [currentIndex, workouts.length]);
 
   return (
-    <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
+    <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
       <AppHeader
         t={t}
         title={t.program}
@@ -5258,13 +5272,78 @@ function Onboarding({ onStart, t }) {
   );
 }
 
+function NavIcon({ type }) {
+  const common = {
+    width: 26,
+    height: 26,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2.4,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  };
+
+  if (type === 'dashboard') {
+    return (
+      <svg {...common}>
+        <path d="M5 15a7 7 0 0 1 14 0" />
+        <path d="M12 15l4-5" />
+        <path d="M5 19h14" />
+      </svg>
+    );
+  }
+
+  if (type === 'program') {
+    return (
+      <svg {...common}>
+        <line x1="8" y1="6" x2="20" y2="6" />
+        <line x1="8" y1="12" x2="20" y2="12" />
+        <line x1="8" y1="18" x2="20" y2="18" />
+        <circle cx="4" cy="6" r="1" />
+        <circle cx="4" cy="12" r="1" />
+        <circle cx="4" cy="18" r="1" />
+      </svg>
+    );
+  }
+
+  if (type === 'workout') {
+    return (
+      <svg {...common}>
+        <line x1="4" y1="12" x2="20" y2="12" />
+        <line x1="3" y1="8" x2="3" y2="16" />
+        <line x1="6" y1="7" x2="6" y2="17" />
+        <line x1="18" y1="7" x2="18" y2="17" />
+        <line x1="21" y1="8" x2="21" y2="16" />
+      </svg>
+    );
+  }
+
+  if (type === 'stats') {
+    return (
+      <svg {...common}>
+        <polyline points="4 17 9 12 13 15 20 7" />
+        <line x1="4" y1="20" x2="20" y2="20" />
+        <line x1="4" y1="4" x2="4" y2="20" />
+      </svg>
+    );
+  }
+
+  return (
+    <span aria-hidden="true" style={{ fontSize: 25, lineHeight: 1 }}>
+      ⚙
+    </span>
+  );
+}
+
 function BottomNav({ screen, onChange, t }) {
   const items = [
-    { key: 'dashboard', label: t.dashboard },
-    { key: 'all', label: t.program },
-    { key: 'current', label: t.workout },
-    { key: 'stats', label: t.stats },
-    { key: 'settings', label: t.settings },
+    { key: 'dashboard', label: t.dashboard, icon: 'dashboard' },
+    { key: 'all', label: t.program, icon: 'program' },
+    { key: 'current', label: t.workout, icon: 'workout' },
+    { key: 'stats', label: t.stats, icon: 'stats' },
+    { key: 'settings', label: t.settings, icon: 'settings' },
   ];
 
   return (
@@ -5281,21 +5360,25 @@ function BottomNav({ screen, onChange, t }) {
       {items.map(item => (
         <button
           key={item.key}
+          aria-label={item.label}
+          title={item.label}
           onClick={() => {
             onChange(item.key);
             window.scrollTo({ top: 0, behavior: 'auto' });
           }}
           style={{
             flex: 1,
-            padding: '12px 0',
+            padding: '11px 0',
             background: 'none',
             border: 'none',
             color: screen === item.key ? THEME.primary : '#ffffff',
-            fontWeight: screen === item.key ? 700 : 500,
-            cursor: 'pointer'
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
-          {item.label}
+          <NavIcon type={item.icon} />
         </button>
       ))}
     </div>
@@ -7318,7 +7401,7 @@ function boneMassStatus(value) {
 const latestBodyDataRows = [
   {
     key: 'bodyWeight',
-    label: `${t.bodyweight} (${t.kg})`,
+    label: t.bodyweight,
     value: bodyMetricValue(latestBodyDataEntry?.bodyWeight, t.kg),
   },
   {
@@ -7359,7 +7442,7 @@ const latestBodyDataRows = [
   {
     key: 'bmr',
     label: t.bmrKcal,
-    value: bodyMetricValue(latestBodyDataEntry?.bmr),
+    value: bodyMetricValue(latestBodyDataEntry?.bmr, 'kcal'),
   },
 ].filter(row => row.value);
 
@@ -7407,7 +7490,7 @@ const latestBodyDataRows = [
       )}
 
       {screen === 'dashboard' && (
-  <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, background: THEME.bg, minHeight: '100vh', color: THEME.text }}>
+  <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
     <AppHeader
       t={t}
       title={t.dashboard}
@@ -7425,7 +7508,7 @@ const latestBodyDataRows = [
       }}>
         <div style={{
           color: THEME.primary,
-          fontSize: 11,
+          fontSize: 14,
           fontWeight: 900,
           letterSpacing: 0.8,
           textTransform: 'uppercase',
@@ -7436,47 +7519,47 @@ const latestBodyDataRows = [
 
         <div style={{
           color: THEME.text,
-          fontSize: 17,
+          fontSize: 22,
           fontWeight: 900
         }}>
           {getWorkoutTitle(workouts[currentIndex], t)}
         </div>
       </div>
     )}
-    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 12 }}>
+    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 18, marginBottom: 12 }}>
       {[
         [t.squat, THEME.red, best1RMs.Squat, bestE1RMs.Squat],
         [t.bench, THEME.primary, best1RMs.Bench, bestE1RMs.Bench],
         [t.deadlift, THEME.yellow, best1RMs.Deadlift, bestE1RMs.Deadlift],
       ].map(([lift, color, oneRM, e1RM]) => (
-        <div key={lift} style={{ marginBottom: lift === t.deadlift ? 0 : 12 }}>
+        <div key={lift} style={{ marginBottom: lift === t.deadlift ? 0 : 14 }}>
           <div style={{ marginBottom: 6 }}>
-            <strong style={{ color }}>{lift}</strong>
+            <strong style={{ color, fontSize: 18 }}>{lift}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.oneRM}:</span>
-            <strong>{oneRM ? `${oneRM} kg` : '—'}</strong>
+            <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.oneRM}:</span>
+            <strong style={{ fontSize: 15 }}>{oneRM ? `${oneRM} kg` : '—'}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.e1RM}:</span>
-            <strong>{e1RM ? `${e1RM} ${t.kg}` : '—'}</strong>
+            <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.e1RM}:</span>
+            <strong style={{ fontSize: 15 }}>{e1RM ? `${e1RM} ${t.kg}` : '—'}</strong>
           </div>
         </div>
       ))}
     </div>
 
-    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 12 }}>
+    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 18, marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ color: THEME.text, fontWeight: 700 }}>{t.total1rm}</span>
-        <strong style={{ color: '#ffffff' }}>{total1RM ? `${total1RM} kg` : '—'}</strong>
+        <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.total1rm}</span>
+        <strong style={{ color: '#ffffff', fontSize: 15 }}>{total1RM ? `${total1RM} kg` : '—'}</strong>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ color: THEME.text, fontWeight: 700 }}>{t.totalE1rm}</span>
-        <strong style={{ color: '#ffffff' }}>{totalE1RM ? `${totalE1RM} kg` : '—'}</strong>
+        <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.totalE1rm}</span>
+        <strong style={{ color: '#ffffff', fontSize: 15 }}>{totalE1RM ? `${totalE1RM} kg` : '—'}</strong>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ color: THEME.text, fontWeight: 700 }}>{t.strength}</span>
-        <strong style={{ color: '#ffffff' }}>{strengthRatio || '—'}</strong>
+        <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.strength}</span>
+        <strong style={{ color: '#ffffff', fontSize: 15 }}>{strengthRatio || '—'}</strong>
       </div>
     </div>
 
@@ -7487,17 +7570,17 @@ const latestBodyDataRows = [
             key={row.key}
             style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 56px 160px',
+              gridTemplateColumns: '1fr 70px 150px',
               alignItems: 'center',
               columnGap: 8,
-              marginBottom: index === latestBodyDataRows.length - 1 ? 0 : 8
+              marginBottom: index === latestBodyDataRows.length - 1 ? 0 : 10
             }}
           >
-            <span style={{ color: THEME.text, fontWeight: 700 }}>
+            <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>
               {row.label}:
             </span>
 
-            <strong style={{ textAlign: 'right', whiteSpace: 'nowrap', minWidth: 56 }}>
+            <strong style={{ textAlign: 'right', whiteSpace: 'nowrap', minWidth: 70, fontSize: 15 }}>
               {row.value}
             </strong>
 
@@ -7505,7 +7588,7 @@ const latestBodyDataRows = [
               {row.status && (
                 <span style={{
                   color: row.status.color,
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight: 800,
                   whiteSpace: 'nowrap'
                 }}>
@@ -7557,21 +7640,12 @@ const latestBodyDataRows = [
 )}
 
       {screen === 'settings' && (
-       <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
+       <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
   <AppHeader
     t={t}
     title={t.settings}
+    meta={`${t.appName} · ${process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev'}`}
   />
-
-  <div style={{
-    marginTop: -4,
-    marginBottom: 10,
-    color: THEME.muted,
-    fontSize: 12,
-    textAlign: 'center'
-  }}>
-    {t.appName} · {process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev'}
-  </div>
 
   <div style={{
     background: THEME.card,
