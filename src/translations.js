@@ -123,7 +123,7 @@ export const translations = {
     side: 'kant',
     prepTitle: 'Voorbereiding',
     prepBandPullApart: 'Band uit elkaar trekken',
-    prepBandExternalRotation: 'Externe rotaties met band',
+    prepBandExternalRotation: 'Externe rotaties',
     prepLightRows: 'Lichte roeibewegingen',
     prepScapPushups: 'Schouderblad-push-ups',
     prepHipOpeners: 'Heupopeners',
