@@ -1584,7 +1584,7 @@ function SettingsListRow({ label, value, valueColor = THEME.text, actionLabel, o
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'minmax(0, 1fr) auto',
+      gridTemplateColumns: 'minmax(0, 1fr) minmax(180px, 190px)',
       alignItems: 'center',
       gap: 12,
       padding: compact ? '6px 0' : '10px 0',
@@ -1604,7 +1604,7 @@ function SettingsListRow({ label, value, valueColor = THEME.text, actionLabel, o
         fontSize: 15,
         fontWeight: 800,
         textAlign: 'center',
-        width: 160
+        width: '100%'
       }}>
         {actionContent || (
           actionLabel ? (
@@ -1612,7 +1612,7 @@ function SettingsListRow({ label, value, valueColor = THEME.text, actionLabel, o
               type="button"
               onClick={onAction}
               style={{
-                width: 160,
+                width: '100%',
                 padding: '9px 11px',
                 fontSize: 15,
                 fontWeight: 800,
@@ -2070,13 +2070,14 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
           <div style={{
             display: 'grid',
             gap: 6,
-            justifyItems: 'end'
+            justifyItems: 'stretch',
+            width: '100%'
           }}>
             <button
               type="button"
               onClick={exportData}
               style={{
-                width: 160,
+                width: '100%',
                 padding: '9px 11px',
                 fontSize: 15,
                 fontWeight: 800,
@@ -2097,7 +2098,7 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
               type="button"
               onClick={() => importInputRef.current?.click()}
               style={{
-                width: 160,
+                width: '100%',
                 padding: '9px 11px',
                 fontSize: 15,
                 fontWeight: 800,
@@ -2255,7 +2256,7 @@ function SupportActionButton({ children, onClick }) {
         borderRadius: 8,
         cursor: 'pointer',
         minHeight: 42,
-        width: 160,
+        width: '100%',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis'
@@ -2296,9 +2297,9 @@ function SupportSection({ t }) {
       actionContent={(
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '160px',
+          gridTemplateColumns: '1fr',
           gap: 8,
-          width: 160
+          width: '100%'
         }}>
           {links.map(item => (
             <SupportActionButton
