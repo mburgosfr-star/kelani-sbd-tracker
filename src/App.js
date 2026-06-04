@@ -5098,26 +5098,53 @@ function Onboarding({ onStart, t }) {
     return Object.values(bodyData).some(value => value !== null) ? bodyData : null;
   }
 
+  function parseBirthDateInput(value) {
+    const trimmed = value.trim();
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) return trimmed;
+
+    const match = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (!match) return '';
+
+    const [, dayRaw, monthRaw, yearRaw] = match;
+    const day = Number(dayRaw);
+    const month = Number(monthRaw);
+    const year = Number(yearRaw);
+    const date = new Date(year, month - 1, day);
+
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return '';
+    }
+
+    return `${yearRaw}-${monthRaw.padStart(2, '0')}-${dayRaw.padStart(2, '0')}`;
+  }
+
   function handleStart() {
     const s = parseFloat(squat);
     const b = parseFloat(bench);
     const d = parseFloat(deadlift);
 
-    if (!s || !b || !d || !birthDate || !sex) {
+    const normalizedBirthDate = parseBirthDateInput(birthDate);
+
+    if (!s || !b || !d || !normalizedBirthDate || !sex) {
       alert(t.fillRequiredFields);
       return;
     }
 
-    onStart(s, b, d, { birthDate, sex }, buildInitialBodyData());
+    onStart(s, b, d, { birthDate: normalizedBirthDate, sex }, buildInitialBodyData());
   }
 
   const bodyFields = [
-    { key: 'bodyWeight', label: `${t.bodyweight} (${t.kg})` },
-    { key: 'bodyFat', label: t.bodyFatPercent },
-    { key: 'bodyWater', label: t.bodyWaterPercent },
+    { key: 'bodyWeight', label: t.bodyweight, unit: t.kg },
+    { key: 'bodyFat', label: t.bodyFatPercent, unit: '%' },
+    { key: 'bodyWater', label: t.bodyWaterPercent, unit: '%' },
     { key: 'visceralFat', label: t.visceralFatRating },
     { key: 'physiqueRating', label: t.physiqueRating },
-    { key: 'boneMass', label: t.boneMassKg },
+    { key: 'boneMass', label: t.boneMassKg, unit: t.kg },
   ];
 
   return (
@@ -5155,22 +5182,34 @@ function Onboarding({ onStart, t }) {
               {label}
             </label>
 
-            <input
-              type="number"
-              value={val}
-              onChange={e => setter(e.target.value)}
-              placeholder={t.kg}
-              style={{
-                width: '100%',
-                padding: 10,
+            <div style={{ position: 'relative' }}>
+              <input
+                type="number"
+                value={val}
+                onChange={e => setter(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 42px 10px 10px',
+                  fontSize: 16,
+                  borderRadius: 4,
+                  border: `1px solid ${THEME.border}`,
+                  boxSizing: 'border-box',
+                  background: THEME.bg,
+                  color: THEME.text
+                }}
+              />
+              <span style={{
+                position: 'absolute',
+                right: 12,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: THEME.text,
                 fontSize: 16,
-                borderRadius: 4,
-                border: `1px solid ${THEME.border}`,
-                boxSizing: 'border-box',
-                background: THEME.bg,
-                color: THEME.text
-              }}
-            />
+                pointerEvents: 'none'
+              }}>
+                {t.kg}
+              </span>
+            </div>
           </div>
         ))}
 
@@ -5179,21 +5218,62 @@ function Onboarding({ onStart, t }) {
             {t.birthDate}
           </label>
 
-          <input
-            type="date"
-            value={birthDate}
-            onChange={e => setBirthDate(e.target.value)}
+          <div
+            onClick={e => {
+              const input = e.currentTarget.querySelector('input[type="date"]');
+              if (input?.showPicker) {
+                input.showPicker();
+              } else {
+                input?.focus();
+                input?.click();
+              }
+            }}
             style={{
+              position: 'relative',
               width: '100%',
-              padding: 10,
-              fontSize: 16,
+              height: 42,
               borderRadius: 4,
               border: `1px solid ${THEME.border}`,
               boxSizing: 'border-box',
               background: THEME.bg,
-              color: THEME.text
+              cursor: 'pointer'
             }}
-          />
+          >
+            <div style={{
+              padding: '10px 42px 10px 10px',
+              fontSize: 16,
+              color: birthDate ? THEME.text : 'transparent',
+              boxSizing: 'border-box'
+            }}>
+              {birthDate || ' '}
+            </div>
+
+            <span style={{
+              position: 'absolute',
+              right: 12,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: THEME.text,
+              fontSize: 16,
+              pointerEvents: 'none'
+            }}>
+              📅
+            </span>
+
+            <input
+              type="date"
+              value={birthDate}
+              onChange={e => setBirthDate(e.target.value)}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                opacity: 0,
+                pointerEvents: 'none'
+              }}
+            />
+          </div>
         </div>
 
         <div style={{ marginBottom: 20 }}>
@@ -5232,21 +5312,36 @@ function Onboarding({ onStart, t }) {
               {field.label}
             </label>
 
-            <input
-              type="number"
-              value={bodyForm[field.key]}
-              onChange={e => updateBodyField(field.key, e.target.value)}
-              style={{
-                width: '100%',
-                padding: 10,
-                fontSize: 16,
-                borderRadius: 4,
-                border: `1px solid ${THEME.border}`,
-                boxSizing: 'border-box',
-                background: THEME.bg,
-                color: THEME.text
-              }}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type="number"
+                value={bodyForm[field.key]}
+                onChange={e => updateBodyField(field.key, e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: field.unit ? '10px 48px 10px 10px' : 10,
+                  fontSize: 16,
+                  borderRadius: 4,
+                  border: `1px solid ${THEME.border}`,
+                  boxSizing: 'border-box',
+                  background: THEME.bg,
+                  color: THEME.text
+                }}
+              />
+              {field.unit && (
+                <span style={{
+                  position: 'absolute',
+                  right: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: THEME.text,
+                  fontSize: 16,
+                  pointerEvents: 'none'
+                }}>
+                  {field.unit}
+                </span>
+              )}
+            </div>
           </div>
         ))}
 
@@ -5385,7 +5480,8 @@ function BottomNav({ screen, onChange, t }) {
   );
 }
 
-export default function App() {
+export default 
+function App() {
   const [language, setLanguage] = useState(() => {
     const savedLanguage = localStorage.getItem('language');
     const supportedLanguages = ['ca', 'en', 'nl'];
