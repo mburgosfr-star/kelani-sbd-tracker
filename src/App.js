@@ -406,7 +406,23 @@ function getWorkoutTypeLabel(workout, t) {
   return key ? t[key] : '—';
 }
 
-function generatePrepItems(lift) {
+function generatePrepItems(lift, preparationMode = 'basic') {
+  if (preparationMode === 'off') return [];
+
+  if (preparationMode === 'shoulderThoracic') {
+    return [
+      { labelKey: 'prepThoracicRotationSideLying', prescription: '2×8', perSide: true },
+      { labelKey: 'prepBeachStretch', prescription: '2×8', perSide: true },
+      { labelKey: 'prepThoracicFoamRoller', prescription: '2×8' },
+      { labelKey: 'prepWallRollsExternalRotation', prescription: '3×8' },
+      { labelKey: 'prepClosedChainScapulaWall', prescription: '2×8' },
+      { labelKey: 'prepScapPushupPosition', prescription: '2×10' },
+    ].map(item => ({
+      ...item,
+      done: false,
+    }));
+  }
+
   const itemsByLift = {
     Bench: [
       { labelKey: 'prepBandPullApart', prescription: '2×20' },
@@ -637,13 +653,18 @@ function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedCoun
 
     return {
       ...workout,
+      prepItems: generated.prepItems || [],
+      lifts: (workout.lifts || []).map((liftBlock, liftIndex) => ({
+        ...liftBlock,
+        prepItems: generated.lifts?.[liftIndex]?.prepItems || [],
+      })),
       accessories: generated.accessories || [],
     };
   });
 }
 
 
-function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
+function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basic') {
   function round25(w) {
     return Math.round(w / 2.5) * 2.5;
   }
@@ -712,7 +733,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
 
     return {
       lift: liftConfig.lift,
-      prepItems: liftIndex === 0 ? generatePrepItems(liftConfig.lift) : [],
+      prepItems: liftIndex === 0 ? generatePrepItems(liftConfig.lift, preparationMode) : [],
       warmups: generateWarmups(firstWorkWeight),
       sets,
     };
@@ -773,7 +794,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}) {
 
     return {
       lift,
-      prepItems: generatePrepItems(lift),
+      prepItems: generatePrepItems(lift, preparationMode),
       warmups: generateWarmups(sets[0].weight),
       sets,
     };
@@ -1146,7 +1167,15 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
 }
 
 
-function CooldownBlock({ t }) {
+function CooldownBlock({ t, isReadOnly = false }) {
+  const [done, setDone] = useState(false);
+  const item = {
+    labelKey: 'cooldownRhomboidStretch',
+    prescription: '4×10 sec',
+    perSide: true,
+    done,
+  };
+
   return (
     <div style={{
       background: THEME.card,
@@ -1166,18 +1195,14 @@ function CooldownBlock({ t }) {
         {t.cooldownTitle}
       </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: 8,
-        padding: '8px 10px',
-        color: THEME.text,
-        fontSize: WORKOUT_TEXT_FONT_SIZE,
-        fontWeight: 800,
-        textAlign: 'center'
-      }}>
-        <div>{t.cooldownBreathe}</div>
-        <div>{t.cooldownFoamRoll}</div>
+      <div style={{ padding: '6px 10px' }}>
+        <PrepRow
+          item={item}
+          isActive={false}
+          isReadOnly={isReadOnly}
+          onToggle={() => setDone(prev => !prev)}
+          t={t}
+        />
       </div>
     </div>
   );
@@ -2538,6 +2563,61 @@ function RestTimeSection({ restTimeSeconds, setRestTimeSeconds, t }) {
 }
 
 
+function PreparationSection({ preparationMode, setPreparationMode, t }) {
+  const [showOptions, setShowOptions] = useState(false);
+
+  const modes = ['off', 'basic', 'shoulderThoracic'];
+  const labels = {
+    off: t.preparationOff,
+    basic: t.preparationBasic,
+    shoulderThoracic: t.preparationShoulderThoracic,
+  };
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.preparation}
+        actionLabel={labels[preparationMode] || labels.basic}
+        onAction={() => setShowOptions(true)}
+      />
+
+      {showOptions && (
+        <SettingsModal
+          title={t.preparation}
+          onClose={() => setShowOptions(false)}
+        >
+          <div style={{ display: 'grid', gap: 8 }}>
+            {modes.map(mode => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setPreparationMode(mode);
+                  setShowOptions(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  border: `1px solid ${preparationMode === mode ? THEME.primary : THEME.border}`,
+                  background: preparationMode === mode ? THEME.primary : THEME.card,
+                  color: preparationMode === mode ? THEME.bg : THEME.text,
+                  cursor: 'pointer'
+                }}
+              >
+                {labels[mode]}
+              </button>
+            ))}
+          </div>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
 function AccessorySection({ accessoryMode, setAccessoryMode, t }) {
   const [showOptions, setShowOptions] = useState(false);
 
@@ -3568,7 +3648,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           </div>
         )}
 
-        {!isMeetDay && <CooldownBlock t={t} />}
+        {!isMeetDay && <CooldownBlock t={t} isReadOnly={isReadOnly} />}
 
         <button
           onClick={() => {
@@ -5502,6 +5582,7 @@ function App() {
   const [timer, setTimer] = useState(null);
   const [restTimeSeconds, setRestTimeSeconds] = useState(DEFAULT_REST_TIME_SECONDS);
   const [accessoryMode, setAccessoryMode] = useState('off');
+  const [preparationMode, setPreparationMode] = useState('basic');
 
   function startTimer(seconds, placement = null) {
     setTimer({
@@ -5626,7 +5707,7 @@ function App() {
 
       const savedHistory = data.history || [];
       const savedCycle = data.currentCycle || 1;
-      const generatedWorkouts = generateProgram(squat, bench, deadlift, normalizeAccessoryMode(data.accessoryMode), data.accessoryPRs || {});
+      const generatedWorkouts = generateProgram(squat, bench, deadlift, normalizeAccessoryMode(data.accessoryMode), data.accessoryPRs || {}, data.preparationMode || 'basic');
       const savedInProgress = data.inProgress || null;
       const savedMeetPlannerAttempts = data.meetPlannerAttempts || {};
       const savedMeetPrepChecklist = data.meetPrepChecklist || {};
@@ -5664,6 +5745,7 @@ function App() {
       setMeetPrepChecklist(savedMeetPrepChecklist);
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
       setAccessoryMode(normalizeAccessoryMode(data.accessoryMode));
+      setPreparationMode(data.preparationMode || 'basic');
 
       const completedWorkoutCount = getCompletedWorkoutCount(savedHistory, savedCycle);
       const restorableSelectedIndex = getRestorableSelectedIndex(
@@ -5713,6 +5795,7 @@ function App() {
       meetPrepChecklist,
       restTimeSeconds,
       accessoryMode,
+      preparationMode,
       inProgress: {
         programVersion: PROGRAM_VERSION,
         currentCycle,
@@ -5721,7 +5804,7 @@ function App() {
         workouts,
       },
     }));
-  }, [history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, accessoryMode, selectedIndex, workouts]);
+  }, [history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, accessoryMode, preparationMode, selectedIndex, workouts]);
 
   useEffect(() => {
     if (!prs.Squat || !prs.Bench || !prs.Deadlift) return;
@@ -5731,7 +5814,8 @@ function App() {
       prs.Bench,
       prs.Deadlift,
       accessoryMode,
-      accessoryPRs
+      accessoryPRs,
+      preparationMode
     );
 
     setWorkouts(prev => applyAccessoryPlanToWorkouts(
@@ -5739,7 +5823,7 @@ function App() {
       generatedWorkouts,
       getCompletedWorkoutCount(history, currentCycle)
     ));
-  }, [accessoryMode, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
+  }, [accessoryMode, preparationMode, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
 
   useEffect(() => {
     if (screen !== 'completed' || !completedWorkout) return;
@@ -5774,7 +5858,7 @@ function App() {
     localStorage.removeItem('kel-powerlifting');
     localStorage.removeItem('app_version');
 
-    setWorkouts(generateProgram(s, b, d, accessoryMode, accessoryPRs));
+    setWorkouts(generateProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode));
     setCurrentWorkoutIndex(0);
   setSelectedIndex(0);
     setCurrentCycle(1);
@@ -5855,7 +5939,7 @@ function handleStartNewCycle() {
   }
 
   const nextCycle = currentCycle + 1;
-  const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift, accessoryMode, accessoryPRs);
+  const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift, accessoryMode, accessoryPRs, preparationMode);
 
   setCurrentCycle(nextCycle);
   setMeetPlannerAttempts({});
@@ -7765,6 +7849,12 @@ const latestBodyDataRows = [
     <RestTimeSection
       restTimeSeconds={restTimeSeconds}
       setRestTimeSeconds={setRestTimeSeconds}
+      t={t}
+    />
+
+    <PreparationSection
+      preparationMode={preparationMode}
+      setPreparationMode={setPreparationMode}
       t={t}
     />
 
