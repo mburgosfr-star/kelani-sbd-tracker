@@ -8,7 +8,77 @@ import { Share } from '@capacitor/share';
 
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
 const REST_TIME_OPTIONS = [90, 180, 300];
+const ACCESSORY_MODES = ['off', 'basic', 'full'];
+const SET_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'max'];
+const WORKOUT_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'tooMuch'];
+const LIFT_ORDER = ['Squat', 'Bench', 'Deadlift'];
 const DEFAULT_REST_TIME_SECONDS = 300;
+const AUTO_BACKUP_PATH = 'Kelani/kelani-sbd-tracker-autosave.json';
+const AUTO_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-auto-backup-status';
+
+function buildBackupSummary(data) {
+  const currentCycle = data?.currentCycle || 1;
+  const totalWorkouts = data?.inProgress?.workouts?.length || 28;
+  const selectedIndex = data?.inProgress?.selectedIndex;
+  const completedWorkoutCount = getCompletedWorkoutCount(data?.history || [], currentCycle);
+  const currentWorkout = Math.min((selectedIndex ?? completedWorkoutCount) + 1, totalWorkouts);
+
+  return {
+    backupVersion: 1,
+    programVersion: data?.inProgress?.programVersion || null,
+    currentCycle,
+    currentWorkout,
+    totalWorkouts,
+    historyEntries: Array.isArray(data?.history) ? data.history.length : 0,
+    bodyDataEntries: Array.isArray(data?.bodyWeights) ? data.bodyWeights.length : 0,
+  };
+}
+
+function buildBackupPayload(data) {
+  const exportedAt = new Date().toISOString();
+
+  return {
+    app: 'Kelani SBD Tracker',
+    backupVersion: 1,
+    appVersion: process.env.REACT_APP_VERSION ?? 'dev',
+    exportedAt,
+    storageKey: STORAGE_KEY,
+    summary: buildBackupSummary(data),
+    data,
+  };
+}
+
+async function writeAutomaticBackup(data) {
+  const backup = buildBackupPayload(data);
+  const json = JSON.stringify(backup, null, 2);
+
+  if (Capacitor.isNativePlatform()) {
+    await Filesystem.mkdir({
+      path: 'Kelani',
+      directory: Directory.Documents,
+      recursive: true,
+    }).catch(() => {});
+
+    await Filesystem.writeFile({
+      path: AUTO_BACKUP_PATH,
+      data: json,
+      directory: Directory.Documents,
+      encoding: Encoding.UTF8,
+    });
+  } else {
+    localStorage.setItem('kelani-sbd-tracker-autosave', json);
+  }
+
+  localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
+    ok: true,
+    exportedAt: backup.exportedAt,
+    path: AUTO_BACKUP_PATH,
+    summary: backup.summary,
+  }));
+
+  return backup;
+}
+
 
 const THEME = {
   bg: '#18110d',
@@ -23,6 +93,15 @@ const THEME = {
   brown: '#a86f45'
   
 };
+
+
+const WORKOUT_CIRCLE_SIZE = 40;
+const WORKOUT_CIRCLE_FONT_SIZE = 16;
+const WORKOUT_SECTION_TITLE_FONT_SIZE = 18;
+const WORKOUT_TITLE_FONT_SIZE = 16;
+const WORKOUT_TEXT_FONT_SIZE = 15;
+const WORKOUT_ROW_PADDING_Y = 8;
+const WORKOUT_PREP_WARMUP_PADDING_Y = WORKOUT_ROW_PADDING_Y;
 
 function toOptionalNumber(value) {
   const parsed = Number(value);
@@ -44,11 +123,8 @@ function calculateBmrEstimate(leanMass) {
 }
 
 
-function sexLabel(value, t) {
-  if (value === 'male') return t.male;
-  if (value === 'female') return t.female;
-  if (value === 'other') return t.other;
-  return '—';
+function normalizeAccessoryMode(value) {
+  return ACCESSORY_MODES.includes(value) ? value : 'off';
 }
 
 function normalizeRestTimeSeconds(value) {
@@ -91,16 +167,30 @@ function getWorkoutLabel(entry) {
   return `C${getEntryCycle(entry)}W${getEntryWorkoutNumber(entry)}`;
 }
 
-function getCompletedWorkoutCount(history, cycle) {
-  return new Set(
+function getCompletedWorkoutCount(history, currentCycle) {
+  const completedWorkoutNumbers = new Set(
     (history || [])
-      .filter(h =>
-        h.lift &&
-        h.workoutNumber > 0 &&
-        getEntryCycle(h) === cycle
-      )
-      .map(h => h.workoutNumber)
-  ).size;
+      .filter(entry => entry.cycle === currentCycle)
+      .map(entry => Number(entry.workoutNumber))
+      .filter(number => Number.isFinite(number))
+  );
+
+  return completedWorkoutNumbers.size;
+}
+
+function getRestorableSelectedIndex(inProgress, currentCycle, totalWorkouts) {
+  const selectedIndex = Number(inProgress?.selectedIndex);
+
+  if (
+    !inProgress ||
+    inProgress.currentCycle !== currentCycle ||
+    !Number.isFinite(selectedIndex) ||
+    totalWorkouts <= 0
+  ) {
+    return null;
+  }
+
+  return Math.max(0, Math.min(selectedIndex, totalWorkouts - 1));
 }
 
 function normalizeBodyWeights(data) {
@@ -173,9 +263,14 @@ function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, history, cy
     const generated = generatedWorkouts[index];
     if (!generated) return workout;
 
-    const prepDone = index < completedCount;
+    const isCompleted = index < completedCount;
+    const prepDone = isCompleted;
 
-    if (workout.type === 'meet') {
+    if (workout.type === 'meet' || (workout.type === 'training' && (workout.lifts || []).length > 0)) {
+      if (!isCompleted) {
+        return generated;
+      }
+
       return {
         ...workout,
         lifts: (workout.lifts || generated.lifts || []).map((liftBlock, liftIndex) => {
@@ -189,6 +284,16 @@ function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, history, cy
             })),
           };
         }),
+      };
+    }
+
+    if (!isCompleted) {
+      return {
+        ...generated,
+        prepItems: (generated.prepItems || []).map((item, itemIndex) => ({
+          ...item,
+          done: workout.prepItems?.[itemIndex]?.done ?? false,
+        })),
       };
     }
 
@@ -301,7 +406,23 @@ function getWorkoutTypeLabel(workout, t) {
   return key ? t[key] : '—';
 }
 
-function generatePrepItems(lift) {
+function generatePrepItems(lift, preparationMode = 'basic') {
+  if (preparationMode === 'off') return [];
+
+  if (preparationMode === 'shoulderThoracic') {
+    return [
+      { labelKey: 'prepThoracicRotationSideLying', prescription: '2×8', perSide: true },
+      { labelKey: 'prepBeachStretch', prescription: '2×8', perSide: true },
+      { labelKey: 'prepThoracicFoamRoller', prescription: '2×8' },
+      { labelKey: 'prepWallRollsExternalRotation', prescription: '3×8' },
+      { labelKey: 'prepClosedChainScapulaWall', prescription: '2×8' },
+      { labelKey: 'prepScapPushupPosition', prescription: '2×10' },
+    ].map(item => ({
+      ...item,
+      done: false,
+    }));
+  }
+
   const itemsByLift = {
     Bench: [
       { labelKey: 'prepBandPullApart', prescription: '2×20' },
@@ -379,6 +500,44 @@ function roundMeetWeight(weight) {
   return Math.round((Number(weight) || 0) / 2.5) * 2.5;
 }
 
+function getFailedSetSuggestedWeight(weight) {
+  const currentWeight = Number(weight) || 0;
+  if (currentWeight <= 0) return 0;
+
+  const rawWeight = currentWeight - Math.max(2.5, currentWeight * 0.075);
+  const roundedWeight = Math.floor(rawWeight / 2.5) * 2.5;
+
+  return Math.max(0, Number(roundedWeight.toFixed(1)));
+}
+
+function getSetTrainingMax(set) {
+  const originalWeight = Number(set?.originalWeight ?? set?.failedWeight ?? set?.weight) || 0;
+  const originalPct = Number(set?.originalPct ?? set?.pct) || 0;
+
+  return originalWeight > 0 && originalPct > 0
+    ? originalWeight / originalPct
+    : 0;
+}
+
+function getSetPctForWeight(set, weight) {
+  const trainingMax = getSetTrainingMax(set);
+  if (!trainingMax) return Number(set?.pct) || null;
+
+  return Number(weight) / trainingMax;
+}
+
+function isTopSetLabel(labelKey) {
+  return ['heavySingle', 'topSingle', 'topDouble', 'topTriple'].includes(labelKey);
+}
+
+function isAttemptSetLabel(labelKey) {
+  return ['opener', 'secondAttempt', 'thirdAttempt'].includes(labelKey);
+}
+
+function getAdjustedAttemptWeight(weight) {
+  return Math.max(2.5, roundMeetWeight((Number(weight) || 0) - 5));
+}
+
 function getMeetPlannerAttemptWeight(attempts, lift, setIndex, fallback) {
   const key = MEET_ATTEMPT_KEYS[setIndex];
   const custom = attempts?.[lift]?.[key];
@@ -417,7 +576,95 @@ function applyMeetPlannerAttemptsToWorkouts(workouts, attempts = {}, prs = {}) {
   });
 }
 
-function generateProgram(s, b, d) {
+const ACCESSORY_TEMPLATES = {
+  Squat: [
+    { key: 'pulldown', labelKey: 'accessoryPulldown', sets: 3, reps: 10, source: 'deadlift', pct: 0.25 },
+    { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.20 },
+  ],
+  Bench: [
+    { key: 'hipThrust', labelKey: 'accessoryHipThrust', sets: 3, reps: 8, source: 'deadlift', pct: 0.40 },
+    { key: 'shoulderRotations', labelKey: 'accessoryShoulderRotations', sets: 2, reps: 15, source: 'fixed', weight: 2.5, optional: true, perSide: true },
+  ],
+  Deadlift: [
+    { key: 'row', labelKey: 'accessoryRow', sets: 3, reps: 10, source: 'deadlift', pct: 0.25 },
+    { key: 'legPressModerate', labelKey: 'accessoryLegPressModerate', sets: 2, reps: 12, source: 'squat', pct: 0.60, optional: true },
+  ],
+};
+
+function getAccessoryBaseWeight(template, oneRMs, accessoryPRs = {}) {
+  const previous = Number(accessoryPRs?.[template.key]);
+
+  if (previous > 0) {
+    return previous;
+  }
+
+  if (template.source === 'fixed') {
+    return template.weight || 2.5;
+  }
+
+  const sourceLift = {
+    squat: 'Squat',
+    bench: 'Bench',
+    deadlift: 'Deadlift',
+  }[template.source];
+
+  const sourceWeight = Number(oneRMs?.[sourceLift]) || 0;
+
+  if (!sourceWeight || !template.pct) {
+    return 20;
+  }
+
+  return Math.max(2.5, roundMeetWeight(sourceWeight * template.pct));
+}
+
+function generateAccessoriesForLift(lift, accessoryMode = 'off', accessoryPRs = {}, oneRMs = {}) {
+  if (accessoryMode === 'off') return [];
+
+  const includeOptional = accessoryMode === 'full';
+
+  return (ACCESSORY_TEMPLATES[lift] || [])
+    .filter(template => includeOptional || !template.optional)
+    .map(template => {
+      const weight = getAccessoryBaseWeight(template, oneRMs, accessoryPRs);
+
+      return {
+        key: template.key,
+        nameKey: template.labelKey,
+        name: template.labelKey,
+        reps: template.reps,
+        perSide: !!template.perSide,
+        weights: Array.from({ length: template.sets }, () => weight),
+        originalWeights: Array.from({ length: template.sets }, () => weight),
+        done: Array.from({ length: template.sets }, () => false),
+        failed: Array.from({ length: template.sets }, () => false),
+        failedWeights: Array.from({ length: template.sets }, () => null),
+        adjustedFromFailedSet: Array.from({ length: template.sets }, () => false),
+        adjustedFromOriginal: Array.from({ length: template.sets }, () => false),
+      };
+    });
+}
+
+function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedCount) {
+  return (workouts || []).map((workout, index) => {
+    if (index < completedCount) return workout;
+
+    const generated = generatedWorkouts[index];
+    if (!generated || workout.type === 'meet') return workout;
+
+    return {
+      ...workout,
+      prepItems: generated.prepItems || [],
+      lifts: (workout.lifts || []).map((liftBlock, liftIndex) => ({
+        ...liftBlock,
+        prepItems: generated.lifts?.[liftIndex]?.prepItems || [],
+      })),
+      accessories: generated.accessories || [],
+    };
+  });
+}
+
+
+function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basic') {
   function round25(w) {
     return Math.round(w / 2.5) * 2.5;
   }
@@ -429,99 +676,89 @@ function generateProgram(s, b, d) {
   };
 
   const program = [
-    { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [{ sets: 4, reps: 5, pct: 0.70 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 8, pct: 0.65 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 6, pct: 0.65 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 6, reps: 5, pct: 0.70 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 5, pct: 0.70 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'practice', blocks: [{ sets: 8, reps: 3, pct: 0.75 }] },
-
-    { lift: 'Deadlift', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 4, pct: 0.75 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 6, pct: 0.70 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 5, pct: 0.70 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 6, reps: 4, pct: 0.75 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [{ sets: 6, reps: 4, pct: 0.75 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'practice', blocks: [{ sets: 7, reps: 3, pct: 0.80 }] },
-
-    { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [{ sets: 5, reps: 3, pct: 0.80 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 5, pct: 0.75 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'volume', blocks: [{ sets: 5, reps: 4, pct: 0.775 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 6, reps: 3, pct: 0.825 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [{ sets: 5, reps: 3, pct: 0.825 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 5, reps: 2, pct: 0.875 }] },
-
-    { lift: 'Deadlift', type: 'training', labelKey: 'heavy', blocks: [{ sets: 4, reps: 2, pct: 0.85 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'volume', blocks: [{ sets: 4, reps: 4, pct: 0.80 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [{ sets: 4, reps: 3, pct: 0.85 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 5, reps: 2, pct: 0.875 }] },
-    { lift: 'Squat', type: 'training', labelKey: 'heavy', blocks: [{ sets: 3, reps: 2, pct: 0.90 }] },
-    { lift: 'Bench', type: 'training', labelKey: 'heavy', blocks: [{ sets: 4, reps: 1, pct: 0.925 }] },
-
-    {
-      lift: 'Deadlift',
-      type: 'training',
-      labelKey: 'preMeet',
-      blocks: [
-        { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
-        { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
-        { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
-        { sets: 3, reps: 3, pct: 0.80, labelKey: 'backoff' },
-      ],
-    },
-    {
-      lift: 'Bench',
-      type: 'training',
-      labelKey: 'preMeet',
-      blocks: [
-        { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
-        { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
-        { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
-        { sets: 3, reps: 3, pct: 0.80, labelKey: 'backoff' },
-      ],
-    },
-    {
-      lift: 'Squat',
-      type: 'training',
-      labelKey: 'preMeet',
-      blocks: [
-        { sets: 1, reps: 1, pct: 0.90, labelKey: 'opener' },
-        { sets: 1, reps: 1, pct: 0.93, labelKey: 'secondAttempt' },
-        { sets: 1, reps: 1, pct: 0.95, labelKey: 'thirdAttempt' },
-        { sets: 3, reps: 3, pct: 0.80, labelKey: 'backoff' },
-      ],
-    },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 3, reps: 5, pct: 0.675, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 4, reps: 6, pct: 0.650, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.775, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.700, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 3, pct: 0.800, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.700, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 3, pct: 0.700, labelKey: 'topTriple' }, { sets: 3, reps: 4, pct: 0.625, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 5, pct: 0.625, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.650, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.800, labelKey: 'topDouble' }, { sets: 3, reps: 4, pct: 0.725, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 2, pct: 0.850, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.775, labelKey: 'topDouble' }, { sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 4, pct: 0.650, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 4, pct: 0.675, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.800, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 4, pct: 0.625, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 1, pct: 0.930, labelKey: 'secondAttempt' }, { sets: 1, reps: 1, pct: 0.950, labelKey: 'thirdAttempt' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 1, pct: 0.930, labelKey: 'secondAttempt' }, { sets: 1, reps: 1, pct: 0.950, labelKey: 'thirdAttempt' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 1, pct: 0.930, labelKey: 'secondAttempt' }, { sets: 1, reps: 1, pct: 0.950, labelKey: 'thirdAttempt' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.800, labelKey: 'topSingle' }, { sets: 2, reps: 4, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.600, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.750, labelKey: 'topSingle' }, { sets: 2, reps: 4, pct: 0.600, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.800, labelKey: 'topSingle' }, { sets: 2, reps: 4, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 2, reps: 4, pct: 0.600, labelKey: 'backoff' }] }] },
   ];
 
   const workouts = [];
 
-  program.forEach((day, dayIndex) => {
+  function buildLiftBlock(liftConfig, liftIndex = 0) {
     const sets = [];
 
-    day.blocks.forEach(block => {
+    liftConfig.blocks.forEach(block => {
       for (let i = 0; i < block.sets; i++) {
+        const weight = round25(oneRMs[liftConfig.lift] * block.pct);
+
         sets.push({
-          labelKey: block.labelKey || null,
+          labelKey: liftConfig.isSecondaryLight && block.labelKey === 'backoff'
+            ? null
+            : block.labelKey || null,
           label: block.label || null,
           reps: block.reps,
           pct: block.pct,
-          weight: round25(oneRMs[day.lift] * block.pct),
+          weight,
+          originalWeight: weight,
+          originalPct: block.pct,
           done: false,
         });
       }
     });
 
     const firstWorkWeight = sets.length ? sets[0].weight : 20;
-    const warmups = generateWarmups(firstWorkWeight);
+
+    return {
+      lift: liftConfig.lift,
+      prepItems: liftIndex === 0 ? generatePrepItems(liftConfig.lift, preparationMode) : [],
+      warmups: generateWarmups(firstWorkWeight),
+      sets,
+    };
+  }
+
+  program.forEach((day, dayIndex) => {
+    const liftBlocks = day.lifts.map((liftConfig, liftIndex) =>
+      buildLiftBlock({
+        ...liftConfig,
+        isSecondaryLight: liftIndex > 0,
+      }, liftIndex)
+    );
+    const primaryLift = liftBlocks[0]?.lift;
 
     workouts.push({
       number: dayIndex + 1,
       type: day.type,
-      lift: day.lift,
+      lift: primaryLift,
       label: day.label,
-      prepItems: generatePrepItems(day.lift),
-      warmups,
-      sets,
-      accessories: [],
+      labelKey: day.labelKey,
+      lifts: liftBlocks,
+      prepItems: liftBlocks[0]?.prepItems || [],
+      warmups: liftBlocks[0]?.warmups || [],
+      sets: liftBlocks[0]?.sets || [],
+      accessories: generateAccessoriesForLift(primaryLift, accessoryMode, accessoryPRs, oneRMs),
     });
   });
 
@@ -530,7 +767,7 @@ function generateProgram(s, b, d) {
   type: 'meet',
   lift: 'SBD',
   labelKey: 'meetDay',
-  lifts: ['Squat', 'Bench', 'Deadlift'].map(lift => {
+  lifts: LIFT_ORDER.map(lift => {
     const sets = [
       {
         labelKey: 'opener',
@@ -557,7 +794,7 @@ function generateProgram(s, b, d) {
 
     return {
       lift,
-      prepItems: generatePrepItems(lift),
+      prepItems: generatePrepItems(lift, preparationMode),
       warmups: generateWarmups(sets[0].weight),
       sets,
     };
@@ -571,15 +808,13 @@ function generateProgram(s, b, d) {
 }
 
 
-function RestTimer({ seconds, onDismiss, t }) {
-  const [remaining, setRemaining] = useState(seconds);
+function RestTimer({ seconds, endTime, onDismiss, t }) {
+  const [remaining, setRemaining] = useState(() => Math.max(0, Math.ceil(((endTime || Date.now() + seconds * 1000) - Date.now()) / 1000)));
   const intervalRef = useRef(null);
   const timeoutRef = useRef(null);
   const hasBeepedRef = useRef(false);
 
   useEffect(() => {
-    const endTime = Date.now() + (seconds * 1000);
-
     const clearTick = () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -636,7 +871,7 @@ function RestTimer({ seconds, onDismiss, t }) {
       clearFinishTimeout();
       document.removeEventListener('visibilitychange', startVisibleTick);
     };
-  }, [seconds]);
+  }, [seconds, endTime]);
 
   function playBeep() {
     try {
@@ -755,43 +990,98 @@ function formatPrepPrescription(item, t) {
   return item.perSide ? `${item.prescription} / ${t.side}` : item.prescription;
 }
 
+function WorkoutCircle({ done = false, active = false, skipped = false, disabled = false, onClick, label }) {
+  const borderColor = skipped
+    ? '#e74c3c'
+    : done || active
+      ? THEME.primary
+      : THEME.border;
+
+  const background = skipped
+    ? '#e74c3c'
+    : done
+      ? THEME.primary
+      : THEME.card;
+
+  const color = skipped || done ? THEME.bg : THEME.text;
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={event => {
+        event.stopPropagation();
+        if (!disabled && onClick) onClick(event);
+      }}
+      disabled={disabled}
+      style={{
+        width: WORKOUT_CIRCLE_SIZE,
+        height: WORKOUT_CIRCLE_SIZE,
+        minWidth: WORKOUT_CIRCLE_SIZE,
+        flex: `0 0 ${WORKOUT_CIRCLE_SIZE}px`,
+        borderRadius: '50%',
+        border: `2px solid ${borderColor}`,
+        background,
+        color,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        fontWeight: 900,
+        fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+        lineHeight: 1,
+        padding: 0,
+        transform: 'scale(1)'
+      }}
+    >
+      {skipped ? '✕' : done ? '✓' : ''}
+    </button>
+  );
+}
+
 function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
+  const label = t[item.labelKey];
+
   return (
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      padding: '12px 16px',
-      borderTop: `1px solid ${THEME.border}`,
-      background: item.done ? 'rgba(255, 138, 61, 0.08)' : THEME.card,
-      boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none'
+      width: '100%',
+      minWidth: 0,
+      boxSizing: 'border-box',
+      padding: `${WORKOUT_PREP_WARMUP_PADDING_Y}px 0`,
+      background: 'transparent'
     }}>
-      <button
-        onClick={onToggle}
+      <WorkoutCircle
+        done={item.done}
+        active={isActive}
         disabled={isReadOnly}
-        style={{
-          width: 26,
-          height: 26,
-          borderRadius: '50%',
-          border: `2px solid ${item.done ? THEME.primary : THEME.border}`,
-          background: item.done ? THEME.primary : THEME.card,
-          color: item.done ? THEME.bg : THEME.text,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginRight: 12,
-          flexShrink: 0,
-          cursor: isReadOnly ? 'not-allowed' : 'pointer',
-          fontWeight: 900
-        }}
-      >
-        {item.done ? '✓' : ''}
-      </button>
+        onClick={onToggle}
+        label={label}
+      />
 
-      <div style={{ flex: 1 }}>
-        <div style={{ color: THEME.text, fontWeight: 800, fontSize: 14 }}>
-          {t[item.labelKey]}
+      <div style={{ flex: 1, minWidth: 0, marginLeft: 10 }}>
+        <div
+          title={label}
+          style={{
+            color: THEME.text,
+            fontWeight: 800,
+            fontSize: WORKOUT_TEXT_FONT_SIZE,
+            lineHeight: 1.15
+          }}
+        >
+          {label}
         </div>
-        <div style={{ color: THEME.muted, fontSize: 12, marginTop: 2 }}>
+        <div
+          title={formatPrepPrescription(item, t)}
+          style={{
+            color: THEME.muted,
+            fontSize: WORKOUT_TEXT_FONT_SIZE,
+            marginTop: 1,
+            lineHeight: 1.15
+          }}
+        >
           {formatPrepPrescription(item, t)}
         </div>
       </div>
@@ -799,12 +1089,354 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
   );
 }
 
-function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, isActive, isReadOnly, t }) {
-const [editing, setEditing] = useState(false);
+
+function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, t }) {
+  if (!warmups.length) return null;
+
+  const columnCount = warmups.length <= 2
+    ? 2
+    : warmups.length === 3
+      ? 3
+      : 4;
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+      justifyContent: 'center',
+      columnGap: 12,
+      rowGap: 0,
+      padding: '0 10px'
+    }}>
+      {warmups.map((warmup, index) => {
+        const label = `${t.warmup} ${index + 1}`;
+        const isActive = index === activeIndex;
+        const isDone = !!warmup.done;
+
+        return (
+          <React.Fragment key={index}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              width: '100%',
+              minWidth: 0,
+              boxSizing: 'border-box',
+              padding: `${WORKOUT_PREP_WARMUP_PADDING_Y}px 0`,
+              background: 'transparent'
+            }}>
+              <WorkoutCircle
+                done={isDone}
+                active={isActive}
+                disabled={isReadOnly}
+                onClick={() => onToggle(index)}
+                label={label}
+              />
+
+              <div style={{ flex: 1, minWidth: 0, marginLeft: 10, textAlign: 'left', lineHeight: 1.15 }}>
+                <div style={{
+                  color: THEME.text,
+                  fontSize: WORKOUT_TEXT_FONT_SIZE,
+                  fontWeight: 800,
+                  lineHeight: 1.15
+                }}>
+                  {label}
+                </div>
+
+                <div style={{
+                  color: THEME.muted,
+                  fontSize: WORKOUT_TEXT_FONT_SIZE,
+                  fontWeight: 700,
+                  marginTop: 1,
+                  lineHeight: 1.15
+                }}>
+                  {warmup.reps} × {warmup.weight} {t.kg}
+                </div>
+              </div>
+            </div>
+
+            {renderTimer?.(index) && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                {renderTimer(index)}
+              </div>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+
+function CooldownBlock({ t, isReadOnly = false }) {
+  const [done, setDone] = useState(false);
+  const item = {
+    labelKey: 'cooldownRhomboidStretch',
+    prescription: '4×10 sec',
+    perSide: true,
+    done,
+  };
+
+  return (
+    <div style={{
+      background: THEME.card,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 8,
+      overflow: 'hidden',
+      marginBottom: 10
+    }}>
+      <div style={{
+        padding: '5px 10px',
+        fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+        fontWeight: 900,
+        color: THEME.text,
+        textAlign: 'center',
+        borderBottom: `1px solid ${THEME.border}`
+      }}>
+        {t.cooldownTitle}
+      </div>
+
+      <div style={{ padding: '6px 10px' }}>
+        <PrepRow
+          item={item}
+          isActive={false}
+          isReadOnly={isReadOnly}
+          onToggle={() => setDone(prev => !prev)}
+          t={t}
+        />
+      </div>
+    </div>
+  );
+}
+
+function EffortPicker({ value, onChange, t }) {
+  return (
+    <div style={{
+      background: THEME.bg,
+      borderTop: `1px solid ${THEME.border}`,
+      borderBottom: `1px solid ${THEME.border}`,
+      padding: '7px 10px',
+      display: 'grid',
+      gap: 6
+    }}>
+      <div style={{
+        color: THEME.text,
+        fontSize: 12,
+        fontWeight: 800,
+        textAlign: 'center'
+      }}>
+        {t.setEffortQuestion}
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+        gap: 6
+      }}>
+        {SET_EFFORT_OPTIONS.map(option => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onChange(option)}
+            style={{
+              padding: '6px 3px',
+              borderRadius: 8,
+              border: `1px solid ${value === option ? THEME.primary : THEME.border}`,
+              background: value === option ? THEME.primary : THEME.card,
+              color: value === option ? THEME.bg : THEME.text,
+              fontSize: 11,
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
+            {t[`setEffort${option[0].toUpperCase()}${option.slice(1)}`]}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function getSetEffortLabel(effort, t) {
+  if (!effort) return null;
+
+  return {
+    easy: t.setEffortEasy,
+    good: t.setEffortGood,
+    hard: t.setEffortHard,
+    max: t.setEffortMax,
+  }[effort] || null;
+}
+
+function getWorkoutEffortLabel(effort, t) {
+  if (!effort) return null;
+
+  return {
+    easy: t.workoutEffortEasy,
+    good: t.workoutEffortGood,
+    hard: t.workoutEffortHard,
+    tooMuch: t.workoutEffortTooMuch,
+  }[effort] || null;
+}
+
+function getWorkoutEffortText(effort, t) {
+  const label = getWorkoutEffortLabel(effort, t);
+  if (!label) return null;
+
+  return t.workoutEffortFelt
+    ? t.workoutEffortFelt.replace('{effort}', label)
+    : label;
+}
+
+function SetActionButton({ title, onClick, borderColor, disabled = false, children }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        width: WORKOUT_CIRCLE_SIZE,
+        height: WORKOUT_CIRCLE_SIZE,
+        minWidth: WORKOUT_CIRCLE_SIZE,
+        borderRadius: '50%',
+        border: `2px solid ${borderColor}`,
+        background: 'transparent',
+        color: '#ffffff',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+        fontWeight: 900,
+        lineHeight: 1,
+        padding: 0,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.45 : 1,
+        flexShrink: 0
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function WorkoutActionRow({
+  rowRef,
+  left,
+  title,
+  detail,
+  meta,
+  actions,
+  feedback,
+  timerNode,
+  onBodyClick,
+  isReadOnly = false,
+  active = false,
+  activeBorder = false,
+  borderMode = 'full',
+  leftOffset = 0,
+}) {
+  const borderStyle = borderMode === 'group'
+    ? {}
+    : {
+      border: `1px solid ${THEME.border}`,
+    };
+
+  return (
+    <div
+      ref={rowRef}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: `auto minmax(0, 1fr) ${WORKOUT_CIRCLE_SIZE * 3 + 16}px`,
+        alignItems: 'center',
+        gap: 10,
+        padding: `${WORKOUT_ROW_PADDING_Y}px 10px ${WORKOUT_ROW_PADDING_Y}px 6px`,
+        background: THEME.card,
+        boxShadow: active ? 'inset 0 0 0 1px #f39c12' : 'none',
+        borderLeft: activeBorder ? `4px solid ${THEME.primary}` : '4px solid transparent',
+        ...borderStyle,
+      }}
+    >
+      <div style={{
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transform: leftOffset ? `translateX(${leftOffset}px)` : 'none',
+      }}>
+        {left}
+      </div>
+
+      <div
+        onClick={isReadOnly ? undefined : onBodyClick}
+        style={{
+          minWidth: 0,
+          textAlign: 'left',
+          cursor: isReadOnly || !onBodyClick ? 'default' : 'pointer',
+        }}
+      >
+        <div style={{
+          color: THEME.text,
+          fontSize: WORKOUT_TITLE_FONT_SIZE,
+          fontWeight: 900,
+          lineHeight: 1.15,
+        }}>
+          {title}
+        </div>
+
+        {detail && (
+          <div style={{
+            color: THEME.muted,
+            fontSize: WORKOUT_TEXT_FONT_SIZE,
+            fontWeight: 800,
+            marginTop: 1,
+            lineHeight: 1.15,
+          }}>
+            {detail}
+          </div>
+        )}
+
+        {meta}
+      </div>
+
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 8,
+        minWidth: WORKOUT_CIRCLE_SIZE * 3 + 16,
+      }}>
+        {actions}
+      </div>
+
+      {feedback && (
+        <div style={{ gridColumn: '1 / -1' }}>
+          {feedback}
+        </div>
+      )}
+
+      {timerNode && (
+        <div style={{ gridColumn: '1 / -1' }}>
+          {timerNode}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t }) {
+  const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
+  const displayPct = set.pct ? Number((set.pct * 100).toFixed(1)) : null;
+  const effortLabel = getSetEffortLabel(set.effort, t);
+  const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(set.weight));
   const inputRef = useRef(null);
-  useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
-  
+
+  useEffect(() => {
+    if (editing && inputRef.current) inputRef.current.focus();
+  }, [editing]);
+
   function handleEditClick(e) {
     e.stopPropagation();
     setInputVal(String(set.weight));
@@ -827,167 +1459,207 @@ const [editing, setEditing] = useState(false);
     if (e.key === 'Enter') handleConfirm();
     if (e.key === 'Escape') setEditing(false);
   }
-  return (
-    <div
-      ref={el => {
-  if (isActive && el && !el.dataset.scrolled) {
-    el.dataset.scrolled = 'true';
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-}}
-      style={{ display: 'flex', alignItems: 'center', padding: '14px 16px', border: `1px solid ${THEME.border}`, boxShadow: isActive ? 'inset 0 0 0 1px #f39c12' : 'none', borderLeft: isActive && !isWarmup ? `4px solid ${THEME.primary}` : '4px solid transparent'}}>
-      <div
-  onClick={isReadOnly ? undefined : onToggle}
-  style={{
-    width: 34,
-    height: 34,
-    borderRadius: '50%',
-    border: `2px solid ${set.done ? THEME.primary : THEME.border}`,
-    background: set.done ? THEME.primary : THEME.card,
-    color: set.done ? THEME.bg : THEME.text,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-    flexShrink: 0,
-    cursor: isReadOnly ? 'not-allowed' : 'pointer',
-    transition: 'all 0.15s ease',
-    transform: set.done ? 'scale(1.08)' : 'scale(1)',
-    fontWeight: 900,
-  }}
->
-        {set.done ? '✓' : ''}
+
+  const detail = (
+    <>
+      <div style={{ color: isAdjusted ? '#f39c12' : THEME.muted }}>
+        1 × {set.reps}
       </div>
-      <div
-        onClick={isReadOnly ? undefined : onToggle}
-        style={{
-          flex: 1,
-          cursor: isReadOnly ? 'not-allowed' : 'pointer'
-        }}
-      >
-        <span style={{ fontWeight: 500, color: THEME.text, textDecoration: set.done ? 'line-through' : 'none' }}>{label}</span>
-<span style={{ color: THEME.text, fontSize: 16, fontWeight: 700, marginLeft: 12 }}>
-{set.reps} {t.reps}
-</span>
+      <div style={{ color: isAdjusted ? '#f39c12' : THEME.muted }}>
+        {set.weight} {t.kg}{displayPct ? ` (${displayPct}%)` : ''}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {editing ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input ref={inputRef} type="number" value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={handleKeyDown} onBlur={handleConfirm}
-              style={{ width: 70, padding: '4px 8px', fontSize: 16, fontWeight: 700, borderRadius: 4, border: '2px solid #e74c3c', textAlign: 'right' }} />
-            <span style={{ fontSize: 16, color: THEME.text }}>{t.kg}</span>
-            {!isWarmup && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleConfirm();
-                }}
-                style={{
-                  background: 'none',
-                  border: `1px solid ${THEME.primary}`,
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  padding: '4px 8px',
-                  color: '#ffffff',
-                  lineHeight: 1,
-                  fontWeight: 700
-                }}
-              >
-                {t.save}
-              </button>
-            )}
-          </div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontWeight: 700, fontSize: 18, color: '#ffffff' }}>{set.weight} kg</span>
-            {set.pct && <span style={{ color: '#ffffff', fontSize: 12 }}>{Math.round(set.pct * 100)}%</span>}
-            {!isWarmup && (
-  <button
-    onClick={handleEditClick}
-    style={{
-      background: 'none',
+    </>
+  );
+
+  const meta = effortLabel ? (
+    <div style={{
+      display: 'inline-flex',
+      marginTop: 3,
+      padding: '2px 7px',
+      borderRadius: 999,
       border: `1px solid ${THEME.primary}`,
-      cursor: 'pointer',
-      fontSize: 16,
-      padding: '2px 4px',
-      color: '#ffffff',
-      lineHeight: 1
-    }}
-  >
-    ✎
-  </button>
-)}
-          </div>
-        )}
-      </div>
+      color: THEME.primary,
+      fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+      fontWeight: 800,
+      lineHeight: 1.2,
+    }}>
+      {effortLabel}
     </div>
+  ) : null;
+
+  const actions = editing ? (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <input
+        ref={inputRef}
+        type="number"
+        step="2.5"
+        value={inputVal}
+        onChange={e => setInputVal(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={handleConfirm}
+        style={{
+          width: 70,
+          padding: '4px 8px',
+          fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+          fontWeight: 700,
+          borderRadius: 4,
+          border: '2px solid #e74c3c',
+          textAlign: 'right',
+        }}
+      />
+      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>{t.kg}</span>
+    </div>
+  ) : (
+    <>
+      {!isWarmup && !set.done && !isReadOnly && (
+        <SetActionButton
+          title={t.edit}
+          borderColor={THEME.primary}
+          onClick={handleEditClick}
+        >
+          ✎
+        </SetActionButton>
+      )}
+
+      {onRestoreWeight && !isWarmup && !isReadOnly && (
+        <SetActionButton
+          title={t.restoreOriginalWeight}
+          borderColor="#f39c12"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRestoreWeight();
+          }}
+        >
+          ↺
+        </SetActionButton>
+      )}
+
+      {onMarkFailed && !set.done && !isReadOnly && (
+        <SetActionButton
+          title={t.markSetFailed}
+          borderColor="#e74c3c"
+          onClick={(e) => {
+            e.stopPropagation();
+            onMarkFailed();
+          }}
+        >
+          ✕
+        </SetActionButton>
+      )}
+    </>
+  );
+
+  return (
+    <WorkoutActionRow
+      rowRef={el => {
+        if (isActive && el && !el.dataset.scrolled) {
+          el.dataset.scrolled = 'true';
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }}
+      left={(
+        <WorkoutCircle
+          done={set.done}
+          active={isActive}
+          skipped={set.skipped}
+          disabled={isReadOnly}
+          onClick={onToggle}
+          label={label}
+        />
+      )}
+      title={label}
+      detail={detail}
+      meta={meta}
+      actions={actions}
+      onBodyClick={onToggle}
+      isReadOnly={isReadOnly}
+      active={isActive}
+      activeBorder={isActive && !isWarmup}
+      borderMode="group"
+    />
   );
 }
 
-
-function SettingsCard({ title, actionLabel, onAction, children, centerTitle = false }) {
+function SettingsListRow({ label, value, valueColor = THEME.text, actionLabel, onAction, actionContent, danger = false, noBorder = false, compact = false }) {
   return (
     <div style={{
-      background: THEME.card,
-      border: `1px solid ${THEME.border}`,
-      borderRadius: 8,
-      padding: 14,
-      marginBottom: 12
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) minmax(180px, 190px)',
+      alignItems: 'center',
+      gap: 12,
+      padding: compact ? '6px 0' : '10px 0',
+      borderBottom: noBorder ? 'none' : `1px solid ${THEME.border}`
     }}>
       <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        marginBottom: 10
+        color: danger ? THEME.red : THEME.text,
+        fontSize: 16,
+        fontWeight: 800,
+        minWidth: 0
       }}>
-        <h3 style={{
-          margin: 0,
-          color: THEME.text,
-          fontSize: 16,
-          textAlign: centerTitle ? 'center' : 'left',
-          flex: centerTitle ? 1 : 'initial'
-        }}>
-          {title}
-        </h3>
-
-        {actionLabel && (
-          <button
-            onClick={onAction}
-            style={{
-              padding: '6px 10px',
-              fontSize: 12,
-              fontWeight: 700,
-              background: THEME.card,
-              color: '#ffffff',
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 8,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {actionLabel}
-          </button>
-        )}
+        {label}
       </div>
 
-      {children}
+      <div style={{
+        color: valueColor,
+        fontSize: 15,
+        fontWeight: 800,
+        textAlign: 'center',
+        width: '100%'
+      }}>
+        {actionContent || (
+          actionLabel ? (
+            <button
+              type="button"
+              onClick={onAction}
+              style={{
+                width: '100%',
+                padding: '9px 11px',
+                fontSize: 15,
+                fontWeight: 800,
+                background: danger ? '#8b1e1e' : THEME.card,
+                color: '#ffffff',
+                border: `1px solid ${danger ? THEME.red : THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              {actionLabel}
+            </button>
+          ) : (
+            <span>{value || '—'}</span>
+          )
+        )}
+      </div>
     </div>
   );
 }
 
-function SettingsRow({ label, value }) {
+function SettingsActionButton({ children, onClick, variant = 'primary', style = {}, disabled = false }) {
+  const isPrimary = variant === 'primary';
+
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'space-between',
-      gap: 12,
-      marginBottom: 6,
-      fontSize: 14
-    }}>
-      <span style={{ color: THEME.muted, fontWeight: 700 }}>{label}</span>
-      <strong style={{ color: THEME.text, textAlign: 'right' }}>{value || '—'}</strong>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        width: '100%',
+        padding: 12,
+        fontSize: 16,
+        fontWeight: 800,
+        background: isPrimary ? THEME.card : THEME.bg,
+        color: disabled ? THEME.muted : THEME.text,
+        border: `1px solid ${isPrimary ? THEME.primary : THEME.border}`,
+        borderRadius: 8,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        ...style
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -1008,7 +1680,7 @@ function SettingsModal({ title, onClose, children }) {
     }}>
       <div style={{
         background: THEME.card,
-        border: `1px solid ${THEME.border}`,
+        border: `1px solid ${THEME.primary}`,
         borderRadius: 12,
         padding: 18,
         maxWidth: 420,
@@ -1060,23 +1732,27 @@ function Toast({ message }) {
   );
 }
 
-function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, t }) {
-  const [showMeetPrepChecklist, setShowMeetPrepChecklist] = useState(false);
-  const [showMeetPrepResetConfirm, setShowMeetPrepResetConfirm] = useState(false);
 
-  const meetPrepItems = [
+const MEET_PREP_ITEMS = [
     ['id', 'meetPrepId'],
     ['registration', 'meetPrepRegistration'],
     ['bodyweight', 'meetPrepBodyweight'],
+    ['clothing', 'meetPrepClothing'],
     ['shoes', 'meetPrepShoes'],
     ['socks', 'meetPrepSocks'],
-    ['clothing', 'meetPrepClothing'],
+    ['equipment', 'meetPrepEquipment'],
     ['food', 'meetPrepFood'],
     ['attempts', 'meetPrepAttempts'],
     ['rackHeights', 'meetPrepRackHeights'],
     ['pen', 'meetPrepPen'],
     ['phone', 'meetPrepPhone'],
-  ];
+    ['travel', 'meetPrepTravel'],
+];
+
+function MeetPrepChecklistSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, t }) {
+  const [showMeetPrepChecklist, setShowMeetPrepChecklist] = useState(false);
+  const [showMeetPrepResetConfirm, setShowMeetPrepResetConfirm] = useState(false);
+
 
   const toggleMeetPrepItem = key => {
     setMeetPrepChecklist(prev => ({
@@ -1085,11 +1761,160 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
     }));
   };
 
-  const checkedMeetPrepItems = meetPrepItems.filter(([key]) => !!meetPrepChecklist?.[key]).length;
-  const allMeetPrepItemsChecked = checkedMeetPrepItems === meetPrepItems.length && meetPrepItems.length > 0;
+  const checkedMeetPrepItems = MEET_PREP_ITEMS.filter(([key]) => !!meetPrepChecklist?.[key]).length;
+  const allMeetPrepItemsChecked = checkedMeetPrepItems === MEET_PREP_ITEMS.length && MEET_PREP_ITEMS.length > 0;
   const hasCheckedMeetPrepItems = checkedMeetPrepItems > 0;
 
+  return (
+    <>
+      <SettingsListRow
+        label={t.meetPrepChecklist}
+        actionLabel={`${checkedMeetPrepItems} / ${MEET_PREP_ITEMS.length}${allMeetPrepItemsChecked ? ` · ✓ ${t.meetPrepReady}` : ''}`}
+        onAction={() => setShowMeetPrepChecklist(true)}
+      />
 
+      {showMeetPrepChecklist && (
+        <SettingsModal
+          title={t.meetPrepChecklist}
+          onClose={() => {
+            setShowMeetPrepChecklist(false);
+            setShowMeetPrepResetConfirm(false);
+          }}
+        >
+          <p style={{
+            margin: '0 0 8px',
+            color: THEME.muted,
+            fontSize: 13,
+            lineHeight: 1.4,
+            textAlign: 'center'
+          }}>
+            {t.meetPrepChecklistHint}
+          </p>
+
+          <div style={{
+            margin: '0 0 14px',
+            color: allMeetPrepItemsChecked ? THEME.primary : THEME.text,
+            fontSize: 14,
+            fontWeight: 800,
+            textAlign: 'center'
+          }}>
+            {checkedMeetPrepItems} / {MEET_PREP_ITEMS.length}{allMeetPrepItemsChecked ? ` · ✓ ${t.meetPrepReady}` : ''}
+          </div>
+
+          <div style={{ display: 'grid', gap: 8 }}>
+            {MEET_PREP_ITEMS.map(([key, labelKey]) => {
+              const checked = !!meetPrepChecklist?.[key];
+
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleMeetPrepItem(key)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    width: '100%',
+                    padding: 10,
+                    borderRadius: 8,
+                    border: `1px solid ${checked ? THEME.primary : THEME.border}`,
+                    background: THEME.bg,
+                    color: THEME.text,
+                    cursor: 'pointer',
+                    textAlign: 'left'
+                  }}
+                >
+                  <span style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 6,
+                    border: `1px solid ${checked ? THEME.primary : THEME.border}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: THEME.primary,
+                    fontWeight: 900,
+                    flexShrink: 0
+                  }}>
+                    {checked ? '✓' : ''}
+                  </span>
+
+                  <span style={{
+                    fontSize: 14,
+                    fontWeight: checked ? 700 : 500,
+                    textDecoration: 'none'
+                  }}>
+                    {t[labelKey]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {hasCheckedMeetPrepItems && (
+            <div style={{
+              marginTop: 14,
+              paddingTop: 12,
+              borderTop: `1px solid ${THEME.border}`
+            }}>
+              {showMeetPrepResetConfirm ? (
+                <div>
+                  <p style={{
+                    margin: '0 0 10px',
+                    color: THEME.muted,
+                    fontSize: 13,
+                    lineHeight: 1.4,
+                    textAlign: 'center'
+                  }}>
+                    {t.meetPrepResetConfirmText}
+                  </p>
+
+                  <SettingsActionButton
+                    onClick={() => {
+                      setMeetPrepChecklist({});
+                      setShowMeetPrepResetConfirm(false);
+                    }}
+                  >
+                    {t.meetPrepResetConfirm}
+                  </SettingsActionButton>
+
+                  <SettingsActionButton
+                    variant="secondary"
+                    onClick={() => setShowMeetPrepResetConfirm(false)}
+                    style={{ marginTop: 8, fontWeight: 700 }}
+                  >
+                    {t.cancel}
+                  </SettingsActionButton>
+                </div>
+              ) : (
+                <SettingsActionButton
+                  variant="secondary"
+                  onClick={() => setShowMeetPrepResetConfirm(true)}
+                >
+                  {t.meetPrepReset}
+                </SettingsActionButton>
+              )}
+            </div>
+          )}
+
+          {!showMeetPrepResetConfirm && (
+            <SettingsActionButton
+              variant="secondary"
+              onClick={() => {
+                setShowMeetPrepChecklist(false);
+                setShowMeetPrepResetConfirm(false);
+              }}
+              style={{ marginTop: 14 }}
+            >
+              {t.done}
+            </SettingsActionButton>
+          )}
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, t }) {
   const [notice, setNotice] = useState('');
   const [pendingImport, setPendingImport] = useState(null);
   const importInputRef = useRef(null);
@@ -1108,7 +1933,7 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const buildBackupSummary = data => {
+  const buildDataSectionBackupSummary = data => {
     const currentCycle = data?.currentCycle || 1;
     const totalWorkouts = data?.inProgress?.workouts?.length || 28;
     const selectedIndex = data?.inProgress?.selectedIndex;
@@ -1199,7 +2024,7 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
         data: backup.data,
         appVersion: backup.appVersion || '—',
         exportedAt: backup.exportedAt || '—',
-        summary: backup.summary || buildBackupSummary(backup.data),
+        summary: backup.summary || buildDataSectionBackupSummary(backup.data),
       });
     } catch (e) {
       setNotice(t.importDataError);
@@ -1217,286 +2042,109 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
 
   const importSummary = pendingImport?.summary;
 
+  const autoBackupStatus = (() => {
+    try {
+      return JSON.parse(localStorage.getItem(AUTO_BACKUP_STATUS_KEY) || 'null');
+    } catch {
+      return null;
+    }
+  })();
+
+  const autoBackupDate = autoBackupStatus?.exportedAt
+    ? new Date(autoBackupStatus.exportedAt).toLocaleString()
+    : null;
+
   return (
     <>
-      <SettingsCard
-        title={t.meetPrepChecklist}
-        actionLabel={t.edit}
-        onAction={() => setShowMeetPrepChecklist(true)}
-      >
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12
-        }}>
-          <p style={{
-            margin: 0,
-            color: THEME.muted,
-            fontSize: 13,
-            lineHeight: 1.4
-          }}>
-            {t.meetPrepChecklistHint}
-          </p>
+      <MeetPrepChecklistSection
+        meetPrepChecklist={meetPrepChecklist}
+        setMeetPrepChecklist={setMeetPrepChecklist}
+        t={t}
+      />
 
-          <strong style={{
-            color: allMeetPrepItemsChecked ? THEME.primary : THEME.text,
-            fontSize: 14,
-            whiteSpace: 'nowrap'
-          }}>
-            {checkedMeetPrepItems} / {meetPrepItems.length}{allMeetPrepItemsChecked ? ` · ✓ ${t.meetPrepReady}` : ''}
-          </strong>
-        </div>
-      </SettingsCard>
-
-      {showMeetPrepChecklist && (
-        <SettingsModal
-          title={t.meetPrepChecklist}
-          onClose={() => {
-            setShowMeetPrepChecklist(false);
-            setShowMeetPrepResetConfirm(false);
-          }}
-        >
-          <p style={{
-            margin: '0 0 8px',
-            color: THEME.muted,
-            fontSize: 13,
-            lineHeight: 1.4,
-            textAlign: 'center'
-          }}>
-            {t.meetPrepChecklistHint}
-          </p>
-
+      <SettingsListRow
+        label={t.dataManagement}
+        noBorder={true}
+        compact={true}
+        actionContent={(
           <div style={{
-            margin: '0 0 14px',
-            color: allMeetPrepItemsChecked ? THEME.primary : THEME.text,
-            fontSize: 14,
-            fontWeight: 800,
-            textAlign: 'center'
+            display: 'grid',
+            gap: 6,
+            justifyItems: 'stretch',
+            width: '100%'
           }}>
-            {checkedMeetPrepItems} / {meetPrepItems.length}{allMeetPrepItemsChecked ? ` · ✓ ${t.meetPrepReady}` : ''}
-          </div>
+            <button
+              type="button"
+              onClick={exportData}
+              style={{
+                width: '100%',
+                padding: '9px 11px',
+                fontSize: 15,
+                fontWeight: 800,
+                background: THEME.card,
+                color: THEME.text,
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              {t.exportDataShort || t.exportData}
+            </button>
 
-          <div style={{ display: 'grid', gap: 8 }}>
-            {meetPrepItems.map(([key, labelKey]) => {
-              const checked = !!meetPrepChecklist?.[key];
-
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => toggleMeetPrepItem(key)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    width: '100%',
-                    padding: 10,
-                    borderRadius: 8,
-                    border: `1px solid ${checked ? THEME.primary : THEME.border}`,
-                    background: THEME.bg,
-                    color: THEME.text,
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
-                >
-                  <span style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: 6,
-                    border: `1px solid ${checked ? THEME.primary : THEME.border}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: THEME.primary,
-                    fontWeight: 900,
-                    flexShrink: 0
-                  }}>
-                    {checked ? '✓' : ''}
-                  </span>
-
-                  <span style={{
-                    fontSize: 14,
-                    fontWeight: checked ? 700 : 500,
-                    textDecoration: checked ? 'line-through' : 'none'
-                  }}>
-                    {t[labelKey]}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          {hasCheckedMeetPrepItems && (
-            <div style={{
-              marginTop: 14,
-              paddingTop: 12,
-              borderTop: `1px solid ${THEME.border}`
-            }}>
-              {showMeetPrepResetConfirm ? (
-                <div>
-                  <p style={{
-                    margin: '0 0 10px',
-                    color: THEME.muted,
-                    fontSize: 13,
-                    lineHeight: 1.4,
-                    textAlign: 'center'
-                  }}>
-                    {t.meetPrepResetConfirmText}
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMeetPrepChecklist({});
-                      setShowMeetPrepResetConfirm(false);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: 10,
-                      fontSize: 14,
-                      fontWeight: 800,
-                      background: THEME.card,
-                      color: '#ffffff',
-                      border: `1px solid ${THEME.primary}`,
-                      borderRadius: 8,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {t.meetPrepResetConfirm}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowMeetPrepResetConfirm(false)}
-                    style={{
-                      width: '100%',
-                      marginTop: 8,
-                      padding: 10,
-                      fontSize: 14,
-                      fontWeight: 700,
-                      background: THEME.bg,
-                      color: THEME.text,
-                      border: `1px solid ${THEME.border}`,
-                      borderRadius: 8,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {t.cancel}
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowMeetPrepResetConfirm(true)}
-                  style={{
-                    width: '100%',
-                    padding: 10,
-                    fontSize: 14,
-                    fontWeight: 800,
-                    background: THEME.bg,
-                    color: THEME.text,
-                    border: `1px solid ${THEME.border}`,
-                    borderRadius: 8,
-                    cursor: 'pointer'
-                  }}
-                >
-                  {t.meetPrepReset}
-                </button>
-              )}
-            </div>
-          )}
-
-          {!showMeetPrepResetConfirm && (
-  <button
-    type="button"
-    onClick={() => {
-      setShowMeetPrepChecklist(false);
-      setShowMeetPrepResetConfirm(false);
-    }}
-    style={{
-      width: '100%',
-      marginTop: 14,
-      padding: 10,
-      fontSize: 14,
-      fontWeight: 800,
-      background: THEME.bg,
-      color: THEME.text,
-      border: `1px solid ${THEME.border}`,
-      borderRadius: 8,
-      cursor: 'pointer'
-    }}
-  >
-    {t.done}
-  </button>
-)}
-        </SettingsModal>
-      )}
-
-      <SettingsCard title={t.dataManagement}>
-        <p style={{
-          margin: '0 0 10px',
-          color: THEME.muted,
-          fontSize: 13,
-          lineHeight: 1.4
-        }}>
-          {t.exportDataDescription}
-        </p>
-
-        <div style={{ display: 'grid', gap: 8 }}>
-          <button
-            onClick={exportData}
-            style={{
-              width: '100%',
-              padding: 10,
-              fontSize: 14,
-              fontWeight: 800,
-              background: THEME.card,
-              color: '#ffffff',
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 8,
-              cursor: 'pointer'
-            }}
-          >
-            {t.exportData}
-          </button>
-
-          <button
-            onClick={() => importInputRef.current?.click()}
-            style={{
-              width: '100%',
-              padding: 10,
-              fontSize: 14,
-              fontWeight: 800,
-              background: THEME.card,
-              color: '#ffffff',
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 8,
-              cursor: 'pointer'
-            }}
-          >
-            {t.importData}
-          </button>
-        </div>
-
-        <input
-          ref={importInputRef}
-          type="file"
-          accept="application/json,.json"
-          onChange={importData}
-          style={{ display: 'none' }}
-        />
-
-        {notice && (
-          <div style={{
-            marginTop: 8,
-            color: THEME.primary,
-            fontSize: 13,
-            fontWeight: 700
-          }}>
-            {notice}
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              style={{
+                width: '100%',
+                padding: '9px 11px',
+                fontSize: 15,
+                fontWeight: 800,
+                background: THEME.card,
+                color: THEME.text,
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              {t.importDataShort || t.importData}
+            </button>
           </div>
         )}
-      </SettingsCard>
+      />
+
+      <SettingsListRow
+        label={t.lastAutomaticBackup}
+        value={autoBackupDate || t.noAutomaticBackupYet}
+        valueColor={autoBackupStatus?.ok ? THEME.primary : THEME.red}
+        compact={true}
+      />
+
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json,.json"
+        onChange={importData}
+        style={{ display: 'none' }}
+      />
+
+      {notice && (
+        <div style={{
+          padding: '7px 0',
+          color: THEME.primary,
+          fontSize: 13,
+          fontWeight: 700,
+          textAlign: 'center',
+          borderBottom: `1px solid ${THEME.border}`
+        }}>
+          {notice}
+        </div>
+      )}
 
       {pendingImport && (
         <SettingsModal
@@ -1593,22 +2241,48 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
   );
 }
 
+function SupportActionButton({ children, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '9px 11px',
+        fontSize: 15,
+        fontWeight: 800,
+        background: THEME.card,
+        color: '#ffffff',
+        border: `1px solid ${THEME.primary}`,
+        borderRadius: 8,
+        cursor: 'pointer',
+        minHeight: 42,
+        width: '100%',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis'
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 function SupportSection({ t }) {
   const links = [
     {
-      label: t.sendFeedback,
+      label: t.sendFeedbackShort || t.sendFeedback,
       url: 'mailto:mburgosfr@gmail.com?subject=Kelani%20SBD%20Tracker%20feedback',
     },
     {
-      label: t.reportBug,
+      label: t.reportBugShort || t.reportBug,
       url: 'https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new',
     },
     {
-      label: t.supportDevelopment,
+      label: t.supportDevelopmentShort || t.supportDevelopment,
       url: 'https://kelani-site.mburgosfr.workers.dev/',
     },
     {
-      label: t.joinTestingOrCoaching,
+      label: t.joinTestingOrCoachingShort || t.joinTestingOrCoaching,
       url: 'mailto:mburgosfr@gmail.com?subject=Kelani%20SBD%20Tracker%20testing%20or%20coaching%20interest',
     },
   ];
@@ -1618,29 +2292,26 @@ function SupportSection({ t }) {
   }
 
   return (
-    <SettingsCard title={t.support} centerTitle={true}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        {links.map(item => (
-          <button
-            key={item.label}
-            onClick={() => openLink(item.url)}
-            style={{
-              padding: '9px 8px',
-              fontSize: 12,
-              fontWeight: 700,
-              background: THEME.card,
-              color: '#ffffff',
-              border: `1px solid ${THEME.border}`,
-              borderRadius: 8,
-              cursor: 'pointer',
-              minHeight: 42
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-    </SettingsCard>
+    <SettingsListRow
+      label={t.support}
+      actionContent={(
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr',
+          gap: 8,
+          width: '100%'
+        }}>
+          {links.map(item => (
+            <SupportActionButton
+              key={item.label}
+              onClick={() => openLink(item.url)}
+            >
+              {item.label}
+            </SupportActionButton>
+          ))}
+        </div>
+      )}
+    />
   );
 }
 
@@ -1677,52 +2348,36 @@ function ProfileSection({ userProfile, onSave, t }) {
     <>
       <Toast message={notice} />
 
-      <SettingsCard title={t.profile} actionLabel={t.edit} onAction={openEdit}>
-        <SettingsRow label={t.birthDate} value={userProfile?.birthDate} />
-        <SettingsRow label={t.sex} value={sexLabel(userProfile?.sex, t)} />
-      </SettingsCard>
+      <SettingsListRow label={t.profile} actionLabel={t.editProfile || t.edit} onAction={openEdit} />
 
       {isEditing && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.65)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 650,
-          padding: 16
-        }}>
-          <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 12, padding: 18, maxWidth: 420, width: '100%', color: THEME.text }}>
-            <h3 style={{ margin: '0 0 16px', textAlign: 'center' }}>{t.profile}</h3>
-
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.birthDate}</label>
-              <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} style={modalInputStyle()} />
-            </div>
-
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.sex}</label>
-              <select value={sex} onChange={e => setSex(e.target.value)} style={modalInputStyle()}>
-                <option value="">{t.selectSex}</option>
-                <option value="male">{t.male}</option>
-                <option value="female">{t.female}</option>
-                <option value="other">{t.other}</option>
-              </select>
-            </div>
-
-            <button onClick={handleSave} style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
-              {t.save}
-            </button>
-
-            <button onClick={() => setIsEditing(false)} style={{ width: '100%', marginTop: 8, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
-              {t.cancel}
-            </button>
+        <SettingsModal
+          title={t.profile}
+          onClose={() => setIsEditing(false)}
+        >
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.birthDate}</label>
+            <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} style={modalInputStyle()} />
           </div>
-        </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.sex}</label>
+            <select value={sex} onChange={e => setSex(e.target.value)} style={modalInputStyle()}>
+              <option value="">{t.selectSex}</option>
+              <option value="male">{t.male}</option>
+              <option value="female">{t.female}</option>
+              <option value="other">{t.other}</option>
+            </select>
+          </div>
+
+          <button onClick={handleSave} style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
+            {t.save}
+          </button>
+
+          <button onClick={() => setIsEditing(false)} style={{ width: '100%', marginTop: 8, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
+            {t.cancel}
+          </button>
+        </SettingsModal>
       )}
     </>
   );
@@ -1799,17 +2454,6 @@ function BodyDataSection({ bodyData, onSave, t }) {
     setSaveNotice(t.bodyDataUpdated);
   }
 
-  const rows = [
-    [`${t.bodyweight} (${t.kg})`, previous.bodyWeight ? `${previous.bodyWeight} ${t.kg}` : null],
-    [t.bodyFatPercent, previous.bodyFat ? `${previous.bodyFat}%` : null],
-    [t.bodyWaterPercent, previous.bodyWater ? `${previous.bodyWater}%` : null],
-    [t.visceralFatRating, previous.visceralFat],
-    [t.physiqueRating, previous.physiqueRating],
-    [t.boneMassKg, previous.boneMass ? `${previous.boneMass} ${t.kg}` : null],
-    [t.leanMassKg, previous.leanMass ? `${previous.leanMass} ${t.kg}` : null],
-    [t.bmrKcal, previous.bmr],
-  ];
-
   const fields = [
     { key: 'bodyWeight', label: `${t.bodyweight} (${t.kg})` },
     { key: 'bodyFat', label: t.bodyFatPercent },
@@ -1823,51 +2467,34 @@ function BodyDataSection({ bodyData, onSave, t }) {
     <>
       <Toast message={saveNotice} />
 
-      <SettingsCard title={t.updateBodyData} actionLabel={t.edit} onAction={openEdit}>
-        {rows.map(([label, value]) => (
-          <SettingsRow key={label} label={label} value={value} />
-        ))}
-      </SettingsCard>
+      <SettingsListRow label={t.updateBodyData} actionLabel={t.editBodyData || t.edit} onAction={openEdit} />
 
       {isEditing && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.65)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 650,
-          padding: 16
-        }}>
-          <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 12, padding: 18, maxWidth: 420, width: '100%', maxHeight: '88vh', overflowY: 'auto', color: THEME.text }}>
-            <h3 style={{ margin: '0 0 16px', textAlign: 'center' }}>{t.updateBodyData}</h3>
+        <SettingsModal
+          title={t.updateBodyData}
+          onClose={() => setIsEditing(false)}
+        >
+          {fields.map(field => (
+            <div key={field.key} style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{field.label}</label>
+              <input
+                type="number"
+                value={form[field.key]}
+                onChange={e => updateField(field.key, e.target.value)}
+                placeholder={previous[field.key] ? String(previous[field.key]) : ''}
+                style={modalInputStyle()}
+              />
+            </div>
+          ))}
 
-            {fields.map(field => (
-              <div key={field.key} style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{field.label}</label>
-                <input
-                  type="number"
-                  value={form[field.key]}
-                  onChange={e => updateField(field.key, e.target.value)}
-                  placeholder={previous[field.key] ? String(previous[field.key]) : ''}
-                  style={modalInputStyle()}
-                />
-              </div>
-            ))}
+          <button onClick={handleSave} style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
+            {t.save}
+          </button>
 
-            <button onClick={handleSave} style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
-              {t.save}
-            </button>
-
-            <button onClick={() => setIsEditing(false)} style={{ width: '100%', marginTop: 8, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
-              {t.cancel}
-            </button>
-          </div>
-        </div>
+          <button onClick={() => setIsEditing(false)} style={{ width: '100%', marginTop: 8, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
+            {t.cancel}
+          </button>
+        </SettingsModal>
       )}
     </>
   );
@@ -1878,41 +2505,11 @@ function RestTimeSection({ restTimeSeconds, setRestTimeSeconds, t }) {
 
   return (
     <>
-      <div style={{
-        background: THEME.card,
-        border: `1px solid ${THEME.border}`,
-        borderRadius: 8,
-        padding: 14,
-        marginBottom: 12
-      }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr auto',
-          alignItems: 'center',
-          gap: 12
-        }}>
-          <h3 style={{ margin: 0, color: THEME.text, fontSize: 16 }}>
-            {t.restTime}
-          </h3>
-
-          <button
-            onClick={() => setShowOptions(true)}
-            style={{
-              padding: '6px 10px',
-              fontSize: 14,
-              fontWeight: 800,
-              background: THEME.card,
-              color: '#ffffff',
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 8,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {formatRestTime(restTimeSeconds)}
-          </button>
-        </div>
-      </div>
+      <SettingsListRow
+        label={t.restTime}
+        actionLabel={formatRestTime(restTimeSeconds)}
+        onAction={() => setShowOptions(true)}
+      />
 
       {showOptions && (
         <SettingsModal
@@ -1966,6 +2563,135 @@ function RestTimeSection({ restTimeSeconds, setRestTimeSeconds, t }) {
   );
 }
 
+
+function PreparationSection({ preparationMode, setPreparationMode, t }) {
+  const [showOptions, setShowOptions] = useState(false);
+
+  const modes = ['off', 'basic', 'shoulderThoracic'];
+  const labels = {
+    off: t.preparationOff,
+    basic: t.preparationBasic,
+    shoulderThoracic: t.preparationShoulderThoracic,
+  };
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.preparation}
+        actionLabel={labels[preparationMode] || labels.basic}
+        onAction={() => setShowOptions(true)}
+      />
+
+      {showOptions && (
+        <SettingsModal
+          title={t.preparation}
+          onClose={() => setShowOptions(false)}
+        >
+          <div style={{ display: 'grid', gap: 8 }}>
+            {modes.map(mode => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setPreparationMode(mode);
+                  setShowOptions(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  border: `1px solid ${preparationMode === mode ? THEME.primary : THEME.border}`,
+                  background: preparationMode === mode ? THEME.primary : THEME.card,
+                  color: preparationMode === mode ? THEME.bg : THEME.text,
+                  cursor: 'pointer'
+                }}
+              >
+                {labels[mode]}
+              </button>
+            ))}
+          </div>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
+function AccessorySection({ accessoryMode, setAccessoryMode, t }) {
+  const [showOptions, setShowOptions] = useState(false);
+
+  const labels = {
+    off: t.accessoriesOff,
+    basic: t.accessoriesBasic,
+    full: t.accessoriesFull,
+  };
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.accessories}
+        actionLabel={labels[accessoryMode] || labels.off}
+        onAction={() => setShowOptions(true)}
+      />
+
+      {showOptions && (
+        <SettingsModal
+          title={t.accessories}
+          onClose={() => setShowOptions(false)}
+        >
+          <div style={{ display: 'grid', gap: 8 }}>
+            {ACCESSORY_MODES.map(mode => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setAccessoryMode(mode);
+                  setShowOptions(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  border: `1px solid ${accessoryMode === mode ? THEME.primary : THEME.border}`,
+                  background: accessoryMode === mode ? THEME.primary : THEME.card,
+                  color: accessoryMode === mode ? THEME.bg : THEME.text,
+                  cursor: 'pointer'
+                }}
+              >
+                {labels[mode]}
+              </button>
+            ))}
+
+            <button
+              type="button"
+              onClick={() => setShowOptions(false)}
+              style={{
+                width: '100%',
+                padding: 10,
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'transparent',
+                color: THEME.text,
+                border: `1px solid ${THEME.border}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.cancel}
+            </button>
+          </div>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
+
 function LanguageSection({ language, setLanguage, t }) {
   const [isEditing, setIsEditing] = useState(false);
 
@@ -1977,88 +2703,45 @@ function LanguageSection({ language, setLanguage, t }) {
 
   return (
     <>
-      <div style={{
-        background: THEME.card,
-        border: `1px solid ${THEME.border}`,
-        borderRadius: 8,
-        padding: 14,
-        marginBottom: 12
-      }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr auto',
-          alignItems: 'center',
-          gap: 12
-        }}>
-          <h3 style={{ margin: 0, color: THEME.text, fontSize: 16 }}>
-            {t.language}
-          </h3>
-
-          <button
-            onClick={() => setIsEditing(true)}
-            style={{
-              padding: '6px 10px',
-              fontSize: 14,
-              fontWeight: 800,
-              background: THEME.card,
-              color: '#ffffff',
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 8,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {languageNames[language]}
-          </button>
-        </div>
-      </div>
+      <SettingsListRow
+        label={t.language}
+        actionLabel={languageNames[language]}
+        onAction={() => setIsEditing(true)}
+      />
 
       {isEditing && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.65)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 650,
-          padding: 16
-        }}>
-          <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 12, padding: 18, maxWidth: 360, width: '100%', color: THEME.text }}>
-            <h3 style={{ margin: '0 0 16px', textAlign: 'center' }}>{t.changeLanguage}</h3>
-
-            {['ca', 'en', 'nl'].map(l => (
-              <button
-                key={l}
-                onClick={() => {
-                  setLanguage(l);
-                  setIsEditing(false);
-                }}
-                style={{
-                  width: '100%',
-                  padding: 12,
-                  fontSize: 15,
-                  fontWeight: 700,
-                  background: language === l ? THEME.primary : THEME.card,
-                  color: '#ffffff',
-                  border: `1px solid ${language === l ? THEME.primary : THEME.border}`,
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  marginBottom: 8
-                }}
-              >
-                {languageNames[l]}
-              </button>
-            ))}
-
-            <button onClick={() => setIsEditing(false)} style={{ width: '100%', padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
-              {t.cancel}
+        <SettingsModal
+          title={t.changeLanguage}
+          onClose={() => setIsEditing(false)}
+        >
+          {['ca', 'en', 'nl'].map(l => (
+            <button
+              key={l}
+              onClick={() => {
+                setLanguage(l);
+                setIsEditing(false);
+              }}
+              style={{
+                width: '100%',
+                padding: 12,
+                fontSize: 15,
+                fontWeight: 700,
+                background: language === l ? THEME.primary : THEME.card,
+                color: '#ffffff',
+                border: `1px solid ${language === l ? THEME.primary : THEME.border}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                marginBottom: 8
+              }}
+            >
+              {languageNames[l]}
             </button>
-          </div>
-        </div>
+          ))}
+
+          <button onClick={() => setIsEditing(false)} style={{ width: '100%', padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
+            {t.cancel}
+          </button>
+        </SettingsModal>
       )}
     </>
   );
@@ -2066,22 +2749,75 @@ function LanguageSection({ language, setLanguage, t }) {
 
 function NewCycleModal({ prs, onStart, t }) {
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
-      <div style={{ background: THEME.card, borderRadius: 12, padding: 24, maxWidth: 340, width: '90%' }}>
-        <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 10 }}>🏆</div>
-        <h3 style={{ margin: '0 0 8px', textAlign: 'center' }}>{t.cycleCompleted}</h3>
-        <p style={{ color: THEME.muted, fontSize: 14, margin: '0 0 20px', textAlign: 'center' }}>{t.newCycleWeights}</p>
-        <div style={{ background: THEME.card,
-border: `1px solid ${THEME.border}`,
-color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
-          {['Deadlift', 'Bench', 'Squat'].map(lift => (
-            <div key={lift} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 14 }}>
-              <span style={{ color: THEME.text, fontWeight: 700 }}>{liftLabel(lift, t)} {t.e1RM}</span>
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 200,
+      padding: 16
+    }}>
+      <div style={{
+        background: THEME.card,
+        borderRadius: 12,
+        padding: 24,
+        maxWidth: 340,
+        width: '90%'
+      }}>
+        <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 10 }}>
+          🏆
+        </div>
+
+        <h3 style={{ margin: '0 0 8px', textAlign: 'center' }}>
+          {t.cycleCompleted}
+        </h3>
+
+        <p style={{ color: THEME.muted, fontSize: 14, margin: '0 0 20px', textAlign: 'center' }}>
+          {t.newCycleWeights}
+        </p>
+
+        <div style={{
+          background: THEME.card,
+          border: `1px solid ${THEME.border}`,
+          color: THEME.text,
+          borderRadius: 8,
+          padding: 12,
+          marginBottom: 20
+        }}>
+          {LIFT_ORDER.map(lift => (
+            <div
+              key={lift}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                padding: '4px 0',
+                fontSize: 14
+              }}
+            >
+              <span style={{ color: THEME.text, fontWeight: 700 }}>
+                {liftLabel(lift, t)} {t.e1RM}
+              </span>
               <span style={{ fontWeight: 700 }}>{prs[lift] || '—'} kg</span>
             </div>
           ))}
         </div>
-        <button onClick={onStart} style={{ width: '100%', padding: 14, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+
+        <button
+          onClick={onStart}
+          style={{
+            width: '100%',
+            padding: 14,
+            fontSize: 16,
+            background: THEME.card,
+            color: '#ffffff',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 4,
+            cursor: 'pointer',
+            fontWeight: 600
+          }}
+        >
           {t.startNewCycle} 🚀
         </button>
       </div>
@@ -2089,7 +2825,334 @@ color: THEME.text, borderRadius: 8, padding: 12, marginBottom: 20 }}>
   );
 }
 
-function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onToggleAccessorySet, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
+function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, label, t }) {
+  const [editing, setEditing] = useState(false);
+  const firstSet = entries?.[0]?.set || {};
+  const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
+  const failedEntry = entries.find(({ set }) => set.failed || set.skipped);
+  const allSameWeight = entries.every(({ set }) => Number(set.weight) === Number(firstSet.weight));
+  const allSameReps = entries.every(({ set }) => Number(set.reps) === Number(firstSet.reps));
+  const displayPct = firstSet.pct ? Number((firstSet.pct * 100).toFixed(1)) : null;
+  const [inputVal, setInputVal] = useState(String(firstSet.weight || ''));
+
+  useEffect(() => {
+    if (editing) setInputVal(String(firstSet.weight || ''));
+  }, [editing, firstSet.weight]);
+
+  if (!entries?.length) return null;
+
+  function confirmEdit() {
+    const val = parseFloat(inputVal);
+
+    if (!Number.isNaN(val) && val > 0) {
+      onEditAll(val);
+    }
+
+    setEditing(false);
+  }
+
+  function handleEditClick(e) {
+    e.stopPropagation();
+    setInputVal(String(firstSet.weight || ''));
+    setEditing(true);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter') confirmEdit();
+    if (e.key === 'Escape') setEditing(false);
+  }
+
+  const timerNode = entries
+    .map(({ index }) => renderTimer?.(index))
+    .find(Boolean);
+
+  const groupLabel = label || t.backoff;
+
+  const detail = (
+    <>
+      <div>
+        {entries.length} × {allSameReps ? firstSet.reps : '—'}
+      </div>
+      <div>
+        {allSameWeight ? `${firstSet.weight} ${t.kg}` : t.kg}{displayPct ? ` (${displayPct}%)` : ''}
+      </div>
+    </>
+  );
+
+  const actions = editing ? (
+    <input
+      type="number"
+      step="2.5"
+      value={inputVal}
+      autoFocus
+      onChange={e => setInputVal(e.target.value)}
+      onKeyDown={handleKeyDown}
+      onBlur={confirmEdit}
+      style={{
+        width: 66,
+        padding: '4px 6px',
+        fontSize: 14,
+        fontWeight: 800,
+        borderRadius: 4,
+        border: `1px solid ${THEME.primary}`,
+        background: THEME.bg,
+        color: THEME.text,
+        textAlign: 'right',
+      }}
+    />
+  ) : (
+    <>
+      <SetActionButton
+        title={t.edit}
+        disabled={isReadOnly}
+        borderColor={THEME.primary}
+        onClick={handleEditClick}
+      >
+        ✎
+      </SetActionButton>
+
+      <SetActionButton
+        title={t.restoreOriginalWeight}
+        disabled={isReadOnly}
+        borderColor="#f39c12"
+        onClick={e => {
+          e.stopPropagation();
+          onRestoreAll();
+        }}
+      >
+        ↺
+      </SetActionButton>
+
+      <SetActionButton
+        title={t.markSetFailed}
+        disabled={isReadOnly}
+        borderColor="#e74c3c"
+        onClick={e => {
+          e.stopPropagation();
+          if (firstOpenEntry) onMarkFailed(firstOpenEntry.index);
+        }}
+      >
+        ✕
+      </SetActionButton>
+    </>
+  );
+
+  const feedback = failedEntry ? (
+    <div style={{
+      marginTop: 2,
+      padding: '7px 9px',
+      border: '1px solid #e74c3c',
+      borderRadius: 8,
+      color: '#ffffff',
+      background: 'rgba(231, 76, 60, 0.16)',
+      fontSize: 12,
+      fontWeight: 800,
+      lineHeight: 1.3,
+      textAlign: 'center',
+    }}>
+      {failedEntry.set.skipped
+        ? t.topSetSkipped
+        : t.failedSetAdjusted.replace('{weight}', `${failedEntry.set.adjustedWeight} ${t.kg}`)}
+    </div>
+  ) : null;
+
+  return (
+    <WorkoutActionRow
+      left={(
+        <div style={{
+          display: 'flex',
+          gap: 5,
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexWrap: 'nowrap',
+        }}>
+          {entries.map(({ set, index }) => (
+            <WorkoutCircle
+              key={index}
+              done={set.done}
+              active={index === activeIndex}
+              skipped={set.skipped}
+              disabled={isReadOnly}
+              onClick={() => onToggle(index)}
+              label={`${groupLabel} ${index + 1}`}
+            />
+          ))}
+        </div>
+      )}
+      title={groupLabel}
+      detail={detail}
+      actions={actions}
+      feedback={feedback}
+      timerNode={timerNode}
+      isReadOnly={isReadOnly}
+      borderMode="group"
+    />
+  );
+}
+
+function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAccessoryWork, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t }) {
+  const [editing, setEditing] = useState(false);
+  const firstWeight = acc.weights?.[0] || 0;
+  const allSameWeight = (acc.weights || []).every(weight => Number(weight) === Number(firstWeight));
+  const firstOpenIndex = (acc.done || []).findIndex(done => !done);
+  const firstSkippedIndex = (acc.skipped || []).findIndex(Boolean);
+  const firstFailedIndex = (acc.failed || []).findIndex(Boolean);
+  const feedbackIndex = firstSkippedIndex !== -1 ? firstSkippedIndex : firstFailedIndex;
+  const [inputVal, setInputVal] = useState(String(firstWeight || ''));
+
+  useEffect(() => {
+    if (editing) setInputVal(String(firstWeight || ''));
+  }, [editing, firstWeight]);
+
+  function confirmEdit() {
+    const val = parseFloat(inputVal);
+
+    if (!Number.isNaN(val) && val > 0) {
+      onEditAll(val);
+    }
+
+    setEditing(false);
+  }
+
+  function handleEditClick(e) {
+    e.stopPropagation();
+    setInputVal(String(firstWeight || ''));
+    setEditing(true);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter') confirmEdit();
+    if (e.key === 'Escape') setEditing(false);
+  }
+
+  const timerNode = (acc.done || [])
+    .map((_, index) => renderTimer?.(index))
+    .find(Boolean);
+
+  const accessoryLabel = acc.nameKey ? t[acc.nameKey] : acc.name;
+
+  const detail = (
+    <>
+      {(acc.done || []).length} × {acc.reps}{acc.perSide ? ` ${t.perSide}` : ''} × {allSameWeight ? `${firstWeight} ${t.kg}` : t.kg}
+    </>
+  );
+
+  const actions = editing ? (
+    <input
+      type="number"
+      step="2.5"
+      value={inputVal}
+      autoFocus
+      onChange={e => setInputVal(e.target.value)}
+      onKeyDown={handleKeyDown}
+      onBlur={confirmEdit}
+      style={{
+        width: 66,
+        padding: '4px 6px',
+        fontSize: 14,
+        fontWeight: 800,
+        borderRadius: 4,
+        border: `1px solid ${THEME.primary}`,
+        background: THEME.bg,
+        color: THEME.text,
+        textAlign: 'right',
+      }}
+    />
+  ) : (
+    <>
+      <SetActionButton
+        title={t.edit}
+        disabled={isReadOnly}
+        borderColor={THEME.primary}
+        onClick={handleEditClick}
+      >
+        ✎
+      </SetActionButton>
+
+      <SetActionButton
+        title={t.restoreOriginalWeight}
+        disabled={isReadOnly}
+        borderColor="#f39c12"
+        onClick={e => {
+          e.stopPropagation();
+          onRestoreAll();
+        }}
+      >
+        ↺
+      </SetActionButton>
+
+      <SetActionButton
+        title={t.markSetFailed}
+        disabled={isReadOnly || firstOpenIndex === -1}
+        borderColor="#e74c3c"
+        onClick={e => {
+          e.stopPropagation();
+          if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex);
+        }}
+      >
+        ✕
+      </SetActionButton>
+    </>
+  );
+
+  const feedback = feedbackIndex !== -1 ? (
+    <div style={{
+      marginTop: 2,
+      padding: '7px 9px',
+      border: '1px solid #e74c3c',
+      borderRadius: 8,
+      color: '#ffffff',
+      background: 'rgba(231, 76, 60, 0.16)',
+      fontSize: 12,
+      fontWeight: 800,
+      lineHeight: 1.3,
+      textAlign: 'center',
+    }}>
+      {acc.skipped?.[feedbackIndex]
+        ? t.topSetSkipped
+        : t.failedSetAdjusted.replace(
+          '{weight}',
+          `${acc.adjustedWeights?.[feedbackIndex] ?? acc.weights?.[feedbackIndex] ?? firstWeight} ${t.kg}`
+        )}
+    </div>
+  ) : null;
+
+  return (
+    <WorkoutActionRow
+      left={(
+        <div style={{
+          display: 'flex',
+          gap: 5,
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexWrap: 'nowrap',
+        }}>
+          {(acc.done || []).map((done, index) => (
+            <WorkoutCircle
+              key={index}
+              done={done}
+              active={isActiveGroup && index === firstOpenIndex}
+              skipped={!!acc.skipped?.[index]}
+              disabled={isReadOnly}
+              onClick={() => onToggle(index)}
+              label={`${accessoryLabel} ${index + 1}`}
+            />
+          ))}
+        </div>
+      )}
+      title={accessoryLabel}
+      detail={detail}
+      actions={actions}
+      feedback={feedback}
+      timerNode={timerNode}
+      isReadOnly={isReadOnly}
+      borderMode="group"
+    />
+  );
+}
+
+function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
+  const [showActivateConfirm, setShowActivateConfirm] = useState(false);
 
   function isTimerFor(placement) {
     if (!timer || !timer.placement) return false;
@@ -2101,13 +3164,139 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
   function renderInlineTimer(placement) {
     if (!isTimerFor(placement)) return null;
 
+    if (timer.endTime && Date.now() >= timer.endTime) {
+      return null;
+    }
+
     return (
       <RestTimer
         key={timer.id}
         seconds={timer.seconds}
+        endTime={timer.endTime}
         onDismiss={() => setTimer(null)}
         t={t}
       />
+    );
+  }
+
+
+  function renderActivateWorkoutCard() {
+    if (!isReadOnly) return null;
+
+    const workoutNumber = workout?.number || '—';
+    const confirmText = t.activateWorkoutConfirmText
+      .replaceAll('{workout}', workoutNumber);
+
+    return (
+      <div style={{
+        marginBottom: 10,
+        padding: '8px 10px',
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 8,
+        background: THEME.card,
+        color: THEME.muted,
+        fontSize: 12,
+        fontWeight: 800,
+        textAlign: 'center'
+      }}>
+        <div>{t.preview}</div>
+
+        {!showActivateConfirm && onActivateWorkout && (
+          <button
+            type="button"
+            onClick={() => setShowActivateConfirm(true)}
+            style={{
+              marginTop: 8,
+              padding: '7px 11px',
+              borderRadius: 6,
+              border: `1px solid ${THEME.primary}`,
+              background: THEME.primary,
+              color: THEME.bg,
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
+            {t.activateWorkout}
+          </button>
+        )}
+
+        {showActivateConfirm && (
+          <div style={{
+            marginTop: 10,
+            padding: 10,
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 8,
+            background: THEME.bg,
+            color: THEME.text,
+            textAlign: 'left',
+            lineHeight: 1.35
+          }}>
+            <div style={{
+              color: THEME.text,
+              fontSize: 14,
+              fontWeight: 900,
+              marginBottom: 6,
+              textAlign: 'center'
+            }}>
+              {t.activateWorkoutConfirmTitle}
+            </div>
+
+            <div style={{
+              color: THEME.muted,
+              fontSize: 12,
+              fontWeight: 700,
+              marginBottom: 10,
+              textAlign: 'center'
+            }}>
+              {confirmText}
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 8
+            }}>
+              <button
+                type="button"
+                onClick={() => setShowActivateConfirm(false)}
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  border: `1px solid ${THEME.border}`,
+                  background: 'transparent',
+                  color: THEME.text,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                {t.cancel}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowActivateConfirm(false);
+                  onActivateWorkout();
+                }}
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  border: `1px solid ${THEME.primary}`,
+                  background: THEME.primary,
+                  color: THEME.bg,
+                  fontSize: 14,
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
+              >
+                {t.activateWorkout}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -2126,43 +3315,49 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           <h2>{t.deload}</h2>
           <p style={{ color: THEME.muted }}>{t.restReadyNextCycle}</p>
         </div>
-        <button onClick={onStartNewCycle} style={{ marginTop: 16, width: '100%', padding: 14, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+        <button onClick={onStartNewCycle} style={{ marginTop: 16, width: '100%', padding: 10, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
           {t.startNewCycle}
         </button>
       </div>
     );
   }
 
-    if (workout.type === 'meet') {
+    if (workout.type === 'meet' || (workout.type === 'training' && (workout.lifts || []).length > 0)) {
 
+    const isMeetDay = workout.type === 'meet';
     const allMeetDone = (workout.lifts || []).every(liftBlock =>
       (liftBlock.sets || []).every(s => s.done)
     );
+    const allMainLiftSetsDone = allMeetDone;
 
     const meetDayProjectedTotal = (workout.lifts || []).reduce((total, liftBlock) => {
       const thirdAttempt = liftBlock.sets?.[2]?.weight;
       return total + (Number(thirdAttempt) || 0);
     }, 0);
 
-    const firstIncompleteLiftIndex = (workout.lifts || []).findIndex(liftBlock =>
-      (liftBlock.prepItems || []).some(item => !item.done) ||
+    const getVisiblePrepItems = (liftBlock, liftIndex) =>
+      isMeetDay || liftIndex === 0 ? (liftBlock.prepItems || []) : [];
+
+    const firstIncompleteLiftIndex = (workout.lifts || []).findIndex((liftBlock, liftIndex) =>
+      getVisiblePrepItems(liftBlock, liftIndex).some(item => !item.done) ||
       (liftBlock.warmups || []).some(w => !w.done) ||
       (liftBlock.sets || []).some(s => !s.done)
     );
 
     return (
-      <div style={{ maxWidth: 500, margin: '0 auto', padding: '8px 12px 12px', paddingBottom: 16, fontFamily: 'sans-serif' }}>
-        <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
-          {t.workout} {workout.number} — {t.meetDay}
-        </h2>
+      <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
+        <AppHeader
+          t={t}
+          title={`${t.workout} ${workout.number} — ${getWorkoutTitle(workout, t)}`}
+          subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${workout.number} / ${totalWorkouts}${isMeetDay ? ` · ${t.meetDay}` : ''}`}
+        />
 
-        <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
-          {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts} · {t.meetDay}
-        </div>
+        {renderActivateWorkoutCard()}
 
+{isMeetDay && (
 <div style={{
-  marginBottom: 14,
-  padding: 14,
+  marginBottom: 10,
+  padding: 10,
   border: `1px solid ${THEME.primary}`,
   borderRadius: 10,
   background: THEME.card,
@@ -2171,105 +3366,290 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
   <div style={{ color: THEME.muted, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
     {t.projectedTotal}
   </div>
-  <div style={{ color: THEME.text, fontSize: 26, fontWeight: 900, lineHeight: 1 }}>
+  <div style={{ color: THEME.text, fontSize: 22, fontWeight: 900, lineHeight: 1 }}>
     {meetDayProjectedTotal ? `${meetDayProjectedTotal} ${t.kg}` : '—'}
   </div>
 </div>
+)}
 
         {(workout.lifts || []).map((liftBlock, li) => {
-          const firstIncompletePrepItem = (liftBlock.prepItems || []).findIndex(item => !item.done);
+          const visiblePrepItems = getVisiblePrepItems(liftBlock, li);
+          const firstIncompletePrepItem = visiblePrepItems.findIndex(item => !item.done);
           const firstIncompleteWarmup = (liftBlock.warmups || []).findIndex(w => !w.done);
           const firstIncompleteSet = (liftBlock.sets || []).findIndex(s => !s.done);
-          const allPrepDone = (liftBlock.prepItems || []).every(item => item.done);
+          const allPrepDone = visiblePrepItems.every(item => item.done);
           const allWarmupsDone = (liftBlock.warmups || []).every(w => w.done);
 
           return (
             <div
               key={liftBlock.lift}
-              style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}
+              style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}
             >
               <div style={{
-                padding: '8px 16px',
-                fontSize: 16,
-                fontWeight: 800,
+                padding: '6px 10px',
+                fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+                fontWeight: 900,
                 color: THEME.text,
+                textAlign: 'center',
                 borderBottom: `1px solid ${THEME.border}`,
               }}>
                 {liftLabel(liftBlock.lift, t)}
               </div>
 
-              {(liftBlock.prepItems || []).length > 0 && (
+              {visiblePrepItems.length > 0 && (
                 <div>
-                  <div style={{
-                    padding: '8px 16px',
-                    fontSize: 14,
-                    fontWeight: 800,
-                    color: THEME.text,
-                    borderTop: `1px solid ${THEME.border}`,
-                    background: THEME.card
-                  }}>
-                    {t.prepTitle}
-                  </div>
 
-                  {(liftBlock.prepItems || []).map((item, pi) => (
-                    <PrepRow
-                      key={`prep-${pi}`}
-                      item={item}
-                      isActive={
-                        !isReadOnly &&
-                        li === firstIncompleteLiftIndex &&
-                        pi === firstIncompletePrepItem
-                      }
-                      isReadOnly={isReadOnly}
-                      onToggle={() => handleToggle(() => onToggleMeetPrepItem(li, pi))}
-                      t={t}
-                    />
-                  ))}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                    justifyContent: 'center',
+                    columnGap: 12,
+                    rowGap: 0,
+                    padding: '0 10px'
+                  }}>
+                    {visiblePrepItems.map((item, pi) => (
+                      <PrepRow
+                        key={`prep-${pi}`}
+                        item={item}
+                        isActive={
+                          !isReadOnly &&
+                          li === firstIncompleteLiftIndex &&
+                          pi === firstIncompletePrepItem
+                        }
+                        isReadOnly={isReadOnly}
+                        onToggle={() => handleToggle(() => onToggleMeetPrepItem(li, pi))}
+                        t={t}
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {(liftBlock.warmups || []).map((w, wi) => (
-                <SetRow
-                  key={`warmup-${wi}`}
-                  set={w}
-                  index={wi}
-                  label={`${t.warmup} ${wi + 1}`}
-                  isWarmup={true}
-                  isActive={
-                    !isReadOnly &&
-                    li === firstIncompleteLiftIndex &&
-                    allPrepDone &&
-                    wi === firstIncompleteWarmup
-                  }
-                  isReadOnly={isReadOnly}
-                  onToggle={() => handleToggle(() => onToggleMeetWarmup(li, wi))}
-                  t={t}
-                />
-              ))}
+              <WarmupGrid
+                warmups={liftBlock.warmups || []}
+                isReadOnly={isReadOnly}
+                activeIndex={
+                  !isReadOnly &&
+                  li === firstIncompleteLiftIndex &&
+                  allPrepDone
+                    ? firstIncompleteWarmup
+                    : -1
+                }
+                onToggle={wi => handleToggle(() => onToggleMeetWarmup(li, wi))}
+                renderTimer={wi => renderInlineTimer({ type: 'meetWarmup', liftIndex: li, index: wi })}
+                followsPrep={visiblePrepItems.length > 0}
+                t={t}
+              />
 
-              {(liftBlock.sets || []).map((set, si) => (
-                <SetRow
-                  key={`attempt-${si}`}
-                  set={set}
-                  index={si}
-                  label={set.labelKey ? t[set.labelKey] : `${t.set} ${si + 1}`}
-                  isWarmup={false}
-                  isActive={
-                    !isReadOnly &&
-                    li === firstIncompleteLiftIndex &&
-                    allPrepDone &&
-                    allWarmupsDone &&
-                    si === firstIncompleteSet
-                  }
-                  isReadOnly={isReadOnly}
-                  onToggle={() => handleToggle(() => onToggleMeetSet(li, si))}
-                  onWeightChange={val => onMeetWeightChange(li, si, val)}
-                  t={t}
-                />
-              ))}
+              {(liftBlock.sets || []).map((set, si) => {
+                const backoffSetEntries = (liftBlock.sets || [])
+                  .map((backoffSet, backoffIndex) => ({ set: backoffSet, index: backoffIndex }))
+                  .filter(({ set: backoffSet }) => backoffSet.labelKey === 'backoff');
+
+                const secondarySetEntries = (liftBlock.sets || [])
+                  .map((secondarySet, secondaryIndex) => ({ set: secondarySet, index: secondaryIndex }));
+
+                const isSecondaryTrainingLift = !isMeetDay && li > 0 && secondarySetEntries.length > 1;
+
+                if (isSecondaryTrainingLift) {
+                  if (si !== 0) return null;
+
+                  const firstIncompleteSecondarySet = secondarySetEntries.find(({ set: secondarySet }) =>
+                    !secondarySet.done && !secondarySet.skipped
+                  )?.index ?? -1;
+
+                  return (
+                    <React.Fragment key={`secondary-set-group-${li}`}>
+                      <BackoffGroup
+                        entries={secondarySetEntries}
+                        label={t.workSets || t.set}
+                        activeIndex={
+                          !isReadOnly &&
+                          li === firstIncompleteLiftIndex &&
+                          allPrepDone &&
+                          allWarmupsDone
+                            ? firstIncompleteSecondarySet
+                            : -1
+                        }
+                        isReadOnly={isReadOnly}
+                        onToggle={index => handleToggle(() => onToggleMeetSet(li, index))}
+                        onEditAll={val => secondarySetEntries.forEach(({ index }) => onMeetWeightChange(li, index, val))}
+                        onRestoreAll={() => secondarySetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
+                        onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
+                        renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
+                        t={t}
+                      />
+                    </React.Fragment>
+                  );
+                }
+
+                if (set.labelKey === 'backoff') {
+                  if (backoffSetEntries[0]?.index !== si) return null;
+
+                  const firstIncompleteBackoff = backoffSetEntries.find(({ set: backoffSet }) => !backoffSet.done && !backoffSet.skipped)?.index ?? -1;
+
+                  return (
+                    <React.Fragment key={`backoff-group-${li}-${si}`}>
+                      <BackoffGroup
+                        entries={backoffSetEntries}
+                        activeIndex={
+                          !isReadOnly &&
+                          li === firstIncompleteLiftIndex &&
+                          allPrepDone &&
+                          allWarmupsDone
+                            ? firstIncompleteBackoff
+                            : -1
+                        }
+                        isReadOnly={isReadOnly}
+                        onToggle={index => handleToggle(() => onToggleMeetSet(li, index))}
+                        onEditAll={val => backoffSetEntries.forEach(({ index }) => onMeetWeightChange(li, index, val))}
+                        onRestoreAll={() => backoffSetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
+                        onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
+                        renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
+                        t={t}
+                      />
+                    </React.Fragment>
+                  );
+                }
+
+                const hasLaterMeetSetAction = (liftBlock.sets || []).some((laterSet, laterIndex) =>
+                  laterIndex > si && (laterSet.done || laterSet.failed || laterSet.skipped)
+                );
+
+                const hasLaterMeetLiftAction = (workout.lifts || []).some((laterLiftBlock, laterLiftIndex) =>
+                  laterLiftIndex > li &&
+                  (laterLiftBlock.sets || []).some(laterSet =>
+                    laterSet.done || laterSet.failed || laterSet.skipped
+                  )
+                );
+
+                const showMeetSetNotice =
+                  (set.failed || set.skipped) &&
+                  !hasLaterMeetSetAction &&
+                  !hasLaterMeetLiftAction;
+
+                return (
+                <React.Fragment key={`attempt-${si}`}>
+                  {showMeetSetNotice && (
+                    <div style={{
+                      margin: 0,
+                      padding: '8px 10px',
+                      borderTop: '1px solid #e74c3c',
+                      borderBottom: '1px solid #e74c3c',
+                      color: '#ffffff',
+                      background: 'rgba(231, 76, 60, 0.16)',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      lineHeight: 1.3,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8
+                    }}>
+                      <span style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: '50%',
+                        background: '#e74c3c',
+                        color: THEME.bg,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        fontWeight: 900
+                      }}>
+                        !
+                      </span>
+                      <span>
+                        {set.skipped
+                          ? t.topSetSkipped
+                          : t.failedSetAdjusted.replace('{weight}', `${set.adjustedWeight} ${t.kg}`)}
+                      </span>
+                    </div>
+                  )}
+
+                  <SetRow
+                    set={set}
+                    index={si}
+                    label={set.labelKey ? t[set.labelKey] : `${t.set} ${si + 1}`}
+                    isWarmup={false}
+                    isActive={
+                      !isReadOnly &&
+                      li === firstIncompleteLiftIndex &&
+                      allPrepDone &&
+                      allWarmupsDone &&
+                      si === firstIncompleteSet
+                    }
+                    isReadOnly={isReadOnly}
+                    onToggle={() => handleToggle(() => onToggleMeetSet(li, si))}
+                    onMarkFailed={() => handleToggle(() => onMarkMeetSetFailed(li, si))}
+                    onRestoreWeight={() => handleToggle(() => onRestoreMeetSetWeight(li, si))}
+                    onWeightChange={val => onMeetWeightChange(li, si, val)}
+                    t={t}
+                  />
+                  {renderInlineTimer({ type: 'meetSet', liftIndex: li, index: si })}
+                  {set.done && !set.failed && !set.skipped && !set.effort && (
+                    <EffortPicker
+                      value={set.effort}
+                      onChange={effort => handleToggle(() => onMeetSetEffortChange(li, si, effort))}
+                      t={t}
+                    />
+                  )}
+                </React.Fragment>
+                );
+              })}
             </div>
           );
         })}
+
+        {!isMeetDay && (workout.accessories || []).length > 0 && (
+          <div style={{
+            background: THEME.card,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            overflow: 'hidden',
+            marginBottom: 10
+          }}>
+            <div style={{
+              padding: '6px 10px',
+              fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+              fontWeight: 900,
+              color: THEME.text,
+              textAlign: 'center',
+              borderBottom: `1px solid ${THEME.border}`
+            }}>
+              {t.accessories}
+            </div>
+
+            {(workout.accessories || []).map((acc, ai) => {
+              const firstIncompleteAccessoryGroup = (workout.accessories || []).findIndex(a =>
+                (a.done || []).some(done => !done)
+              );
+              const hasMoreAccessoryWork = (acc.done || []).some((done, si) => si > -1 && !done) ||
+                (workout.accessories || []).some((nextAccessory, nextIndex) =>
+                  nextIndex > ai && (nextAccessory.done || []).some(done => !done)
+                );
+
+              return (
+                <AccessoryGroup
+                  key={ai}
+                  acc={acc}
+                  accIndex={ai}
+                  isActiveGroup={!isReadOnly && allMainLiftSetsDone && ai === firstIncompleteAccessoryGroup}
+                  isReadOnly={isReadOnly}
+                  hasMoreAccessoryWork={hasMoreAccessoryWork}
+                  onToggle={si => handleToggle(() => onToggleAccessorySet(ai, si))}
+                  onEditAll={val => (acc.done || []).forEach((_, si) => onAccessoryWeightChange(ai, si, val))}
+                  onRestoreAll={() => (acc.done || []).forEach((_, si) => onRestoreAccessoryWeight(ai, si))}
+                  onMarkFailed={si => handleToggle(() => onMarkAccessorySetFailed(ai, si))}
+                  renderTimer={si => renderInlineTimer({ type: 'accessory', accIndex: ai, index: si })}
+                  t={t}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {!isMeetDay && <CooldownBlock t={t} isReadOnly={isReadOnly} />}
 
         <button
           onClick={() => {
@@ -2279,7 +3659,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           disabled={!allMeetDone || isReadOnly}
           style={{
             width: '100%',
-            padding: 14,
+            padding: 10,
             fontSize: 16,
             fontWeight: 600,
             background: THEME.card,
@@ -2304,195 +3684,275 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
   const allDone = (workout.sets || []).every(s => s.done);
   const allPrepDone = (workout.prepItems || []).every(item => item.done);
 
-function handleToggle(fn) {
-  if (isReadOnly) return;
-  fn();
-}
+  function handleToggle(fn) {
+    if (isReadOnly) return;
+    fn();
+  }
 
   return (
-    <div style={{ maxWidth: 500, margin: '0 auto', padding: '8px 12px 12px', paddingBottom: 16, fontFamily: 'sans-serif' }}>
-  
-    <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
-
-{t.workout} {workout.number} — {liftLabel(workout.lift, t)}
-
-  {isReadOnly && (
-    <span style={{
-      marginLeft: 8,
-      fontSize: 12,
-      background: '#999',
-      color: 'white',
-      padding: '2px 6px',
-      borderRadius: 4
+    <div style={{
+      maxWidth: 500,
+      margin: '0 auto',
+      padding: '8px 12px 12px',
+      paddingBottom: 16,
+      fontFamily: 'sans-serif'
     }}>
-      {t.preview}
-    </span>
-  )}
-</h2>
+      <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
+        {t.workout} {workout.number} — {liftLabel(workout.lift, t)}
+      </h2>
 
-<div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
-  {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts} · {getWorkoutTypeLabel(workout, t)}
-</div>
+      <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
+        {t.cycle} {currentCycle} · {t.workoutProgress} {workout.number} / {totalWorkouts}
+      </div>
+
+      {renderActivateWorkoutCard()}
 
       {(workout.prepItems || []).length > 0 && (
-        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
           <div style={{
-            padding: '8px 16px',
-            fontSize: 16,
-            fontWeight: 700,
-            color: THEME.text
+            padding: '6px 10px',
+            fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+            fontWeight: 900,
+            color: THEME.text,
+            textAlign: 'center'
           }}>
             {t.prepTitle}
           </div>
 
-          {workout.prepItems.map((item, i) => (
-            <PrepRow
-              key={i}
-              item={item}
-              isActive={!isReadOnly && i === workout.prepItems.findIndex(prep => !prep.done)}
-              isReadOnly={isReadOnly}
-              onToggle={() => handleToggle(() => onTogglePrepItem(i))}
-              t={t}
-            />
-          ))}
+          <div style={{
+            display: 'grid',
+                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                    justifyContent: 'center',
+                    columnGap: 12,
+                    rowGap: 0,
+                    padding: '0 10px'
+          }}>
+            {workout.prepItems.map((item, i) => (
+              <PrepRow
+                key={i}
+                item={item}
+                isActive={!isReadOnly && i === workout.prepItems.findIndex(prep => !prep.done)}
+                isReadOnly={isReadOnly}
+                onToggle={() => handleToggle(() => onTogglePrepItem(i))}
+                t={t}
+              />
+            ))}
+          </div>
         </div>
       )}
 
       {(workout.warmups || []).length > 0 && (
-        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
         <div style={{
-  padding: '8px 16px',
-  fontSize: 16,
-  fontWeight: 700,
-  color: THEME.text
-}}>
-  {t.warmup}
-</div>
-          {workout.warmups.map((w, i) => (
+          background: THEME.card,
+          border: `1px solid ${THEME.border}`,
+          borderRadius: 8,
+          overflow: 'hidden',
+          marginBottom: 10
+        }}>
+          <WarmupGrid
+            warmups={workout.warmups || []}
+            isReadOnly={isReadOnly}
+            activeIndex={!isReadOnly && allPrepDone ? workout.warmups.findIndex(wu => !wu.done) : -1}
+            onToggle={i => handleToggle(() => onToggleWarmup(i))}
+            renderTimer={i => renderInlineTimer({ type: 'warmup', index: i })}
+            followsPrep={(workout.prepItems || []).length > 0}
+            t={t}
+          />
+        </div>
+      )}
+
+      <div style={{
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginBottom: 10
+      }}>
+        <div style={{
+          padding: '6px 10px',
+          fontSize: 16,
+          fontWeight: 700,
+          color: THEME.text,
+          textAlign: 'center'
+        }}>
+          {liftLabel(workout.lift, t)}
+        </div>
+
+        {workout.sets.map((set, i) => {
+          const allWarmupsDone = allPrepDone && (workout.warmups || []).every(w => w.done);
+          const backoffSetEntries = (workout.sets || [])
+            .map((backoffSet, backoffIndex) => ({ set: backoffSet, index: backoffIndex }))
+            .filter(({ set: backoffSet }) => backoffSet.labelKey === 'backoff');
+          const firstIncomplete = workout.sets.findIndex(s => !s.done);
+          const hasLaterSetAction = workout.sets.some((laterSet, laterIndex) =>
+            laterIndex > i && (laterSet.done || laterSet.failed || laterSet.skipped)
+          );
+          const showSetNotice = set.failed || (set.skipped && !hasLaterSetAction);
+
+          if (set.labelKey === 'backoff') {
+            if (backoffSetEntries[0]?.index !== i) return null;
+
+            const firstIncompleteBackoff = backoffSetEntries.find(({ set: backoffSet }) => !backoffSet.done && !backoffSet.skipped)?.index ?? -1;
+
+            return (
+              <React.Fragment key={`backoff-group-${i}`}>
+                <BackoffGroup
+                  entries={backoffSetEntries}
+                  activeIndex={!isReadOnly && allWarmupsDone ? firstIncompleteBackoff : -1}
+                  isReadOnly={isReadOnly}
+                  onToggle={index => handleToggle(() => onToggleSet(index))}
+                  onEditAll={val => backoffSetEntries.forEach(({ index }) => onWeightChange('set', index, val))}
+                  onRestoreAll={() => backoffSetEntries.forEach(({ index }) => onRestoreSetWeight(index))}
+                  onMarkFailed={index => handleToggle(() => onMarkSetFailed(index))}
+                  renderTimer={index => renderInlineTimer({ type: 'main', index })}
+                  t={t}
+                />
+              </React.Fragment>
+            );
+          }
+
+          return (
             <React.Fragment key={i}>
+              {showSetNotice && (
+                <div style={{
+                  margin: 0,
+                  padding: '10px 14px',
+                  borderTop: '1px solid #e74c3c',
+                  borderBottom: '1px solid #e74c3c',
+                  color: '#ffffff',
+                  background: 'rgba(231, 76, 60, 0.16)',
+                  fontSize: 13,
+                  fontWeight: 800,
+                  lineHeight: 1.35,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10
+                }}>
+                  <span style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    background: '#e74c3c',
+                    color: THEME.bg,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    fontWeight: 900
+                  }}>
+                    !
+                  </span>
+                  <span>
+                    {set.skipped
+                      ? t.topSetSkipped
+                      : t.failedSetAdjusted.replace('{weight}', `${set.adjustedWeight} ${t.kg}`)}
+                  </span>
+                </div>
+              )}
+              {set.failed && renderInlineTimer({ type: 'main', index: i })}
               <SetRow
-                set={w}
+                set={set}
                 index={i}
-                label={`${t.warmup} ${i + 1}`}
-                isWarmup={true}
-                isActive={!isReadOnly && allPrepDone && i === workout.warmups.findIndex(wu => !wu.done)}
+                label={set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`}
+                isWarmup={false}
+                isActive={!isReadOnly && allWarmupsDone && i === firstIncomplete}
                 isReadOnly={isReadOnly}
-                onToggle={() => handleToggle(() => onToggleWarmup(i))}
+                onToggle={() => handleToggle(() => onToggleSet(i))}
+                onMarkFailed={() => handleToggle(() => onMarkSetFailed(i))}
+                onRestoreWeight={() => handleToggle(() => onRestoreSetWeight(i))}
+                onWeightChange={val => onWeightChange('set', i, val)}
                 t={t}
               />
-              {renderInlineTimer({ type: 'warmup', index: i })}
+              {!set.failed && renderInlineTimer({ type: 'main', index: i })}
+              {set.done && !set.failed && !set.skipped && !set.effort && (
+                <EffortPicker
+                  value={set.effort}
+                  onChange={effort => handleToggle(() => onSetEffortChange(i, effort))}
+                  t={t}
+                />
+              )}
             </React.Fragment>
-          ))}
-        </div>
-      )}
-
-      <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-      <div style={{
-  padding: '8px 16px',
-  fontSize: 16,
-  fontWeight: 700,
-  color: THEME.text
-}}>
-  {liftLabel(workout.lift, t)}
-</div>
-      {workout.sets.map((set, i) => {
-  const allWarmupsDone = allPrepDone && (workout.warmups || []).every(w => w.done);
-  const firstIncomplete = workout.sets.findIndex(s => !s.done);
-
-  return (
-    <React.Fragment key={i}>
-      <SetRow
-        set={set}
-        index={i}
-        label={set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`}
-        isWarmup={false}
-        isActive={!isReadOnly && allWarmupsDone && i === firstIncomplete}
-        isReadOnly={isReadOnly}
-        onToggle={() => handleToggle(() => onToggleSet(i))}
-        onWeightChange={val => onWeightChange('set', i, val)}
-        t={t}
-      />
-      {renderInlineTimer({ type: 'main', index: i })}
-    </React.Fragment>
-  );
-})}
-</div>
+          );
+        })}
+      </div>
 
       {(workout.accessories || []).length > 0 && (
-        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-          {workout.accessories.map((acc, ai) => (
-            <div key={ai}>
-<div style={{
-  padding: '8px 16px',
-  background: THEME.card,
-  borderBottom: `1px solid ${THEME.border}`,
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center'
-}}>
-<span style={{ fontWeight: 800, color: THEME.text }}>
-  {acc.name}
-</span>
-                </div>
-              {acc.done.map((done, si) => {
-  const allMainSetsDone = (workout.sets || []).every(s => s.done);
-  const firstIncompleteAccessoryGroup = (workout.accessories || []).findIndex(a =>
-    (a.done || []).some(d => !d)
-  );
-  const firstIncompleteAccessorySet = (acc.done || []).findIndex(d => !d);
+        <div style={{
+          background: THEME.card,
+          border: `1px solid ${THEME.border}`,
+          borderRadius: 8,
+          overflow: 'hidden',
+          marginBottom: 10
+        }}>
+          <div style={{
+            padding: '6px 10px',
+            fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+            fontWeight: 900,
+            color: THEME.text,
+            textAlign: 'center',
+            borderBottom: `1px solid ${THEME.border}`
+          }}>
+            {t.accessories}
+          </div>
 
-  return (
-    <SetRow
-      key={si}
-      set={{ done, weight: acc.weights[si], reps: acc.reps }}
-      index={si}
-      label={`${t.set} ${si + 1}`}
-      isWarmup={false}
-      isActive={
-        !isReadOnly &&
-        allMainSetsDone &&
-        ai === firstIncompleteAccessoryGroup &&
-        si === firstIncompleteAccessorySet
-      }
-      isReadOnly={isReadOnly}
-      onToggle={() => handleToggle(() => onToggleAccessorySet(ai, si))}      
-      onWeightChange={val => onAccessoryWeightChange(ai, si, val)}
-      t={t}
-    />
-  );
-  })}
+          {workout.accessories.map((acc, ai) => {
+            const allMainSetsDone = (workout.sets || []).every(s => s.done);
+            const firstIncompleteAccessoryGroup = (workout.accessories || []).findIndex(a =>
+              (a.done || []).some(done => !done)
+            );
+            const hasMoreAccessoryWork = (acc.done || []).some((done, si) => si > -1 && !done) ||
+              (workout.accessories || []).some((nextAccessory, nextIndex) =>
+                nextIndex > ai && (nextAccessory.done || []).some(done => !done)
+              );
 
-            </div>
-          ))}
+            return (
+              <AccessoryGroup
+                key={ai}
+                acc={acc}
+                accIndex={ai}
+                isActiveGroup={!isReadOnly && allMainSetsDone && ai === firstIncompleteAccessoryGroup}
+                isReadOnly={isReadOnly}
+                hasMoreAccessoryWork={hasMoreAccessoryWork}
+                onToggle={si => handleToggle(() => onToggleAccessorySet(ai, si))}
+                onEditAll={val => (acc.done || []).forEach((_, si) => onAccessoryWeightChange(ai, si, val))}
+                onRestoreAll={() => (acc.done || []).forEach((_, si) => onRestoreAccessoryWeight(ai, si))}
+                onMarkFailed={si => handleToggle(() => onMarkAccessorySetFailed(ai, si))}
+                renderTimer={si => renderInlineTimer({ type: 'accessory', accIndex: ai, index: si })}
+                t={t}
+              />
+            );
+          })}
         </div>
       )}
 
+      <CooldownBlock t={t} />
+
       <button
-  onClick={() => {
-    if (isReadOnly) return;
-    onComplete();
-  }}
-  disabled={!allDone || isReadOnly}
-  style={{
-    width: '100%',
-    padding: 14,
-    fontSize: 16,
-    fontWeight: 600,
-    background: THEME.card,
-    color: (allDone && !isReadOnly) ? 'white' : '#666',
-    border: `1px solid ${THEME.primary}`,
-    borderRadius: 8,
-    cursor: (allDone && !isReadOnly) ? 'pointer' : 'not-allowed',
-    marginBottom: 10,
-    opacity: 1
-  }}
->
-  {isReadOnly
-    ? t.previewNotCompletable
-    : allDone
-    ? `${t.completeWorkout}`
-    : t.completeWorkout}
-</button>
+        onClick={() => {
+          if (isReadOnly) return;
+          onComplete();
+        }}
+        disabled={!allDone || isReadOnly}
+        style={{
+          width: '100%',
+          padding: 10,
+          fontSize: 16,
+          fontWeight: 600,
+          background: THEME.card,
+          color: (allDone && !isReadOnly) ? 'white' : '#666',
+          border: `1px solid ${THEME.primary}`,
+          borderRadius: 8,
+          cursor: (allDone && !isReadOnly) ? 'pointer' : 'not-allowed',
+          marginBottom: 10,
+          opacity: 1
+        }}
+      >
+        {isReadOnly
+          ? t.previewNotCompletable
+          : allDone
+          ? t.completeWorkout
+          : t.completeWorkout}
+      </button>
 
       {showNewCycle && <NewCycleModal prs={newCyclePRs} onStart={onStartNewCycle} t={t} />}
     </div>
@@ -2532,7 +3992,7 @@ const sortedHistory = [...history]
 sortedHistory.forEach(entry => {
   const label = getWorkoutLabel(entry);
 
-  if (entry.lift && ['Deadlift', 'Bench', 'Squat'].includes(entry.lift)) {
+  if (entry.lift && LIFT_ORDER.includes(entry.lift)) {
     if (!liftData[entry.lift]) liftData[entry.lift] = [];
 
     bestStats[entry.lift].oneRM = Math.max(
@@ -2557,7 +4017,7 @@ sortedHistory.forEach(entry => {
 const bestPerLift = {};
 
 sortedHistory.forEach(entry => {
-  if (!entry.lift || !['Squat', 'Bench', 'Deadlift'].includes(entry.lift)) return;
+  if (!entry.lift || !LIFT_ORDER.includes(entry.lift)) return;
 
   if (!bestPerLift[entry.lift]) {
     bestPerLift[entry.lift] = { oneRM: 0, e1rm: 0 };
@@ -2703,7 +4163,7 @@ function meetAttemptValue(lift, key, fallback) {
   return custom;
 }
 
-const suggestedMeetPlan = ['Squat', 'Bench', 'Deadlift'].map(lift => {
+const suggestedMeetPlan = LIFT_ORDER.map(lift => {
   const e1rm = bestStats[lift]?.e1rm || 0;
 
   return {
@@ -2731,15 +4191,20 @@ const meetTotals = {
   function renderChart(data, dataKeys, colors) {
     if (!data || data.length === 0) {
       return (
-        <p style={{ color: THEME.text, textAlign: 'center', padding: 20 }}>
+        <p style={{ color: THEME.text, textAlign: 'center', padding: 14 }}>
           {t.noStatsData}
         </p>
       );
     }
 
+    const visibleData = (data.length > 10 ? data.slice(-10) : data).map((item, index) => ({
+      ...item,
+      chartIndex: index + 1,
+    }));
+
     const allXTicks = [...new Set(
-      data
-        .map(item => Number(item.absoluteWorkoutIndex))
+      visibleData
+        .map(item => Number(item.chartIndex))
         .filter(value => Number.isFinite(value))
     )];
 
@@ -2752,19 +4217,19 @@ const meetTotals = {
           allXTicks[allXTicks.length - 1],
         ].filter((value, index, arr) => value !== undefined && arr.indexOf(value) === index);
 
-    const labelByX = data.reduce((labels, item) => {
-      labels[item.absoluteWorkoutIndex] = item.label;
+    const labelByX = visibleData.reduce((labels, item) => {
+      labels[item.chartIndex] = item.label;
       return labels;
     }, {});
 
     return (
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={data} margin={{ top: 5, right: 16, left: 8, bottom: 5 }}>
+      <ResponsiveContainer width="100%" height={180}>
+        <LineChart data={visibleData} margin={{ top: 4, right: 12, left: 4, bottom: 2 }}>
           <CartesianGrid stroke={THEME.border} vertical={false} />
           <XAxis
-            dataKey="absoluteWorkoutIndex"
+            dataKey="chartIndex"
             type="number"
-            domain={['dataMin', 'dataMax']}
+            domain={[1, visibleData.length]}
             ticks={xTicks}
             tickFormatter={(value) => labelByX[value] || ''}
             allowDecimals={false}
@@ -2809,56 +4274,81 @@ const meetTotals = {
     );
   }
 
-  return (
-    <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
-      <div style={{ marginBottom: 20, textAlign: 'center' }}>
-        <h2 style={{ margin: '0 0 6px' }}>{t.stats}</h2>
-        <div style={{ color: THEME.muted, fontSize: 13 }}>
-          {t.cycle} {currentCycle} · {t.workoutProgress} {Math.min(currentIndex + 1, totalWorkouts)} / {totalWorkouts}
-        </div>
+  const statsTabs = [
+    { key: 'lifts', label: t.lifts },
+    { key: 'totaal', label: t.total },
+    { key: 'lichaam', label: t.body },
+    { key: 'compositie', label: t.composition },
+    { key: 'scores', label: t.ratings },
+    { key: 'meet', label: t.meetPlannerShort },
+  ];
+
+  function renderMetricChartCards(charts) {
+    return (
+      <div>
+        {charts.filter(chart => chart.data.length > 0).map(chart => (
+          <div
+            key={chart.key}
+            style={{
+              background: THEME.card,
+              border: `1px solid ${THEME.border}`,
+              borderRadius: 8,
+              padding: 12,
+              marginBottom: 10
+            }}
+          >
+            <h3 style={{ margin: '0 0 8px' }}>{chart.title}</h3>
+            {renderChart(chart.data, [chart.key], [chart.color])}
+          </div>
+        ))}
       </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
+      <AppHeader
+        t={t}
+        title={t.stats}
+        subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${Math.min(currentIndex + 1, totalWorkouts)} / ${totalWorkouts}`}
+      />
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
+        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
         gap: 8,
         marginBottom: 20
       }}>
-        {['lifts', 'totaal', 'lichaam', 'kracht', 'meet'].map(screen => (
-  <button
-    key={screen}
-    onClick={() => setActivescreen(screen)}
-    style={{
-  width: '100%',
-  padding: '9px 6px',
-  fontSize: 14,
-  background: THEME.card,
-  color: activescreen === screen ? THEME.primary : THEME.text,
-  border: `1px solid ${THEME.border}`,
-  borderTop: activescreen === screen
-    ? `2px solid ${THEME.primary}`
-    : `2px solid ${THEME.border}`,
-  borderRadius: 4,
-  cursor: 'pointer',
-  fontWeight: activescreen === screen ? 600 : 400
-}}
->
-    {screen === 'lifts'
-      ? t.lifts
-      : screen === 'totaal'
-      ? t.total
-      : screen === 'lichaam'
-      ? t.body
-      : screen === 'kracht'
-      ? t.strength
-      : t.meetPlannerShort}
-  </button>
-))}   
-</div>
+        {statsTabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActivescreen(tab.key)}
+            style={{
+              width: '100%',
+              minHeight: 44,
+              padding: '10px 6px',
+              fontSize: 15,
+              lineHeight: 1.2,
+              background: THEME.card,
+              color: activescreen === tab.key ? THEME.primary : THEME.text,
+              border: `1px solid ${THEME.border}`,
+              borderTop: activescreen === tab.key
+                ? `2px solid ${THEME.primary}`
+                : `2px solid ${THEME.border}`,
+              borderRadius: 8,
+              cursor: 'pointer',
+              fontWeight: activescreen === tab.key ? 800 : 700,
+              textAlign: 'center'
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
       {activescreen === 'lifts' && (
   <div>
-    {['Deadlift', 'Bench', 'Squat'].map(lift => {
+    {LIFT_ORDER.map(lift => {
   const liftLabel =
     lift === 'Deadlift' ? t.deadlift :
     lift === 'Bench' ? t.bench :
@@ -2875,7 +4365,7 @@ const meetTotals = {
         marginBottom: 16
       }}
     >
-      <h3 style={{ margin: '0 0 12px', color: COLORS[lift] }}>
+      <h3 style={{ margin: '0 0 8px', color: COLORS[lift] }}>
         {liftLabel}
       </h3>
       {renderChart(
@@ -2890,109 +4380,128 @@ const meetTotals = {
 )}
 
       {activescreen === 'totaal' && (
-        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
-          <h3 style={{ margin: '0 0 12px' }}>{t.totalSBD}</h3>
-          {renderChart(totalData, ['oneRM', 'e1rm'], [THEME.muted, THEME.primary])}
+        <div>
+          <div style={{
+            background: THEME.card,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            padding: 16,
+            marginBottom: 16
+          }}>
+            <h3 style={{ margin: '0 0 8px' }}>{t.totalSBD}</h3>
+            {renderChart(totalData, ['oneRM', 'e1rm'], [THEME.muted, THEME.primary])}
+          </div>
+
+          <div style={{
+            background: THEME.card,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            padding: 16
+          }}>
+            <h3 style={{ margin: '0 0 8px' }}>{t.strengthTotalBodyweight}</h3>
+            {renderChart(strengthData, ['strength'], [THEME.primary])}
+          </div>
         </div>
       )}
 
-      {activescreen === 'lichaam' && (
-        <div>
-          {[
-            {
-              key: 'gewicht',
-              title: `${t.bodyweight} (${t.kg})`,
-              data: bodyData,
-              color: THEME.primary,
-            },
-            {
-              key: 'bodyFat',
-              title: t.bodyFatPercent,
-              data: bodyMetricData.bodyFat,
-              color: THEME.primary,
-            },
-            {
-              key: 'bodyWater',
-              title: t.bodyWaterPercent,
-              data: bodyMetricData.bodyWater,
-              color: THEME.primary,
-            },
-            {
-              key: 'leanMass',
-              title: t.leanMassKg,
-              data: bodyMetricData.leanMass,
-              color: THEME.primary,
-            },
-            {
-              key: 'visceralFat',
-              title: t.visceralFatRating,
-              data: bodyMetricData.visceralFat,
-              color: THEME.primary,
-            },
-            {
-              key: 'physiqueRating',
-              title: t.physiqueRating,
-              data: bodyMetricData.physiqueRating,
-              color: THEME.primary,
-            },
-            {
-              key: 'boneMass',
-              title: t.boneMassKg,
-              data: bodyMetricData.boneMass,
-              color: THEME.primary,
-            },
-            {
-              key: 'bmr',
-              title: t.bmrKcal,
-              data: bodyMetricData.bmr,
-              color: THEME.primary,
-            },
-          ].filter(chart => chart.data.length > 0).map(chart => (
-            <div
-              key={chart.key}
-              style={{
-                background: THEME.card,
-                border: `1px solid ${THEME.border}`,
-                borderRadius: 8,
-                padding: 16,
-                marginBottom: 16
-              }}
-            >
-              <h3 style={{ margin: '0 0 12px' }}>{chart.title}</h3>
-              {renderChart(chart.data, [chart.key], [chart.color])}
-            </div>
-          ))}
-        </div>
-      )}
-      {activescreen === 'kracht' && (
-  <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
-    <h3 style={{ margin: '0 0 12px' }}>{t.strengthTotalBodyweight}</h3>
-    {renderChart(strengthData, ['strength'], [THEME.primary])}
-  </div>
-)}
+      {activescreen === 'lichaam' && renderMetricChartCards([
+        {
+          key: 'gewicht',
+          title: `${t.bodyweight} (${t.kg})`,
+          data: bodyData,
+          color: THEME.primary,
+        },
+        {
+          key: 'bodyFat',
+          title: t.bodyFatPercent,
+          data: bodyMetricData.bodyFat,
+          color: THEME.primary,
+        },
+        {
+          key: 'bodyWater',
+          title: t.bodyWaterPercent,
+          data: bodyMetricData.bodyWater,
+          color: THEME.primary,
+        },
+      ])}
+
+      {activescreen === 'compositie' && renderMetricChartCards([
+        {
+          key: 'leanMass',
+          title: t.leanMassKg,
+          data: bodyMetricData.leanMass,
+          color: THEME.primary,
+        },
+        {
+          key: 'boneMass',
+          title: t.boneMassKg,
+          data: bodyMetricData.boneMass,
+          color: THEME.primary,
+        },
+        {
+          key: 'bmr',
+          title: t.bmrKcal,
+          data: bodyMetricData.bmr,
+          color: THEME.primary,
+        },
+      ])}
+
+      {activescreen === 'scores' && renderMetricChartCards([
+        {
+          key: 'visceralFat',
+          title: t.visceralFatRating,
+          data: bodyMetricData.visceralFat,
+          color: THEME.primary,
+        },
+        {
+          key: 'physiqueRating',
+          title: t.physiqueRating,
+          data: bodyMetricData.physiqueRating,
+          color: THEME.primary,
+        },
+      ])}
 
 {activescreen === 'meet' && (
   <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
-    <h3 style={{ margin: '0 0 6px' }}>{t.meetPlanner}</h3>
-    <p style={{ margin: '0 0 16px', color: THEME.muted, fontSize: 13, lineHeight: 1.4 }}>
-      {t.basedOnBestE1RM}
-    </p>
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) auto',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 14
+    }}>
+      <div>
+        <h3 style={{ margin: '0 0 6px' }}>
+          {t.meetPlanner}
+        </h3>
 
-<div style={{
-  marginBottom: 14,
-  padding: 14,
-  border: `1px solid ${THEME.primary}`,
-  borderRadius: 10,
-  background: THEME.bg,
-  textAlign: 'center'
-}}>
-  <div style={{ color: THEME.muted, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
-    {t.projectedTotal}
-  </div>
-  <div style={{ color: THEME.text, fontSize: 28, fontWeight: 900, lineHeight: 1 }}>
-    {meetTotals.third ? `${meetTotals.third} ${t.kg}` : '—'}
-  </div>
-</div>
+        <p style={{
+          margin: 0,
+          color: THEME.muted,
+          fontSize: 13,
+          lineHeight: 1.4
+        }}>
+          {t.basedOnBestE1RM}
+        </p>
+      </div>
+
+      <div style={{
+        minWidth: 118,
+        padding: '10px 12px',
+        border: `1px solid ${THEME.primary}`,
+        borderRadius: 10,
+        background: THEME.bg,
+        textAlign: 'center'
+      }}>
+        <div style={{ color: THEME.muted, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>
+          {t.projectedTotal}
+        </div>
+
+        <div style={{ color: THEME.text, fontSize: 22, fontWeight: 900, lineHeight: 1 }}>
+          {meetTotals.third ? `${meetTotals.third} ${t.kg}` : '—'}
+        </div>
+      </div>
+    </div>
 
     <div style={{ display: 'grid', gap: 12 }}>
       {meetPlan.map(row => (
@@ -3005,16 +4514,28 @@ const meetTotals = {
             background: THEME.bg
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 10 }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            marginBottom: 8
+          }}>
             <strong style={{ color: COLORS[row.lift], fontSize: 16 }}>
               {liftLabel(row.lift, t)}
             </strong>
-            <span style={{ color: THEME.muted, fontSize: 13, whiteSpace: 'nowrap' }}>
+
+            <span style={{
+              color: THEME.muted,
+              fontSize: 12,
+              fontWeight: 700,
+              whiteSpace: 'nowrap'
+            }}>
               {t.e1RM} {row.e1rm ? `${row.e1rm} ${t.kg}` : '—'}
             </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
             {[
               ['opener', t.opener, '90%', row.opener],
               ['second', t.secondAttempt, '97.5%', row.second],
@@ -3025,17 +4546,33 @@ const meetTotals = {
                 style={{
                   border: `1px solid ${THEME.border}`,
                   borderRadius: 8,
-                  padding: 8,
+                  padding: 7,
                   textAlign: 'center',
                   background: THEME.card
                 }}
               >
-                <div style={{ color: THEME.text, fontSize: 12, fontWeight: 800, marginBottom: 2 }}>
+                <div style={{
+                  color: THEME.text,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  lineHeight: 1.15,
+                  minHeight: 25,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
                   {label}
                 </div>
-                <div style={{ color: THEME.muted, fontSize: 11, marginBottom: 6 }}>
+
+                <div style={{
+                  color: THEME.muted,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  margin: '2px 0 5px'
+                }}>
                   {pct}
                 </div>
+
                 <input
                   type="number"
                   inputMode="decimal"
@@ -3049,17 +4586,18 @@ const meetTotals = {
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
-                    padding: '8px 4px',
+                    padding: '7px 4px',
                     borderRadius: 6,
                     border: `1px solid ${THEME.border}`,
                     background: THEME.bg,
                     color: THEME.text,
                     textAlign: 'center',
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: 800
                   }}
                 />
-                <div style={{ color: THEME.muted, fontSize: 11, marginTop: 4 }}>
+
+                <div style={{ color: THEME.muted, fontSize: 10, marginTop: 3 }}>
                   {t.kg}
                 </div>
               </div>
@@ -3091,94 +4629,96 @@ const meetTotals = {
       ))}
     </div>
 
-  {hasCustomMeetAttempts && (
-  <button
-    onClick={() => setShowResetMeetPlannerConfirm(true)}
-    style={{
-      marginTop: 10,
-      width: '100%',
-      padding: 10,
-      fontSize: 13,
-      fontWeight: 800,
-      background: THEME.card,
-      color: THEME.text,
-      border: `1px solid ${THEME.border}`,
-      borderRadius: 8,
-      cursor: 'pointer'
-    }}
-  >
-    {t.resetMeetPlanner}
-  </button>
+    {hasCustomMeetAttempts && (
+      <div style={{ marginTop: 10, textAlign: 'center' }}>
+        <button
+          onClick={() => setShowResetMeetPlannerConfirm(true)}
+          style={{
+            width: 'auto',
+            minWidth: 170,
+            padding: '8px 12px',
+            fontSize: 13,
+            fontWeight: 800,
+            background: 'transparent',
+            color: THEME.text,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          {t.resetMeetPlanner}
+        </button>
+      </div>
     )}
 
   {showResetMeetPlannerConfirm && (
-  <div style={{
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0,0,0,0.65)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 800,
-    padding: 16
-  }}>
     <div style={{
-      background: THEME.card,
-      border: `1px solid ${THEME.border}`,
-      borderRadius: 12,
-      padding: 18,
-      maxWidth: 420,
-      width: '100%',
-      color: THEME.text
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.65)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 800,
+      padding: 16
     }}>
-      <h3 style={{ margin: '0 0 10px', textAlign: 'center' }}>
-        {t.resetMeetPlannerConfirmTitle}
-      </h3>
+      <div style={{
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 12,
+        padding: 18,
+        maxWidth: 420,
+        width: '100%',
+        color: THEME.text
+      }}>
+        <h3 style={{ margin: '0 0 10px', textAlign: 'center' }}>
+          {t.resetMeetPlannerConfirmTitle}
+        </h3>
 
-      <p style={{ color: THEME.muted, fontSize: 14, lineHeight: 1.4, margin: '0 0 16px', textAlign: 'center' }}>
-        {t.resetMeetPlannerConfirmText}
-      </p>
+        <p style={{ color: THEME.muted, fontSize: 14, lineHeight: 1.4, margin: '0 0 16px', textAlign: 'center' }}>
+          {t.resetMeetPlannerConfirmText}
+        </p>
 
-      <button
-        onClick={() => {
-          setShowResetMeetPlannerConfirm(false);
-          setMeetPlannerAttempts({});
-        }}
-        style={{
-          width: '100%',
-          padding: 12,
-          fontSize: 15,
-          fontWeight: 800,
-          background: THEME.card,
-          color: '#ffffff',
-          border: `1px solid ${THEME.primary}`,
-          borderRadius: 8,
-          cursor: 'pointer'
-        }}
-      >
-        {t.resetMeetPlanner}
-      </button>
+        <button
+          onClick={() => {
+            setShowResetMeetPlannerConfirm(false);
+            setMeetPlannerAttempts({});
+          }}
+          style={{
+            width: '100%',
+            padding: 12,
+            fontSize: 15,
+            fontWeight: 800,
+            background: THEME.card,
+            color: '#ffffff',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          {t.resetMeetPlanner}
+        </button>
 
-      <button
-        onClick={() => setShowResetMeetPlannerConfirm(false)}
-        style={{
-          width: '100%',
-          marginTop: 8,
-          padding: 10,
-          fontSize: 14,
-          fontWeight: 700,
-          background: THEME.bg,
-          color: THEME.text,
-          border: `1px solid ${THEME.border}`,
-          borderRadius: 8,
-          cursor: 'pointer'
-        }}
-      >
-        {t.cancel}
-      </button>
+        <button
+          onClick={() => setShowResetMeetPlannerConfirm(false)}
+          style={{
+            width: '100%',
+            marginTop: 8,
+            padding: 10,
+            fontSize: 14,
+            fontWeight: 700,
+            background: 'transparent',
+            color: THEME.text,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          {t.cancel}
+        </button>
+      </div>
     </div>
-  </div>
-)}
+  )}
 
     </div>
 )}
@@ -3187,11 +4727,264 @@ const meetTotals = {
   );
 }
 
-function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t }) {
-  const currentWorkoutRef = useRef(null);
+function StartNewCycleSection({ onStartNewCycle, t }) {
   const [showStartCycleConfirm, setShowStartCycleConfirm] = useState(false);
+  const [notice, setNotice] = useState('');
 
+  useEffect(() => {
+    if (!notice) return;
+    const id = window.setTimeout(() => setNotice(''), 1800);
+    return () => window.clearTimeout(id);
+  }, [notice]);
 
+  return (
+    <>
+      <Toast message={notice} />
+      <div style={{
+        marginTop: 6,
+        padding: 12,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 10,
+        background: THEME.card
+      }}>
+        <p style={{
+          margin: '0 0 10px',
+          color: THEME.muted,
+          fontSize: 13,
+          lineHeight: 1.4,
+          textAlign: 'center'
+        }}>
+          {t.startNewCycleHint}
+        </p>
+
+        <button
+          onClick={() => setShowStartCycleConfirm(true)}
+          style={{
+            width: '100%',
+            padding: 12,
+            fontSize: 14,
+            fontWeight: 800,
+            background: THEME.card,
+            color: '#ffffff',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          {t.startNewCycle}
+        </button>
+      </div>
+
+      {showStartCycleConfirm && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 800,
+          padding: 16
+        }}>
+          <div style={{
+            background: THEME.card,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 12,
+            padding: 18,
+            maxWidth: 420,
+            width: '100%',
+            color: THEME.text
+          }}>
+            <h3 style={{ margin: '0 0 10px', textAlign: 'center' }}>
+              {t.startNewCycleConfirmTitle}
+            </h3>
+
+            <p style={{
+              color: THEME.muted,
+              fontSize: 14,
+              lineHeight: 1.4,
+              margin: '0 0 16px',
+              textAlign: 'center'
+            }}>
+              {t.startNewCycleConfirmText}
+            </p>
+
+            <button
+              onClick={() => {
+                setShowStartCycleConfirm(false);
+                setNotice(t.startNewCycleStarted);
+                onStartNewCycle();
+
+                window.setTimeout(() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }, 0);
+              }}
+              style={{
+                width: '100%',
+                padding: 12,
+                fontSize: 15,
+                fontWeight: 800,
+                background: THEME.card,
+                color: '#ffffff',
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.startNewCycle}
+            </button>
+
+            <button
+              onClick={() => setShowStartCycleConfirm(false)}
+              style={{
+                width: '100%',
+                marginTop: 8,
+                padding: 10,
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'transparent',
+                color: THEME.text,
+                border: `1px solid ${THEME.border}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.cancel}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function getWorkoutTitle(workout, t) {
+  if (!workout || workout.type === 'rest') return t.deload;
+  if (workout.type === 'meet') return t.sbdMeetDay || t.meetDay;
+
+  const lifts = (workout.lifts || [])
+    .map(liftBlock => liftBlock.lift)
+    .filter(Boolean);
+
+  if (lifts.length > 0) {
+    return lifts.map(lift => liftLabel(lift, t)).join(' + ');
+  }
+
+  return liftLabel(workout.lift, t);
+}
+
+function getWorkoutPlanLines(workout, t) {
+  if (!workout || workout.type === 'rest') return [];
+
+  const liftBlocks = (workout.lifts || []).length > 0
+    ? workout.lifts
+    : [{ lift: workout.lift, sets: workout.sets || [] }];
+
+  return liftBlocks.flatMap(liftBlock => {
+    const groups = [];
+
+    (liftBlock.sets || []).forEach(set => {
+      const labelKey = set.labelKey || null;
+      const label = labelKey ? t[labelKey] : set.label || t.set;
+      const last = groups[groups.length - 1];
+
+      if (
+        last &&
+        last.labelKey === labelKey &&
+        last.label === label &&
+        last.reps === set.reps &&
+        last.weight === set.weight
+      ) {
+        last.count += 1;
+        return;
+      }
+
+      groups.push({
+        labelKey,
+        label,
+        reps: set.reps,
+        weight: set.weight,
+        count: 1,
+      });
+    });
+
+    const onlyBackoff = groups.length > 0 && groups.every(group => group.labelKey === 'backoff');
+
+    return groups.map(group => {
+      if (onlyBackoff || !group.labelKey) {
+        return `${liftLabel(liftBlock.lift, t)}: ${group.count}×${group.reps}×${group.weight} ${t.kg}`;
+      }
+
+      return `${liftLabel(liftBlock.lift, t)} · ${group.label}: ${group.count}×${group.reps}×${group.weight} ${t.kg}`;
+    });
+  });
+}
+
+function AppHeader({ t, title, subtitle, meta, children }) {
+  return (
+    <div style={{ textAlign: 'center', marginBottom: 16 }}>
+      <div style={{
+        color: THEME.primary,
+        fontSize: 15,
+        fontWeight: 900,
+        letterSpacing: 1.2,
+        textTransform: 'uppercase',
+        marginBottom: 6
+      }}>
+        {t.appName}
+      </div>
+
+      <h2 style={{
+        margin: 0,
+        fontSize: 30,
+        fontWeight: 900,
+        lineHeight: 1.15
+      }}>
+        {title}
+      </h2>
+
+      {subtitle && (
+        <div style={{
+          color: THEME.muted,
+          fontSize: 15,
+          fontWeight: 700,
+          lineHeight: 1.35,
+          marginTop: 6
+        }}>
+          {subtitle}
+        </div>
+      )}
+
+      {meta && (
+        <div style={{
+          color: THEME.muted,
+          fontSize: 15,
+          fontWeight: 700,
+          lineHeight: 1.35,
+          marginTop: 6
+        }}>
+          {meta}
+        </div>
+      )}
+
+      {children}
+    </div>
+  );
+}
+
+function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t }) {
+  const currentWorkoutRef = useRef(null);
+  const [showAllWorkouts, setShowAllWorkouts] = useState(false);
+
+  const visibleStart = Math.max(0, currentIndex - 3);
+  const visibleEnd = Math.min(workouts.length, currentIndex + 4);
+  const visibleWorkoutEntries = showAllWorkouts
+    ? workouts.map((workout, idx) => ({ workout, idx }))
+    : workouts.slice(visibleStart, visibleEnd).map((workout, offset) => ({
+      workout,
+      idx: visibleStart + offset,
+    }));
+  const hasHiddenWorkouts = workouts.length > (visibleEnd - visibleStart);
 
   useEffect(() => {
     if (!currentWorkoutRef.current) return;
@@ -3207,19 +5000,21 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
   }, [currentIndex, workouts.length]);
 
   return (
-    <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
-      <div style={{ marginBottom: 20, textAlign: 'center' }}>
-        <h2 style={{ margin: '0 0 6px' }}>{t.program}</h2>
-        <div style={{ color: THEME.muted, fontSize: 13 }}>
-          {t.cycle} {currentCycle} · {t.workoutProgress} {Math.min(currentIndex + 1, workouts.length)} / {workouts.length}
-        </div>
-      </div>
+    <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
+      <AppHeader
+        t={t}
+        title={t.program}
+        subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${Math.min(currentIndex + 1, workouts.length)} / ${workouts.length}`}
+      />
 
 
-      {workouts.map((workout, idx) => {
+      {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
-        const isDone = idx < currentIndex;
-        const headerBg = workout.type === 'rest' ? THEME.brown : THEME.border;
+        const isDone = idx < completedWorkoutCount;
+        const headerBg = isCurrent ? THEME.primary : workout.type === 'rest' ? THEME.brown : THEME.border;
+        const planLines = getWorkoutPlanLines(workout, t);
+        const typeLabel = getWorkoutTypeLabel(workout, t);
+        const showTypeLabel = false;
 
         return (
           <div
@@ -3260,7 +5055,7 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
 
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: isCurrent ? 700 : 500, color: isCurrent ? THEME.primary : '#ffffff' }}>
-                {workout.type === 'rest' ? t.deload : liftLabel(workout.lift, t)}
+                {getWorkoutTitle(workout, t)}
                 {isCurrent && (
                   <span style={{
                     fontSize: 11,
@@ -3275,119 +5070,68 @@ function AllWorkouts({ workouts, currentIndex, currentCycle, onSelect, onBack, o
                 )}
               </div>
 
-              <div style={{ fontSize: 12, color: THEME.muted, marginTop: 2 }}>
-                {t.workoutProgress} {workout.number} / {workouts.length} · {getWorkoutTypeLabel(workout, t)}
-              </div>
+              {showTypeLabel && (
+                <div style={{ fontSize: 12, color: THEME.muted, marginTop: 2 }}>
+                  {typeLabel}
+                </div>
+              )}
             </div>
 
-            {isDone && <span style={{ color: THEME.primary, fontSize: 18 }}>✅</span>}
+            {planLines.length > 0 && (
+              <div style={{
+                marginLeft: 10,
+                display: 'grid',
+                gap: 2,
+                color: THEME.text,
+                fontSize: 11,
+                lineHeight: 1.2,
+                textAlign: 'right',
+                maxWidth: 210,
+                flexShrink: 0
+              }}>
+                {planLines.map((line, lineIndex) => (
+                  <div
+                    key={lineIndex}
+                    style={{
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}
+                  >
+                    {line}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {isDone && <span style={{ color: THEME.primary, fontSize: 18, marginLeft: 8 }}>✅</span>}
           </div>
         );
       })}
 
-      <div style={{
-  marginTop: 14,
-  padding: 12,
-  border: `1px solid ${THEME.border}`,
-  borderRadius: 10,
-  background: THEME.card
-}}>
-  <p style={{
-    margin: '0 0 10px',
-    color: THEME.muted,
-    fontSize: 13,
-    lineHeight: 1.4,
-    textAlign: 'center'
-  }}>
-    {t.startNewCycleHint}
-  </p>
-
-  <button
-    onClick={() => setShowStartCycleConfirm(true)}
-    style={{
-      width: '100%',
-      padding: 12,
-      fontSize: 14,
-      fontWeight: 800,
-      background: THEME.card,
-      color: '#ffffff',
-      border: `1px solid ${THEME.primary}`,
-      borderRadius: 8,
-      cursor: 'pointer'
-    }}
-  >
-    {t.startNewCycle}
-  </button>
-</div>
-
-      {showStartCycleConfirm && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.65)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 800,
-          padding: 16
-        }}>
-          <div style={{
-            background: THEME.card,
-            border: `1px solid ${THEME.border}`,
-            borderRadius: 12,
-            padding: 18,
-            maxWidth: 420,
+      {hasHiddenWorkouts && (
+        <button
+          onClick={() => setShowAllWorkouts(value => !value)}
+          style={{
             width: '100%',
-            color: THEME.text
-          }}>
-            <h3 style={{ margin: '0 0 10px', textAlign: 'center' }}>
-              {t.startNewCycleConfirmTitle}
-            </h3>
-
-            <p style={{ color: THEME.muted, fontSize: 14, lineHeight: 1.4, margin: '0 0 16px', textAlign: 'center' }}>
-              {t.startNewCycleConfirmText}
-            </p>
-
-            <button
-              onClick={() => {
-                setShowStartCycleConfirm(false);
-                onStartNewCycle();
-              }}
-              style={{
-                width: '100%',
-                padding: 12,
-                fontSize: 15,
-                fontWeight: 800,
-                background: THEME.card,
-                color: '#ffffff',
-                border: `1px solid ${THEME.primary}`,
-                borderRadius: 8,
-                cursor: 'pointer'
-              }}
-            >
-              {t.startNewCycle}
-            </button>
-
-            <button
-              onClick={() => setShowStartCycleConfirm(false)}
-              style={{
-                width: '100%',
-                marginTop: 8,
-                padding: 10,
-                fontSize: 14,
-                fontWeight: 700,
-                background: 'transparent',
-                color: THEME.text,
-                border: `1px solid ${THEME.border}`,
-                borderRadius: 8,
-                cursor: 'pointer'
-              }}
-            >
-              {t.cancel}
-            </button>
-          </div>
-        </div>
+            margin: '4px 0 6px',
+            padding: 10,
+            borderRadius: 8,
+            border: `1px solid ${THEME.border}`,
+            background: THEME.card,
+            color: THEME.primary,
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          {showAllWorkouts ? t.showFewerWorkouts : t.showAllWorkouts}
+        </button>
       )}
+
+      <StartNewCycleSection
+        onStartNewCycle={onStartNewCycle}
+        t={t}
+      />
     </div>
   );
 }
@@ -3435,26 +5179,53 @@ function Onboarding({ onStart, t }) {
     return Object.values(bodyData).some(value => value !== null) ? bodyData : null;
   }
 
+  function parseBirthDateInput(value) {
+    const trimmed = value.trim();
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) return trimmed;
+
+    const match = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (!match) return '';
+
+    const [, dayRaw, monthRaw, yearRaw] = match;
+    const day = Number(dayRaw);
+    const month = Number(monthRaw);
+    const year = Number(yearRaw);
+    const date = new Date(year, month - 1, day);
+
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return '';
+    }
+
+    return `${yearRaw}-${monthRaw.padStart(2, '0')}-${dayRaw.padStart(2, '0')}`;
+  }
+
   function handleStart() {
     const s = parseFloat(squat);
     const b = parseFloat(bench);
     const d = parseFloat(deadlift);
 
-    if (!s || !b || !d || !birthDate || !sex) {
+    const normalizedBirthDate = parseBirthDateInput(birthDate);
+
+    if (!s || !b || !d || !normalizedBirthDate || !sex) {
       alert(t.fillRequiredFields);
       return;
     }
 
-    onStart(s, b, d, { birthDate, sex }, buildInitialBodyData());
+    onStart(s, b, d, { birthDate: normalizedBirthDate, sex }, buildInitialBodyData());
   }
 
   const bodyFields = [
-    { key: 'bodyWeight', label: `${t.bodyweight} (${t.kg})` },
-    { key: 'bodyFat', label: t.bodyFatPercent },
-    { key: 'bodyWater', label: t.bodyWaterPercent },
+    { key: 'bodyWeight', label: t.bodyweight, unit: t.kg },
+    { key: 'bodyFat', label: t.bodyFatPercent, unit: '%' },
+    { key: 'bodyWater', label: t.bodyWaterPercent, unit: '%' },
     { key: 'visceralFat', label: t.visceralFatRating },
     { key: 'physiqueRating', label: t.physiqueRating },
-    { key: 'boneMass', label: t.boneMassKg },
+    { key: 'boneMass', label: t.boneMassKg, unit: t.kg },
   ];
 
   return (
@@ -3492,22 +5263,34 @@ function Onboarding({ onStart, t }) {
               {label}
             </label>
 
-            <input
-              type="number"
-              value={val}
-              onChange={e => setter(e.target.value)}
-              placeholder={t.kg}
-              style={{
-                width: '100%',
-                padding: 10,
+            <div style={{ position: 'relative' }}>
+              <input
+                type="number"
+                value={val}
+                onChange={e => setter(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 42px 10px 10px',
+                  fontSize: 16,
+                  borderRadius: 4,
+                  border: `1px solid ${THEME.border}`,
+                  boxSizing: 'border-box',
+                  background: THEME.bg,
+                  color: THEME.text
+                }}
+              />
+              <span style={{
+                position: 'absolute',
+                right: 12,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: THEME.text,
                 fontSize: 16,
-                borderRadius: 4,
-                border: `1px solid ${THEME.border}`,
-                boxSizing: 'border-box',
-                background: THEME.bg,
-                color: THEME.text
-              }}
-            />
+                pointerEvents: 'none'
+              }}>
+                {t.kg}
+              </span>
+            </div>
           </div>
         ))}
 
@@ -3516,21 +5299,62 @@ function Onboarding({ onStart, t }) {
             {t.birthDate}
           </label>
 
-          <input
-            type="date"
-            value={birthDate}
-            onChange={e => setBirthDate(e.target.value)}
+          <div
+            onClick={e => {
+              const input = e.currentTarget.querySelector('input[type="date"]');
+              if (input?.showPicker) {
+                input.showPicker();
+              } else {
+                input?.focus();
+                input?.click();
+              }
+            }}
             style={{
+              position: 'relative',
               width: '100%',
-              padding: 10,
-              fontSize: 16,
+              height: 42,
               borderRadius: 4,
               border: `1px solid ${THEME.border}`,
               boxSizing: 'border-box',
               background: THEME.bg,
-              color: THEME.text
+              cursor: 'pointer'
             }}
-          />
+          >
+            <div style={{
+              padding: '10px 42px 10px 10px',
+              fontSize: 16,
+              color: birthDate ? THEME.text : 'transparent',
+              boxSizing: 'border-box'
+            }}>
+              {birthDate || ' '}
+            </div>
+
+            <span style={{
+              position: 'absolute',
+              right: 12,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: THEME.text,
+              fontSize: 16,
+              pointerEvents: 'none'
+            }}>
+              📅
+            </span>
+
+            <input
+              type="date"
+              value={birthDate}
+              onChange={e => setBirthDate(e.target.value)}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                opacity: 0,
+                pointerEvents: 'none'
+              }}
+            />
+          </div>
         </div>
 
         <div style={{ marginBottom: 20 }}>
@@ -3569,21 +5393,36 @@ function Onboarding({ onStart, t }) {
               {field.label}
             </label>
 
-            <input
-              type="number"
-              value={bodyForm[field.key]}
-              onChange={e => updateBodyField(field.key, e.target.value)}
-              style={{
-                width: '100%',
-                padding: 10,
-                fontSize: 16,
-                borderRadius: 4,
-                border: `1px solid ${THEME.border}`,
-                boxSizing: 'border-box',
-                background: THEME.bg,
-                color: THEME.text
-              }}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type="number"
+                value={bodyForm[field.key]}
+                onChange={e => updateBodyField(field.key, e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: field.unit ? '10px 48px 10px 10px' : 10,
+                  fontSize: 16,
+                  borderRadius: 4,
+                  border: `1px solid ${THEME.border}`,
+                  boxSizing: 'border-box',
+                  background: THEME.bg,
+                  color: THEME.text
+                }}
+              />
+              {field.unit && (
+                <span style={{
+                  position: 'absolute',
+                  right: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: THEME.text,
+                  fontSize: 16,
+                  pointerEvents: 'none'
+                }}>
+                  {field.unit}
+                </span>
+              )}
+            </div>
           </div>
         ))}
 
@@ -3609,13 +5448,78 @@ function Onboarding({ onStart, t }) {
   );
 }
 
+function NavIcon({ type }) {
+  const common = {
+    width: 26,
+    height: 26,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2.4,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  };
+
+  if (type === 'dashboard') {
+    return (
+      <svg {...common}>
+        <path d="M5 15a7 7 0 0 1 14 0" />
+        <path d="M12 15l4-5" />
+        <path d="M5 19h14" />
+      </svg>
+    );
+  }
+
+  if (type === 'program') {
+    return (
+      <svg {...common}>
+        <line x1="8" y1="6" x2="20" y2="6" />
+        <line x1="8" y1="12" x2="20" y2="12" />
+        <line x1="8" y1="18" x2="20" y2="18" />
+        <circle cx="4" cy="6" r="1" />
+        <circle cx="4" cy="12" r="1" />
+        <circle cx="4" cy="18" r="1" />
+      </svg>
+    );
+  }
+
+  if (type === 'workout') {
+    return (
+      <svg {...common}>
+        <line x1="4" y1="12" x2="20" y2="12" />
+        <line x1="3" y1="8" x2="3" y2="16" />
+        <line x1="6" y1="7" x2="6" y2="17" />
+        <line x1="18" y1="7" x2="18" y2="17" />
+        <line x1="21" y1="8" x2="21" y2="16" />
+      </svg>
+    );
+  }
+
+  if (type === 'stats') {
+    return (
+      <svg {...common}>
+        <polyline points="4 17 9 12 13 15 20 7" />
+        <line x1="4" y1="20" x2="20" y2="20" />
+        <line x1="4" y1="4" x2="4" y2="20" />
+      </svg>
+    );
+  }
+
+  return (
+    <span aria-hidden="true" style={{ fontSize: 25, lineHeight: 1 }}>
+      ⚙
+    </span>
+  );
+}
+
 function BottomNav({ screen, onChange, t }) {
   const items = [
-    { key: 'dashboard', label: t.dashboard },
-    { key: 'all', label: t.program },
-    { key: 'current', label: t.workout },
-    { key: 'stats', label: t.progress },
-    { key: 'settings', label: t.settings },
+    { key: 'dashboard', label: t.dashboard, icon: 'dashboard' },
+    { key: 'all', label: t.program, icon: 'program' },
+    { key: 'current', label: t.workout, icon: 'workout' },
+    { key: 'stats', label: t.stats, icon: 'stats' },
+    { key: 'settings', label: t.settings, icon: 'settings' },
   ];
 
   return (
@@ -3632,39 +5536,60 @@ function BottomNav({ screen, onChange, t }) {
       {items.map(item => (
         <button
           key={item.key}
+          aria-label={item.label}
+          title={item.label}
           onClick={() => {
             onChange(item.key);
             window.scrollTo({ top: 0, behavior: 'auto' });
           }}
           style={{
             flex: 1,
-            padding: '12px 0',
+            padding: '11px 0',
             background: 'none',
             border: 'none',
             color: screen === item.key ? THEME.primary : '#ffffff',
-            fontWeight: screen === item.key ? 700 : 500,
-            cursor: 'pointer'
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
-          {item.label}
+          <NavIcon type={item.icon} />
         </button>
       ))}
     </div>
   );
 }
 
-export default function App() {
+export default 
+function App() {
   const [language, setLanguage] = useState(() => {
-    return localStorage.getItem('language') || 'nl';
+    const savedLanguage = localStorage.getItem('language');
+    const supportedLanguages = ['ca', 'en', 'nl'];
+
+    if (supportedLanguages.includes(savedLanguage)) {
+      return savedLanguage;
+    }
+
+    const systemLanguage = (navigator.language || navigator.userLanguage || '').toLowerCase();
+
+    if (systemLanguage.startsWith('ca')) return 'ca';
+    if (systemLanguage.startsWith('nl')) return 'nl';
+    if (systemLanguage.startsWith('en')) return 'en';
+
+    return 'en';
   });
 
   const [timer, setTimer] = useState(null);
   const [restTimeSeconds, setRestTimeSeconds] = useState(DEFAULT_REST_TIME_SECONDS);
+  const [accessoryMode, setAccessoryMode] = useState('off');
+  const [preparationMode, setPreparationMode] = useState('basic');
 
   function startTimer(seconds, placement = null) {
     setTimer({
       id: Date.now(),
       seconds,
+      endTime: Date.now() + seconds * 1000,
       placement,
     });
   }
@@ -3677,6 +5602,7 @@ export default function App() {
   const [screen, setScreen] = useState('onboarding');
   const [workouts, setWorkouts] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [currentWorkoutIndex, setCurrentWorkoutIndex] = useState(0);
   const [history, setHistory] = useState([]);
   const [prs, setPrs] = useState({});
   const [accessoryPRs, setAccessoryPRs] = useState({});
@@ -3684,14 +5610,16 @@ export default function App() {
   const [completedWorkout, setCompletedWorkout] = useState(null);
   const [completedWorkoutIndex, setCompletedWorkoutIndex] = useState(null);
   const [completedSummary, setCompletedSummary] = useState(null);
+  const [showWorkoutEffortPrompt, setShowWorkoutEffortPrompt] = useState(false);
   const [currentCycle, setCurrentCycle] = useState(1);
   const [bodyWeights, setBodyWeights] = useState([]);
   const [userProfile, setUserProfile] = useState({});
   const [meetPlannerAttempts, setMeetPlannerAttempts] = useState({});
   const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const currentIndex = getCompletedWorkoutCount(history, currentCycle);
-  const PROGRAM_VERSION = 'cube-27-v3';
+  const completedWorkoutCount = getCompletedWorkoutCount(history, currentCycle);
+  const currentIndex = Math.max(completedWorkoutCount, currentWorkoutIndex);
+  const PROGRAM_VERSION = 'cube-27-v5';
 
   function updateMeetPlannerAttempts(next) {
     setMeetPlannerAttempts(prev => {
@@ -3780,7 +5708,7 @@ export default function App() {
 
       const savedHistory = data.history || [];
       const savedCycle = data.currentCycle || 1;
-      const generatedWorkouts = generateProgram(squat, bench, deadlift);
+      const generatedWorkouts = generateProgram(squat, bench, deadlift, normalizeAccessoryMode(data.accessoryMode), data.accessoryPRs || {}, data.preparationMode || 'basic');
       const savedInProgress = data.inProgress || null;
       const savedMeetPlannerAttempts = data.meetPlannerAttempts || {};
       const savedMeetPrepChecklist = data.meetPrepChecklist || {};
@@ -3817,12 +5745,33 @@ export default function App() {
       setMeetPlannerAttempts(savedMeetPlannerAttempts);
       setMeetPrepChecklist(savedMeetPrepChecklist);
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
+      setAccessoryMode(normalizeAccessoryMode(data.accessoryMode));
+      setPreparationMode(data.preparationMode || 'basic');
 
-      setSelectedIndex(
-        canRestoreInProgress
-          ? savedInProgress.selectedIndex || 0
-          : getCompletedWorkoutCount(savedHistory, savedCycle)
+      const completedWorkoutCount = getCompletedWorkoutCount(savedHistory, savedCycle);
+      const restorableSelectedIndex = getRestorableSelectedIndex(
+        savedInProgress,
+        savedCycle,
+        generatedWorkouts.length
       );
+      const restorableCurrentIndex = getRestorableSelectedIndex(
+        {
+          ...savedInProgress,
+          selectedIndex: savedInProgress?.currentIndex ?? savedInProgress?.selectedIndex,
+        },
+        savedCycle,
+        generatedWorkouts.length
+      );
+      const restoredCurrentIndex = Math.max(
+        completedWorkoutCount,
+        restorableCurrentIndex ?? completedWorkoutCount
+      );
+
+      setCurrentWorkoutIndex(restoredCurrentIndex);
+      setSelectedIndex(Math.max(
+        restoredCurrentIndex,
+        restorableSelectedIndex ?? restoredCurrentIndex
+      ));
 
       setShowNewCycle(false);
       setScreen('dashboard');
@@ -3846,14 +5795,63 @@ export default function App() {
       meetPlannerAttempts,
       meetPrepChecklist,
       restTimeSeconds,
+      accessoryMode,
+      preparationMode,
       inProgress: {
         programVersion: PROGRAM_VERSION,
         currentCycle,
+        currentIndex,
         selectedIndex,
         workouts,
       },
     }));
-  }, [history, prs, accessoryPRs, currentCycle, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, selectedIndex, workouts]);
+  }, [history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, accessoryMode, preparationMode, selectedIndex, workouts]);
+
+  useEffect(() => {
+    if (!prs.Squat || !prs.Bench || !prs.Deadlift) return;
+
+    const generatedWorkouts = generateProgram(
+      prs.Squat,
+      prs.Bench,
+      prs.Deadlift,
+      accessoryMode,
+      accessoryPRs,
+      preparationMode
+    );
+
+    setWorkouts(prev => applyAccessoryPlanToWorkouts(
+      prev,
+      generatedWorkouts,
+      getCompletedWorkoutCount(history, currentCycle)
+    ));
+  }, [accessoryMode, preparationMode, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
+
+  useEffect(() => {
+    if (screen !== 'completed' || !completedWorkout) return;
+
+    const timeoutId = setTimeout(() => {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (!saved) return;
+
+        writeAutomaticBackup(JSON.parse(saved)).catch(error => {
+          console.error('Automatic backup failed', error);
+          localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
+            ok: false,
+            exportedAt: new Date().toISOString(),
+          }));
+        });
+      } catch (error) {
+        console.error('Automatic backup failed', error);
+        localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
+          ok: false,
+          exportedAt: new Date().toISOString(),
+        }));
+      }
+    }, 250);
+
+    return () => clearTimeout(timeoutId);
+  }, [screen, completedWorkout]);
 
   function handleStart(s, b, d, profile = {}, initialBodyData = null) {
     const today = new Date().toLocaleDateString('nl-NL');
@@ -3861,8 +5859,9 @@ export default function App() {
     localStorage.removeItem('kel-powerlifting');
     localStorage.removeItem('app_version');
 
-    setWorkouts(generateProgram(s, b, d));
-    setSelectedIndex(0);
+    setWorkouts(generateProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode));
+    setCurrentWorkoutIndex(0);
+  setSelectedIndex(0);
     setCurrentCycle(1);
 
     setHistory([
@@ -3920,6 +5919,7 @@ function handleResetApp() {
   localStorage.removeItem('bodyweight_prompt_date');
 
   setWorkouts([]);
+  setCurrentWorkoutIndex(0);
   setSelectedIndex(0);
   setHistory([]);
   setPrs({});
@@ -3927,6 +5927,7 @@ function handleResetApp() {
   setUserProfile({});
   setMeetPlannerAttempts({});
   setShowNewCycle(false);
+  setShowWorkoutEffortPrompt(false);
   setCurrentCycle(1);
   setBodyWeights([]);
   setScreen('onboarding');
@@ -3939,15 +5940,17 @@ function handleStartNewCycle() {
   }
 
   const nextCycle = currentCycle + 1;
-  const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift);
+  const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift, accessoryMode, accessoryPRs, preparationMode);
 
   setCurrentCycle(nextCycle);
   setMeetPlannerAttempts({});
   setWorkouts(newWorkouts);
+  setCurrentWorkoutIndex(0);
   setSelectedIndex(0);
   setCompletedWorkout(null);
   setCompletedSummary(null);
   setShowNewCycle(false);
+  setShowWorkoutEffortPrompt(false);
   setScreen('all');
 }
 
@@ -4021,8 +6024,6 @@ function toggleWarmup(wIndex) {
       type: 'warmup',
       index: wIndex,
     });
-  } else {
-    setTimer(null);
   }
 
   setWorkouts(prev =>
@@ -4039,15 +6040,35 @@ function toggleWarmup(wIndex) {
   );
 }
 
+function hasMoreWorkAfterMainSet(workout, setIndex) {
+  const sets = workout.sets || [];
+  const accessories = workout.accessories || [];
+
+  const hasMoreMainSets = sets.some((set, index) =>
+    index > setIndex && !set.done && !set.skipped
+  );
+
+  const hasAccessories = accessories.some(a => (a.done || []).some(d => !d));
+
+  return hasMoreMainSets || hasAccessories;
+}
+
 function toggleSet(setIndex) {
   const workout = workouts[selectedIndex];
+  const currentSet = workout?.sets?.[setIndex];
 
-  if (shouldStartRestTimerAfterToggle(workout, 'main', setIndex)) {
-    startTimer(restTimeSeconds, {
-      workoutNumber: workout.number,
-      type: 'main',
-      index: setIndex,
-    });
+  const shouldComplete = currentSet && !currentSet.done && !currentSet.skipped;
+
+  if (shouldComplete) {
+    if (hasMoreWorkAfterMainSet(workout, setIndex)) {
+      startTimer(restTimeSeconds, {
+        workoutNumber: workout.number,
+        type: 'main',
+        index: setIndex,
+      });
+    } else {
+      setTimer(null);
+    }
   } else {
     setTimer(null);
   }
@@ -4058,11 +6079,271 @@ function toggleSet(setIndex) {
         ? w
         : {
             ...w,
-            sets: w.sets.map((s, si) =>
-              si === setIndex ? { ...s, done: !s.done } : s
-            ),
+            sets: w.sets.map((s, si) => {
+              if (si !== setIndex) return s;
+
+              if (s.skipped) {
+                const restoredWeight = Number(s.originalWeight ?? s.failedWeight ?? s.weight) || s.weight;
+                const restoredPct = Number(s.originalPct ?? getSetPctForWeight(s, restoredWeight)) || s.pct;
+
+                return {
+                  ...s,
+                  weight: restoredWeight,
+                  pct: restoredPct,
+                  done: false,
+                  failed: false,
+                  skipped: false,
+                  failedAttempts: 0,
+                  failedWeight: null,
+                  adjustedWeight: null,
+                  adjustedFromFailedSet: false,
+                  adjustedFromOriginal: false,
+                };
+              }
+
+              if (!s.done) {
+                return {
+                  ...s,
+                  done: true,
+                  failed: false,
+                };
+              }
+
+              return {
+                ...s,
+                done: false,
+                effort: null,
+              };
+            }),
           }
     )
+  );
+}
+
+function markSetFailed(setIndex) {
+  const workout = workouts[selectedIndex];
+
+  if (workout) {
+    startTimer(restTimeSeconds, {
+      workoutNumber: workout.number,
+      type: 'main',
+      index: setIndex,
+    });
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      const failedSet = w.sets[setIndex];
+      const failedAttempts = (Number(failedSet?.failedAttempts) || 0) + 1;
+      const isPreMeetWorkout = w.number >= 25 && w.number <= 27;
+      const isAttemptSet = isAttemptSetLabel(failedSet?.labelKey);
+      const isBackoff = failedSet?.labelKey === 'backoff';
+      const isZeroWeightFailure = Number(failedSet?.weight) <= 0;
+
+      const normalAdjustedWeight = getFailedSetSuggestedWeight(failedSet?.weight);
+      const attemptAdjustedWeight = getAdjustedAttemptWeight(failedSet?.weight);
+      const adjustedWeight = isPreMeetWorkout && isAttemptSet
+        ? attemptAdjustedWeight
+        : normalAdjustedWeight;
+
+      const isTopSet = isTopSetLabel(failedSet?.labelKey);
+
+      const shouldSkipAttempt =
+        isPreMeetWorkout &&
+        isAttemptSet &&
+        failedAttempts >= 2;
+
+      const shouldSkipTopSet =
+        !isPreMeetWorkout &&
+        isTopSet &&
+        failedAttempts >= 2;
+
+      return {
+        ...w,
+        sets: w.sets.map((s, si) => {
+          const shouldAdjustThisSet = si === setIndex;
+
+          const shouldAdjustLaterAttempt =
+            isPreMeetWorkout &&
+            isAttemptSet &&
+            si > setIndex &&
+            isAttemptSetLabel(s.labelKey) &&
+            !s.done &&
+            !s.skipped;
+
+          const shouldAdjustLaterBackoff =
+            (
+              isBackoff ||
+              (!isPreMeetWorkout && isTopSet)
+            ) &&
+            si > setIndex &&
+            s.labelKey === 'backoff' &&
+            !s.done &&
+            !s.skipped;
+
+          const shouldLowerBackoffIfTooHeavy =
+            isPreMeetWorkout &&
+            isAttemptSet &&
+            si > setIndex &&
+            s.labelKey === 'backoff' &&
+            !s.done &&
+            !s.skipped &&
+            Number(s.weight) > adjustedWeight;
+
+          if (
+            !shouldAdjustThisSet &&
+            !shouldAdjustLaterAttempt &&
+            !shouldAdjustLaterBackoff &&
+            !shouldLowerBackoffIfTooHeavy
+          ) {
+            return s;
+          }
+
+          const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
+          const originalPct = Number(s.originalPct ?? s.pct) || 0;
+
+          if (shouldAdjustThisSet && (isZeroWeightFailure || shouldSkipAttempt || shouldSkipTopSet)) {
+            return {
+              ...s,
+              done: true,
+              failed: false,
+              skipped: true,
+              failedAttempts,
+              failedWeight: Number(s.failedWeight ?? s.weight) || 0,
+              originalWeight,
+              originalPct,
+              adjustedWeight: null,
+              adjustedFromFailedSet: false,
+              adjustedFromOriginal: false,
+            };
+          }
+
+          let nextWeight = adjustedWeight;
+
+          if (shouldAdjustLaterAttempt) {
+            nextWeight = getAdjustedAttemptWeight(s.weight);
+          }
+
+          if (shouldAdjustLaterBackoff || shouldLowerBackoffIfTooHeavy) {
+            nextWeight = Math.min(Number(s.weight) || adjustedWeight, adjustedWeight);
+          }
+
+          const adjustedPct = getSetPctForWeight(
+            { ...s, originalWeight, originalPct },
+            nextWeight
+          );
+
+          return {
+            ...s,
+            done: false,
+            failed: shouldAdjustThisSet,
+            skipped: false,
+            failedAttempts: shouldAdjustThisSet ? failedAttempts : Number(s.failedAttempts) || 0,
+            failedWeight: shouldAdjustThisSet ? Number(s.failedWeight ?? s.weight) || 0 : s.failedWeight ?? null,
+            weight: nextWeight,
+            pct: adjustedPct || s.pct,
+            originalWeight,
+            originalPct,
+            adjustedWeight: shouldAdjustThisSet ? nextWeight : s.adjustedWeight ?? null,
+            adjustedFromFailedSet: shouldAdjustThisSet,
+            adjustedFromOriginal: Number(nextWeight) !== originalWeight,
+          };
+        }),
+      };
+    })
+  );
+}
+
+function restoreSetWeight(setIndex) {
+  setWorkouts(prev =>
+    prev.map((w, wi) =>
+      wi !== selectedIndex
+        ? w
+        : {
+            ...w,
+            sets: w.sets.map((s, si) => {
+              if (si !== setIndex) return s;
+
+              const hasRestoreTarget =
+                s.failed ||
+                s.skipped ||
+                s.adjustedFromFailedSet ||
+                s.adjustedFromOriginal ||
+                s.failedWeight ||
+                s.adjustedWeight;
+
+              if (!hasRestoreTarget) return s;
+
+              const restoredWeight = Number(s.failedWeight ?? s.originalWeight ?? s.weight) || s.weight;
+              const restoredPct = Number(s.originalPct ?? getSetPctForWeight(s, restoredWeight)) || s.pct;
+
+              return {
+                ...s,
+                weight: restoredWeight,
+                pct: restoredPct,
+                done: false,
+                failed: false,
+                skipped: false,
+                failedAttempts: 0,
+                failedWeight: null,
+                adjustedWeight: null,
+                adjustedFromFailedSet: false,
+                adjustedFromOriginal: false,
+              };
+            }),
+          }
+    )
+  );
+}
+
+function restoreMeetSetWeight(liftIndex, setIndex) {
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: (w.lifts || []).map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
+            sets: (liftBlock.sets || []).map((s, si) => {
+              if (si !== setIndex) return s;
+
+              const hasRestoreTarget =
+                s.failed ||
+                s.skipped ||
+                s.adjustedFromFailedSet ||
+                s.adjustedFromOriginal ||
+                s.failedWeight ||
+                s.adjustedWeight;
+
+              if (!hasRestoreTarget) return s;
+
+              const restoredWeight = Number(s.failedWeight ?? s.originalWeight ?? s.weight) || s.weight;
+              const restoredPct = Number(s.originalPct ?? getSetPctForWeight(s, restoredWeight)) || s.pct;
+
+              return {
+                ...s,
+                weight: restoredWeight,
+                pct: restoredPct,
+                done: false,
+                failed: false,
+                skipped: false,
+                failedAttempts: 0,
+                failedWeight: null,
+                adjustedWeight: null,
+                adjustedFromFailedSet: false,
+                adjustedFromOriginal: false,
+              };
+            }),
+          };
+        }),
+      };
+    })
   );
 }
 
@@ -4077,7 +6358,10 @@ function toggleAccessorySet(accIndex, setIndex) {
       index: setIndex,
     });
   } else {
-    setTimer(null);
+    const currentDone = workout?.accessories?.[accIndex]?.done?.[setIndex];
+    if (currentDone === false) {
+      setTimer(null);
+    }
   }
 
   setWorkouts(prev =>
@@ -4089,9 +6373,26 @@ function toggleAccessorySet(accIndex, setIndex) {
         accessories: w.accessories.map((a, ai) => {
           if (ai !== accIndex) return a;
 
+          const isCurrentlyDone = !!a.done?.[setIndex];
+
           return {
             ...a,
             done: a.done.map((d, di) => (di === setIndex ? !d : d)),
+            failed: (a.failed || a.done.map(() => false)).map((failed, di) =>
+              di === setIndex ? false : failed
+            ),
+            failedWeights: (a.failedWeights || a.done.map(() => null)).map((weight, di) =>
+              di === setIndex ? null : weight
+            ),
+            skipped: (a.skipped || a.done.map(() => false)).map((skipped, di) =>
+              di === setIndex ? false : skipped
+            ),
+            adjustedFromFailedSet: (a.adjustedFromFailedSet || a.done.map(() => false)).map((adjusted, di) =>
+              di === setIndex ? false : adjusted
+            ),
+            adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, di) =>
+              di === setIndex && !isCurrentlyDone ? false : adjusted
+            ),
           };
         }),
       };
@@ -4114,11 +6415,75 @@ function changeWeight(type, index, val) {
       if (type === 'set') {
         return {
           ...w,
-          sets: w.sets.map((s, i) => i === index ? { ...s, weight: val } : s),
+          sets: w.sets.map((s, i) => {
+            if (i !== index) return s;
+
+            const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
+            const originalPct = Number(s.originalPct ?? s.pct) || 0;
+            const nextPct = getSetPctForWeight(
+              { ...s, originalWeight, originalPct },
+              val
+            );
+
+            const nextWeight = Number(val) || originalWeight;
+
+            return {
+              ...s,
+              weight: nextWeight,
+              pct: nextPct || s.pct,
+              done: false,
+              failed: false,
+              skipped: false,
+              failedAttempts: 0,
+              failedWeight: null,
+              adjustedWeight: null,
+              originalWeight,
+              originalPct,
+              adjustedFromFailedSet: false,
+              adjustedFromOriginal: Number(nextWeight) !== originalWeight,
+            };
+          }),
         };
       }
 
       return w;
+    })
+  );
+}
+
+function changeSetEffort(setIndex, effort) {
+  setWorkouts(prev =>
+    prev.map((w, wi) =>
+      wi !== selectedIndex
+        ? w
+        : {
+            ...w,
+            sets: w.sets.map((s, si) =>
+              si === setIndex ? { ...s, effort } : s
+            ),
+          }
+    )
+  );
+}
+
+function changeMeetSetEffort(liftIndex, setIndex, effort) {
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: (w.lifts || []).map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
+            sets: (liftBlock.sets || []).map((s, si) =>
+              si === setIndex ? { ...s, effort } : s
+            ),
+          };
+        }),
+      };
     })
   );
 }
@@ -4147,7 +6512,40 @@ function toggleMeetPrepItem(liftIndex, prepIndex) {
   );
 }
 
+function hasMoreWorkAfterLiftWarmup(workout, liftIndex, warmupIndex) {
+  const liftBlock = workout?.lifts?.[liftIndex];
+  if (!liftBlock) return false;
+
+  const hasLaterWarmupsInSameLift = (liftBlock.warmups || []).some((w, wi) =>
+    wi > warmupIndex && !w.done
+  );
+
+  if (hasLaterWarmupsInSameLift) {
+    return false;
+  }
+
+  return (liftBlock.sets || []).some(s => !s.done && !s.skipped);
+}
+
 function toggleMeetWarmup(liftIndex, warmupIndex) {
+  const workout = workouts[selectedIndex];
+  const currentDone = workout?.lifts?.[liftIndex]?.warmups?.[warmupIndex]?.done;
+
+  if (currentDone === false) {
+    if (hasMoreWorkAfterLiftWarmup(workout, liftIndex, warmupIndex)) {
+      startTimer(restTimeSeconds, {
+        workoutNumber: workout.number,
+        type: 'meetWarmup',
+        liftIndex,
+        index: warmupIndex,
+      });
+    } else {
+      setTimer(null);
+    }
+  } else {
+    setTimer(null);
+  }
+
   setWorkouts(prev =>
     prev.map((w, wi) => {
       if (wi !== selectedIndex) return w;
@@ -4170,24 +6568,38 @@ function toggleMeetWarmup(liftIndex, warmupIndex) {
 }
 
 function hasMoreMeetSets(workout, liftIndex, setIndex) {
-  return (workout.lifts || []).some((liftBlock, li) => {
-    if (li < liftIndex) return false;
-    if (li > liftIndex) return (liftBlock.sets || []).some(s => !s.done);
+  const liftBlock = workout?.lifts?.[liftIndex];
+  if (!liftBlock) return false;
 
-    return (liftBlock.sets || []).some((s, si) => si > setIndex && !s.done);
-  });
+  const hasMoreSetsInSameLift = (liftBlock.sets || []).some((s, si) =>
+    si > setIndex && !s.done && !s.skipped
+  );
+
+  if (hasMoreSetsInSameLift) return true;
+
+  const hasMoreAccessories = (workout?.accessories || []).some(accessory =>
+    (accessory.done || []).some(done => !done)
+  );
+
+  return hasMoreAccessories;
 }
 
 function toggleMeetSet(liftIndex, setIndex) {
   const workout = workouts[selectedIndex];
+  const currentSet = workout?.lifts?.[liftIndex]?.sets?.[setIndex];
+  const shouldComplete = currentSet && !currentSet.done && !currentSet.skipped;
 
-  if (hasMoreMeetSets(workout, liftIndex, setIndex)) {
-    startTimer(restTimeSeconds, {
-      workoutNumber: workout.number,
-      type: 'meetSet',
-      liftIndex,
-      index: setIndex,
-    });
+  if (shouldComplete) {
+    if (hasMoreMeetSets(workout, liftIndex, setIndex)) {
+      startTimer(restTimeSeconds, {
+        workoutNumber: workout.number,
+        type: 'meetSet',
+        liftIndex,
+        index: setIndex,
+      });
+    } else {
+      setTimer(null);
+    }
   } else {
     setTimer(null);
   }
@@ -4203,8 +6615,221 @@ function toggleMeetSet(liftIndex, setIndex) {
 
           return {
             ...liftBlock,
+            sets: liftBlock.sets.map((s, si) => {
+              if (si !== setIndex) return s;
+
+              if (s.failed && !s.skipped) {
+                return {
+                  ...s,
+                  done: true,
+                  failed: false,
+                  skipped: false,
+                  adjustedWeight: null,
+                  adjustedFromFailedSet: false,
+                  effort: null,
+                };
+              }
+
+              if (s.skipped) {
+                return {
+                  ...s,
+                  done: false,
+                  failed: false,
+                  skipped: false,
+                  failedAttempts: 0,
+                  failedWeight: null,
+                  adjustedWeight: null,
+                  adjustedFromFailedSet: false,
+                  adjustedFromOriginal: false,
+                  effort: null,
+                };
+              }
+
+              return {
+                ...s,
+                done: !s.done,
+                failed: false,
+                skipped: false,
+                adjustedWeight: s.done ? null : s.adjustedWeight,
+                adjustedFromFailedSet: s.done ? false : s.adjustedFromFailedSet,
+                effort: s.done ? null : s.effort,
+              };
+            }),
+          };
+        }),
+      };
+    })
+  );
+}
+
+function markMeetSetFailed(liftIndex, setIndex) {
+  const workout = workouts[selectedIndex];
+
+  if (workout && hasMoreMeetSets(workout, liftIndex, setIndex)) {
+    startTimer(restTimeSeconds, {
+      workoutNumber: workout.number,
+      type: 'meetSet',
+      liftIndex,
+      index: setIndex,
+    });
+  } else {
+    setTimer(null);
+  }
+
+  if (workout?.type !== 'meet') {
+    setWorkouts(prev =>
+      prev.map((w, wi) => {
+        if (wi !== selectedIndex) return w;
+
+        return {
+          ...w,
+          lifts: w.lifts.map((liftBlock, li) => {
+            if (li !== liftIndex) return liftBlock;
+
+            const failedSet = liftBlock.sets[setIndex];
+            const failedAttempts = (Number(failedSet?.failedAttempts) || 0) + 1;
+            const isPreMeetWorkout = w.number >= 25 && w.number <= 27;
+            const isAttemptSet = isAttemptSetLabel(failedSet?.labelKey);
+            const isBackoff = failedSet?.labelKey === 'backoff';
+            const isZeroWeightFailure = Number(failedSet?.weight) <= 0;
+            const isTopSet = isTopSetLabel(failedSet?.labelKey);
+
+            const normalAdjustedWeight = getFailedSetSuggestedWeight(failedSet?.weight);
+            const attemptAdjustedWeight = getAdjustedAttemptWeight(failedSet?.weight);
+            const adjustedWeight = isPreMeetWorkout && isAttemptSet
+              ? attemptAdjustedWeight
+              : normalAdjustedWeight;
+
+            const shouldSkipAttempt =
+              isPreMeetWorkout &&
+              isAttemptSet &&
+              failedAttempts >= 2;
+
+            const shouldSkipTopSet =
+              !isPreMeetWorkout &&
+              isTopSet &&
+              failedAttempts >= 2;
+
+            return {
+              ...liftBlock,
+              sets: liftBlock.sets.map((s, si) => {
+                const shouldAdjustThisSet = si === setIndex;
+
+                const shouldAdjustLaterAttempt =
+                  isPreMeetWorkout &&
+                  isAttemptSet &&
+                  si > setIndex &&
+                  isAttemptSetLabel(s.labelKey) &&
+                  !s.done &&
+                  !s.skipped;
+
+                const shouldAdjustLaterBackoff =
+                  (
+                    isBackoff ||
+                    (!isPreMeetWorkout && isTopSet)
+                  ) &&
+                  si > setIndex &&
+                  s.labelKey === 'backoff' &&
+                  !s.done &&
+                  !s.skipped;
+
+                const shouldLowerBackoffIfTooHeavy =
+                  isPreMeetWorkout &&
+                  isAttemptSet &&
+                  si > setIndex &&
+                  s.labelKey === 'backoff' &&
+                  !s.done &&
+                  !s.skipped &&
+                  Number(s.weight) > adjustedWeight;
+
+                if (
+                  !shouldAdjustThisSet &&
+                  !shouldAdjustLaterAttempt &&
+                  !shouldAdjustLaterBackoff &&
+                  !shouldLowerBackoffIfTooHeavy
+                ) {
+                  return s;
+                }
+
+                const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
+                const originalPct = Number(s.originalPct ?? s.pct) || 0;
+
+                if (shouldAdjustThisSet && (isZeroWeightFailure || shouldSkipAttempt || shouldSkipTopSet)) {
+                  return {
+                    ...s,
+                    done: true,
+                    failed: false,
+                    skipped: true,
+                    failedAttempts,
+                    failedWeight: Number(s.failedWeight ?? s.weight) || 0,
+                    originalWeight,
+                    originalPct,
+                    adjustedWeight: null,
+                    adjustedFromFailedSet: false,
+                    adjustedFromOriginal: false,
+                  };
+                }
+
+                let nextWeight = adjustedWeight;
+
+                if (shouldAdjustLaterAttempt) {
+                  nextWeight = getAdjustedAttemptWeight(s.weight);
+                }
+
+                if (shouldAdjustLaterBackoff || shouldLowerBackoffIfTooHeavy) {
+                  nextWeight = Math.min(Number(s.weight) || adjustedWeight, adjustedWeight);
+                }
+
+                const adjustedPct = getSetPctForWeight(
+                  { ...s, originalWeight, originalPct },
+                  nextWeight
+                );
+
+                return {
+                  ...s,
+                  done: false,
+                  failed: shouldAdjustThisSet,
+                  skipped: false,
+                  failedAttempts: shouldAdjustThisSet ? failedAttempts : Number(s.failedAttempts) || 0,
+                  failedWeight: shouldAdjustThisSet ? Number(s.failedWeight ?? s.weight) || 0 : s.failedWeight ?? null,
+                  weight: nextWeight,
+                  pct: adjustedPct || s.pct,
+                  originalWeight,
+                  originalPct,
+                  adjustedWeight: shouldAdjustThisSet ? nextWeight : s.adjustedWeight ?? null,
+                  adjustedFromFailedSet: shouldAdjustThisSet,
+                  adjustedFromOriginal: Number(nextWeight) !== originalWeight,
+                };
+              }),
+            };
+          }),
+        };
+      })
+    );
+
+    return;
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: w.lifts.map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
             sets: liftBlock.sets.map((s, si) =>
-              si === setIndex ? { ...s, done: !s.done } : s
+              si === setIndex
+                ? {
+                    ...s,
+                    done: true,
+                    failed: true,
+                    skipped: true,
+                  }
+                : s
             ),
           };
         }),
@@ -4219,7 +6844,7 @@ function changeMeetWeight(liftIndex, setIndex, val) {
   const key = MEET_ATTEMPT_KEYS[setIndex];
   const roundedVal = roundMeetWeight(val);
 
-  if (lift && key) {
+  if (workout?.type === 'meet' && lift && key) {
     setMeetPlannerAttempts(prev => ({
       ...(prev || {}),
       [lift]: {
@@ -4240,9 +6865,142 @@ function changeMeetWeight(liftIndex, setIndex, val) {
 
           return {
             ...liftBlock,
-            sets: liftBlock.sets.map((s, si) =>
-              si === setIndex ? { ...s, weight: roundedVal } : s
+            sets: liftBlock.sets.map((s, si) => {
+              if (si !== setIndex) return s;
+
+              const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
+              const originalPct = Number(s.originalPct ?? s.pct) || 0;
+              const nextPct = getSetPctForWeight(
+                { ...s, originalWeight, originalPct },
+                roundedVal
+              );
+
+              return {
+                ...s,
+                weight: roundedVal,
+                pct: nextPct || s.pct,
+                done: false,
+                failed: false,
+                skipped: false,
+                failedAttempts: 0,
+                failedWeight: null,
+                adjustedWeight: null,
+                originalWeight,
+                originalPct,
+                adjustedFromFailedSet: false,
+                adjustedFromOriginal: Number(roundedVal) !== originalWeight,
+              };
+            }),
+          };
+        }),
+      };
+    })
+  );
+}
+
+function hasMoreWorkAfterAccessoryFailure(workout, accIndex, setIndex) {
+  const accessory = workout?.accessories?.[accIndex];
+  if (!accessory) return false;
+
+  const currentWeight = Number(accessory.weights?.[setIndex]) || 0;
+
+  // If weight can still be lowered, the same set must be retried.
+  if (currentWeight > 0) return true;
+
+  const hasLaterSetsInSameAccessory = (accessory.done || []).some((done, index) =>
+    index > setIndex && !done
+  );
+
+  if (hasLaterSetsInSameAccessory) return true;
+
+  return (workout.accessories || []).some((nextAccessory, index) =>
+    index > accIndex &&
+    (nextAccessory.done || []).some(done => !done)
+  );
+}
+
+function markAccessorySetFailed(accIndex, setIndex) {
+  const workout = workouts[selectedIndex];
+
+  if (workout && hasMoreWorkAfterAccessoryFailure(workout, accIndex, setIndex)) {
+    startTimer(restTimeSeconds, {
+      workoutNumber: workout.number,
+      type: 'accessory',
+      accIndex,
+      index: setIndex,
+    });
+  } else {
+    setTimer(null);
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        accessories: w.accessories.map((a, ai) => {
+          if (ai !== accIndex) return a;
+
+          const currentWeight = Number(a.weights?.[setIndex]) || 0;
+          const adjustedWeight = getFailedSetSuggestedWeight(currentWeight);
+          const shouldSkipAccessory = currentWeight <= 0;
+
+          return {
+            ...a,
+            done: a.done.map((done, i) => i === setIndex && shouldSkipAccessory ? true : done),
+            skipped: (a.skipped || a.done.map(() => false)).map((skipped, i) =>
+              i === setIndex ? shouldSkipAccessory : skipped
             ),
+            weights: a.weights.map((weight, i) => {
+              const shouldLower =
+                i >= setIndex &&
+                !a.done?.[i] &&
+                Number(weight) >= adjustedWeight;
+
+              return shouldSkipAccessory ? weight : shouldLower ? adjustedWeight : weight;
+            }),
+            originalWeights: (a.originalWeights || a.weights).map((weight, i) => weight || a.weights?.[i]),
+            failed: (a.failed || a.done.map(() => false)).map((failed, i) =>
+              i === setIndex ? !shouldSkipAccessory : failed
+            ),
+            failedWeights: (a.failedWeights || a.done.map(() => null)).map((weight, i) =>
+              i === setIndex ? (shouldSkipAccessory ? null : (weight || currentWeight)) : weight
+            ),
+            adjustedFromFailedSet: (a.adjustedFromFailedSet || a.done.map(() => false)).map((adjusted, i) =>
+              i === setIndex ? !shouldSkipAccessory : adjusted
+            ),
+            adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, i) =>
+              i >= setIndex && !a.done?.[i] && Number(a.weights?.[i]) >= adjustedWeight ? true : adjusted
+            ),
+          };
+        }),
+      };
+    })
+  );
+}
+
+function restoreAccessoryWeight(accIndex, setIndex) {
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        accessories: w.accessories.map((a, ai) => {
+          if (ai !== accIndex) return a;
+
+          const restoredWeight =
+            Number(a.originalWeights?.[setIndex] || a.failedWeights?.[setIndex] || a.weights?.[setIndex]) || 0;
+
+          return {
+            ...a,
+            weights: a.weights.map((weight, i) => i === setIndex ? restoredWeight : weight),
+            failed: (a.failed || a.done.map(() => false)).map((failed, i) => i === setIndex ? false : failed),
+            failedWeights: (a.failedWeights || a.done.map(() => null)).map((weight, i) => i === setIndex ? null : weight),
+            skipped: (a.skipped || a.done.map(() => false)).map((skipped, i) => i === setIndex ? false : skipped),
+            adjustedFromFailedSet: (a.adjustedFromFailedSet || a.done.map(() => false)).map((adjusted, i) => i === setIndex ? false : adjusted),
+            adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, i) => i === setIndex ? false : adjusted),
           };
         }),
       };
@@ -4260,9 +7018,15 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         accessories: w.accessories.map((a, ai) => {
           if (ai !== accIndex) return a;
 
+          const originalWeights = a.originalWeights || a.weights;
+
           return {
             ...a,
+            originalWeights,
             weights: a.weights.map((wt, i) => i === setIndex ? val : wt),
+            adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, i) =>
+              i === setIndex ? Number(val) !== Number(originalWeights?.[i]) : adjusted
+            ),
           };
         }),
       };
@@ -4270,27 +7034,47 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   );
 }
 
-  function completeWorkout() {  
-    
+  function completeWorkout(workoutEffortOverride = null) {
+    const baseWorkout = workouts[selectedIndex];
+    const workout = workoutEffortOverride
+      ? { ...baseWorkout, workoutEffort: workoutEffortOverride }
+      : baseWorkout;
+
+    if (!workout?.workoutEffort) {
+      setShowWorkoutEffortPrompt(true);
+      return;
+    }
+
+    setShowWorkoutEffortPrompt(false);
     setTimer(null);
-    
-    const workout = workouts[selectedIndex];
+
     const finishedWorkout = JSON.parse(JSON.stringify(workout));
+
+    if (workout.type === 'training' && (finishedWorkout.lifts || []).length > 0) {
+      const primaryLiftBlock = finishedWorkout.lifts[0];
+
+      finishedWorkout.lift = primaryLiftBlock.lift;
+      finishedWorkout.prepItems = primaryLiftBlock.prepItems || [];
+      finishedWorkout.warmups = primaryLiftBlock.warmups || [];
+      finishedWorkout.sets = primaryLiftBlock.sets || [];
+    }
 
     if (workout.type === 'meet') {
   const today = new Date().toLocaleDateString('nl-NL');
 
   const results = (workout.lifts || []).map(liftBlock => {
-    const sets = liftBlock.sets || [];
+    const sets = (liftBlock.sets || []).filter(s => s.done && !s.failed && !s.skipped);
 
-    const topSet = sets.reduce(
-      (best, s) =>
-        epley(Number(s.weight) || 0, Number(s.reps) || 0) >
-        epley(Number(best.weight) || 0, Number(best.reps) || 0)
-          ? s
-          : best,
-      sets[0]
-    );
+    const topSet = sets.length
+      ? sets.reduce(
+          (best, s) =>
+            epley(Number(s.weight) || 0, Number(s.reps) || 0) >
+            epley(Number(best.weight) || 0, Number(best.reps) || 0)
+              ? s
+              : best,
+          sets[0]
+        )
+      : null;
 
     const oneRMToday = sets.length
       ? Math.max(...sets.map(s => Number(s.weight) || 0))
@@ -4300,18 +7084,19 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       ? Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0)))
       : 0;
 
+    const previousLiftHistory = history.filter(h =>
+      h.lift === liftBlock.lift &&
+      !(h.cycle === currentCycle && h.workoutNumber === workout.number)
+    );
+
     const previousBestE1RM = Math.max(
-      0,
-      ...history
-        .filter(h => h.lift === liftBlock.lift && h.workoutNumber !== workout.number)
-        .map(h => Number(h.e1rm) || 0)
+      Number(prs[liftBlock.lift]) || 0,
+      ...previousLiftHistory.map(h => Number(h.e1rm) || 0)
     );
 
     const previousBest1RM = Math.max(
       0,
-      ...history
-        .filter(h => h.lift === liftBlock.lift && h.workoutNumber !== workout.number)
-        .map(h => Number(h.topWeight) || 0)
+      ...previousLiftHistory.map(h => Number(h.topWeight) || 0)
     );
 
     return {
@@ -4328,9 +7113,21 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     };
   });
 
+  const primaryResult = results[0];
+
   setCompletedSummary({
-    type: 'meet',
+    type: workout.type === 'meet' ? 'meet' : 'multiTraining',
     results,
+    lift: primaryResult?.lift,
+    oneRMToday: primaryResult?.oneRMToday || 0,
+    e1RMToday: primaryResult?.e1RMToday || 0,
+    previousBest1RM: primaryResult?.previousBest1RM || 0,
+    previousBestE1RM: primaryResult?.previousBestE1RM || 0,
+    best1RM: primaryResult?.best1RM || 0,
+    bestE1RM: primaryResult?.bestE1RM || 0,
+    is1RMPR: !!primaryResult?.is1RMPR,
+    isE1RMPR: !!primaryResult?.isE1RMPR,
+    topSet: primaryResult?.topSet || null,
     bodyWeight: latestBodyWeight,
   });
 
@@ -4346,6 +7143,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     topReps: 1,
     e1rm: result.e1RMToday,
     date: today,
+    workoutEffort: finishedWorkout.workoutEffort,
     workoutSnapshot: finishedWorkout,
   }));
 
@@ -4356,16 +7154,117 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 
   setCompletedWorkout(finishedWorkout);
   setCompletedWorkoutIndex(selectedIndex);
-  setSelectedIndex(Math.min(currentIndex + 1, workouts.length - 1));
-  setShowNewCycle(true);
+  const nextWorkoutIndex = Math.min(selectedIndex + 1, workouts.length - 1);
+  if (selectedIndex === currentIndex) {
+    setCurrentWorkoutIndex(nextWorkoutIndex);
+  }
+  setSelectedIndex(nextWorkoutIndex);
+  setShowNewCycle(workout.type === 'meet');
   setScreen('completed');
 
   return;
 
 }
   
-    if (workout.type === 'training' && ['Deadlift', 'Bench', 'Squat'].includes(workout.lift)) {
-    const sets = workout.sets || [];
+    if (workout.type === 'training' && (workout.lifts || []).length > 0) {
+      const today = new Date().toLocaleDateString('nl-NL');
+
+      const results = (workout.lifts || []).map(liftBlock => {
+        const sets = (liftBlock.sets || []).filter(s => s.done && !s.failed && !s.skipped);
+
+        const topSet = sets.length
+          ? sets.reduce(
+              (best, s) =>
+                epley(Number(s.weight) || 0, Number(s.reps) || 0) >
+                epley(Number(best.weight) || 0, Number(best.reps) || 0)
+                  ? s
+                  : best,
+              sets[0]
+            )
+          : null;
+
+        const oneRMToday = sets.length
+          ? Math.max(...sets.map(s => Number(s.weight) || 0))
+          : 0;
+
+        const e1RMToday = sets.length
+          ? Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0)))
+          : 0;
+
+        const previousLiftHistory = history.filter(h =>
+          h.lift === liftBlock.lift &&
+          !(h.cycle === currentCycle && h.workoutNumber === workout.number)
+        );
+
+        const previousBestE1RM = Math.max(
+          Number(prs[liftBlock.lift]) || 0,
+          ...previousLiftHistory.map(h => Number(h.e1rm) || 0)
+        );
+
+        const previousBest1RM = Math.max(
+          0,
+          ...previousLiftHistory.map(h => Number(h.topWeight) || 0)
+        );
+
+        return {
+          lift: liftBlock.lift,
+          oneRMToday,
+          e1RMToday,
+          previousBest1RM,
+          previousBestE1RM,
+          best1RM: Math.max(previousBest1RM, oneRMToday),
+          bestE1RM: Math.max(previousBestE1RM, e1RMToday),
+          is1RMPR: oneRMToday > previousBest1RM,
+          isE1RMPR: e1RMToday > previousBestE1RM,
+          topSet,
+        };
+      });
+
+      const primaryResult = results[0];
+
+      setCompletedSummary({
+        type: 'multiTraining',
+        results,
+        lift: primaryResult?.lift,
+        oneRMToday: primaryResult?.oneRMToday || 0,
+        e1RMToday: primaryResult?.e1RMToday || 0,
+        previousBest1RM: primaryResult?.previousBest1RM || 0,
+        previousBestE1RM: primaryResult?.previousBestE1RM || 0,
+        best1RM: primaryResult?.best1RM || 0,
+        bestE1RM: primaryResult?.bestE1RM || 0,
+        is1RMPR: !!primaryResult?.is1RMPR,
+        isE1RMPR: !!primaryResult?.isE1RMPR,
+        topSet: primaryResult?.topSet || null,
+        bodyWeight: latestBodyWeight,
+      });
+
+      const withoutCurrentWorkout = history.filter(
+        h => !(h.cycle === currentCycle && h.workoutNumber === workout.number)
+      );
+
+      const newEntries = results.map(result => ({
+        workoutNumber: workout.number,
+        cycle: currentCycle,
+        lift: result.lift,
+        topWeight: result.oneRMToday,
+        topReps: result.topSet?.reps || 0,
+        e1rm: result.e1RMToday,
+        date: today,
+        workoutEffort: finishedWorkout.workoutEffort,
+        workoutSnapshot: finishedWorkout,
+      }));
+
+      const nextHistory = [...withoutCurrentWorkout, ...newEntries];
+
+      setHistory(nextHistory);
+      setPrs(calculatePrsFromHistory(nextHistory));
+    }
+
+  
+    if (workout.type === 'training' && LIFT_ORDER.includes(workout.lift)) {
+    const sets = (workout.sets || []).filter(s => s.done && !s.failed && !s.skipped);
+
+if (sets.length > 0) {
 
 const topSet = sets.reduce(
   (best, s) => epley(s.weight, s.reps) > epley(best.weight, best.reps) ? s : best,
@@ -4427,6 +7326,7 @@ setCompletedSummary({
     topReps: sets.find(s => Number(s.weight) === oneRMToday)?.reps || topSet.reps,
     e1rm: e1RMToday,
     date: new Date().toLocaleDateString('nl-NL'),
+    workoutEffort: finishedWorkout.workoutEffort,
     workoutSnapshot: finishedWorkout,
   };
 
@@ -4439,11 +7339,12 @@ setCompletedSummary({
   return [...prev, newEntry];
 });
 }
+}
 
   if (workout.accessories) {
     workout.accessories.forEach(acc => {
       const bestWeight = Math.max(...acc.weights);
-      const name = acc.name;
+      const name = acc.key || acc.name;
 
       setAccessoryPRs(prev => {
         const current = prev[name] || 0;
@@ -4455,7 +7356,11 @@ setCompletedSummary({
   setCompletedWorkout(finishedWorkout);
   setCompletedWorkoutIndex(selectedIndex);
 
-  setSelectedIndex(Math.min(currentIndex + 1, workouts.length - 1));
+  const nextWorkoutIndex = Math.min(selectedIndex + 1, workouts.length - 1);
+  if (selectedIndex === currentIndex) {
+    setCurrentWorkoutIndex(nextWorkoutIndex);
+  }
+  setSelectedIndex(nextWorkoutIndex);
 
   setScreen('completed');
 }
@@ -4464,6 +7369,13 @@ if (screen === 'onboarding') return <Onboarding onStart={handleStart} t={t}/>;
 
 if (screen !== 'onboarding' && !workouts.length) {
   return <Onboarding onStart={handleStart} t={t}/>;
+}
+
+function activateSelectedWorkout() {
+  if (selectedIndex <= currentIndex) return;
+
+  setCurrentWorkoutIndex(selectedIndex);
+  setSelectedIndex(selectedIndex);
 }
 
 if (screen === 'current' && !workouts[selectedIndex]) {
@@ -4670,7 +7582,7 @@ function boneMassStatus(value) {
 const latestBodyDataRows = [
   {
     key: 'bodyWeight',
-    label: `${t.bodyweight} (${t.kg})`,
+    label: t.bodyweight,
     value: bodyMetricValue(latestBodyDataEntry?.bodyWeight, t.kg),
   },
   {
@@ -4711,7 +7623,7 @@ const latestBodyDataRows = [
   {
     key: 'bmr',
     label: t.bmrKcal,
-    value: bodyMetricValue(latestBodyDataEntry?.bmr),
+    value: bodyMetricValue(latestBodyDataEntry?.bmr, 'kcal'),
   },
 ].filter(row => row.value);
 
@@ -4731,11 +7643,17 @@ const latestBodyDataRows = [
           onTogglePrepItem={togglePrepItem}
           onToggleWarmup={toggleWarmup}
           onToggleSet={toggleSet}
+          onMarkSetFailed={markSetFailed}
+          onRestoreSetWeight={restoreSetWeight}
           onToggleAccessorySet={toggleAccessorySet}
+          onMarkAccessorySetFailed={markAccessorySetFailed}
+          onRestoreAccessoryWeight={restoreAccessoryWeight}
           onWeightChange={changeWeight}
+          onSetEffortChange={changeSetEffort}
           onAccessoryWeightChange={changeAccessoryWeight}
           onComplete={completeWorkout}
           onViewAll={() => setScreen('all')}
+          onActivateWorkout={activateSelectedWorkout}
           showNewCycle={showNewCycle}
           newCyclePRs={prs}
           onStartNewCycle={handleStartNewCycle}
@@ -4745,50 +7663,84 @@ const latestBodyDataRows = [
           onToggleMeetPrepItem={toggleMeetPrepItem}
           onToggleMeetWarmup={toggleMeetWarmup}
           onToggleMeetSet={toggleMeetSet}
+          onMarkMeetSetFailed={markMeetSetFailed}
+          onRestoreMeetSetWeight={restoreMeetSetWeight}
           onMeetWeightChange={changeMeetWeight}
+          onMeetSetEffortChange={changeMeetSetEffort}
         />
       )}
 
       {screen === 'dashboard' && (
-  <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, background: THEME.bg, minHeight: '100vh', color: THEME.text }}>
-    <h2 style={{ marginTop: 0, textAlign: 'center' }}>{t.dashboard}</h2>
-    <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
-      {t.cycle} {currentCycle} · {t.workoutProgress} {Math.min(currentIndex + 1, workouts.length)} / {workouts.length}
-    </div>
-    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 12 }}>
+  <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
+    <AppHeader
+      t={t}
+      title={t.dashboard}
+      subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${Math.min(currentIndex + 1, workouts.length)} / ${workouts.length}`}
+    />
+
+    {workouts[currentIndex] && (
+      <div style={{
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 10,
+        padding: 14,
+        marginBottom: 12,
+        textAlign: 'center'
+      }}>
+        <div style={{
+          color: THEME.primary,
+          fontSize: 14,
+          fontWeight: 900,
+          letterSpacing: 0.8,
+          textTransform: 'uppercase',
+          marginBottom: 6
+        }}>
+          {t.nextWorkout} · W{workouts[currentIndex].number}
+        </div>
+
+        <div style={{
+          color: THEME.text,
+          fontSize: 22,
+          fontWeight: 900
+        }}>
+          {getWorkoutTitle(workouts[currentIndex], t)}
+        </div>
+      </div>
+    )}
+    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 18, marginBottom: 12 }}>
       {[
         [t.squat, THEME.red, best1RMs.Squat, bestE1RMs.Squat],
         [t.bench, THEME.primary, best1RMs.Bench, bestE1RMs.Bench],
         [t.deadlift, THEME.yellow, best1RMs.Deadlift, bestE1RMs.Deadlift],
       ].map(([lift, color, oneRM, e1RM]) => (
-        <div key={lift} style={{ marginBottom: lift === t.deadlift ? 0 : 12 }}>
+        <div key={lift} style={{ marginBottom: lift === t.deadlift ? 0 : 14 }}>
           <div style={{ marginBottom: 6 }}>
-            <strong style={{ color }}>{lift}</strong>
+            <strong style={{ color, fontSize: 18 }}>{lift}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.oneRM}:</span>
-            <strong>{oneRM ? `${oneRM} kg` : '—'}</strong>
+            <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.oneRM}:</span>
+            <strong style={{ fontSize: 15 }}>{oneRM ? `${oneRM} kg` : '—'}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.e1RM}:</span>
-            <strong>{e1RM ? `${e1RM} ${t.kg}` : '—'}</strong>
+            <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.e1RM}:</span>
+            <strong style={{ fontSize: 15 }}>{e1RM ? `${e1RM} ${t.kg}` : '—'}</strong>
           </div>
         </div>
       ))}
     </div>
 
-    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16, marginBottom: 12 }}>
+    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 18, marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ color: THEME.text, fontWeight: 700 }}>{t.total1rm}</span>
-        <strong style={{ color: '#ffffff' }}>{total1RM ? `${total1RM} kg` : '—'}</strong>
+        <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.total1rm}</span>
+        <strong style={{ color: '#ffffff', fontSize: 15 }}>{total1RM ? `${total1RM} kg` : '—'}</strong>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ color: THEME.text, fontWeight: 700 }}>{t.totalE1rm}</span>
-        <strong style={{ color: '#ffffff' }}>{totalE1RM ? `${totalE1RM} kg` : '—'}</strong>
+        <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.totalE1rm}</span>
+        <strong style={{ color: '#ffffff', fontSize: 15 }}>{totalE1RM ? `${totalE1RM} kg` : '—'}</strong>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ color: THEME.text, fontWeight: 700 }}>{t.strength}</span>
-        <strong style={{ color: '#ffffff' }}>{strengthRatio || '—'}</strong>
+        <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.strength}</span>
+        <strong style={{ color: '#ffffff', fontSize: 15 }}>{strengthRatio || '—'}</strong>
       </div>
     </div>
 
@@ -4799,17 +7751,17 @@ const latestBodyDataRows = [
             key={row.key}
             style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 56px 160px',
+              gridTemplateColumns: '1fr 70px 150px',
               alignItems: 'center',
               columnGap: 8,
-              marginBottom: index === latestBodyDataRows.length - 1 ? 0 : 8
+              marginBottom: index === latestBodyDataRows.length - 1 ? 0 : 10
             }}
           >
-            <span style={{ color: THEME.text, fontWeight: 700 }}>
+            <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>
               {row.label}:
             </span>
 
-            <strong style={{ textAlign: 'right', whiteSpace: 'nowrap', minWidth: 56 }}>
+            <strong style={{ textAlign: 'right', whiteSpace: 'nowrap', minWidth: 70, fontSize: 15 }}>
               {row.value}
             </strong>
 
@@ -4817,7 +7769,7 @@ const latestBodyDataRows = [
               {row.status && (
                 <span style={{
                   color: row.status.color,
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight: 800,
                   whiteSpace: 'nowrap'
                 }}>
@@ -4841,6 +7793,7 @@ const latestBodyDataRows = [
         <AllWorkouts
           workouts={workouts}
           currentIndex={currentIndex}
+          completedWorkoutCount={completedWorkoutCount}
           currentCycle={currentCycle}
           onSelect={(idx) => {
             setSelectedIndex(idx);
@@ -4868,72 +7821,76 @@ const latestBodyDataRows = [
 )}
 
       {screen === 'settings' && (
-       <div style={{ maxWidth: 500, margin: '0 auto', padding: 12, fontFamily: 'sans-serif' }}>
-  <h2 style={{ marginTop: 0, textAlign: 'center' }}>{t.settings}</h2>
-
-  <ProfileSection
-    userProfile={userProfile}
-    onSave={setUserProfile}
+       <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
+  <AppHeader
     t={t}
+    title={t.settings}
+    meta={`${t.appName} · ${process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev'}`}
   />
-
-  <BodyDataSection
-    bodyData={latestBodyDataEntry}
-    onSave={saveBodyWeight}
-    t={t}
-  />
-
-  <RestTimeSection
-    restTimeSeconds={restTimeSeconds}
-    setRestTimeSeconds={setRestTimeSeconds}
-    t={t}
-  />
-
-  <LanguageSection
-    language={language}
-    setLanguage={setLanguage}
-    t={t}
-  />
-
-  <DataSection
-    meetPrepChecklist={meetPrepChecklist}
-    setMeetPrepChecklist={setMeetPrepChecklist}
-    t={t}
-  />
-
-  <SupportSection t={t} />
-
-  <button
-    onClick={() => setShowResetConfirm(true)}
-    style={{
-      width: '100%',
-      padding: 9,
-      fontSize: 12,
-      fontWeight: 700,
-      background: THEME.card,
-      color: THEME.red,
-      border: `1px solid ${THEME.red}`,
-      borderRadius: 8,
-      cursor: 'pointer',
-      marginTop: 20
-    }}
-  >
-    {t.restart}
-  </button>
 
   <div style={{
-    marginTop: 32,
-    paddingTop: 12,
-    borderTop: `1px solid ${THEME.border}`,
-    textAlign: 'center',
-    color: THEME.muted,
-    fontSize: 12
+    background: THEME.card,
+    border: `1px solid ${THEME.border}`,
+    borderRadius: 8,
+    padding: '5px 14px',
+    marginBottom: 10
   }}>
-    {t.appName} · v{process.env.REACT_APP_VERSION ?? 'dev'}
+    <ProfileSection
+      userProfile={userProfile}
+      onSave={setUserProfile}
+      t={t}
+    />
+
+    <BodyDataSection
+      bodyData={latestBodyDataEntry}
+      onSave={saveBodyWeight}
+      t={t}
+    />
+
+    <RestTimeSection
+      restTimeSeconds={restTimeSeconds}
+      setRestTimeSeconds={setRestTimeSeconds}
+      t={t}
+    />
+
+    <PreparationSection
+      preparationMode={preparationMode}
+      setPreparationMode={setPreparationMode}
+      t={t}
+    />
+
+    <AccessorySection
+      accessoryMode={accessoryMode}
+      setAccessoryMode={setAccessoryMode}
+      t={t}
+    />
+
+    <LanguageSection
+      language={language}
+      setLanguage={setLanguage}
+      t={t}
+    />
+
+    <DataSection
+      meetPrepChecklist={meetPrepChecklist}
+      setMeetPrepChecklist={setMeetPrepChecklist}
+      t={t}
+    />
+
+    <SupportSection t={t} />
+
+    <SettingsListRow
+      label={t.restart}
+      actionLabel={t.startFromScratch || t.restart}
+      onAction={() => setShowResetConfirm(true)}
+      danger={true}
+      noBorder={true}
+    />
+
   </div>
+
 </div>
-      )}
-      
+      )}      
     {screen === 'completed' && (
   <div style={{
     maxWidth: 500,
@@ -4944,170 +7901,594 @@ const latestBodyDataRows = [
     color: THEME.text,
     fontFamily: 'sans-serif'
   }}>
-    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 12, padding: 24, textAlign: 'center' }}>
-      <div style={{ fontSize: 40, marginBottom: 10 }}>🎉</div>
+    {completedWorkout?.type === 'meet' ? (
+      <div style={{
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 12,
+        padding: 24,
+        textAlign: 'center'
+      }}>
+        <div style={{ fontSize: 40, marginBottom: 10 }}>🎉</div>
 
-      <h2 style={{ margin: '0 0 8px', color: THEME.text }}>{t.workoutCompleted}</h2>
+        <h2 style={{ margin: '0 0 8px', color: THEME.text }}>
+          {t.workoutAndCycleCompleted}
+        </h2>
 
-<p style={{ color: THEME.muted, margin: '0 0 12px' }}>
-  {t.goodJobSaved}
-</p>
+        <p style={{ color: THEME.muted, margin: '0 0 16px' }}>
+          {t.workoutAndCycleSaved}
+        </p>
 
-<div style={{
-  background: THEME.card,
-  border: `1px solid ${THEME.border}`,
-  color: THEME.text,
-  borderRadius: 8,
-  padding: 12,
-  marginBottom: 20,
-  textAlign: 'left'
-}}>
-
-{(() => {
-  const row = (label, value, isPR) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-      <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
-      <strong style={{ color: '#ffffff' }}>
-        {value} kg {isPR ? '🚀' : ''}
-      </strong>
-    </div>
-  );
-
-  if (completedWorkout?.type === 'meet') {
-
-    return (
-      <>
-        {(completedSummary?.results || []).map(result => (
-          <div key={result.lift} style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 800, color: THEME.primary, marginBottom: 6 }}>
-              {liftLabel(result.lift)}
+        {getWorkoutEffortText(completedWorkout?.workoutEffort, t) && (
+          <div style={{
+            margin: '0 auto 16px',
+            padding: '10px 14px',
+            borderRadius: 10,
+            border: `1px solid ${THEME.border}`,
+            background: THEME.bg,
+            maxWidth: 260,
+            textAlign: 'center'
+          }}>
+            <div style={{
+              color: THEME.primary,
+              fontSize: 18,
+              fontWeight: 900,
+              lineHeight: 1.15
+            }}>
+              {getWorkoutEffortText(completedWorkout.workoutEffort, t)}
             </div>
-            {row(t.oneRMToday, result.oneRMToday, result.is1RMPR)}
-            {row(t.e1RMToday, result.e1RMToday, result.isE1RMPR)}
-            {row(t.best1RM, result.best1RM, result.is1RMPR)}
-            {row(t.bestE1RM, result.bestE1RM, result.isE1RMPR)}
           </div>
-        ))}
-      </>
-    );
-  }
+        )}
 
-  const sets = completedWorkout?.sets || [];
+        {(() => {
+          const achievedLiftResults = (completedWorkout?.lifts || []).map(liftBlock => {
+            const successfulSets = (liftBlock.sets || []).filter(set =>
+              set.done && !set.failed && !set.skipped
+            );
 
-  const oneRMToday = sets.length
-    ? Math.max(...sets.map(s => Number(s.weight) || 0))
-    : 0;
+            const bestSet = successfulSets.reduce((best, set) => {
+              if (!best) return set;
+              return Number(set.weight) > Number(best.weight) ? set : best;
+            }, null);
 
-  const e1RMToday = sets.length
-      ? Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0)))
-  : 0;
+            return {
+              lift: liftBlock.lift,
+              weight: Number(bestSet?.weight) || 0,
+            };
+          });
 
-  const best1RM = completedSummary?.best1RM || oneRMToday;
-  const bestE1RM = completedSummary?.bestE1RM || completedSummary?.e1rm || e1RMToday;
+          const achievedTotal = achievedLiftResults.reduce(
+            (total, result) => total + result.weight,
+            0
+          );
 
-  const is1RMPR = oneRMToday >= best1RM && oneRMToday > 0;
-  const isE1RMPR = e1RMToday >= bestE1RM && e1RMToday > 0;
+          return (
+            <div style={{
+              background: THEME.bg,
+              border: `1px solid ${THEME.primary}`,
+              color: THEME.text,
+              borderRadius: 10,
+              padding: 16,
+              marginBottom: 16,
+              textAlign: 'center'
+            }}>
+              <div style={{
+                color: THEME.muted,
+                fontSize: 13,
+                fontWeight: 800,
+                marginBottom: 4
+              }}>
+                {t.achievedTotal || t.total}
+              </div>
 
-  return (
-    <>
-      {row(t.oneRMToday, oneRMToday, is1RMPR)}
-      {row(t.e1RMToday, e1RMToday, isE1RMPR)}
-      {row(t.best1RM, Math.max(best1RM, oneRMToday), is1RMPR)}
-      {row(t.bestE1RM, Math.max(bestE1RM, e1RMToday), isE1RMPR)}
-    </>
-  );
-})()}
+              <div style={{
+                color: THEME.primary,
+                fontSize: 28,
+                fontWeight: 900,
+                lineHeight: 1,
+                marginBottom: 12
+              }}>
+                {achievedTotal ? `${achievedTotal} ${t.kg}` : '—'}
+              </div>
 
-</div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr',
+                gap: 8
+              }}>
+                {achievedLiftResults.map(result => (
+                  <div
+                    key={`achieved-${result.lift}`}
+                    style={{
+                      padding: '8px 6px',
+                      borderRadius: 8,
+                      border: `1px solid ${THEME.border}`,
+                      background: THEME.card
+                    }}
+                  >
+                    <div style={{
+                      color: THEME.muted,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      marginBottom: 3
+                    }}>
+                      {liftLabel(result.lift, t)}
+                    </div>
+                    <div style={{
+                      color: '#ffffff',
+                      fontSize: 13,
+                      fontWeight: 900
+                    }}>
+                      {result.weight ? `${result.weight} ${t.kg}` : '—'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
-<div style={{ background: THEME.card,
-border: `1px solid ${THEME.border}`,
-color: THEME.text, borderRadius: 8, padding: 16, marginBottom: 20, textAlign: 'left' }}>
-  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-    <span style={{ color: THEME.text, fontWeight: 700 }}>{t.lift}</span>
-    <strong>{completedWorkout?.lift || '—'}</strong>
-  </div>
+        <div style={{
+          background: THEME.card,
+          border: `1px solid ${THEME.border}`,
+          color: THEME.text,
+          borderRadius: 8,
+          padding: 14,
+          marginBottom: 16,
+          textAlign: 'left'
+        }}>
+          <div style={{
+            color: THEME.primary,
+            fontWeight: 900,
+            marginBottom: 8,
+            textAlign: 'center'
+          }}>
+            {t.cycleCompleted}
+          </div>
 
-  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-    <span style={{ color: THEME.text, fontWeight: 700 }}>{t.workout}</span>
-    <strong>{completedWorkout?.number || '—'}</strong>
-  </div>
+          <div style={{
+            color: THEME.muted,
+            fontSize: 13,
+            lineHeight: 1.4,
+            marginBottom: 10,
+            textAlign: 'center'
+          }}>
+            {t.cycleNewE1RMs}
+          </div>
 
-  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-    <span style={{ color: THEME.text, fontWeight: 700 }}>{t.cycle}</span>
-    <strong>{currentCycle}</strong>
-  </div>
+          {(completedSummary?.results || []).map(result => (
+            <div
+              key={result.lift}
+              style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}
+            >
+              <span style={{ color: THEME.text, fontWeight: 700 }}>
+                {liftLabel(result.lift, t)} {t.e1RM}
+              </span>
+              <strong style={{ color: '#ffffff', whiteSpace: 'nowrap' }}>
+                {result.bestE1RM} {t.kg}
+              </strong>
+            </div>
+          ))}
+        </div>
 
-<div style={{ fontSize: 16, fontWeight: 700, color: THEME.muted, marginBottom: 10 }}>
-  {completedWorkout?.lift || '—'}
-</div>
+        <div style={{
+          background: THEME.card,
+          border: `1px solid ${THEME.border}`,
+          color: THEME.text,
+          borderRadius: 8,
+          padding: 16,
+          marginBottom: 16,
+          textAlign: 'left'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.lift}</span>
+            <strong>{completedWorkout?.lift || 'SBD'}</strong>
+          </div>
 
-{(completedWorkout?.sets || []).map((set, i) => {
-  return (
-    <div
-  key={i}
-  style={{
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '10px 12px',
-    color: '#ffffff'
-  }}
->
-  <span style={{ color: '#ffffff', fontWeight: 700 }}>
-    {set.label || `${t.set} ${i + 1}`} — {set.reps} {t.reps}
-  </span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.workout}</span>
+            <strong>{completedWorkout?.number || '—'}</strong>
+          </div>
 
-  <strong style={{ color: '#ffffff' }}>
-    {set.weight} kg
-  </strong>
-</div>
-  );
-})}
-</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
+            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.cycle}</span>
+            <strong>{currentCycle}</strong>
+          </div>
 
-      <button
-        onClick={() => setScreen('stats')}
-        style={{
-  width: '100%',
-  padding: 14,
-  fontSize: 16,
-  fontWeight: 600,
-  background: THEME.primary,
-  color: '#ffffff',
-  border: `1px solid ${THEME.primary}`,
-  borderRadius: 8,
-  cursor: 'pointer',
-  marginBottom: 10
-}}
->
-        {t.viewProgress}
-      </button>
+          <div style={{
+            fontSize: 16,
+            fontWeight: 900,
+            color: THEME.primary,
+            marginBottom: 10,
+            textAlign: 'center'
+          }}>
+            {t.meetAttemptsCompleted}
+          </div>
 
-      <button
-onClick={() => {
-  setSelectedIndex(completedWorkoutIndex);
-  setScreen('current');
-}}
-style={{
-  width: '100%',
-  padding: 14,
-  fontSize: 16,
-  fontWeight: 600,
-  marginBottom: 0,
-  background: 'transparent',
-  color: '#ffffff',
-  border: `1px solid ${THEME.border}`,
-  borderRadius: 8,
-  cursor: 'pointer'
-}}
->
-        {t.backToWorkout}
-      </button>
-    </div>
+          {(completedWorkout?.lifts || []).map(liftBlock => (
+            <div key={liftBlock.lift} style={{ marginBottom: 14 }}>
+              <div style={{
+                color: THEME.primary,
+                fontWeight: 900,
+                marginBottom: 6
+              }}>
+                {liftLabel(liftBlock.lift, t)}
+              </div>
+
+              {(liftBlock.sets || []).map((set, i) => {
+                const setLabel = set.labelKey ? t[set.labelKey] : `${t.set} ${i + 1}`;
+                const isInvalidSet = set.failed || set.skipped || !set.done;
+
+                return (
+                  <div
+                    key={`${liftBlock.lift}-${i}`}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      padding: '8px 10px',
+                      color: '#ffffff',
+                      opacity: isInvalidSet ? 0.8 : 1,
+                      borderLeft: isInvalidSet ? '3px solid #e74c3c' : '3px solid transparent'
+                    }}
+                  >
+                    <span style={{ color: '#ffffff', fontWeight: 700 }}>
+                      {isInvalidSet ? '✕ ' : '✓ '}
+                      {setLabel}
+                    </span>
+
+                    <strong style={{ color: isInvalidSet ? '#e74c3c' : '#ffffff', whiteSpace: 'nowrap' }}>
+                      {set.weight} {t.kg}
+                    </strong>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={handleStartNewCycle}
+          style={{
+            width: '100%',
+            padding: 14,
+            fontSize: 16,
+            fontWeight: 800,
+            background: THEME.primary,
+            color: '#ffffff',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 8,
+            cursor: 'pointer',
+            marginBottom: 10
+          }}
+        >
+          {t.startNewCycle} 🚀
+        </button>
+
+        <button
+          onClick={() => setScreen('stats')}
+          style={{
+            width: '100%',
+            padding: 14,
+            fontSize: 16,
+            fontWeight: 600,
+            background: 'transparent',
+            color: '#ffffff',
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            cursor: 'pointer',
+            marginBottom: 10
+          }}
+        >
+          {t.viewProgress}
+        </button>
+
+        <button
+          onClick={() => {
+            const targetIndex = Number.isInteger(completedWorkoutIndex)
+              ? completedWorkoutIndex
+              : Math.max(0, (completedWorkout?.number || 1) - 1);
+
+            setSelectedIndex(targetIndex);
+            setScreen('current');
+          }}
+          style={{
+            width: '100%',
+            padding: 14,
+            fontSize: 16,
+            fontWeight: 600,
+            marginBottom: 0,
+            background: 'transparent',
+            color: '#ffffff',
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          {t.backToWorkout}
+        </button>
+      </div>
+    ) : (
+      <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 12, padding: 24, textAlign: 'center' }}>
+        <div style={{ fontSize: 40, marginBottom: 10 }}>🎉</div>
+
+        <h2 style={{ margin: '0 0 8px', color: THEME.text }}>{t.workoutCompleted}</h2>
+
+        <p style={{ color: THEME.muted, margin: '0 0 12px' }}>
+          {t.goodJobSaved}
+        </p>
+
+        {(completedWorkout?.lifts || []).length > 0 && (() => {
+          const liftNames = (completedWorkout.lifts || [])
+            .map(liftBlock => liftLabel(liftBlock.lift, t))
+            .filter(Boolean)
+            .join(' + ');
+
+          const effortLabel = getWorkoutEffortLabel(completedWorkout?.workoutEffort, t);
+
+          const summaryRow = (label, value) => (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+              marginBottom: 10
+            }}>
+              <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
+              <strong style={{ color: '#ffffff', textAlign: 'right' }}>{value}</strong>
+            </div>
+          );
+
+          return (
+            <div style={{
+              background: THEME.card,
+              border: `1px solid ${THEME.border}`,
+              color: THEME.text,
+              borderRadius: 8,
+              padding: 12,
+              marginBottom: 10,
+              textAlign: 'left'
+            }}>
+              {summaryRow(t.lifts || t.lift, liftNames || '—')}
+              {summaryRow(t.workout, completedWorkout?.number || '—')}
+              {summaryRow(t.cycle, currentCycle)}
+              {summaryRow(t.workoutEffortWas, effortLabel || '—')}
+            </div>
+          );
+        })()}
+
+
+        {(completedWorkout?.lifts || []).length === 0 && getWorkoutEffortText(completedWorkout?.workoutEffort, t) && (
+          <div style={{
+            margin: '0 auto 16px',
+            padding: '10px 14px',
+            borderRadius: 10,
+            border: `1px solid ${THEME.border}`,
+            background: THEME.bg,
+            maxWidth: 260,
+            textAlign: 'center'
+          }}>
+            <div style={{
+              color: THEME.muted,
+              fontSize: 12,
+              fontWeight: 800,
+              marginBottom: 3
+            }}>
+              {t.workoutEffort}
+            </div>
+
+            <div style={{
+              color: THEME.primary,
+              fontSize: 18,
+              fontWeight: 900,
+              lineHeight: 1.1
+            }}>
+              {getWorkoutEffortText(completedWorkout.workoutEffort, t)}
+            </div>
+          </div>
+        )}
+
+        <div style={{
+          background: THEME.card,
+          border: `1px solid ${THEME.border}`,
+          color: THEME.text,
+          borderRadius: 8,
+          padding: 12,
+          marginBottom: 20,
+          textAlign: 'left'
+        }}>
+          <div style={{
+            color: ({
+              Squat: THEME.red,
+              Bench: THEME.primary,
+              Deadlift: THEME.yellow,
+            }[completedSummary?.results?.[0]?.lift || completedWorkout?.lift] || THEME.primary),
+            fontSize: 16,
+            fontWeight: 900,
+            marginBottom: 10,
+            textAlign: 'center'
+          }}>
+            {liftLabel(completedSummary?.results?.[0]?.lift || completedWorkout?.lift, t)} · 1RM / e1RM
+          </div>
+
+          {(() => {
+            const row = (label, value, isPR) => (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
+                <strong style={{ color: '#ffffff' }}>
+                  {value} kg {isPR ? '🚀' : ''}
+                </strong>
+              </div>
+            );
+
+            const primaryResult = completedSummary?.type === 'multiTraining'
+              ? completedSummary.results?.[0]
+              : null;
+
+            const sets = (completedWorkout?.sets || []).filter(s => s.done && !s.failed && !s.skipped);
+
+            const calculatedOneRMToday = sets.length
+              ? Math.max(...sets.map(s => Number(s.weight) || 0))
+              : 0;
+
+            const calculatedE1RMToday = sets.length
+              ? Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0)))
+              : 0;
+
+            const oneRMToday = primaryResult?.oneRMToday ?? calculatedOneRMToday;
+            const e1RMToday = primaryResult?.e1RMToday ?? calculatedE1RMToday;
+
+            const primaryLift = primaryResult?.lift || completedWorkout?.lift;
+
+            const previousBest1RM = Number(best1RMs?.[primaryLift]) || 0;
+            const previousBestE1RM = Number(bestE1RMs?.[primaryLift]) || Number(prs?.[primaryLift]) || 0;
+
+            const best1RM = Math.max(previousBest1RM, oneRMToday || 0);
+            const bestE1RM = Math.max(previousBestE1RM, e1RMToday || 0);
+
+            const is1RMPR = oneRMToday > previousBest1RM && oneRMToday > 0;
+            const isE1RMPR = e1RMToday > previousBestE1RM && e1RMToday > 0;
+
+            return (
+              <>
+                {row(t.oneRMToday, oneRMToday, is1RMPR)}
+                {row(t.e1RMToday, e1RMToday, isE1RMPR)}
+                {row(t.best1RM, best1RM, is1RMPR)}
+                {row(t.bestE1RM, bestE1RM, isE1RMPR)}
+              </>
+            );
+          })()}
+        </div>
+
+        {/* FORCE_MULTI_LIFT_COMPLETED_SETS_START */}
+        {(completedWorkout?.lifts || []).length > 0 && (
+          <div style={{
+            background: THEME.card,
+            border: `1px solid ${THEME.border}`,
+            color: THEME.text,
+            borderRadius: 8,
+            padding: 16,
+            marginBottom: 20,
+            textAlign: 'left'
+          }}>
+            {(completedWorkout.lifts || []).map((liftBlock, liftIndex) => (
+              <div
+                key={`force-completed-lift-${liftBlock.lift}`}
+                style={{
+                  marginTop: liftIndex === 0 ? 0 : 16,
+                  paddingTop: liftIndex === 0 ? 0 : 14,
+                  borderTop: liftIndex === 0 ? 'none' : `1px solid ${THEME.border}`
+                }}
+              >
+                <div style={{
+                  color: ({
+                    Squat: THEME.red,
+                    Bench: THEME.primary,
+                    Deadlift: THEME.yellow,
+                  }[liftBlock.lift] || THEME.primary),
+                  fontSize: 16,
+                  fontWeight: 900,
+                  marginBottom: 8
+                }}>
+                  {liftLabel(liftBlock.lift, t)}
+                </div>
+
+                {(liftBlock.sets || []).map((set, i) => {
+                  const setLabel = set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`;
+                  const isInvalidSet = set.failed || set.skipped || !set.done;
+                  const effortLabel = getSetEffortLabel(set.effort, t);
+
+                  return (
+                    <div
+                      key={`force-${liftBlock.lift}-${i}`}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr auto',
+                        gap: 12,
+                        padding: '7px 0',
+                        borderTop: i === 0 ? 'none' : `1px solid ${THEME.border}`,
+                        opacity: isInvalidSet ? 0.75 : 1
+                      }}
+                    >
+                      <div>
+                        <div style={{ color: THEME.text, fontWeight: 800 }}>
+                          {isInvalidSet ? '✕ ' : '✓ '}
+                          {setLabel}
+                        </div>
+
+                        <div style={{
+                          color: THEME.muted,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          marginTop: 2
+                        }}>
+                          {set.reps} {t.reps}
+                          {effortLabel ? ` · ${effortLabel}` : ''}
+                        </div>
+                      </div>
+
+                      <strong style={{
+                        color: isInvalidSet ? '#e74c3c' : '#ffffff',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {set.weight} {t.kg}
+                      </strong>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+        {/* FORCE_MULTI_LIFT_COMPLETED_SETS_END */}
+
+        <button
+          onClick={() => setScreen('stats')}
+          style={{
+            width: '100%',
+            padding: 14,
+            fontSize: 16,
+            fontWeight: 600,
+            background: THEME.primary,
+            color: '#ffffff',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 8,
+            cursor: 'pointer',
+            marginBottom: 10
+          }}
+        >
+          {t.viewProgress}
+        </button>
+
+        <button
+          onClick={() => {
+            const targetIndex = Number.isInteger(completedWorkoutIndex)
+              ? completedWorkoutIndex
+              : Math.max(0, (completedWorkout?.number || 1) - 1);
+
+            setSelectedIndex(targetIndex);
+            setScreen('current');
+          }}
+          style={{
+            width: '100%',
+            padding: 14,
+            fontSize: 16,
+            fontWeight: 600,
+            marginBottom: 0,
+            background: 'transparent',
+            color: '#ffffff',
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          {t.backToWorkout}
+        </button>
+      </div>
+    )}
   </div>
 )}
 
-{showNewCycle && screen === 'completed' && (
+{false && showNewCycle && screen === 'completed' && (
   <NewCycleModal
     prs={prs}
     onStart={handleStartNewCycle}
@@ -5115,13 +8496,96 @@ style={{
   />
 )}
 
+{showWorkoutEffortPrompt && (
+  <div style={{
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.65)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 650,
+    padding: 16
+  }}>
+    <div style={{
+      background: THEME.card,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: 12,
+      padding: 20,
+      maxWidth: 380,
+      width: '100%',
+      color: THEME.text
+    }}>
+      <h3 style={{
+        margin: '0 0 8px',
+        color: THEME.text,
+        textAlign: 'center'
+      }}>
+        {t.workoutEffortQuestion}
+      </h3>
+
+      <p style={{
+        margin: '0 0 16px',
+        color: THEME.muted,
+        fontSize: 13,
+        lineHeight: 1.4,
+        textAlign: 'center'
+      }}>
+        {t.workoutEffortRequired}
+      </p>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+        gap: 8
+      }}>
+        {WORKOUT_EFFORT_OPTIONS.map(option => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => completeWorkout(option)}
+            style={{
+              padding: 12,
+              borderRadius: 8,
+              border: `1px solid ${THEME.primary}`,
+              background: THEME.card,
+              color: THEME.text,
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
+            {t[`workoutEffort${option[0].toUpperCase()}${option.slice(1)}`]}
+          </button>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowWorkoutEffortPrompt(false)}
+        style={{
+          width: '100%',
+          marginTop: 10,
+          padding: 10,
+          fontSize: 14,
+          fontWeight: 700,
+          background: 'transparent',
+          color: THEME.text,
+          border: `1px solid ${THEME.border}`,
+          borderRadius: 8,
+          cursor: 'pointer'
+        }}
+      >
+        {t.cancel}
+      </button>
+    </div>
+  </div>
+)}
+
 {showResetConfirm && (
   <div style={{
     position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    inset: 0,
     background: 'rgba(0,0,0,0.65)',
     display: 'flex',
     alignItems: 'center',

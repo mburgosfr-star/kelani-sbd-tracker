@@ -1,14 +1,19 @@
-const { execSync } = require('child_process');
+#!/usr/bin/env node
+
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const pkg = require(path.join(root, 'package.json'));
 const androidDir = path.join(root, 'android');
-const gradleHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kelani-izzy-gradle-'));
+const pkg = require(path.join(root, 'package.json'));
 
 const javaHome = '/usr/lib/jvm/java-21-openjdk-amd64';
+const gradleHome = path.join(os.tmpdir(), 'kelani-izzy-gradle-home');
+
+fs.rmSync(gradleHome, { recursive: true, force: true });
+fs.mkdirSync(gradleHome, { recursive: true });
 
 const env = {
   ...process.env,
@@ -18,25 +23,23 @@ const env = {
   REACT_APP_VERSION: pkg.version,
 };
 
-function run(command, cwd = root) {
-  console.log(`\n> ${command}`);
-  execSync(command, {
-    cwd,
+function run(command, args, options = {}) {
+  console.log(`\n> ${[command, ...args].join(' ')}`);
+
+  const result = spawnSync(command, args, {
+    cwd: options.cwd || root,
     env,
     stdio: 'inherit',
+    shell: false,
   });
+
+  if (result.status !== 0) {
+    process.exit(result.status || 1);
+  }
 }
 
-try {
-  run('java -version');
-  run('npm run build');
-  run('npx cap sync android');
-  run('./gradlew :app:assembleRelease --no-daemon', androidDir);
+run('npm', ['run', 'build']);
+run('npx', ['cap', 'sync', 'android']);
+run('./gradlew', [':app:assembleRelease', '--no-daemon'], { cwd: androidDir });
 
-  console.log('\n✅ Izzy-style build test passed without local Gradle signing properties.');
-  console.log(`Temporary GRADLE_USER_HOME: ${gradleHome}`);
-} catch (error) {
-  console.error('\n❌ Izzy-style build test failed.');
-  console.error(`Temporary GRADLE_USER_HOME: ${gradleHome}`);
-  process.exit(error.status || 1);
-}
+console.log('\n✅ Izzy-style build test passed');

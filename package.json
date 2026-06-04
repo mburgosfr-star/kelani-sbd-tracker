@@ -1,6 +1,6 @@
 {
   "name": "kel-powerlifting",
-  "version": "0.9.4",
+  "version": "1.1.0",
   "private": true,
   "dependencies": {
     "@capacitor/android": "^8.3.1",
@@ -26,7 +26,8 @@
     "eject": "react-scripts eject",
     "android:release-apk": "node scripts/build-release-apk.js",
     "github:release": "node scripts/create-github-release.js",
-    "android:izzy-test": "node scripts/test-izzy-build.js"
+    "android:izzy-test": "node scripts/test-izzy-build.js",
+    "android:install-apk": "node scripts/install-apk.js"
   },
   "eslintConfig": {
     "extends": [

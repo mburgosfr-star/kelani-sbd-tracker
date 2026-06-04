@@ -1,0 +1,7 @@
+Fixed rest timer behavior after navigation and language changes.
+Improved missed-attempt handling for pre-meet workouts.
+Improved meet-day completion and failed attempt handling.
+Added compact main set and back-off overview to the Program screen.
+Added rest timers for accessory work.
+Added perceived effort tracking for sets and completed workouts.
+Refined late-cycle training intensity.

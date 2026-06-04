@@ -1,0 +1,4 @@
+Redesigned the program into a clearer 7-workout cycle.
+Added multi-lift workouts with improved meet-prep structure.
+Improved meet-day, taper and completed-workout summaries.
+Fixed workout restore behavior after program updates.

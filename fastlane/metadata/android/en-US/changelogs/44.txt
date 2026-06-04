@@ -1,0 +1,6 @@
+Made the Program screen more compact.
+Made Stats charts easier to read with fewer visible points.
+Redesigned Settings into a compact list layout.
+Polished Dashboard and shared app headers.
+Improved meet day title consistency.
+Fixed workout progress behavior after previewing future workouts.

@@ -10,16 +10,21 @@ Website: https://kelani-site.mburgosfr.workers.dev/
 
 ## Features
 
-- Structured SBD training programs
+- Structured Squat, Bench Press and Deadlift training cycles
+- Workout tracking with warm-ups, main work, back-offs and optional accessories
 - Automatic progression based on performance
 - Rest timer with audio signals
-- Bodyweight tracking
-- Strength ratio tracking
-- Detailed statistics and graphs
+- Meet Planner for planning squat, bench press and deadlift attempts before competition day
+- Meet prep checklist for practical competition-day preparation
+- Bodyweight and body composition logging
+- 1RM, estimated 1RM and strength statistics
+- Perceived effort tracking for sets and completed workouts
+- Local data export and import
 - Offline-first: no internet required
+- No accounts
 - No ads
 - No tracking
-- Multilingual interface
+- Multilingual interface: English, Catalan and Dutch
 
 ## Download
 
@@ -45,7 +50,12 @@ npm install
 npm run build  
 npx cap sync android  
 cd android  
-./gradlew assembleRelease  
+./gradlew assembleRelease
+
+For the local signed release APK workflow used by the maintainer:
+
+npm install  
+npm run android:release-apk  
 
 For a clean release-style build:
 

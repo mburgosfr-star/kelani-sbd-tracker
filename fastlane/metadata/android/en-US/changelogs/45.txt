@@ -1,0 +1,6 @@
+Made the Workout screen much more compact.
+Grouped back-off sets into one compact row.
+Grouped accessory sets into one compact row.
+Improved preparation and warm-up layout.
+Unified workout circle and checkmark styling.
+Improved failed-set retry, restore and timer behavior.

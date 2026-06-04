@@ -1,0 +1,6 @@
+Reworked the training program around top sets and back-off sets.
+Added missed-set handling with automatic weight adjustment.
+Added restore action for adjusted sets.
+Improved repeated missed top set handling.
+Improved skipped/failed set display in workout summaries.
+Improved rest timer behavior around failed and final sets.
