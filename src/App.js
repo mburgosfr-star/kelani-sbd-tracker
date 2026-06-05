@@ -2918,7 +2918,7 @@ function LanguageSection({ language, setLanguage, t }) {
   );
 }
 
-function NewCycleModal({ prs, onStart, t }) {
+function NewCycleModal({ prs, onStart, t, weightUnit = WEIGHT_UNITS.KG }) {
   return (
     <div style={{
       position: 'fixed',
@@ -2970,7 +2970,7 @@ function NewCycleModal({ prs, onStart, t }) {
               <span style={{ color: THEME.text, fontWeight: 700 }}>
                 {liftLabel(lift, t)} {t.e1RM}
               </span>
-              <span style={{ fontWeight: 700 }}>{prs[lift] || '—'} kg</span>
+              <span style={{ fontWeight: 700 }}>{prs[lift] ? formatWeightFromKg(prs[lift], weightUnit) : '—'}</span>
             </div>
           ))}
         </div>
@@ -4153,7 +4153,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           : t.completeWorkout}
       </button>
 
-      {showNewCycle && <NewCycleModal prs={newCyclePRs} onStart={onStartNewCycle} t={t} />}
+      {showNewCycle && <NewCycleModal prs={newCyclePRs} onStart={onStartNewCycle} t={t}         weightUnit={weightUnit}
+/>}
     </div>
   );
 }
