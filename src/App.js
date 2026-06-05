@@ -456,10 +456,13 @@ function formatWeightValue(value, unit = WEIGHT_UNITS.KG, { body = false } = {})
   if (!Number.isFinite(numericValue)) return '—';
 
   const normalizedUnit = normalizeWeightUnit(unit);
-  const decimals = body ? 1 : normalizedUnit === WEIGHT_UNITS.LB ? 0 : 1;
-  const rounded = body
-    ? Number(numericValue.toFixed(decimals))
-    : roundToStep(numericValue, normalizedUnit === WEIGHT_UNITS.LB ? 5 : 2.5);
+
+  if (body) {
+    return Number(numericValue.toFixed(1)).toString();
+  }
+
+  const decimals = normalizedUnit === WEIGHT_UNITS.LB ? 0 : 1;
+  const rounded = roundToStep(numericValue, normalizedUnit === WEIGHT_UNITS.LB ? 5 : 2.5);
 
   return Number(rounded.toFixed(decimals)).toString();
 }
@@ -2461,7 +2464,7 @@ function ProfileSection({ userProfile, onSave, weightUnit, setWeightUnit, t }) {
   );
 }
 
-function BodyDataSection({ bodyData, onSave, t }) {
+function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) {
   const previous = bodyData || {};
   const [isEditing, setIsEditing] = useState(false);
   const [saveNotice, setSaveNotice] = useState(null);
@@ -2496,8 +2499,26 @@ function BodyDataSection({ bodyData, onSave, t }) {
     setForm(prev => ({ ...prev, [field]: value }));
   }
 
+  function isWeightMassField(field) {
+    return field === 'bodyWeight' || field === 'boneMass';
+  }
+
   function enteredValue(field) {
-    return toOptionalNumber(form[field]);
+    const entered = toOptionalNumber(form[field]);
+    if (entered === null) return null;
+
+    return isWeightMassField(field)
+      ? displayWeightToKg(entered, weightUnit)
+      : entered;
+  }
+
+  function placeholderValue(field) {
+    const previousValue = previous[field];
+    if (!previousValue) return '';
+
+    return isWeightMassField(field)
+      ? formatWeightValue(kgToDisplayWeight(previousValue, weightUnit), weightUnit, { body: true })
+      : String(previousValue);
   }
 
   function finalValue(field) {
@@ -2533,12 +2554,12 @@ function BodyDataSection({ bodyData, onSave, t }) {
   }
 
   const fields = [
-    { key: 'bodyWeight', label: `${t.bodyweight} (${t.kg})` },
-    { key: 'bodyFat', label: t.bodyFatPercent },
-    { key: 'bodyWater', label: t.bodyWaterPercent },
+    { key: 'bodyWeight', label: t.bodyweight, unit: normalizeWeightUnit(weightUnit) },
+    { key: 'bodyFat', label: t.bodyFatPercent, unit: '%' },
+    { key: 'bodyWater', label: t.bodyWaterPercent, unit: '%' },
     { key: 'visceralFat', label: t.visceralFatRating },
     { key: 'physiqueRating', label: t.physiqueRating },
-    { key: 'boneMass', label: t.boneMassKg },
+    { key: 'boneMass', label: t.boneMassKg, unit: normalizeWeightUnit(weightUnit) },
   ];
 
   return (
@@ -2555,13 +2576,31 @@ function BodyDataSection({ bodyData, onSave, t }) {
           {fields.map(field => (
             <div key={field.key} style={{ marginBottom: 14 }}>
               <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{field.label}</label>
-              <input
-                type="number"
-                value={form[field.key]}
-                onChange={e => updateField(field.key, e.target.value)}
-                placeholder={previous[field.key] ? String(previous[field.key]) : ''}
-                style={modalInputStyle()}
-              />
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="number"
+                  value={form[field.key]}
+                  onChange={e => updateField(field.key, e.target.value)}
+                  placeholder={placeholderValue(field.key)}
+                  style={{
+                    ...modalInputStyle(),
+                    paddingRight: field.unit ? 48 : 10
+                  }}
+                />
+                {field.unit && (
+                  <span style={{
+                    position: 'absolute',
+                    right: 12,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: THEME.text,
+                    fontSize: 15,
+                    pointerEvents: 'none'
+                  }}>
+                    {field.unit}
+                  </span>
+                )}
+              </div>
             </div>
           ))}
 
@@ -7773,7 +7812,7 @@ const latestBodyDataRows = [
   {
     key: 'bodyWeight',
     label: t.bodyweight,
-    value: bodyMetricValue(latestBodyDataEntry?.bodyWeight, t.kg),
+    value: latestBodyDataEntry?.bodyWeight ? formatWeightFromKg(latestBodyDataEntry.bodyWeight, weightUnit, { body: true }) : null,
   },
   {
     key: 'bodyFat',
@@ -7790,7 +7829,7 @@ const latestBodyDataRows = [
   {
     key: 'leanMass',
     label: t.leanMassKg,
-    value: bodyMetricValue(latestBodyDataEntry?.leanMass, t.kg),
+    value: latestBodyDataEntry?.leanMass ? formatWeightFromKg(latestBodyDataEntry.leanMass, weightUnit, { body: true }) : null,
   },
   {
     key: 'visceralFat',
@@ -7807,7 +7846,7 @@ const latestBodyDataRows = [
   {
     key: 'boneMass',
     label: t.boneMassKg,
-    value: bodyMetricValue(latestBodyDataEntry?.boneMass, t.kg),
+    value: latestBodyDataEntry?.boneMass ? formatWeightFromKg(latestBodyDataEntry.boneMass, weightUnit, { body: true }) : null,
     status: boneMassStatus(latestBodyDataEntry?.boneMass),
   },
   {
@@ -7910,11 +7949,11 @@ const latestBodyDataRows = [
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
             <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.oneRM}:</span>
-            <strong style={{ fontSize: 15 }}>{oneRM ? `${oneRM} kg` : '—'}</strong>
+            <strong style={{ fontSize: 15 }}>{oneRM ? formatWeightFromKg(oneRM, weightUnit) : '—'}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.e1RM}:</span>
-            <strong style={{ fontSize: 15 }}>{e1RM ? `${e1RM} ${t.kg}` : '—'}</strong>
+            <strong style={{ fontSize: 15 }}>{e1RM ? formatWeightFromKg(e1RM, weightUnit) : '—'}</strong>
           </div>
         </div>
       ))}
@@ -7923,11 +7962,11 @@ const latestBodyDataRows = [
     <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 18, marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.total1rm}</span>
-        <strong style={{ color: '#ffffff', fontSize: 15 }}>{total1RM ? `${total1RM} kg` : '—'}</strong>
+        <strong style={{ color: '#ffffff', fontSize: 15 }}>{total1RM ? formatWeightFromKg(total1RM, weightUnit) : '—'}</strong>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.totalE1rm}</span>
-        <strong style={{ color: '#ffffff', fontSize: 15 }}>{totalE1RM ? `${totalE1RM} kg` : '—'}</strong>
+        <strong style={{ color: '#ffffff', fontSize: 15 }}>{totalE1RM ? formatWeightFromKg(totalE1RM, weightUnit) : '—'}</strong>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.strength}</span>
@@ -8038,6 +8077,7 @@ const latestBodyDataRows = [
       bodyData={latestBodyDataEntry}
       onSave={saveBodyWeight}
       t={t}
+      weightUnit={weightUnit}
     />
 
     <RestTimeSection
