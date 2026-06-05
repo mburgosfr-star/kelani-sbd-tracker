@@ -4653,7 +4653,7 @@ const meetTotals = {
       {activescreen === 'lichaam' && renderMetricChartCards([
         {
           key: 'gewicht',
-          title: weightMetricTitle(t.bodyweight),
+          title: t.bodyweight,
           data: bodyData,
           color: THEME.primary,
         },
@@ -4674,13 +4674,13 @@ const meetTotals = {
       {activescreen === 'compositie' && renderMetricChartCards([
         {
           key: 'leanMass',
-          title: weightMetricTitle(t.leanMassKg),
+          title: t.leanMassKg,
           data: bodyMetricData.leanMass,
           color: THEME.primary,
         },
         {
           key: 'boneMass',
-          title: weightMetricTitle(t.boneMassKg),
+          title: t.boneMassKg,
           data: bodyMetricData.boneMass,
           color: THEME.primary,
         },
