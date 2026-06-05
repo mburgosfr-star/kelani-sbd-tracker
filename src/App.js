@@ -8239,7 +8239,7 @@ const latestBodyDataRows = [
                 lineHeight: 1,
                 marginBottom: 12
               }}>
-                {achievedTotal ? `${achievedTotal} ${t.kg}` : '—'}
+                {achievedTotal ? formatWeightFromKg(achievedTotal, weightUnit) : '—'}
               </div>
 
               <div style={{
@@ -8270,7 +8270,7 @@ const latestBodyDataRows = [
                       fontSize: 13,
                       fontWeight: 900
                     }}>
-                      {result.weight ? `${result.weight} ${t.kg}` : '—'}
+                      {result.weight ? formatWeightFromKg(result.weight, weightUnit) : '—'}
                     </div>
                   </div>
                 ))}
@@ -8316,7 +8316,7 @@ const latestBodyDataRows = [
                 {liftLabel(result.lift, t)} {t.e1RM}
               </span>
               <strong style={{ color: '#ffffff', whiteSpace: 'nowrap' }}>
-                {result.bestE1RM} {t.kg}
+                {formatWeightFromKg(result.bestE1RM, weightUnit)}
               </strong>
             </div>
           ))}
@@ -8389,7 +8389,7 @@ const latestBodyDataRows = [
                     </span>
 
                     <strong style={{ color: isInvalidSet ? '#e74c3c' : '#ffffff', whiteSpace: 'nowrap' }}>
-                      {set.weight} {t.kg}
+                      {formatWeightFromKg(set.weight, weightUnit)}
                     </strong>
                   </div>
                 );
@@ -8566,7 +8566,7 @@ const latestBodyDataRows = [
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                 <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
                 <strong style={{ color: '#ffffff' }}>
-                  {value} kg {isPR ? '🚀' : ''}
+                  {formatWeightFromKg(value, weightUnit)} {isPR ? '🚀' : ''}
                 </strong>
               </div>
             );
@@ -8681,7 +8681,7 @@ const latestBodyDataRows = [
                         color: isInvalidSet ? '#e74c3c' : '#ffffff',
                         whiteSpace: 'nowrap'
                       }}>
-                        {set.weight} {t.kg}
+                        {formatWeightFromKg(set.weight, weightUnit)}
                       </strong>
                     </div>
                   );
