@@ -514,7 +514,7 @@ export const translations = {
     secondAttempt: '2nd attempt',
     thirdAttempt: '3rd attempt',
     backoff: 'Backoff',
-    workSets: 'Sèries de treball',
+    workSets: 'Work sets',
     heavySingle: 'Heavy single',
     topTriple: 'Top triple',
     topDouble: 'Top double',

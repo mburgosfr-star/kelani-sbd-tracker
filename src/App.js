@@ -401,6 +401,14 @@ function liftLabel(lift, t) {
   return lift;
 }
 
+function workoutLiftLabel(lift, t, benchPressVariant = 'standard') {
+  if (lift === 'Bench' && benchPressVariant === 'floorPress') {
+    return t.benchPressFloorPress || 'Floor Press';
+  }
+
+  return liftLabel(lift, t);
+}
+
 function getWorkoutTypeLabel(workout, t) {
   const key = getWorkoutTypeKey(workout);
   return key ? t[key] : '—';
@@ -3391,7 +3399,7 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
   );
 }
 
-function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, timer, setTimer, startTimer }) {
+function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer }) {
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
 
   function isTimerFor(placement) {
@@ -3588,7 +3596,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
         <AppHeader
           t={t}
-          title={`${t.workout} ${workout.number} — ${getWorkoutTitle(workout, t)}`}
+          title={`${t.workout} ${workout.number} — ${getWorkoutTitle(workout, t, benchPressVariant)}`}
           subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${workout.number} / ${totalWorkouts}${isMeetDay ? ` · ${t.meetDay}` : ''}`}
         />
 
@@ -3633,7 +3641,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 textAlign: 'center',
                 borderBottom: `1px solid ${THEME.border}`,
               }}>
-                {liftLabel(liftBlock.lift, t)}
+                {workoutLiftLabel(liftBlock.lift, t, benchPressVariant)}
               </div>
 
               {visiblePrepItems.length > 0 && (
@@ -3943,7 +3951,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       fontFamily: 'sans-serif'
     }}>
       <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
-        {t.workout} {workout.number} — {liftLabel(workout.lift, t)}
+        {t.workout} {workout.number} — {workoutLiftLabel(workout.lift, t, benchPressVariant)}
       </h2>
 
       <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
@@ -4021,7 +4029,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           color: THEME.text,
           textAlign: 'center'
         }}>
-          {liftLabel(workout.lift, t)}
+          {workoutLiftLabel(workout.lift, t, benchPressVariant)}
         </div>
 
         {workout.sets.map((set, i) => {
@@ -5151,7 +5159,7 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
   );
 }
 
-function getWorkoutTitle(workout, t) {
+function getWorkoutTitle(workout, t, benchPressVariant = 'standard') {
   if (!workout || workout.type === 'rest') return t.deload;
   if (workout.type === 'meet') return t.sbdMeetDay || t.meetDay;
 
@@ -5160,13 +5168,13 @@ function getWorkoutTitle(workout, t) {
     .filter(Boolean);
 
   if (lifts.length > 0) {
-    return lifts.map(lift => liftLabel(lift, t)).join(' + ');
+    return lifts.map(lift => workoutLiftLabel(lift, t, benchPressVariant)).join(' + ');
   }
 
-  return liftLabel(workout.lift, t);
+  return workoutLiftLabel(workout.lift, t, benchPressVariant);
 }
 
-function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG) {
+function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard') {
   if (!workout || workout.type === 'rest') return [];
 
   const liftBlocks = (workout.lifts || []).length > 0
@@ -5205,10 +5213,10 @@ function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG) {
 
     return groups.map(group => {
       if (onlyBackoff || !group.labelKey) {
-        return `${liftLabel(liftBlock.lift, t)}: ${group.count}×${group.reps}×${formatWeightFromKg(group.weight, weightUnit)}`;
+        return `${workoutLiftLabel(liftBlock.lift, t, benchPressVariant)}: ${group.count}×${group.reps}×${formatWeightFromKg(group.weight, weightUnit)}`;
       }
 
-      return `${liftLabel(liftBlock.lift, t)} · ${group.label}: ${group.count}×${group.reps}×${formatWeightFromKg(group.weight, weightUnit)}`;
+      return `${workoutLiftLabel(liftBlock.lift, t, benchPressVariant)} · ${group.label}: ${group.count}×${group.reps}×${formatWeightFromKg(group.weight, weightUnit)}`;
     });
   });
 }
@@ -5265,7 +5273,7 @@ function AppHeader({ t, title, subtitle, meta, children }) {
   );
 }
 
-function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t, weightUnit = WEIGHT_UNITS.KG }) {
+function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard' }) {
   const currentWorkoutRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
 
@@ -5305,7 +5313,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCyc
         const isCurrent = idx === currentIndex;
         const isDone = idx < completedWorkoutCount;
         const headerBg = isCurrent ? THEME.primary : workout.type === 'rest' ? THEME.brown : THEME.border;
-        const planLines = getWorkoutPlanLines(workout, t, weightUnit);
+        const planLines = getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant);
         const typeLabel = getWorkoutTypeLabel(workout, t);
         const showTypeLabel = false;
 
@@ -5348,7 +5356,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCyc
 
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: isCurrent ? 700 : 500, color: isCurrent ? THEME.primary : '#ffffff' }}>
-                {getWorkoutTitle(workout, t)}
+                {getWorkoutTitle(workout, t, benchPressVariant)}
                 {isCurrent && (
                   <span style={{
                     fontSize: 11,
@@ -7998,6 +8006,7 @@ const latestBodyDataRows = [
           onStartNewCycle={handleStartNewCycle}
           t={t}
           weightUnit={weightUnit}
+          benchPressVariant={benchPressVariant}
           timer={timer}
           setTimer={setTimer}
           onToggleMeetPrepItem={toggleMeetPrepItem}
@@ -8043,7 +8052,7 @@ const latestBodyDataRows = [
           fontSize: 22,
           fontWeight: 900
         }}>
-          {getWorkoutTitle(workouts[currentIndex], t)}
+          {getWorkoutTitle(workouts[currentIndex], t, benchPressVariant)}
         </div>
       </div>
     )}
@@ -8143,8 +8152,9 @@ const latestBodyDataRows = [
           onStats={() => setScreen('stats')}
           onStartNewCycle={handleStartNewCycle}
           t={t}
-                  weightUnit={weightUnit}
-/>
+          weightUnit={weightUnit}
+          benchPressVariant={benchPressVariant}
+        />
       )}
 
       {screen === 'stats' && (
@@ -8159,6 +8169,7 @@ const latestBodyDataRows = [
           onBack={() => setScreen('all')}
           t={t}
           weightUnit={weightUnit}
+          benchPressVariant={benchPressVariant}
         />
 )}
 
@@ -8455,7 +8466,7 @@ const latestBodyDataRows = [
                 fontWeight: 900,
                 marginBottom: 6
               }}>
-                {liftLabel(liftBlock.lift, t)}
+                {workoutLiftLabel(liftBlock.lift, t, benchPressVariant)}
               </div>
 
               {(liftBlock.sets || []).map((set, i) => {
@@ -8732,7 +8743,7 @@ const latestBodyDataRows = [
                   fontWeight: 900,
                   marginBottom: 8
                 }}>
-                  {liftLabel(liftBlock.lift, t)}
+                  {workoutLiftLabel(liftBlock.lift, t, benchPressVariant)}
                 </div>
 
                 {(liftBlock.sets || []).map((set, i) => {
