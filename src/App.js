@@ -401,10 +401,87 @@ function liftLabel(lift, t) {
   return lift;
 }
 
+function workoutLiftLabel(lift, t, benchPressVariant = 'standard') {
+  if (lift === 'Bench' && benchPressVariant === 'floorPress') {
+    return t.benchPressFloorPress || 'Floor Press';
+  }
+
+  return liftLabel(lift, t);
+}
+
 function getWorkoutTypeLabel(workout, t) {
   const key = getWorkoutTypeKey(workout);
   return key ? t[key] : '—';
 }
+
+const WEIGHT_UNITS = {
+  KG: 'kg',
+  LB: 'lb',
+};
+
+const KG_TO_LB = 2.2046226218;
+
+function normalizeWeightUnit(unit) {
+  return unit === WEIGHT_UNITS.LB ? WEIGHT_UNITS.LB : WEIGHT_UNITS.KG;
+}
+
+function kgToDisplayWeight(weightKg, unit = WEIGHT_UNITS.KG) {
+  const numericWeight = Number(weightKg);
+  if (!Number.isFinite(numericWeight)) return '';
+
+  return normalizeWeightUnit(unit) === WEIGHT_UNITS.LB
+    ? numericWeight * KG_TO_LB
+    : numericWeight;
+}
+
+function roundKgForStorage(weightKg) {
+  const numericWeight = Number(weightKg);
+  if (!Number.isFinite(numericWeight)) return '';
+
+  return Number(numericWeight.toFixed(1));
+}
+
+function displayWeightToKg(weight, unit = WEIGHT_UNITS.KG) {
+  const numericWeight = Number(weight);
+  if (!Number.isFinite(numericWeight)) return '';
+
+  const weightKg = normalizeWeightUnit(unit) === WEIGHT_UNITS.LB
+    ? numericWeight / KG_TO_LB
+    : numericWeight;
+
+  return roundKgForStorage(weightKg);
+}
+
+function roundToStep(value, step) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return '';
+
+  return Math.round(numericValue / step) * step;
+}
+
+function formatWeightValue(value, unit = WEIGHT_UNITS.KG, { body = false } = {}) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return '—';
+
+  const normalizedUnit = normalizeWeightUnit(unit);
+
+  if (body) {
+    return Number(numericValue.toFixed(1)).toString();
+  }
+
+  const decimals = normalizedUnit === WEIGHT_UNITS.LB ? 0 : 1;
+  const rounded = roundToStep(numericValue, normalizedUnit === WEIGHT_UNITS.LB ? 5 : 2.5);
+
+  return Number(rounded.toFixed(decimals)).toString();
+}
+
+function formatWeightFromKg(weightKg, unit = WEIGHT_UNITS.KG, options = {}) {
+  const displayWeight = kgToDisplayWeight(weightKg, unit);
+  if (displayWeight === '') return '—';
+
+  return `${formatWeightValue(displayWeight, unit, options)} ${normalizeWeightUnit(unit)}`;
+}
+
 
 function generatePrepItems(lift, preparationMode = 'basic') {
   if (preparationMode === 'off') return [];
@@ -529,6 +606,27 @@ function getSetPctForWeight(set, weight) {
 function isTopSetLabel(labelKey) {
   return ['heavySingle', 'topSingle', 'topDouble', 'topTriple'].includes(labelKey);
 }
+
+function isMainOrAttemptLabelKey(labelKey) {
+  return [
+    'heavySingle',
+    'topSingle',
+    'topDouble',
+    'topTriple',
+    'opener',
+    'secondAttempt',
+    'thirdAttempt',
+  ].includes(labelKey);
+}
+
+function getBackoffGroupLabelForSets(sets = [], t) {
+  const hasMainOrAttemptSet = sets.some(set => isMainOrAttemptLabelKey(set.labelKey));
+
+  return hasMainOrAttemptSet
+    ? t.backoff
+    : (t.workSets || t.set);
+}
+
 
 function isAttemptSetLabel(labelKey) {
   return ['opener', 'secondAttempt', 'thirdAttempt'].includes(labelKey);
@@ -682,21 +780,21 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.775, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.700, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 3, pct: 0.800, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.700, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 3, pct: 0.700, labelKey: 'topTriple' }, { sets: 3, reps: 4, pct: 0.625, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 5, pct: 0.625, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 5, pct: 0.625, labelKey: 'workSets' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.650, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.800, labelKey: 'topDouble' }, { sets: 3, reps: 4, pct: 0.725, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 2, pct: 0.850, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.775, labelKey: 'topDouble' }, { sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 4, pct: 0.650, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 4, pct: 0.675, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 4, pct: 0.675, labelKey: 'workSets' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.800, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 4, pct: 0.625, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.700, labelKey: 'workSets' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 1, pct: 0.930, labelKey: 'secondAttempt' }, { sets: 1, reps: 1, pct: 0.950, labelKey: 'thirdAttempt' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 1, pct: 0.930, labelKey: 'secondAttempt' }, { sets: 1, reps: 1, pct: 0.950, labelKey: 'thirdAttempt' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 1, pct: 0.930, labelKey: 'secondAttempt' }, { sets: 1, reps: 1, pct: 0.950, labelKey: 'thirdAttempt' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
@@ -759,6 +857,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
       warmups: liftBlocks[0]?.warmups || [],
       sets: liftBlocks[0]?.sets || [],
       accessories: generateAccessoriesForLift(primaryLift, accessoryMode, accessoryPRs, oneRMs),
+      cooldownItems: generateCooldownItems(),
     });
   });
 
@@ -1090,7 +1189,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
 }
 
 
-function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, t }) {
+function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, t, weightUnit = WEIGHT_UNITS.KG }) {
   if (!warmups.length) return null;
 
   const columnCount = warmups.length <= 2
@@ -1149,7 +1248,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
                   marginTop: 1,
                   lineHeight: 1.15
                 }}>
-                  {warmup.reps} × {warmup.weight} {t.kg}
+                  {warmup.reps} × {formatWeightFromKg(warmup.weight, weightUnit)}
                 </div>
               </div>
             </div>
@@ -1167,14 +1266,20 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
 }
 
 
-function CooldownBlock({ t, isReadOnly = false }) {
-  const [done, setDone] = useState(false);
-  const item = {
-    labelKey: 'cooldownRhomboidStretch',
-    prescription: '4×10 sec',
-    perSide: true,
-    done,
-  };
+function generateCooldownItems() {
+  return [
+    {
+      labelKey: 'cooldownRhomboidStretch',
+      prescription: '4×10 sec',
+      perSide: true,
+      done: false,
+    },
+  ];
+}
+
+function CooldownBlock({ items = [], onToggleItem = () => {}, t, isReadOnly = false }) {
+  const cooldownItems = items.length > 0 ? items : generateCooldownItems();
+  const firstIncompleteIndex = cooldownItems.findIndex(item => !item.done);
 
   return (
     <div style={{
@@ -1196,13 +1301,16 @@ function CooldownBlock({ t, isReadOnly = false }) {
       </div>
 
       <div style={{ padding: '6px 10px' }}>
-        <PrepRow
-          item={item}
-          isActive={false}
-          isReadOnly={isReadOnly}
-          onToggle={() => setDone(prev => !prev)}
-          t={t}
-        />
+        {cooldownItems.map((item, index) => (
+          <PrepRow
+            key={index}
+            item={item}
+            isActive={!isReadOnly && index === firstIncompleteIndex}
+            isReadOnly={isReadOnly}
+            onToggle={() => onToggleItem(index)}
+            t={t}
+          />
+        ))}
       </div>
     </div>
   );
@@ -1425,7 +1533,7 @@ function WorkoutActionRow({
 }
 
 
-function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t }) {
+function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG }) {
   const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
   const displayPct = set.pct ? Number((set.pct * 100).toFixed(1)) : null;
   const effortLabel = getSetEffortLabel(set.effort, t);
@@ -1439,7 +1547,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
 
   function handleEditClick(e) {
     e.stopPropagation();
-    setInputVal(String(set.weight));
+    setInputVal(formatWeightValue(kgToDisplayWeight(set.weight, weightUnit), weightUnit));
     setEditing(true);
   }
 
@@ -1447,9 +1555,9 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
     const val = parseFloat(inputVal);
 
     if (!isNaN(val) && val > 0) {
-      onWeightChange(val);
+      onWeightChange(displayWeightToKg(val, weightUnit));
     } else {
-      setInputVal(String(set.weight));
+      setInputVal(formatWeightValue(kgToDisplayWeight(set.weight, weightUnit), weightUnit));
     }
 
     setEditing(false);
@@ -1466,7 +1574,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
         1 × {set.reps}
       </div>
       <div style={{ color: isAdjusted ? '#f39c12' : THEME.muted }}>
-        {set.weight} {t.kg}{displayPct ? ` (${displayPct}%)` : ''}
+        {formatWeightFromKg(set.weight, weightUnit)}{displayPct ? ` (${displayPct}%)` : ''}
       </div>
     </>
   );
@@ -1492,7 +1600,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
       <input
         ref={inputRef}
         type="number"
-        step="2.5"
+        step={normalizeWeightUnit(weightUnit) === WEIGHT_UNITS.LB ? "5" : "2.5"}
         value={inputVal}
         onChange={e => setInputVal(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -1507,7 +1615,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
           textAlign: 'right',
         }}
       />
-      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>{t.kg}</span>
+      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>{normalizeWeightUnit(weightUnit)}</span>
     </div>
   ) : (
     <>
@@ -2315,16 +2423,18 @@ function SupportSection({ t }) {
   );
 }
 
-function ProfileSection({ userProfile, onSave, t }) {
+function ProfileSection({ userProfile, onSave, weightUnit, setWeightUnit, t }) {
   const [isEditing, setIsEditing] = useState(false);
   const [birthDate, setBirthDate] = useState(userProfile?.birthDate || '');
   const [sex, setSex] = useState(userProfile?.sex || '');
+  const [profileWeightUnit, setProfileWeightUnit] = useState(normalizeWeightUnit(weightUnit));
   const [notice, setNotice] = useState(null);
 
   useEffect(() => {
     setBirthDate(userProfile?.birthDate || '');
     setSex(userProfile?.sex || '');
-  }, [userProfile?.birthDate, userProfile?.sex]);
+    setProfileWeightUnit(normalizeWeightUnit(weightUnit));
+  }, [userProfile?.birthDate, userProfile?.sex, weightUnit]);
 
   useEffect(() => {
     if (!notice) return;
@@ -2335,11 +2445,13 @@ function ProfileSection({ userProfile, onSave, t }) {
   function openEdit() {
     setBirthDate(userProfile?.birthDate || '');
     setSex(userProfile?.sex || '');
+    setProfileWeightUnit(normalizeWeightUnit(weightUnit));
     setIsEditing(true);
   }
 
   function handleSave() {
     onSave({ birthDate, sex });
+    setWeightUnit(normalizeWeightUnit(profileWeightUnit));
     setIsEditing(false);
     setNotice(t.profileSaved);
   }
@@ -2370,6 +2482,14 @@ function ProfileSection({ userProfile, onSave, t }) {
             </select>
           </div>
 
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.weightUnit}</label>
+            <select value={profileWeightUnit} onChange={e => setProfileWeightUnit(normalizeWeightUnit(e.target.value))} style={modalInputStyle()}>
+              <option value={WEIGHT_UNITS.KG}>{t.weightUnitKg}</option>
+              <option value={WEIGHT_UNITS.LB}>{t.weightUnitLb}</option>
+            </select>
+          </div>
+
           <button onClick={handleSave} style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
             {t.save}
           </button>
@@ -2383,7 +2503,7 @@ function ProfileSection({ userProfile, onSave, t }) {
   );
 }
 
-function BodyDataSection({ bodyData, onSave, t }) {
+function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) {
   const previous = bodyData || {};
   const [isEditing, setIsEditing] = useState(false);
   const [saveNotice, setSaveNotice] = useState(null);
@@ -2418,8 +2538,26 @@ function BodyDataSection({ bodyData, onSave, t }) {
     setForm(prev => ({ ...prev, [field]: value }));
   }
 
+  function isWeightMassField(field) {
+    return field === 'bodyWeight' || field === 'boneMass';
+  }
+
   function enteredValue(field) {
-    return toOptionalNumber(form[field]);
+    const entered = toOptionalNumber(form[field]);
+    if (entered === null) return null;
+
+    return isWeightMassField(field)
+      ? displayWeightToKg(entered, weightUnit)
+      : entered;
+  }
+
+  function placeholderValue(field) {
+    const previousValue = previous[field];
+    if (!previousValue) return '';
+
+    return isWeightMassField(field)
+      ? formatWeightValue(kgToDisplayWeight(previousValue, weightUnit), weightUnit, { body: true })
+      : String(previousValue);
   }
 
   function finalValue(field) {
@@ -2455,12 +2593,12 @@ function BodyDataSection({ bodyData, onSave, t }) {
   }
 
   const fields = [
-    { key: 'bodyWeight', label: `${t.bodyweight} (${t.kg})` },
-    { key: 'bodyFat', label: t.bodyFatPercent },
-    { key: 'bodyWater', label: t.bodyWaterPercent },
+    { key: 'bodyWeight', label: t.bodyweight, unit: normalizeWeightUnit(weightUnit) },
+    { key: 'bodyFat', label: t.bodyFatPercent, unit: '%' },
+    { key: 'bodyWater', label: t.bodyWaterPercent, unit: '%' },
     { key: 'visceralFat', label: t.visceralFatRating },
     { key: 'physiqueRating', label: t.physiqueRating },
-    { key: 'boneMass', label: t.boneMassKg },
+    { key: 'boneMass', label: t.boneMassKg, unit: normalizeWeightUnit(weightUnit) },
   ];
 
   return (
@@ -2477,13 +2615,31 @@ function BodyDataSection({ bodyData, onSave, t }) {
           {fields.map(field => (
             <div key={field.key} style={{ marginBottom: 14 }}>
               <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{field.label}</label>
-              <input
-                type="number"
-                value={form[field.key]}
-                onChange={e => updateField(field.key, e.target.value)}
-                placeholder={previous[field.key] ? String(previous[field.key]) : ''}
-                style={modalInputStyle()}
-              />
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="number"
+                  value={form[field.key]}
+                  onChange={e => updateField(field.key, e.target.value)}
+                  placeholder={placeholderValue(field.key)}
+                  style={{
+                    ...modalInputStyle(),
+                    paddingRight: field.unit ? 48 : 10
+                  }}
+                />
+                {field.unit && (
+                  <span style={{
+                    position: 'absolute',
+                    right: 12,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: THEME.text,
+                    fontSize: 15,
+                    pointerEvents: 'none'
+                  }}>
+                    {field.unit}
+                  </span>
+                )}
+              </div>
             </div>
           ))}
 
@@ -2619,6 +2775,128 @@ function PreparationSection({ preparationMode, setPreparationMode, t }) {
 }
 
 
+function WorkoutSection({
+  preparationMode,
+  setPreparationMode,
+  accessoryMode,
+  setAccessoryMode,
+  benchPressVariant,
+  setBenchPressVariant,
+  t,
+}) {
+  const [showWorkoutSettings, setShowWorkoutSettings] = useState(false);
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.workoutSettings}
+        actionLabel={t.configure || t.edit}
+        onAction={() => setShowWorkoutSettings(true)}
+      />
+
+      {showWorkoutSettings && (
+        <SettingsModal
+          title={t.workoutSettings}
+          onClose={() => setShowWorkoutSettings(false)}
+        >
+          <PreparationSection
+            preparationMode={preparationMode}
+            setPreparationMode={setPreparationMode}
+            t={t}
+          />
+
+          <AccessorySection
+            accessoryMode={accessoryMode}
+            setAccessoryMode={setAccessoryMode}
+            t={t}
+          />
+
+          <BenchPressVariantSection
+            benchPressVariant={benchPressVariant}
+            setBenchPressVariant={setBenchPressVariant}
+            t={t}
+          />
+
+          <button
+            type="button"
+            onClick={() => setShowWorkoutSettings(false)}
+            style={{
+              width: '100%',
+              marginTop: 12,
+              padding: 12,
+              fontSize: 15,
+              fontWeight: 800,
+              background: THEME.card,
+              color: THEME.text,
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 8,
+              cursor: 'pointer'
+            }}
+          >
+            {t.done || 'Done'}
+          </button>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
+function BenchPressVariantSection({ benchPressVariant, setBenchPressVariant, t }) {
+  const [showOptions, setShowOptions] = useState(false);
+
+  const modes = ['standard', 'floorPress'];
+  const labels = {
+    standard: t.benchPressStandard,
+    floorPress: t.benchPressFloorPress,
+  };
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.benchPressVariant}
+        actionLabel={labels[benchPressVariant] || labels.standard}
+        onAction={() => setShowOptions(true)}
+        noBorder
+      />
+
+      {showOptions && (
+        <SettingsModal
+          title={t.benchPressVariant}
+          onClose={() => setShowOptions(false)}
+        >
+          <div style={{ display: 'grid', gap: 8 }}>
+            {modes.map(mode => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setBenchPressVariant(mode);
+                  setShowOptions(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  border: `1px solid ${benchPressVariant === mode ? THEME.primary : THEME.border}`,
+                  background: benchPressVariant === mode ? THEME.primary : THEME.card,
+                  color: benchPressVariant === mode ? THEME.bg : THEME.text,
+                  cursor: 'pointer'
+                }}
+              >
+                {labels[mode]}
+              </button>
+            ))}
+          </div>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
 function AccessorySection({ accessoryMode, setAccessoryMode, t }) {
   const [showOptions, setShowOptions] = useState(false);
 
@@ -2665,24 +2943,6 @@ function AccessorySection({ accessoryMode, setAccessoryMode, t }) {
                 {labels[mode]}
               </button>
             ))}
-
-            <button
-              type="button"
-              onClick={() => setShowOptions(false)}
-              style={{
-                width: '100%',
-                padding: 10,
-                fontSize: 14,
-                fontWeight: 700,
-                background: 'transparent',
-                color: THEME.text,
-                border: `1px solid ${THEME.border}`,
-                borderRadius: 8,
-                cursor: 'pointer'
-              }}
-            >
-              {t.cancel}
-            </button>
           </div>
         </SettingsModal>
       )}
@@ -2747,7 +3007,7 @@ function LanguageSection({ language, setLanguage, t }) {
   );
 }
 
-function NewCycleModal({ prs, onStart, t }) {
+function NewCycleModal({ prs, onStart, t, weightUnit = WEIGHT_UNITS.KG }) {
   return (
     <div style={{
       position: 'fixed',
@@ -2799,7 +3059,7 @@ function NewCycleModal({ prs, onStart, t }) {
               <span style={{ color: THEME.text, fontWeight: 700 }}>
                 {liftLabel(lift, t)} {t.e1RM}
               </span>
-              <span style={{ fontWeight: 700 }}>{prs[lift] || '—'} kg</span>
+              <span style={{ fontWeight: 700 }}>{prs[lift] ? formatWeightFromKg(prs[lift], weightUnit) : '—'}</span>
             </div>
           ))}
         </div>
@@ -2825,7 +3085,7 @@ function NewCycleModal({ prs, onStart, t }) {
   );
 }
 
-function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, label, t }) {
+function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, label, t, weightUnit = WEIGHT_UNITS.KG }) {
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
   const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
@@ -2836,8 +3096,10 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   const [inputVal, setInputVal] = useState(String(firstSet.weight || ''));
 
   useEffect(() => {
-    if (editing) setInputVal(String(firstSet.weight || ''));
-  }, [editing, firstSet.weight]);
+    if (editing) {
+      setInputVal(formatWeightValue(kgToDisplayWeight(firstSet.weight || '', weightUnit), weightUnit));
+    }
+  }, [editing, firstSet.weight, weightUnit]);
 
   if (!entries?.length) return null;
 
@@ -2845,7 +3107,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
     const val = parseFloat(inputVal);
 
     if (!Number.isNaN(val) && val > 0) {
-      onEditAll(val);
+      onEditAll(displayWeightToKg(val, weightUnit));
     }
 
     setEditing(false);
@@ -2853,7 +3115,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
 
   function handleEditClick(e) {
     e.stopPropagation();
-    setInputVal(String(firstSet.weight || ''));
+    setInputVal(formatWeightValue(kgToDisplayWeight(firstSet.weight || '', weightUnit), weightUnit));
     setEditing(true);
   }
 
@@ -2867,39 +3129,49 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
     .find(Boolean);
 
   const groupLabel = label || t.backoff;
+  const isAdjusted = entries.some(({ set }) =>
+    Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed) ||
+    Number(set.weight) !== Number(set.originalWeight ?? set.weight)
+  );
+  const detailColor = isAdjusted ? '#f39c12' : THEME.muted;
 
   const detail = (
     <>
-      <div>
+      <div style={{ color: detailColor }}>
         {entries.length} × {allSameReps ? firstSet.reps : '—'}
       </div>
-      <div>
-        {allSameWeight ? `${firstSet.weight} ${t.kg}` : t.kg}{displayPct ? ` (${displayPct}%)` : ''}
+      <div style={{ color: detailColor }}>
+        {allSameWeight ? formatWeightFromKg(firstSet.weight, weightUnit) : normalizeWeightUnit(weightUnit)}{displayPct ? ` (${displayPct}%)` : ''}
       </div>
     </>
   );
 
   const actions = editing ? (
-    <input
-      type="number"
-      step="2.5"
-      value={inputVal}
-      autoFocus
-      onChange={e => setInputVal(e.target.value)}
-      onKeyDown={handleKeyDown}
-      onBlur={confirmEdit}
-      style={{
-        width: 66,
-        padding: '4px 6px',
-        fontSize: 14,
-        fontWeight: 800,
-        borderRadius: 4,
-        border: `1px solid ${THEME.primary}`,
-        background: THEME.bg,
-        color: THEME.text,
-        textAlign: 'right',
-      }}
-    />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <input
+        type="number"
+        step={normalizeWeightUnit(weightUnit) === WEIGHT_UNITS.LB ? "5" : "2.5"}
+        value={inputVal}
+        autoFocus
+        onChange={e => setInputVal(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={confirmEdit}
+        style={{
+          width: 66,
+          padding: '4px 6px',
+          fontSize: 14,
+          fontWeight: 800,
+          borderRadius: 4,
+          border: `1px solid ${THEME.primary}`,
+          background: THEME.bg,
+          color: THEME.text,
+          textAlign: 'right',
+        }}
+      />
+      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>
+        {normalizeWeightUnit(weightUnit)}
+      </span>
+    </div>
   ) : (
     <>
       <SetActionButton
@@ -2952,7 +3224,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
     }}>
       {failedEntry.set.skipped
         ? t.topSetSkipped
-        : t.failedSetAdjusted.replace('{weight}', `${failedEntry.set.adjustedWeight} ${t.kg}`)}
+        : t.failedSetAdjusted.replace('{weight}', formatWeightFromKg(failedEntry.set.adjustedWeight, weightUnit))}
     </div>
   ) : null;
 
@@ -2990,7 +3262,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   );
 }
 
-function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAccessoryWork, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t }) {
+function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAccessoryWork, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG }) {
   const [editing, setEditing] = useState(false);
   const firstWeight = acc.weights?.[0] || 0;
   const allSameWeight = (acc.weights || []).every(weight => Number(weight) === Number(firstWeight));
@@ -3001,14 +3273,16 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
   const [inputVal, setInputVal] = useState(String(firstWeight || ''));
 
   useEffect(() => {
-    if (editing) setInputVal(String(firstWeight || ''));
-  }, [editing, firstWeight]);
+    if (editing) {
+      setInputVal(formatWeightValue(kgToDisplayWeight(firstWeight || '', weightUnit), weightUnit));
+    }
+  }, [editing, firstWeight, weightUnit]);
 
   function confirmEdit() {
     const val = parseFloat(inputVal);
 
     if (!Number.isNaN(val) && val > 0) {
-      onEditAll(val);
+      onEditAll(displayWeightToKg(val, weightUnit));
     }
 
     setEditing(false);
@@ -3016,7 +3290,7 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
 
   function handleEditClick(e) {
     e.stopPropagation();
-    setInputVal(String(firstWeight || ''));
+    setInputVal(formatWeightValue(kgToDisplayWeight(firstWeight || '', weightUnit), weightUnit));
     setEditing(true);
   }
 
@@ -3033,31 +3307,36 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
 
   const detail = (
     <>
-      {(acc.done || []).length} × {acc.reps}{acc.perSide ? ` ${t.perSide}` : ''} × {allSameWeight ? `${firstWeight} ${t.kg}` : t.kg}
+      {(acc.done || []).length} × {acc.reps}{acc.perSide ? ` ${t.perSide}` : ''} × {allSameWeight ? formatWeightFromKg(firstWeight, weightUnit) : normalizeWeightUnit(weightUnit)}
     </>
   );
 
   const actions = editing ? (
-    <input
-      type="number"
-      step="2.5"
-      value={inputVal}
-      autoFocus
-      onChange={e => setInputVal(e.target.value)}
-      onKeyDown={handleKeyDown}
-      onBlur={confirmEdit}
-      style={{
-        width: 66,
-        padding: '4px 6px',
-        fontSize: 14,
-        fontWeight: 800,
-        borderRadius: 4,
-        border: `1px solid ${THEME.primary}`,
-        background: THEME.bg,
-        color: THEME.text,
-        textAlign: 'right',
-      }}
-    />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <input
+        type="number"
+        step={normalizeWeightUnit(weightUnit) === WEIGHT_UNITS.LB ? "5" : "2.5"}
+        value={inputVal}
+        autoFocus
+        onChange={e => setInputVal(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={confirmEdit}
+        style={{
+          width: 66,
+          padding: '4px 6px',
+          fontSize: 14,
+          fontWeight: 800,
+          borderRadius: 4,
+          border: `1px solid ${THEME.primary}`,
+          background: THEME.bg,
+          color: THEME.text,
+          textAlign: 'right',
+        }}
+      />
+      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>
+        {normalizeWeightUnit(weightUnit)}
+      </span>
+    </div>
   ) : (
     <>
       <SetActionButton
@@ -3112,7 +3391,7 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
         ? t.topSetSkipped
         : t.failedSetAdjusted.replace(
           '{weight}',
-          `${acc.adjustedWeights?.[feedbackIndex] ?? acc.weights?.[feedbackIndex] ?? firstWeight} ${t.kg}`
+          formatWeightFromKg(acc.adjustedWeights?.[feedbackIndex] ?? acc.weights?.[feedbackIndex] ?? firstWeight, weightUnit)
         )}
     </div>
   ) : null;
@@ -3151,7 +3430,7 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
   );
 }
 
-function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
+function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer }) {
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
 
   function isTimerFor(placement) {
@@ -3348,7 +3627,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
         <AppHeader
           t={t}
-          title={`${t.workout} ${workout.number} — ${getWorkoutTitle(workout, t)}`}
+          title={`${t.workout} ${workout.number} — ${getWorkoutTitle(workout, t, benchPressVariant)}`}
           subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${workout.number} / ${totalWorkouts}${isMeetDay ? ` · ${t.meetDay}` : ''}`}
         />
 
@@ -3367,7 +3646,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
     {t.projectedTotal}
   </div>
   <div style={{ color: THEME.text, fontSize: 22, fontWeight: 900, lineHeight: 1 }}>
-    {meetDayProjectedTotal ? `${meetDayProjectedTotal} ${t.kg}` : '—'}
+    {meetDayProjectedTotal ? formatWeightFromKg(meetDayProjectedTotal, weightUnit) : '—'}
   </div>
 </div>
 )}
@@ -3393,7 +3672,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 textAlign: 'center',
                 borderBottom: `1px solid ${THEME.border}`,
               }}>
-                {liftLabel(liftBlock.lift, t)}
+                {workoutLiftLabel(liftBlock.lift, t, benchPressVariant)}
               </div>
 
               {visiblePrepItems.length > 0 && (
@@ -3439,12 +3718,14 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 renderTimer={wi => renderInlineTimer({ type: 'meetWarmup', liftIndex: li, index: wi })}
                 followsPrep={visiblePrepItems.length > 0}
                 t={t}
+                  weightUnit={weightUnit}
               />
 
               {(liftBlock.sets || []).map((set, si) => {
                 const backoffSetEntries = (liftBlock.sets || [])
                   .map((backoffSet, backoffIndex) => ({ set: backoffSet, index: backoffIndex }))
-                  .filter(({ set: backoffSet }) => backoffSet.labelKey === 'backoff');
+                  .filter(({ set: backoffSet }) => ['backoff', 'workSets'].includes(backoffSet.labelKey));
+                const backoffGroupLabel = getBackoffGroupLabelForSets(liftBlock.sets || [], t);
 
                 const secondarySetEntries = (liftBlock.sets || [])
                   .map((secondarySet, secondaryIndex) => ({ set: secondarySet, index: secondaryIndex }));
@@ -3462,7 +3743,6 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     <React.Fragment key={`secondary-set-group-${li}`}>
                       <BackoffGroup
                         entries={secondarySetEntries}
-                        label={t.workSets || t.set}
                         activeIndex={
                           !isReadOnly &&
                           li === firstIncompleteLiftIndex &&
@@ -3477,13 +3757,15 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                         onRestoreAll={() => secondarySetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
                         onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
                         renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
+                        label={backoffGroupLabel}
                         t={t}
+                  weightUnit={weightUnit}
                       />
                     </React.Fragment>
                   );
                 }
 
-                if (set.labelKey === 'backoff') {
+                if (['backoff', 'workSets'].includes(set.labelKey)) {
                   if (backoffSetEntries[0]?.index !== si) return null;
 
                   const firstIncompleteBackoff = backoffSetEntries.find(({ set: backoffSet }) => !backoffSet.done && !backoffSet.skipped)?.index ?? -1;
@@ -3506,7 +3788,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                         onRestoreAll={() => backoffSetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
                         onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
                         renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
+                        label={backoffGroupLabel}
                         t={t}
+                  weightUnit={weightUnit}
                       />
                     </React.Fragment>
                   );
@@ -3562,7 +3846,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                       <span>
                         {set.skipped
                           ? t.topSetSkipped
-                          : t.failedSetAdjusted.replace('{weight}', `${set.adjustedWeight} ${t.kg}`)}
+                          : t.failedSetAdjusted.replace('{weight}', formatWeightFromKg(set.adjustedWeight, weightUnit))}
                       </span>
                     </div>
                   )}
@@ -3585,6 +3869,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     onRestoreWeight={() => handleToggle(() => onRestoreMeetSetWeight(li, si))}
                     onWeightChange={val => onMeetWeightChange(li, si, val)}
                     t={t}
+                  weightUnit={weightUnit}
                   />
                   {renderInlineTimer({ type: 'meetSet', liftIndex: li, index: si })}
                   {set.done && !set.failed && !set.skipped && !set.effort && (
@@ -3643,13 +3928,21 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   onMarkFailed={si => handleToggle(() => onMarkAccessorySetFailed(ai, si))}
                   renderTimer={si => renderInlineTimer({ type: 'accessory', accIndex: ai, index: si })}
                   t={t}
+                  weightUnit={weightUnit}
                 />
               );
             })}
           </div>
         )}
 
-        {!isMeetDay && <CooldownBlock t={t} isReadOnly={isReadOnly} />}
+        {!isMeetDay && (
+          <CooldownBlock
+            items={workout.cooldownItems || generateCooldownItems()}
+            onToggleItem={index => handleToggle(() => onToggleCooldownItem(index))}
+            t={t}
+            isReadOnly={isReadOnly}
+          />
+        )}
 
         <button
           onClick={() => {
@@ -3698,7 +3991,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       fontFamily: 'sans-serif'
     }}>
       <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
-        {t.workout} {workout.number} — {liftLabel(workout.lift, t)}
+        {t.workout} {workout.number} — {workoutLiftLabel(workout.lift, t, benchPressVariant)}
       </h2>
 
       <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
@@ -3757,6 +4050,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             renderTimer={i => renderInlineTimer({ type: 'warmup', index: i })}
             followsPrep={(workout.prepItems || []).length > 0}
             t={t}
+                  weightUnit={weightUnit}
           />
         </div>
       )}
@@ -3775,21 +4069,22 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           color: THEME.text,
           textAlign: 'center'
         }}>
-          {liftLabel(workout.lift, t)}
+          {workoutLiftLabel(workout.lift, t, benchPressVariant)}
         </div>
 
         {workout.sets.map((set, i) => {
           const allWarmupsDone = allPrepDone && (workout.warmups || []).every(w => w.done);
           const backoffSetEntries = (workout.sets || [])
             .map((backoffSet, backoffIndex) => ({ set: backoffSet, index: backoffIndex }))
-            .filter(({ set: backoffSet }) => backoffSet.labelKey === 'backoff');
+            .filter(({ set: backoffSet }) => ['backoff', 'workSets'].includes(backoffSet.labelKey));
+          const backoffGroupLabel = getBackoffGroupLabelForSets(workout.sets || [], t);
           const firstIncomplete = workout.sets.findIndex(s => !s.done);
           const hasLaterSetAction = workout.sets.some((laterSet, laterIndex) =>
             laterIndex > i && (laterSet.done || laterSet.failed || laterSet.skipped)
           );
           const showSetNotice = set.failed || (set.skipped && !hasLaterSetAction);
 
-          if (set.labelKey === 'backoff') {
+          if (['backoff', 'workSets'].includes(set.labelKey)) {
             if (backoffSetEntries[0]?.index !== i) return null;
 
             const firstIncompleteBackoff = backoffSetEntries.find(({ set: backoffSet }) => !backoffSet.done && !backoffSet.skipped)?.index ?? -1;
@@ -3805,7 +4100,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   onRestoreAll={() => backoffSetEntries.forEach(({ index }) => onRestoreSetWeight(index))}
                   onMarkFailed={index => handleToggle(() => onMarkSetFailed(index))}
                   renderTimer={index => renderInlineTimer({ type: 'main', index })}
+                  label={backoffGroupLabel}
                   t={t}
+                  weightUnit={weightUnit}
                 />
               </React.Fragment>
             );
@@ -3845,7 +4142,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   <span>
                     {set.skipped
                       ? t.topSetSkipped
-                      : t.failedSetAdjusted.replace('{weight}', `${set.adjustedWeight} ${t.kg}`)}
+                      : t.failedSetAdjusted.replace('{weight}', formatWeightFromKg(set.adjustedWeight, weightUnit))}
                   </span>
                 </div>
               )}
@@ -3862,6 +4159,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 onRestoreWeight={() => handleToggle(() => onRestoreSetWeight(i))}
                 onWeightChange={val => onWeightChange('set', i, val)}
                 t={t}
+                  weightUnit={weightUnit}
               />
               {!set.failed && renderInlineTimer({ type: 'main', index: i })}
               {set.done && !set.failed && !set.skipped && !set.effort && (
@@ -3869,6 +4167,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   value={set.effort}
                   onChange={effort => handleToggle(() => onSetEffortChange(i, effort))}
                   t={t}
+                  weightUnit={weightUnit}
                 />
               )}
             </React.Fragment>
@@ -3925,7 +4224,12 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
         </div>
       )}
 
-      <CooldownBlock t={t} />
+      <CooldownBlock
+        items={workout.cooldownItems || generateCooldownItems()}
+        onToggleItem={index => handleToggle(() => onToggleCooldownItem(index))}
+        t={t}
+        isReadOnly={isReadOnly}
+      />
 
       <button
         onClick={() => {
@@ -3954,12 +4258,13 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           : t.completeWorkout}
       </button>
 
-      {showNewCycle && <NewCycleModal prs={newCyclePRs} onStart={onStartNewCycle} t={t} />}
+      {showNewCycle && <NewCycleModal prs={newCyclePRs} onStart={onStartNewCycle} t={t}         weightUnit={weightUnit}
+/>}
     </div>
   );
 }
 
-function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, meetPlannerAttempts, setMeetPlannerAttempts, onBack, t }) {
+function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, meetPlannerAttempts, setMeetPlannerAttempts, onBack, t, weightUnit = WEIGHT_UNITS.KG }) {
 const [activescreen, setActivescreen] = useState('lifts');
 const [showResetMeetPlannerConfirm, setShowResetMeetPlannerConfirm] = useState(false);
 const customMeetAttempts = meetPlannerAttempts || {};
@@ -3978,6 +4283,21 @@ const hasCustomMeetAttempts = Object.values(customMeetAttempts).some(liftAttempt
   Bench: THEME.primary,
   Deadlift: THEME.yellow
 };
+
+const statsWeightUnit = normalizeWeightUnit(weightUnit);
+
+function chartWeightFromKg(weightKg, options = {}) {
+  const displayWeight = kgToDisplayWeight(weightKg, statsWeightUnit);
+  if (displayWeight === '') return null;
+
+  const formatted = formatWeightValue(displayWeight, statsWeightUnit, options);
+  const value = Number(formatted);
+  return Number.isFinite(value) ? value : null;
+}
+
+function weightMetricTitle(label) {
+  return `${label} (${statsWeightUnit})`;
+}
   
 const bestStats = {
   Squat: { oneRM: 0, e1rm: 0 },
@@ -4006,8 +4326,8 @@ sortedHistory.forEach(entry => {
       liftData[entry.lift].push({
         label,
         absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
-        oneRM: bestStats[entry.lift].oneRM || null,
-        e1rm: bestStats[entry.lift].e1rm || null,
+        oneRM: chartWeightFromKg(bestStats[entry.lift].oneRM),
+        e1rm: chartWeightFromKg(bestStats[entry.lift].e1rm),
       });
     }
   }
@@ -4072,7 +4392,7 @@ bodyWeights.forEach(entry => {
   if (entry.bodyWeight) {
     bodyData.push({
       ...base,
-      gewicht: entry.bodyWeight,
+      gewicht: chartWeightFromKg(entry.bodyWeight, { body: true }),
     });
   }
 
@@ -4091,7 +4411,9 @@ bodyWeights.forEach(entry => {
 
     bodyMetricData[key].push({
       ...base,
-      [key]: value,
+      [key]: (key === 'leanMass' || key === 'boneMass')
+        ? chartWeightFromKg(value, { body: true })
+        : value,
     });
   });
 });
@@ -4125,17 +4447,17 @@ totalData.forEach(entry => {
 });
 
 function chartMetricLabel(key) {
-  if (key === 'oneRM') return '1RM';
-  if (key === 'e1rm') return t.e1RM;
-  if (key === 'gewicht') return `${t.bodyweight} (${t.kg})`;
+  if (key === 'oneRM') return weightMetricTitle('1RM');
+  if (key === 'e1rm') return weightMetricTitle(t.e1RM);
+  if (key === 'gewicht') return weightMetricTitle(t.bodyweight);
   if (key === 'strength') return t.strength;
-  if (key === 'bodyFat') return t.bodyFatPercent;
-  if (key === 'bodyWater') return t.bodyWaterPercent;
-  if (key === 'leanMass') return t.leanMassKg;
-  if (key === 'visceralFat') return t.visceralFatRating;
+  if (key === 'bodyFat') return `${t.bodyFatPercent} (%)`;
+  if (key === 'bodyWater') return `${t.bodyWaterPercent} (%)`;
+  if (key === 'leanMass') return weightMetricTitle(t.leanMassKg);
+  if (key === 'visceralFat') return `${t.visceralFatRating} rating`;
   if (key === 'physiqueRating') return t.physiqueRating;
-  if (key === 'boneMass') return t.boneMassKg;
-  if (key === 'bmr') return t.bmrKcal;
+  if (key === 'boneMass') return weightMetricTitle(t.boneMassKg);
+  if (key === 'bmr') return `${t.bmrKcal} (kcal)`;
 
   return key;
 }
@@ -4161,6 +4483,35 @@ function meetAttemptValue(lift, key, fallback) {
   if (custom === '') return '';
 
   return custom;
+}
+
+function formatMeetAttemptInput(valueKg) {
+  if (valueKg === undefined || valueKg === null || valueKg === '') return '';
+  return formatWeightValue(kgToDisplayWeight(valueKg, statsWeightUnit), statsWeightUnit);
+}
+
+function roundMeetAttemptDisplay(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return '';
+
+  return statsWeightUnit === WEIGHT_UNITS.LB
+    ? roundToStep(numericValue, 5)
+    : roundAttempt(numericValue);
+}
+
+function commitMeetAttempt(lift, key, displayValue) {
+  const roundedDisplay = roundMeetAttemptDisplay(displayValue);
+
+  if (roundedDisplay === '') {
+    updateMeetAttempt(lift, key, '');
+    return;
+  }
+
+  const valueKg = statsWeightUnit === WEIGHT_UNITS.LB
+    ? displayWeightToKg(roundedDisplay, statsWeightUnit)
+    : roundedDisplay;
+
+  updateMeetAttempt(lift, key, valueKg);
 }
 
 const suggestedMeetPlan = LIFT_ORDER.map(lift => {
@@ -4389,7 +4740,7 @@ const meetTotals = {
             marginBottom: 16
           }}>
             <h3 style={{ margin: '0 0 8px' }}>{t.totalSBD}</h3>
-            {renderChart(totalData, ['oneRM', 'e1rm'], [THEME.muted, THEME.primary])}
+            {renderChart(totalData.map(entry => ({ ...entry, oneRM: chartWeightFromKg(entry.oneRM), e1rm: chartWeightFromKg(entry.e1rm) })), ['oneRM', 'e1rm'], [THEME.muted, THEME.primary])}
           </div>
 
           <div style={{
@@ -4407,7 +4758,7 @@ const meetTotals = {
       {activescreen === 'lichaam' && renderMetricChartCards([
         {
           key: 'gewicht',
-          title: `${t.bodyweight} (${t.kg})`,
+          title: t.bodyweight,
           data: bodyData,
           color: THEME.primary,
         },
@@ -4498,7 +4849,7 @@ const meetTotals = {
         </div>
 
         <div style={{ color: THEME.text, fontSize: 22, fontWeight: 900, lineHeight: 1 }}>
-          {meetTotals.third ? `${meetTotals.third} ${t.kg}` : '—'}
+          {meetTotals.third ? formatWeightFromKg(meetTotals.third, statsWeightUnit) : '—'}
         </div>
       </div>
     </div>
@@ -4531,7 +4882,7 @@ const meetTotals = {
               fontWeight: 700,
               whiteSpace: 'nowrap'
             }}>
-              {t.e1RM} {row.e1rm ? `${row.e1rm} ${t.kg}` : '—'}
+              {t.e1RM} {row.e1rm ? formatWeightFromKg(row.e1rm, statsWeightUnit) : '—'}
             </span>
           </div>
 
@@ -4574,15 +4925,12 @@ const meetTotals = {
                 </div>
 
                 <input
+                  key={`${statsWeightUnit}-${row.lift}-${key}-${value}`}
                   type="number"
                   inputMode="decimal"
-                  step="2.5"
-                  value={value}
-                  onChange={e => updateMeetAttempt(row.lift, key, e.target.value)}
-                  onBlur={e => {
-                    const rounded = roundAttempt(e.target.value);
-                    updateMeetAttempt(row.lift, key, rounded || '');
-                  }}
+                  step={statsWeightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"}
+                  defaultValue={formatMeetAttemptInput(value)}
+                  onBlur={e => commitMeetAttempt(row.lift, key, e.target.value)}
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
@@ -4598,7 +4946,7 @@ const meetTotals = {
                 />
 
                 <div style={{ color: THEME.muted, fontSize: 10, marginTop: 3 }}>
-                  {t.kg}
+                  {statsWeightUnit}
                 </div>
               </div>
             ))}
@@ -4624,7 +4972,7 @@ const meetTotals = {
       ].map(([label, value]) => (
         <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
           <span style={{ color: THEME.text, fontWeight: 800 }}>{label}</span>
-          <strong>{value ? `${value} ${t.kg}` : '—'}</strong>
+          <strong>{value ? formatWeightFromKg(value, statsWeightUnit) : '—'}</strong>
         </div>
       ))}
     </div>
@@ -4858,7 +5206,7 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
   );
 }
 
-function getWorkoutTitle(workout, t) {
+function getWorkoutTitle(workout, t, benchPressVariant = 'standard') {
   if (!workout || workout.type === 'rest') return t.deload;
   if (workout.type === 'meet') return t.sbdMeetDay || t.meetDay;
 
@@ -4867,13 +5215,13 @@ function getWorkoutTitle(workout, t) {
     .filter(Boolean);
 
   if (lifts.length > 0) {
-    return lifts.map(lift => liftLabel(lift, t)).join(' + ');
+    return lifts.map(lift => workoutLiftLabel(lift, t, benchPressVariant)).join(' + ');
   }
 
-  return liftLabel(workout.lift, t);
+  return workoutLiftLabel(workout.lift, t, benchPressVariant);
 }
 
-function getWorkoutPlanLines(workout, t) {
+function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard') {
   if (!workout || workout.type === 'rest') return [];
 
   const liftBlocks = (workout.lifts || []).length > 0
@@ -4912,10 +5260,10 @@ function getWorkoutPlanLines(workout, t) {
 
     return groups.map(group => {
       if (onlyBackoff || !group.labelKey) {
-        return `${liftLabel(liftBlock.lift, t)}: ${group.count}×${group.reps}×${group.weight} ${t.kg}`;
+        return `${workoutLiftLabel(liftBlock.lift, t, benchPressVariant)}: ${group.count}×${group.reps}×${formatWeightFromKg(group.weight, weightUnit)}`;
       }
 
-      return `${liftLabel(liftBlock.lift, t)} · ${group.label}: ${group.count}×${group.reps}×${group.weight} ${t.kg}`;
+      return `${workoutLiftLabel(liftBlock.lift, t, benchPressVariant)} · ${group.label}: ${group.count}×${group.reps}×${formatWeightFromKg(group.weight, weightUnit)}`;
     });
   });
 }
@@ -4972,7 +5320,7 @@ function AppHeader({ t, title, subtitle, meta, children }) {
   );
 }
 
-function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t }) {
+function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard' }) {
   const currentWorkoutRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
 
@@ -5012,7 +5360,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCyc
         const isCurrent = idx === currentIndex;
         const isDone = idx < completedWorkoutCount;
         const headerBg = isCurrent ? THEME.primary : workout.type === 'rest' ? THEME.brown : THEME.border;
-        const planLines = getWorkoutPlanLines(workout, t);
+        const planLines = getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant);
         const typeLabel = getWorkoutTypeLabel(workout, t);
         const showTypeLabel = false;
 
@@ -5055,7 +5403,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCyc
 
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: isCurrent ? 700 : 500, color: isCurrent ? THEME.primary : '#ffffff' }}>
-                {getWorkoutTitle(workout, t)}
+                {getWorkoutTitle(workout, t, benchPressVariant)}
                 {isCurrent && (
                   <span style={{
                     fontSize: 11,
@@ -5137,6 +5485,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCyc
 }
 
 function Onboarding({ onStart, t }) {
+  const [onboardingWeightUnit, setOnboardingWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
   const [squat, setSquat] = useState('');
   const [bench, setBench] = useState('');
   const [deadlift, setDeadlift] = useState('');
@@ -5156,12 +5505,15 @@ function Onboarding({ onStart, t }) {
   }
 
   function buildInitialBodyData() {
-    const bodyWeight = toOptionalNumber(bodyForm.bodyWeight);
+    const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
+    const bodyWeightInput = toOptionalNumber(bodyForm.bodyWeight);
     const bodyFat = toOptionalNumber(bodyForm.bodyFat);
     const bodyWater = toOptionalNumber(bodyForm.bodyWater);
     const visceralFat = toOptionalNumber(bodyForm.visceralFat);
     const physiqueRating = toOptionalNumber(bodyForm.physiqueRating);
-    const boneMass = toOptionalNumber(bodyForm.boneMass);
+    const boneMassInput = toOptionalNumber(bodyForm.boneMass);
+    const bodyWeight = bodyWeightInput !== null ? displayWeightToKg(bodyWeightInput, selectedWeightUnit) : null;
+    const boneMass = boneMassInput !== null ? displayWeightToKg(boneMassInput, selectedWeightUnit) : null;
     const leanMass = calculateLeanMassEstimate(bodyWeight, bodyFat, boneMass);
     const bmr = calculateBmrEstimate(leanMass);
 
@@ -5205,9 +5557,10 @@ function Onboarding({ onStart, t }) {
   }
 
   function handleStart() {
-    const s = parseFloat(squat);
-    const b = parseFloat(bench);
-    const d = parseFloat(deadlift);
+    const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
+    const s = displayWeightToKg(parseFloat(squat), selectedWeightUnit);
+    const b = displayWeightToKg(parseFloat(bench), selectedWeightUnit);
+    const d = displayWeightToKg(parseFloat(deadlift), selectedWeightUnit);
 
     const normalizedBirthDate = parseBirthDateInput(birthDate);
 
@@ -5216,16 +5569,16 @@ function Onboarding({ onStart, t }) {
       return;
     }
 
-    onStart(s, b, d, { birthDate: normalizedBirthDate, sex }, buildInitialBodyData());
+    onStart(s, b, d, { birthDate: normalizedBirthDate, sex, weightUnit: selectedWeightUnit }, buildInitialBodyData());
   }
 
   const bodyFields = [
-    { key: 'bodyWeight', label: t.bodyweight, unit: t.kg },
+    { key: 'bodyWeight', label: t.bodyweight, unit: onboardingWeightUnit },
     { key: 'bodyFat', label: t.bodyFatPercent, unit: '%' },
     { key: 'bodyWater', label: t.bodyWaterPercent, unit: '%' },
     { key: 'visceralFat', label: t.visceralFatRating },
     { key: 'physiqueRating', label: t.physiqueRating },
-    { key: 'boneMass', label: t.boneMassKg, unit: t.kg },
+    { key: 'boneMass', label: t.boneMassKg, unit: onboardingWeightUnit },
   ];
 
   return (
@@ -5252,6 +5605,31 @@ function Onboarding({ onStart, t }) {
         <h2 style={{ marginTop: 0, color: THEME.text, textAlign: 'center' }}>
           {t.enterDetails}
         </h2>
+
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
+            {t.weightUnit}
+          </label>
+
+          <select
+            value={onboardingWeightUnit}
+            onChange={e => setOnboardingWeightUnit(normalizeWeightUnit(e.target.value))}
+            style={{
+              width: '100%',
+              padding: 10,
+              fontSize: 16,
+              borderRadius: 4,
+              border: `1px solid ${THEME.border}`,
+              boxSizing: 'border-box',
+              background: THEME.bg,
+              color: THEME.text
+            }}
+          >
+            <option value={WEIGHT_UNITS.KG}>{t.weightUnitKg}</option>
+            <option value={WEIGHT_UNITS.LB}>{t.weightUnitLb}</option>
+          </select>
+        </div>
 
         {[
           [t.squat1RM, squat, setSquat],
@@ -5288,7 +5666,7 @@ function Onboarding({ onStart, t }) {
                 fontSize: 16,
                 pointerEvents: 'none'
               }}>
-                {t.kg}
+                {onboardingWeightUnit}
               </span>
             </div>
           </div>
@@ -5584,6 +5962,10 @@ function App() {
   const [restTimeSeconds, setRestTimeSeconds] = useState(DEFAULT_REST_TIME_SECONDS);
   const [accessoryMode, setAccessoryMode] = useState('off');
   const [preparationMode, setPreparationMode] = useState('basic');
+  const [benchPressVariant, setBenchPressVariant] = useState(() =>
+    localStorage.getItem('benchPressVariant') === 'floorPress' ? 'floorPress' : 'standard'
+  );
+  const [weightUnit, setWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
 
   function startTimer(seconds, placement = null) {
     setTimer({
@@ -5597,6 +5979,14 @@ function App() {
   useEffect(() => {
     localStorage.setItem('language', language);
   }, [language]);
+
+  useEffect(() => {
+    localStorage.setItem('weightUnit', normalizeWeightUnit(weightUnit));
+  }, [weightUnit]);
+
+  useEffect(() => {
+    localStorage.setItem('benchPressVariant', benchPressVariant === 'floorPress' ? 'floorPress' : 'standard');
+  }, [benchPressVariant]);
 
   const t = translations[language];
   const [screen, setScreen] = useState('onboarding');
@@ -5859,6 +6249,10 @@ function App() {
     localStorage.removeItem('kel-powerlifting');
     localStorage.removeItem('app_version');
 
+    const selectedWeightUnit = normalizeWeightUnit(profile.weightUnit || weightUnit);
+    setWeightUnit(selectedWeightUnit);
+    localStorage.setItem('weightUnit', selectedWeightUnit);
+
     setWorkouts(generateProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode));
     setCurrentWorkoutIndex(0);
   setSelectedIndex(0);
@@ -5896,7 +6290,7 @@ function App() {
 
     setPrs({ Squat: s, Bench: b, Deadlift: d });
     setAccessoryPRs({});
-    setUserProfile(profile);
+    setUserProfile({ ...profile, weightUnit: selectedWeightUnit });
     setMeetPlannerAttempts({});
     setBodyWeights(initialBodyData ? [
       {
@@ -7034,6 +7428,25 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   );
 }
 
+  function toggleCooldownItem(index) {
+    setWorkouts(prev =>
+      prev.map((w, wi) => {
+        if (wi !== selectedIndex) return w;
+
+        const cooldownItems = (w.cooldownItems && w.cooldownItems.length > 0)
+          ? w.cooldownItems
+          : generateCooldownItems();
+
+        return {
+          ...w,
+          cooldownItems: cooldownItems.map((item, i) =>
+            i === index ? { ...item, done: !item.done } : item
+          ),
+        };
+      })
+    );
+  }
+
   function completeWorkout(workoutEffortOverride = null) {
     const baseWorkout = workouts[selectedIndex];
     const workout = workoutEffortOverride
@@ -7583,7 +7996,7 @@ const latestBodyDataRows = [
   {
     key: 'bodyWeight',
     label: t.bodyweight,
-    value: bodyMetricValue(latestBodyDataEntry?.bodyWeight, t.kg),
+    value: latestBodyDataEntry?.bodyWeight ? formatWeightFromKg(latestBodyDataEntry.bodyWeight, weightUnit, { body: true }) : null,
   },
   {
     key: 'bodyFat',
@@ -7600,7 +8013,7 @@ const latestBodyDataRows = [
   {
     key: 'leanMass',
     label: t.leanMassKg,
-    value: bodyMetricValue(latestBodyDataEntry?.leanMass, t.kg),
+    value: latestBodyDataEntry?.leanMass ? formatWeightFromKg(latestBodyDataEntry.leanMass, weightUnit, { body: true }) : null,
   },
   {
     key: 'visceralFat',
@@ -7617,7 +8030,7 @@ const latestBodyDataRows = [
   {
     key: 'boneMass',
     label: t.boneMassKg,
-    value: bodyMetricValue(latestBodyDataEntry?.boneMass, t.kg),
+    value: latestBodyDataEntry?.boneMass ? formatWeightFromKg(latestBodyDataEntry.boneMass, weightUnit, { body: true }) : null,
     status: boneMassStatus(latestBodyDataEntry?.boneMass),
   },
   {
@@ -7648,6 +8061,7 @@ const latestBodyDataRows = [
           onToggleAccessorySet={toggleAccessorySet}
           onMarkAccessorySetFailed={markAccessorySetFailed}
           onRestoreAccessoryWeight={restoreAccessoryWeight}
+          onToggleCooldownItem={toggleCooldownItem}
           onWeightChange={changeWeight}
           onSetEffortChange={changeSetEffort}
           onAccessoryWeightChange={changeAccessoryWeight}
@@ -7658,6 +8072,8 @@ const latestBodyDataRows = [
           newCyclePRs={prs}
           onStartNewCycle={handleStartNewCycle}
           t={t}
+          weightUnit={weightUnit}
+          benchPressVariant={benchPressVariant}
           timer={timer}
           setTimer={setTimer}
           onToggleMeetPrepItem={toggleMeetPrepItem}
@@ -7703,7 +8119,7 @@ const latestBodyDataRows = [
           fontSize: 22,
           fontWeight: 900
         }}>
-          {getWorkoutTitle(workouts[currentIndex], t)}
+          {getWorkoutTitle(workouts[currentIndex], t, benchPressVariant)}
         </div>
       </div>
     )}
@@ -7719,11 +8135,11 @@ const latestBodyDataRows = [
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
             <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.oneRM}:</span>
-            <strong style={{ fontSize: 15 }}>{oneRM ? `${oneRM} kg` : '—'}</strong>
+            <strong style={{ fontSize: 15 }}>{oneRM ? formatWeightFromKg(oneRM, weightUnit) : '—'}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.e1RM}:</span>
-            <strong style={{ fontSize: 15 }}>{e1RM ? `${e1RM} ${t.kg}` : '—'}</strong>
+            <strong style={{ fontSize: 15 }}>{e1RM ? formatWeightFromKg(e1RM, weightUnit) : '—'}</strong>
           </div>
         </div>
       ))}
@@ -7732,11 +8148,11 @@ const latestBodyDataRows = [
     <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 18, marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.total1rm}</span>
-        <strong style={{ color: '#ffffff', fontSize: 15 }}>{total1RM ? `${total1RM} kg` : '—'}</strong>
+        <strong style={{ color: '#ffffff', fontSize: 15 }}>{total1RM ? formatWeightFromKg(total1RM, weightUnit) : '—'}</strong>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.totalE1rm}</span>
-        <strong style={{ color: '#ffffff', fontSize: 15 }}>{totalE1RM ? `${totalE1RM} kg` : '—'}</strong>
+        <strong style={{ color: '#ffffff', fontSize: 15 }}>{totalE1RM ? formatWeightFromKg(totalE1RM, weightUnit) : '—'}</strong>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.strength}</span>
@@ -7803,6 +8219,8 @@ const latestBodyDataRows = [
           onStats={() => setScreen('stats')}
           onStartNewCycle={handleStartNewCycle}
           t={t}
+          weightUnit={weightUnit}
+          benchPressVariant={benchPressVariant}
         />
       )}
 
@@ -7817,6 +8235,8 @@ const latestBodyDataRows = [
           setMeetPlannerAttempts={updateMeetPlannerAttempts}
           onBack={() => setScreen('all')}
           t={t}
+          weightUnit={weightUnit}
+          benchPressVariant={benchPressVariant}
         />
 )}
 
@@ -7838,6 +8258,8 @@ const latestBodyDataRows = [
     <ProfileSection
       userProfile={userProfile}
       onSave={setUserProfile}
+      weightUnit={weightUnit}
+      setWeightUnit={setWeightUnit}
       t={t}
     />
 
@@ -7845,6 +8267,7 @@ const latestBodyDataRows = [
       bodyData={latestBodyDataEntry}
       onSave={saveBodyWeight}
       t={t}
+      weightUnit={weightUnit}
     />
 
     <RestTimeSection
@@ -7853,15 +8276,13 @@ const latestBodyDataRows = [
       t={t}
     />
 
-    <PreparationSection
+    <WorkoutSection
       preparationMode={preparationMode}
       setPreparationMode={setPreparationMode}
-      t={t}
-    />
-
-    <AccessorySection
       accessoryMode={accessoryMode}
       setAccessoryMode={setAccessoryMode}
+      benchPressVariant={benchPressVariant}
+      setBenchPressVariant={setBenchPressVariant}
       t={t}
     />
 
@@ -7988,7 +8409,7 @@ const latestBodyDataRows = [
                 lineHeight: 1,
                 marginBottom: 12
               }}>
-                {achievedTotal ? `${achievedTotal} ${t.kg}` : '—'}
+                {achievedTotal ? formatWeightFromKg(achievedTotal, weightUnit) : '—'}
               </div>
 
               <div style={{
@@ -8019,7 +8440,7 @@ const latestBodyDataRows = [
                       fontSize: 13,
                       fontWeight: 900
                     }}>
-                      {result.weight ? `${result.weight} ${t.kg}` : '—'}
+                      {result.weight ? formatWeightFromKg(result.weight, weightUnit) : '—'}
                     </div>
                   </div>
                 ))}
@@ -8065,7 +8486,7 @@ const latestBodyDataRows = [
                 {liftLabel(result.lift, t)} {t.e1RM}
               </span>
               <strong style={{ color: '#ffffff', whiteSpace: 'nowrap' }}>
-                {result.bestE1RM} {t.kg}
+                {formatWeightFromKg(result.bestE1RM, weightUnit)}
               </strong>
             </div>
           ))}
@@ -8112,7 +8533,7 @@ const latestBodyDataRows = [
                 fontWeight: 900,
                 marginBottom: 6
               }}>
-                {liftLabel(liftBlock.lift, t)}
+                {workoutLiftLabel(liftBlock.lift, t, benchPressVariant)}
               </div>
 
               {(liftBlock.sets || []).map((set, i) => {
@@ -8138,7 +8559,7 @@ const latestBodyDataRows = [
                     </span>
 
                     <strong style={{ color: isInvalidSet ? '#e74c3c' : '#ffffff', whiteSpace: 'nowrap' }}>
-                      {set.weight} {t.kg}
+                      {formatWeightFromKg(set.weight, weightUnit)}
                     </strong>
                   </div>
                 );
@@ -8220,7 +8641,7 @@ const latestBodyDataRows = [
 
         {(completedWorkout?.lifts || []).length > 0 && (() => {
           const liftNames = (completedWorkout.lifts || [])
-            .map(liftBlock => liftLabel(liftBlock.lift, t))
+            .map(liftBlock => workoutLiftLabel(liftBlock.lift, t, benchPressVariant))
             .filter(Boolean)
             .join(' + ');
 
@@ -8315,7 +8736,7 @@ const latestBodyDataRows = [
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                 <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
                 <strong style={{ color: '#ffffff' }}>
-                  {value} kg {isPR ? '🚀' : ''}
+                  {formatWeightFromKg(value, weightUnit)} {isPR ? '🚀' : ''}
                 </strong>
               </div>
             );
@@ -8389,7 +8810,7 @@ const latestBodyDataRows = [
                   fontWeight: 900,
                   marginBottom: 8
                 }}>
-                  {liftLabel(liftBlock.lift, t)}
+                  {workoutLiftLabel(liftBlock.lift, t, benchPressVariant)}
                 </div>
 
                 {(liftBlock.sets || []).map((set, i) => {
@@ -8430,7 +8851,7 @@ const latestBodyDataRows = [
                         color: isInvalidSet ? '#e74c3c' : '#ffffff',
                         whiteSpace: 'nowrap'
                       }}>
-                        {set.weight} {t.kg}
+                        {formatWeightFromKg(set.weight, weightUnit)}
                       </strong>
                     </div>
                   );
