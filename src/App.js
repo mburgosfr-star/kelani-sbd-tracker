@@ -4149,7 +4149,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
   );
 }
 
-function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, meetPlannerAttempts, setMeetPlannerAttempts, onBack, t }) {
+function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, meetPlannerAttempts, setMeetPlannerAttempts, onBack, t, weightUnit = WEIGHT_UNITS.KG }) {
 const [activescreen, setActivescreen] = useState('lifts');
 const [showResetMeetPlannerConfirm, setShowResetMeetPlannerConfirm] = useState(false);
 const customMeetAttempts = meetPlannerAttempts || {};
@@ -4168,6 +4168,21 @@ const hasCustomMeetAttempts = Object.values(customMeetAttempts).some(liftAttempt
   Bench: THEME.primary,
   Deadlift: THEME.yellow
 };
+
+const statsWeightUnit = normalizeWeightUnit(weightUnit);
+
+function chartWeightFromKg(weightKg, options = {}) {
+  const displayWeight = kgToDisplayWeight(weightKg, statsWeightUnit);
+  if (displayWeight === '') return null;
+
+  const formatted = formatWeightValue(displayWeight, statsWeightUnit, options);
+  const value = Number(formatted);
+  return Number.isFinite(value) ? value : null;
+}
+
+function weightMetricTitle(label) {
+  return `${label} (${statsWeightUnit})`;
+}
   
 const bestStats = {
   Squat: { oneRM: 0, e1rm: 0 },
@@ -4196,8 +4211,8 @@ sortedHistory.forEach(entry => {
       liftData[entry.lift].push({
         label,
         absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
-        oneRM: bestStats[entry.lift].oneRM || null,
-        e1rm: bestStats[entry.lift].e1rm || null,
+        oneRM: chartWeightFromKg(bestStats[entry.lift].oneRM),
+        e1rm: chartWeightFromKg(bestStats[entry.lift].e1rm),
       });
     }
   }
@@ -4262,7 +4277,7 @@ bodyWeights.forEach(entry => {
   if (entry.bodyWeight) {
     bodyData.push({
       ...base,
-      gewicht: entry.bodyWeight,
+      gewicht: chartWeightFromKg(entry.bodyWeight, { body: true }),
     });
   }
 
@@ -4281,7 +4296,9 @@ bodyWeights.forEach(entry => {
 
     bodyMetricData[key].push({
       ...base,
-      [key]: value,
+      [key]: (key === 'leanMass' || key === 'boneMass')
+        ? chartWeightFromKg(value, { body: true })
+        : value,
     });
   });
 });
@@ -4315,17 +4332,17 @@ totalData.forEach(entry => {
 });
 
 function chartMetricLabel(key) {
-  if (key === 'oneRM') return '1RM';
-  if (key === 'e1rm') return t.e1RM;
-  if (key === 'gewicht') return `${t.bodyweight} (${t.kg})`;
+  if (key === 'oneRM') return weightMetricTitle('1RM');
+  if (key === 'e1rm') return weightMetricTitle(t.e1RM);
+  if (key === 'gewicht') return weightMetricTitle(t.bodyweight);
   if (key === 'strength') return t.strength;
-  if (key === 'bodyFat') return t.bodyFatPercent;
-  if (key === 'bodyWater') return t.bodyWaterPercent;
-  if (key === 'leanMass') return t.leanMassKg;
-  if (key === 'visceralFat') return t.visceralFatRating;
+  if (key === 'bodyFat') return `${t.bodyFatPercent} (%)`;
+  if (key === 'bodyWater') return `${t.bodyWaterPercent} (%)`;
+  if (key === 'leanMass') return weightMetricTitle(t.leanMassKg);
+  if (key === 'visceralFat') return `${t.visceralFatRating} rating`;
   if (key === 'physiqueRating') return t.physiqueRating;
-  if (key === 'boneMass') return t.boneMassKg;
-  if (key === 'bmr') return t.bmrKcal;
+  if (key === 'boneMass') return weightMetricTitle(t.boneMassKg);
+  if (key === 'bmr') return `${t.bmrKcal} (kcal)`;
 
   return key;
 }
@@ -4579,7 +4596,7 @@ const meetTotals = {
             marginBottom: 16
           }}>
             <h3 style={{ margin: '0 0 8px' }}>{t.totalSBD}</h3>
-            {renderChart(totalData, ['oneRM', 'e1rm'], [THEME.muted, THEME.primary])}
+            {renderChart(totalData.map(entry => ({ ...entry, oneRM: chartWeightFromKg(entry.oneRM), e1rm: chartWeightFromKg(entry.e1rm) })), ['oneRM', 'e1rm'], [THEME.muted, THEME.primary])}
           </div>
 
           <div style={{
@@ -4597,7 +4614,7 @@ const meetTotals = {
       {activescreen === 'lichaam' && renderMetricChartCards([
         {
           key: 'gewicht',
-          title: `${t.bodyweight} (${t.kg})`,
+          title: weightMetricTitle(t.bodyweight),
           data: bodyData,
           color: THEME.primary,
         },
@@ -4618,13 +4635,13 @@ const meetTotals = {
       {activescreen === 'compositie' && renderMetricChartCards([
         {
           key: 'leanMass',
-          title: t.leanMassKg,
+          title: weightMetricTitle(t.leanMassKg),
           data: bodyMetricData.leanMass,
           color: THEME.primary,
         },
         {
           key: 'boneMass',
-          title: t.boneMassKg,
+          title: weightMetricTitle(t.boneMassKg),
           data: bodyMetricData.boneMass,
           color: THEME.primary,
         },
@@ -8047,6 +8064,7 @@ const latestBodyDataRows = [
           setMeetPlannerAttempts={updateMeetPlannerAttempts}
           onBack={() => setScreen('all')}
           t={t}
+          weightUnit={weightUnit}
         />
 )}
 
