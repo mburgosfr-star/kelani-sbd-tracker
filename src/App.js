@@ -8574,7 +8574,7 @@ const latestBodyDataRows = [
 
         {(completedWorkout?.lifts || []).length > 0 && (() => {
           const liftNames = (completedWorkout.lifts || [])
-            .map(liftBlock => liftLabel(liftBlock.lift, t))
+            .map(liftBlock => workoutLiftLabel(liftBlock.lift, t, benchPressVariant))
             .filter(Boolean)
             .join(' + ');
 
