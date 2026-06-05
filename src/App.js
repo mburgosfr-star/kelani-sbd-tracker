@@ -2681,60 +2681,6 @@ function RestTimeSection({ restTimeSeconds, setRestTimeSeconds, t }) {
 }
 
 
-function WeightUnitSection({ weightUnit, setWeightUnit, t }) {
-  const [showOptions, setShowOptions] = useState(false);
-
-  const modes = [WEIGHT_UNITS.KG, WEIGHT_UNITS.LB];
-  const labels = {
-    [WEIGHT_UNITS.KG]: t.weightUnitKg,
-    [WEIGHT_UNITS.LB]: t.weightUnitLb,
-  };
-
-  return (
-    <>
-      <SettingsListRow
-        label={t.weightUnit}
-        actionLabel={labels[normalizeWeightUnit(weightUnit)]}
-        onAction={() => setShowOptions(true)}
-      />
-
-      {showOptions && (
-        <SettingsModal
-          title={t.weightUnit}
-          onClose={() => setShowOptions(false)}
-        >
-          <div style={{ display: 'grid', gap: 8 }}>
-            {modes.map(mode => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => {
-                  setWeightUnit(mode);
-                  setShowOptions(false);
-                }}
-                style={{
-                  width: '100%',
-                  padding: 12,
-                  fontSize: 14,
-                  fontWeight: 800,
-                  borderRadius: 8,
-                  border: `1px solid ${normalizeWeightUnit(weightUnit) === mode ? THEME.primary : THEME.border}`,
-                  background: normalizeWeightUnit(weightUnit) === mode ? THEME.primary : THEME.card,
-                  color: normalizeWeightUnit(weightUnit) === mode ? THEME.bg : THEME.text,
-                  cursor: 'pointer'
-                }}
-              >
-                {labels[mode]}
-              </button>
-            ))}
-          </div>
-        </SettingsModal>
-      )}
-    </>
-  );
-}
-
-
 function PreparationSection({ preparationMode, setPreparationMode, t }) {
   const [showOptions, setShowOptions] = useState(false);
 
