@@ -3135,7 +3135,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
     }}>
       {failedEntry.set.skipped
         ? t.topSetSkipped
-        : t.failedSetAdjusted.replace('{weight}', `${failedEntry.set.adjustedWeight} ${t.kg}`)}
+        : t.failedSetAdjusted.replace('{weight}', formatWeightFromKg(failedEntry.set.adjustedWeight, weightUnit))}
     </div>
   ) : null;
 
@@ -3173,7 +3173,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   );
 }
 
-function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAccessoryWork, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t }) {
+function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAccessoryWork, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG }) {
   const [editing, setEditing] = useState(false);
   const firstWeight = acc.weights?.[0] || 0;
   const allSameWeight = (acc.weights || []).every(weight => Number(weight) === Number(firstWeight));
@@ -3184,14 +3184,16 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
   const [inputVal, setInputVal] = useState(String(firstWeight || ''));
 
   useEffect(() => {
-    if (editing) setInputVal(String(firstWeight || ''));
-  }, [editing, firstWeight]);
+    if (editing) {
+      setInputVal(formatWeightValue(kgToDisplayWeight(firstWeight || '', weightUnit), weightUnit));
+    }
+  }, [editing, firstWeight, weightUnit]);
 
   function confirmEdit() {
     const val = parseFloat(inputVal);
 
     if (!Number.isNaN(val) && val > 0) {
-      onEditAll(val);
+      onEditAll(displayWeightToKg(val, weightUnit));
     }
 
     setEditing(false);
@@ -3199,7 +3201,7 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
 
   function handleEditClick(e) {
     e.stopPropagation();
-    setInputVal(String(firstWeight || ''));
+    setInputVal(formatWeightValue(kgToDisplayWeight(firstWeight || '', weightUnit), weightUnit));
     setEditing(true);
   }
 
@@ -3216,31 +3218,36 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
 
   const detail = (
     <>
-      {(acc.done || []).length} × {acc.reps}{acc.perSide ? ` ${t.perSide}` : ''} × {allSameWeight ? `${firstWeight} ${t.kg}` : t.kg}
+      {(acc.done || []).length} × {acc.reps}{acc.perSide ? ` ${t.perSide}` : ''} × {allSameWeight ? formatWeightFromKg(firstWeight, weightUnit) : normalizeWeightUnit(weightUnit)}
     </>
   );
 
   const actions = editing ? (
-    <input
-      type="number"
-      step="2.5"
-      value={inputVal}
-      autoFocus
-      onChange={e => setInputVal(e.target.value)}
-      onKeyDown={handleKeyDown}
-      onBlur={confirmEdit}
-      style={{
-        width: 66,
-        padding: '4px 6px',
-        fontSize: 14,
-        fontWeight: 800,
-        borderRadius: 4,
-        border: `1px solid ${THEME.primary}`,
-        background: THEME.bg,
-        color: THEME.text,
-        textAlign: 'right',
-      }}
-    />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <input
+        type="number"
+        step={normalizeWeightUnit(weightUnit) === WEIGHT_UNITS.LB ? "5" : "2.5"}
+        value={inputVal}
+        autoFocus
+        onChange={e => setInputVal(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={confirmEdit}
+        style={{
+          width: 66,
+          padding: '4px 6px',
+          fontSize: 14,
+          fontWeight: 800,
+          borderRadius: 4,
+          border: `1px solid ${THEME.primary}`,
+          background: THEME.bg,
+          color: THEME.text,
+          textAlign: 'right',
+        }}
+      />
+      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>
+        {normalizeWeightUnit(weightUnit)}
+      </span>
+    </div>
   ) : (
     <>
       <SetActionButton
@@ -3295,7 +3302,7 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
         ? t.topSetSkipped
         : t.failedSetAdjusted.replace(
           '{weight}',
-          `${acc.adjustedWeights?.[feedbackIndex] ?? acc.weights?.[feedbackIndex] ?? firstWeight} ${t.kg}`
+          formatWeightFromKg(acc.adjustedWeights?.[feedbackIndex] ?? acc.weights?.[feedbackIndex] ?? firstWeight, weightUnit)
         )}
     </div>
   ) : null;
@@ -3550,7 +3557,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
     {t.projectedTotal}
   </div>
   <div style={{ color: THEME.text, fontSize: 22, fontWeight: 900, lineHeight: 1 }}>
-    {meetDayProjectedTotal ? `${meetDayProjectedTotal} ${t.kg}` : '—'}
+    {meetDayProjectedTotal ? formatWeightFromKg(meetDayProjectedTotal, weightUnit) : '—'}
   </div>
 </div>
 )}
@@ -3748,7 +3755,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                       <span>
                         {set.skipped
                           ? t.topSetSkipped
-                          : t.failedSetAdjusted.replace('{weight}', `${set.adjustedWeight} ${t.kg}`)}
+                          : t.failedSetAdjusted.replace('{weight}', formatWeightFromKg(set.adjustedWeight, weightUnit))}
                       </span>
                     </div>
                   )}
@@ -3830,6 +3837,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   onMarkFailed={si => handleToggle(() => onMarkAccessorySetFailed(ai, si))}
                   renderTimer={si => renderInlineTimer({ type: 'accessory', accIndex: ai, index: si })}
                   t={t}
+                  weightUnit={weightUnit}
                 />
               );
             })}
@@ -4034,7 +4042,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   <span>
                     {set.skipped
                       ? t.topSetSkipped
-                      : t.failedSetAdjusted.replace('{weight}', `${set.adjustedWeight} ${t.kg}`)}
+                      : t.failedSetAdjusted.replace('{weight}', formatWeightFromKg(set.adjustedWeight, weightUnit))}
                   </span>
                 </div>
               )}
@@ -4059,6 +4067,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   value={set.effort}
                   onChange={effort => handleToggle(() => onSetEffortChange(i, effort))}
                   t={t}
+                  weightUnit={weightUnit}
                 />
               )}
             </React.Fragment>
