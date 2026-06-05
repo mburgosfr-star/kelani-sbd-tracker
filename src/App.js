@@ -607,6 +607,27 @@ function isTopSetLabel(labelKey) {
   return ['heavySingle', 'topSingle', 'topDouble', 'topTriple'].includes(labelKey);
 }
 
+function isMainOrAttemptLabelKey(labelKey) {
+  return [
+    'heavySingle',
+    'topSingle',
+    'topDouble',
+    'topTriple',
+    'opener',
+    'secondAttempt',
+    'thirdAttempt',
+  ].includes(labelKey);
+}
+
+function getBackoffGroupLabelForSets(sets = [], t) {
+  const hasMainOrAttemptSet = sets.some(set => isMainOrAttemptLabelKey(set.labelKey));
+
+  return hasMainOrAttemptSet
+    ? t.backoff
+    : (t.workSets || t.set);
+}
+
+
 function isAttemptSetLabel(labelKey) {
   return ['opener', 'secondAttempt', 'thirdAttempt'].includes(labelKey);
 }
@@ -759,21 +780,21 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.775, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.700, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 3, pct: 0.800, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.700, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 3, pct: 0.700, labelKey: 'topTriple' }, { sets: 3, reps: 4, pct: 0.625, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 5, pct: 0.625, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 5, pct: 0.625, labelKey: 'workSets' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.650, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.800, labelKey: 'topDouble' }, { sets: 3, reps: 4, pct: 0.725, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 2, pct: 0.850, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.775, labelKey: 'topDouble' }, { sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 4, pct: 0.650, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 4, pct: 0.675, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 4, pct: 0.675, labelKey: 'workSets' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.800, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 4, pct: 0.625, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.700, labelKey: 'workSets' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 1, pct: 0.930, labelKey: 'secondAttempt' }, { sets: 1, reps: 1, pct: 0.950, labelKey: 'thirdAttempt' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 1, pct: 0.930, labelKey: 'secondAttempt' }, { sets: 1, reps: 1, pct: 0.950, labelKey: 'thirdAttempt' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 1, pct: 0.930, labelKey: 'secondAttempt' }, { sets: 1, reps: 1, pct: 0.950, labelKey: 'thirdAttempt' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
@@ -3693,7 +3714,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
               {(liftBlock.sets || []).map((set, si) => {
                 const backoffSetEntries = (liftBlock.sets || [])
                   .map((backoffSet, backoffIndex) => ({ set: backoffSet, index: backoffIndex }))
-                  .filter(({ set: backoffSet }) => backoffSet.labelKey === 'backoff');
+                  .filter(({ set: backoffSet }) => ['backoff', 'workSets'].includes(backoffSet.labelKey));
+                const backoffGroupLabel = getBackoffGroupLabelForSets(liftBlock.sets || [], t);
 
                 const secondarySetEntries = (liftBlock.sets || [])
                   .map((secondarySet, secondaryIndex) => ({ set: secondarySet, index: secondaryIndex }));
@@ -3726,6 +3748,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                         onRestoreAll={() => secondarySetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
                         onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
                         renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
+                        label={backoffGroupLabel}
                         t={t}
                   weightUnit={weightUnit}
                       />
@@ -3733,7 +3756,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   );
                 }
 
-                if (set.labelKey === 'backoff') {
+                if (['backoff', 'workSets'].includes(set.labelKey)) {
                   if (backoffSetEntries[0]?.index !== si) return null;
 
                   const firstIncompleteBackoff = backoffSetEntries.find(({ set: backoffSet }) => !backoffSet.done && !backoffSet.skipped)?.index ?? -1;
@@ -3756,6 +3779,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                         onRestoreAll={() => backoffSetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
                         onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
                         renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
+                        label={backoffGroupLabel}
                         t={t}
                   weightUnit={weightUnit}
                       />
@@ -4036,14 +4060,15 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           const allWarmupsDone = allPrepDone && (workout.warmups || []).every(w => w.done);
           const backoffSetEntries = (workout.sets || [])
             .map((backoffSet, backoffIndex) => ({ set: backoffSet, index: backoffIndex }))
-            .filter(({ set: backoffSet }) => backoffSet.labelKey === 'backoff');
+            .filter(({ set: backoffSet }) => ['backoff', 'workSets'].includes(backoffSet.labelKey));
+          const backoffGroupLabel = getBackoffGroupLabelForSets(workout.sets || [], t);
           const firstIncomplete = workout.sets.findIndex(s => !s.done);
           const hasLaterSetAction = workout.sets.some((laterSet, laterIndex) =>
             laterIndex > i && (laterSet.done || laterSet.failed || laterSet.skipped)
           );
           const showSetNotice = set.failed || (set.skipped && !hasLaterSetAction);
 
-          if (set.labelKey === 'backoff') {
+          if (['backoff', 'workSets'].includes(set.labelKey)) {
             if (backoffSetEntries[0]?.index !== i) return null;
 
             const firstIncompleteBackoff = backoffSetEntries.find(({ set: backoffSet }) => !backoffSet.done && !backoffSet.skipped)?.index ?? -1;
@@ -4059,6 +4084,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   onRestoreAll={() => backoffSetEntries.forEach(({ index }) => onRestoreSetWeight(index))}
                   onMarkFailed={index => handleToggle(() => onMarkSetFailed(index))}
                   renderTimer={index => renderInlineTimer({ type: 'main', index })}
+                  label={backoffGroupLabel}
                   t={t}
                   weightUnit={weightUnit}
                 />
