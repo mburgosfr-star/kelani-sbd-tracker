@@ -5115,7 +5115,7 @@ function getWorkoutTitle(workout, t) {
   return liftLabel(workout.lift, t);
 }
 
-function getWorkoutPlanLines(workout, t) {
+function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG) {
   if (!workout || workout.type === 'rest') return [];
 
   const liftBlocks = (workout.lifts || []).length > 0
@@ -5154,10 +5154,10 @@ function getWorkoutPlanLines(workout, t) {
 
     return groups.map(group => {
       if (onlyBackoff || !group.labelKey) {
-        return `${liftLabel(liftBlock.lift, t)}: ${group.count}×${group.reps}×${group.weight} ${t.kg}`;
+        return `${liftLabel(liftBlock.lift, t)}: ${group.count}×${group.reps}×${formatWeightFromKg(group.weight, weightUnit)}`;
       }
 
-      return `${liftLabel(liftBlock.lift, t)} · ${group.label}: ${group.count}×${group.reps}×${group.weight} ${t.kg}`;
+      return `${liftLabel(liftBlock.lift, t)} · ${group.label}: ${group.count}×${group.reps}×${formatWeightFromKg(group.weight, weightUnit)}`;
     });
   });
 }
@@ -5214,7 +5214,7 @@ function AppHeader({ t, title, subtitle, meta, children }) {
   );
 }
 
-function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t }) {
+function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t, weightUnit = WEIGHT_UNITS.KG }) {
   const currentWorkoutRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
 
@@ -5254,7 +5254,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCyc
         const isCurrent = idx === currentIndex;
         const isDone = idx < completedWorkoutCount;
         const headerBg = isCurrent ? THEME.primary : workout.type === 'rest' ? THEME.brown : THEME.border;
-        const planLines = getWorkoutPlanLines(workout, t);
+        const planLines = getWorkoutPlanLines(workout, t, weightUnit);
         const typeLabel = getWorkoutTypeLabel(workout, t);
         const showTypeLabel = false;
 
@@ -8085,7 +8085,8 @@ const latestBodyDataRows = [
           onStats={() => setScreen('stats')}
           onStartNewCycle={handleStartNewCycle}
           t={t}
-        />
+                  weightUnit={weightUnit}
+/>
       )}
 
       {screen === 'stats' && (
