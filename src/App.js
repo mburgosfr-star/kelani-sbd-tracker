@@ -3743,7 +3743,6 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     <React.Fragment key={`secondary-set-group-${li}`}>
                       <BackoffGroup
                         entries={secondarySetEntries}
-                        label={t.workSets || t.set}
                         activeIndex={
                           !isReadOnly &&
                           li === firstIncompleteLiftIndex &&
