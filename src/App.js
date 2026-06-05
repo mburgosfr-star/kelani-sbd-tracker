@@ -857,6 +857,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
       warmups: liftBlocks[0]?.warmups || [],
       sets: liftBlocks[0]?.sets || [],
       accessories: generateAccessoriesForLift(primaryLift, accessoryMode, accessoryPRs, oneRMs),
+      cooldownItems: generateCooldownItems(),
     });
   });
 
@@ -1265,14 +1266,20 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
 }
 
 
-function CooldownBlock({ t, isReadOnly = false }) {
-  const [done, setDone] = useState(false);
-  const item = {
-    labelKey: 'cooldownRhomboidStretch',
-    prescription: '4×10 sec',
-    perSide: true,
-    done,
-  };
+function generateCooldownItems() {
+  return [
+    {
+      labelKey: 'cooldownRhomboidStretch',
+      prescription: '4×10 sec',
+      perSide: true,
+      done: false,
+    },
+  ];
+}
+
+function CooldownBlock({ items = [], onToggleItem = () => {}, t, isReadOnly = false }) {
+  const cooldownItems = items.length > 0 ? items : generateCooldownItems();
+  const firstIncompleteIndex = cooldownItems.findIndex(item => !item.done);
 
   return (
     <div style={{
@@ -1294,13 +1301,16 @@ function CooldownBlock({ t, isReadOnly = false }) {
       </div>
 
       <div style={{ padding: '6px 10px' }}>
-        <PrepRow
-          item={item}
-          isActive={false}
-          isReadOnly={isReadOnly}
-          onToggle={() => setDone(prev => !prev)}
-          t={t}
-        />
+        {cooldownItems.map((item, index) => (
+          <PrepRow
+            key={index}
+            item={item}
+            isActive={!isReadOnly && index === firstIncompleteIndex}
+            isReadOnly={isReadOnly}
+            onToggle={() => onToggleItem(index)}
+            t={t}
+          />
+        ))}
       </div>
     </div>
   );
@@ -3420,7 +3430,7 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
   );
 }
 
-function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer }) {
+function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer }) {
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
 
   function isTimerFor(placement) {
@@ -3926,7 +3936,14 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           </div>
         )}
 
-        {!isMeetDay && <CooldownBlock t={t} isReadOnly={isReadOnly} />}
+        {!isMeetDay && (
+          <CooldownBlock
+            items={workout.cooldownItems || generateCooldownItems()}
+            onToggleItem={index => handleToggle(() => onToggleCooldownItem(index))}
+            t={t}
+            isReadOnly={isReadOnly}
+          />
+        )}
 
         <button
           onClick={() => {
@@ -4208,7 +4225,12 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
         </div>
       )}
 
-      <CooldownBlock t={t} />
+      <CooldownBlock
+        items={workout.cooldownItems || generateCooldownItems()}
+        onToggleItem={index => handleToggle(() => onToggleCooldownItem(index))}
+        t={t}
+        isReadOnly={isReadOnly}
+      />
 
       <button
         onClick={() => {
@@ -7407,6 +7429,25 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   );
 }
 
+  function toggleCooldownItem(index) {
+    setWorkouts(prev =>
+      prev.map((w, wi) => {
+        if (wi !== selectedIndex) return w;
+
+        const cooldownItems = (w.cooldownItems && w.cooldownItems.length > 0)
+          ? w.cooldownItems
+          : generateCooldownItems();
+
+        return {
+          ...w,
+          cooldownItems: cooldownItems.map((item, i) =>
+            i === index ? { ...item, done: !item.done } : item
+          ),
+        };
+      })
+    );
+  }
+
   function completeWorkout(workoutEffortOverride = null) {
     const baseWorkout = workouts[selectedIndex];
     const workout = workoutEffortOverride
@@ -8021,6 +8062,7 @@ const latestBodyDataRows = [
           onToggleAccessorySet={toggleAccessorySet}
           onMarkAccessorySetFailed={markAccessorySetFailed}
           onRestoreAccessoryWeight={restoreAccessoryWeight}
+          onToggleCooldownItem={toggleCooldownItem}
           onWeightChange={changeWeight}
           onSetEffortChange={changeSetEffort}
           onAccessoryWeightChange={changeAccessoryWeight}
