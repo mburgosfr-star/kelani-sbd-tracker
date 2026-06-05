@@ -126,6 +126,11 @@ export const translations = {
 
     side: 'kant',
     prepTitle: 'Voorbereiding',
+    workoutSettings: 'Workout',
+    configure: 'Configureren',
+    benchPressVariant: 'Bench Press',
+    benchPressStandard: 'Standaard',
+    benchPressFloorPress: 'Floor Press',
     preparation: 'Voorbereiding',
     preparationOff: 'Uit',
     preparationBasic: 'Basis',
@@ -439,6 +444,10 @@ export const translations = {
 
     side: 'side',
     prepTitle: 'Preparation',
+    workoutSettings: 'Workout',
+    benchPressVariant: 'Bench Press',
+    benchPressStandard: 'Standard',
+    benchPressFloorPress: 'Floor Press',
     preparation: 'Preparation',
     preparationOff: 'Off',
     preparationBasic: 'Bàsica',
@@ -752,6 +761,10 @@ export const translations = {
 
     side: 'costat',
     prepTitle: 'Preparació',
+    workoutSettings: 'Workout',
+    benchPressVariant: 'Bench Press',
+    benchPressStandard: 'Estàndard',
+    benchPressFloorPress: 'Floor Press',
     preparation: 'Preparació',
     preparationOff: 'Desactivada',
     preparationBasic: 'Bàsica',

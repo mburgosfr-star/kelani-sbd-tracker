@@ -2736,6 +2736,128 @@ function PreparationSection({ preparationMode, setPreparationMode, t }) {
 }
 
 
+function WorkoutSection({
+  preparationMode,
+  setPreparationMode,
+  accessoryMode,
+  setAccessoryMode,
+  benchPressVariant,
+  setBenchPressVariant,
+  t,
+}) {
+  const [showWorkoutSettings, setShowWorkoutSettings] = useState(false);
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.workoutSettings}
+        actionLabel={t.configure || t.edit}
+        onAction={() => setShowWorkoutSettings(true)}
+      />
+
+      {showWorkoutSettings && (
+        <SettingsModal
+          title={t.workoutSettings}
+          onClose={() => setShowWorkoutSettings(false)}
+        >
+          <PreparationSection
+            preparationMode={preparationMode}
+            setPreparationMode={setPreparationMode}
+            t={t}
+          />
+
+          <AccessorySection
+            accessoryMode={accessoryMode}
+            setAccessoryMode={setAccessoryMode}
+            t={t}
+          />
+
+          <BenchPressVariantSection
+            benchPressVariant={benchPressVariant}
+            setBenchPressVariant={setBenchPressVariant}
+            t={t}
+          />
+
+          <button
+            type="button"
+            onClick={() => setShowWorkoutSettings(false)}
+            style={{
+              width: '100%',
+              marginTop: 12,
+              padding: 12,
+              fontSize: 15,
+              fontWeight: 800,
+              background: THEME.card,
+              color: THEME.text,
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 8,
+              cursor: 'pointer'
+            }}
+          >
+            {t.done || 'Done'}
+          </button>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
+function BenchPressVariantSection({ benchPressVariant, setBenchPressVariant, t }) {
+  const [showOptions, setShowOptions] = useState(false);
+
+  const modes = ['standard', 'floorPress'];
+  const labels = {
+    standard: t.benchPressStandard,
+    floorPress: t.benchPressFloorPress,
+  };
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.benchPressVariant}
+        actionLabel={labels[benchPressVariant] || labels.standard}
+        onAction={() => setShowOptions(true)}
+        noBorder
+      />
+
+      {showOptions && (
+        <SettingsModal
+          title={t.benchPressVariant}
+          onClose={() => setShowOptions(false)}
+        >
+          <div style={{ display: 'grid', gap: 8 }}>
+            {modes.map(mode => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setBenchPressVariant(mode);
+                  setShowOptions(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  border: `1px solid ${benchPressVariant === mode ? THEME.primary : THEME.border}`,
+                  background: benchPressVariant === mode ? THEME.primary : THEME.card,
+                  color: benchPressVariant === mode ? THEME.bg : THEME.text,
+                  cursor: 'pointer'
+                }}
+              >
+                {labels[mode]}
+              </button>
+            ))}
+          </div>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
 function AccessorySection({ accessoryMode, setAccessoryMode, t }) {
   const [showOptions, setShowOptions] = useState(false);
 
@@ -2782,24 +2904,6 @@ function AccessorySection({ accessoryMode, setAccessoryMode, t }) {
                 {labels[mode]}
               </button>
             ))}
-
-            <button
-              type="button"
-              onClick={() => setShowOptions(false)}
-              style={{
-                width: '100%',
-                padding: 10,
-                fontSize: 14,
-                fontWeight: 700,
-                background: 'transparent',
-                color: THEME.text,
-                border: `1px solid ${THEME.border}`,
-                borderRadius: 8,
-                cursor: 'pointer'
-              }}
-            >
-              {t.cancel}
-            </button>
           </div>
         </SettingsModal>
       )}
@@ -5803,6 +5907,9 @@ function App() {
   const [restTimeSeconds, setRestTimeSeconds] = useState(DEFAULT_REST_TIME_SECONDS);
   const [accessoryMode, setAccessoryMode] = useState('off');
   const [preparationMode, setPreparationMode] = useState('basic');
+  const [benchPressVariant, setBenchPressVariant] = useState(() =>
+    localStorage.getItem('benchPressVariant') === 'floorPress' ? 'floorPress' : 'standard'
+  );
   const [weightUnit, setWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
 
   function startTimer(seconds, placement = null) {
@@ -5821,6 +5928,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('weightUnit', normalizeWeightUnit(weightUnit));
   }, [weightUnit]);
+
+  useEffect(() => {
+    localStorage.setItem('benchPressVariant', benchPressVariant === 'floorPress' ? 'floorPress' : 'standard');
+  }, [benchPressVariant]);
 
   const t = translations[language];
   const [screen, setScreen] = useState('onboarding');
@@ -8087,15 +8198,13 @@ const latestBodyDataRows = [
       t={t}
     />
 
-    <PreparationSection
+    <WorkoutSection
       preparationMode={preparationMode}
       setPreparationMode={setPreparationMode}
-      t={t}
-    />
-
-    <AccessorySection
       accessoryMode={accessoryMode}
       setAccessoryMode={setAccessoryMode}
+      benchPressVariant={benchPressVariant}
+      setBenchPressVariant={setBenchPressVariant}
       t={t}
     />
 
