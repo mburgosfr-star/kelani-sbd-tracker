@@ -406,6 +406,72 @@ function getWorkoutTypeLabel(workout, t) {
   return key ? t[key] : '—';
 }
 
+const WEIGHT_UNITS = {
+  KG: 'kg',
+  LB: 'lb',
+};
+
+const KG_TO_LB = 2.2046226218;
+
+function normalizeWeightUnit(unit) {
+  return unit === WEIGHT_UNITS.LB ? WEIGHT_UNITS.LB : WEIGHT_UNITS.KG;
+}
+
+function kgToDisplayWeight(weightKg, unit = WEIGHT_UNITS.KG) {
+  const numericWeight = Number(weightKg);
+  if (!Number.isFinite(numericWeight)) return '';
+
+  return normalizeWeightUnit(unit) === WEIGHT_UNITS.LB
+    ? numericWeight * KG_TO_LB
+    : numericWeight;
+}
+
+function roundKgForStorage(weightKg) {
+  const numericWeight = Number(weightKg);
+  if (!Number.isFinite(numericWeight)) return '';
+
+  return Number(numericWeight.toFixed(1));
+}
+
+function displayWeightToKg(weight, unit = WEIGHT_UNITS.KG) {
+  const numericWeight = Number(weight);
+  if (!Number.isFinite(numericWeight)) return '';
+
+  const weightKg = normalizeWeightUnit(unit) === WEIGHT_UNITS.LB
+    ? numericWeight / KG_TO_LB
+    : numericWeight;
+
+  return roundKgForStorage(weightKg);
+}
+
+function roundToStep(value, step) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return '';
+
+  return Math.round(numericValue / step) * step;
+}
+
+function formatWeightValue(value, unit = WEIGHT_UNITS.KG, { body = false } = {}) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return '—';
+
+  const normalizedUnit = normalizeWeightUnit(unit);
+  const decimals = body ? 1 : normalizedUnit === WEIGHT_UNITS.LB ? 0 : 1;
+  const rounded = body
+    ? Number(numericValue.toFixed(decimals))
+    : roundToStep(numericValue, normalizedUnit === WEIGHT_UNITS.LB ? 5 : 2.5);
+
+  return Number(rounded.toFixed(decimals)).toString();
+}
+
+function formatWeightFromKg(weightKg, unit = WEIGHT_UNITS.KG, options = {}) {
+  const displayWeight = kgToDisplayWeight(weightKg, unit);
+  if (displayWeight === '') return '—';
+
+  return `${formatWeightValue(displayWeight, unit, options)} ${normalizeWeightUnit(unit)}`;
+}
+
+
 function generatePrepItems(lift, preparationMode = 'basic') {
   if (preparationMode === 'off') return [];
 
@@ -1090,7 +1156,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
 }
 
 
-function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, t }) {
+function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, t, weightUnit = WEIGHT_UNITS.KG }) {
   if (!warmups.length) return null;
 
   const columnCount = warmups.length <= 2
@@ -1149,7 +1215,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
                   marginTop: 1,
                   lineHeight: 1.15
                 }}>
-                  {warmup.reps} × {warmup.weight} {t.kg}
+                  {warmup.reps} × {formatWeightFromKg(warmup.weight, weightUnit)}
                 </div>
               </div>
             </div>
@@ -1425,7 +1491,7 @@ function WorkoutActionRow({
 }
 
 
-function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t }) {
+function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG }) {
   const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
   const displayPct = set.pct ? Number((set.pct * 100).toFixed(1)) : null;
   const effortLabel = getSetEffortLabel(set.effort, t);
@@ -1439,7 +1505,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
 
   function handleEditClick(e) {
     e.stopPropagation();
-    setInputVal(String(set.weight));
+    setInputVal(formatWeightValue(kgToDisplayWeight(set.weight, weightUnit), weightUnit));
     setEditing(true);
   }
 
@@ -1447,9 +1513,9 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
     const val = parseFloat(inputVal);
 
     if (!isNaN(val) && val > 0) {
-      onWeightChange(val);
+      onWeightChange(displayWeightToKg(val, weightUnit));
     } else {
-      setInputVal(String(set.weight));
+      setInputVal(formatWeightValue(kgToDisplayWeight(set.weight, weightUnit), weightUnit));
     }
 
     setEditing(false);
@@ -1466,7 +1532,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
         1 × {set.reps}
       </div>
       <div style={{ color: isAdjusted ? '#f39c12' : THEME.muted }}>
-        {set.weight} {t.kg}{displayPct ? ` (${displayPct}%)` : ''}
+        {formatWeightFromKg(set.weight, weightUnit)}{displayPct ? ` (${displayPct}%)` : ''}
       </div>
     </>
   );
@@ -1492,7 +1558,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
       <input
         ref={inputRef}
         type="number"
-        step="2.5"
+        step={normalizeWeightUnit(weightUnit) === WEIGHT_UNITS.LB ? "5" : "2.5"}
         value={inputVal}
         onChange={e => setInputVal(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -1507,7 +1573,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
           textAlign: 'right',
         }}
       />
-      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>{t.kg}</span>
+      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>{normalizeWeightUnit(weightUnit)}</span>
     </div>
   ) : (
     <>
@@ -2315,16 +2381,18 @@ function SupportSection({ t }) {
   );
 }
 
-function ProfileSection({ userProfile, onSave, t }) {
+function ProfileSection({ userProfile, onSave, weightUnit, setWeightUnit, t }) {
   const [isEditing, setIsEditing] = useState(false);
   const [birthDate, setBirthDate] = useState(userProfile?.birthDate || '');
   const [sex, setSex] = useState(userProfile?.sex || '');
+  const [profileWeightUnit, setProfileWeightUnit] = useState(normalizeWeightUnit(weightUnit));
   const [notice, setNotice] = useState(null);
 
   useEffect(() => {
     setBirthDate(userProfile?.birthDate || '');
     setSex(userProfile?.sex || '');
-  }, [userProfile?.birthDate, userProfile?.sex]);
+    setProfileWeightUnit(normalizeWeightUnit(weightUnit));
+  }, [userProfile?.birthDate, userProfile?.sex, weightUnit]);
 
   useEffect(() => {
     if (!notice) return;
@@ -2335,11 +2403,13 @@ function ProfileSection({ userProfile, onSave, t }) {
   function openEdit() {
     setBirthDate(userProfile?.birthDate || '');
     setSex(userProfile?.sex || '');
+    setProfileWeightUnit(normalizeWeightUnit(weightUnit));
     setIsEditing(true);
   }
 
   function handleSave() {
     onSave({ birthDate, sex });
+    setWeightUnit(normalizeWeightUnit(profileWeightUnit));
     setIsEditing(false);
     setNotice(t.profileSaved);
   }
@@ -2367,6 +2437,14 @@ function ProfileSection({ userProfile, onSave, t }) {
               <option value="male">{t.male}</option>
               <option value="female">{t.female}</option>
               <option value="other">{t.other}</option>
+            </select>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.weightUnit}</label>
+            <select value={profileWeightUnit} onChange={e => setProfileWeightUnit(normalizeWeightUnit(e.target.value))} style={modalInputStyle()}>
+              <option value={WEIGHT_UNITS.KG}>{t.weightUnitKg}</option>
+              <option value={WEIGHT_UNITS.LB}>{t.weightUnitLb}</option>
             </select>
           </div>
 
@@ -2556,6 +2634,60 @@ function RestTimeSection({ restTimeSeconds, setRestTimeSeconds, t }) {
             >
               {t.cancel}
             </button>
+          </div>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
+function WeightUnitSection({ weightUnit, setWeightUnit, t }) {
+  const [showOptions, setShowOptions] = useState(false);
+
+  const modes = [WEIGHT_UNITS.KG, WEIGHT_UNITS.LB];
+  const labels = {
+    [WEIGHT_UNITS.KG]: t.weightUnitKg,
+    [WEIGHT_UNITS.LB]: t.weightUnitLb,
+  };
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.weightUnit}
+        actionLabel={labels[normalizeWeightUnit(weightUnit)]}
+        onAction={() => setShowOptions(true)}
+      />
+
+      {showOptions && (
+        <SettingsModal
+          title={t.weightUnit}
+          onClose={() => setShowOptions(false)}
+        >
+          <div style={{ display: 'grid', gap: 8 }}>
+            {modes.map(mode => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setWeightUnit(mode);
+                  setShowOptions(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  border: `1px solid ${normalizeWeightUnit(weightUnit) === mode ? THEME.primary : THEME.border}`,
+                  background: normalizeWeightUnit(weightUnit) === mode ? THEME.primary : THEME.card,
+                  color: normalizeWeightUnit(weightUnit) === mode ? THEME.bg : THEME.text,
+                  cursor: 'pointer'
+                }}
+              >
+                {labels[mode]}
+              </button>
+            ))}
           </div>
         </SettingsModal>
       )}
@@ -2825,7 +2957,7 @@ function NewCycleModal({ prs, onStart, t }) {
   );
 }
 
-function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, label, t }) {
+function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, label, t, weightUnit = WEIGHT_UNITS.KG }) {
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
   const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
@@ -2836,8 +2968,10 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   const [inputVal, setInputVal] = useState(String(firstSet.weight || ''));
 
   useEffect(() => {
-    if (editing) setInputVal(String(firstSet.weight || ''));
-  }, [editing, firstSet.weight]);
+    if (editing) {
+      setInputVal(formatWeightValue(kgToDisplayWeight(firstSet.weight || '', weightUnit), weightUnit));
+    }
+  }, [editing, firstSet.weight, weightUnit]);
 
   if (!entries?.length) return null;
 
@@ -2845,7 +2979,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
     const val = parseFloat(inputVal);
 
     if (!Number.isNaN(val) && val > 0) {
-      onEditAll(val);
+      onEditAll(displayWeightToKg(val, weightUnit));
     }
 
     setEditing(false);
@@ -2853,7 +2987,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
 
   function handleEditClick(e) {
     e.stopPropagation();
-    setInputVal(String(firstSet.weight || ''));
+    setInputVal(formatWeightValue(kgToDisplayWeight(firstSet.weight || '', weightUnit), weightUnit));
     setEditing(true);
   }
 
@@ -2867,39 +3001,49 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
     .find(Boolean);
 
   const groupLabel = label || t.backoff;
+  const isAdjusted = entries.some(({ set }) =>
+    Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed) ||
+    Number(set.weight) !== Number(set.originalWeight ?? set.weight)
+  );
+  const detailColor = isAdjusted ? '#f39c12' : THEME.muted;
 
   const detail = (
     <>
-      <div>
+      <div style={{ color: detailColor }}>
         {entries.length} × {allSameReps ? firstSet.reps : '—'}
       </div>
-      <div>
-        {allSameWeight ? `${firstSet.weight} ${t.kg}` : t.kg}{displayPct ? ` (${displayPct}%)` : ''}
+      <div style={{ color: detailColor }}>
+        {allSameWeight ? formatWeightFromKg(firstSet.weight, weightUnit) : normalizeWeightUnit(weightUnit)}{displayPct ? ` (${displayPct}%)` : ''}
       </div>
     </>
   );
 
   const actions = editing ? (
-    <input
-      type="number"
-      step="2.5"
-      value={inputVal}
-      autoFocus
-      onChange={e => setInputVal(e.target.value)}
-      onKeyDown={handleKeyDown}
-      onBlur={confirmEdit}
-      style={{
-        width: 66,
-        padding: '4px 6px',
-        fontSize: 14,
-        fontWeight: 800,
-        borderRadius: 4,
-        border: `1px solid ${THEME.primary}`,
-        background: THEME.bg,
-        color: THEME.text,
-        textAlign: 'right',
-      }}
-    />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <input
+        type="number"
+        step={normalizeWeightUnit(weightUnit) === WEIGHT_UNITS.LB ? "5" : "2.5"}
+        value={inputVal}
+        autoFocus
+        onChange={e => setInputVal(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={confirmEdit}
+        style={{
+          width: 66,
+          padding: '4px 6px',
+          fontSize: 14,
+          fontWeight: 800,
+          borderRadius: 4,
+          border: `1px solid ${THEME.primary}`,
+          background: THEME.bg,
+          color: THEME.text,
+          textAlign: 'right',
+        }}
+      />
+      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>
+        {normalizeWeightUnit(weightUnit)}
+      </span>
+    </div>
   ) : (
     <>
       <SetActionButton
@@ -3151,7 +3295,7 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
   );
 }
 
-function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, timer, setTimer, startTimer }) {
+function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, timer, setTimer, startTimer }) {
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
 
   function isTimerFor(placement) {
@@ -3439,6 +3583,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 renderTimer={wi => renderInlineTimer({ type: 'meetWarmup', liftIndex: li, index: wi })}
                 followsPrep={visiblePrepItems.length > 0}
                 t={t}
+                  weightUnit={weightUnit}
               />
 
               {(liftBlock.sets || []).map((set, si) => {
@@ -3478,6 +3623,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                         onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
                         renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
                         t={t}
+                  weightUnit={weightUnit}
                       />
                     </React.Fragment>
                   );
@@ -3507,6 +3653,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                         onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
                         renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
                         t={t}
+                  weightUnit={weightUnit}
                       />
                     </React.Fragment>
                   );
@@ -3585,6 +3732,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     onRestoreWeight={() => handleToggle(() => onRestoreMeetSetWeight(li, si))}
                     onWeightChange={val => onMeetWeightChange(li, si, val)}
                     t={t}
+                  weightUnit={weightUnit}
                   />
                   {renderInlineTimer({ type: 'meetSet', liftIndex: li, index: si })}
                   {set.done && !set.failed && !set.skipped && !set.effort && (
@@ -3757,6 +3905,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             renderTimer={i => renderInlineTimer({ type: 'warmup', index: i })}
             followsPrep={(workout.prepItems || []).length > 0}
             t={t}
+                  weightUnit={weightUnit}
           />
         </div>
       )}
@@ -3806,6 +3955,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   onMarkFailed={index => handleToggle(() => onMarkSetFailed(index))}
                   renderTimer={index => renderInlineTimer({ type: 'main', index })}
                   t={t}
+                  weightUnit={weightUnit}
                 />
               </React.Fragment>
             );
@@ -3862,6 +4012,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 onRestoreWeight={() => handleToggle(() => onRestoreSetWeight(i))}
                 onWeightChange={val => onWeightChange('set', i, val)}
                 t={t}
+                  weightUnit={weightUnit}
               />
               {!set.failed && renderInlineTimer({ type: 'main', index: i })}
               {set.done && !set.failed && !set.skipped && !set.effort && (
@@ -5137,6 +5288,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCyc
 }
 
 function Onboarding({ onStart, t }) {
+  const [onboardingWeightUnit, setOnboardingWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
   const [squat, setSquat] = useState('');
   const [bench, setBench] = useState('');
   const [deadlift, setDeadlift] = useState('');
@@ -5156,12 +5308,15 @@ function Onboarding({ onStart, t }) {
   }
 
   function buildInitialBodyData() {
-    const bodyWeight = toOptionalNumber(bodyForm.bodyWeight);
+    const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
+    const bodyWeightInput = toOptionalNumber(bodyForm.bodyWeight);
     const bodyFat = toOptionalNumber(bodyForm.bodyFat);
     const bodyWater = toOptionalNumber(bodyForm.bodyWater);
     const visceralFat = toOptionalNumber(bodyForm.visceralFat);
     const physiqueRating = toOptionalNumber(bodyForm.physiqueRating);
-    const boneMass = toOptionalNumber(bodyForm.boneMass);
+    const boneMassInput = toOptionalNumber(bodyForm.boneMass);
+    const bodyWeight = bodyWeightInput !== null ? displayWeightToKg(bodyWeightInput, selectedWeightUnit) : null;
+    const boneMass = boneMassInput !== null ? displayWeightToKg(boneMassInput, selectedWeightUnit) : null;
     const leanMass = calculateLeanMassEstimate(bodyWeight, bodyFat, boneMass);
     const bmr = calculateBmrEstimate(leanMass);
 
@@ -5205,9 +5360,10 @@ function Onboarding({ onStart, t }) {
   }
 
   function handleStart() {
-    const s = parseFloat(squat);
-    const b = parseFloat(bench);
-    const d = parseFloat(deadlift);
+    const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
+    const s = displayWeightToKg(parseFloat(squat), selectedWeightUnit);
+    const b = displayWeightToKg(parseFloat(bench), selectedWeightUnit);
+    const d = displayWeightToKg(parseFloat(deadlift), selectedWeightUnit);
 
     const normalizedBirthDate = parseBirthDateInput(birthDate);
 
@@ -5216,16 +5372,16 @@ function Onboarding({ onStart, t }) {
       return;
     }
 
-    onStart(s, b, d, { birthDate: normalizedBirthDate, sex }, buildInitialBodyData());
+    onStart(s, b, d, { birthDate: normalizedBirthDate, sex, weightUnit: selectedWeightUnit }, buildInitialBodyData());
   }
 
   const bodyFields = [
-    { key: 'bodyWeight', label: t.bodyweight, unit: t.kg },
+    { key: 'bodyWeight', label: t.bodyweight, unit: onboardingWeightUnit },
     { key: 'bodyFat', label: t.bodyFatPercent, unit: '%' },
     { key: 'bodyWater', label: t.bodyWaterPercent, unit: '%' },
     { key: 'visceralFat', label: t.visceralFatRating },
     { key: 'physiqueRating', label: t.physiqueRating },
-    { key: 'boneMass', label: t.boneMassKg, unit: t.kg },
+    { key: 'boneMass', label: t.boneMassKg, unit: onboardingWeightUnit },
   ];
 
   return (
@@ -5252,6 +5408,31 @@ function Onboarding({ onStart, t }) {
         <h2 style={{ marginTop: 0, color: THEME.text, textAlign: 'center' }}>
           {t.enterDetails}
         </h2>
+
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
+            {t.weightUnit}
+          </label>
+
+          <select
+            value={onboardingWeightUnit}
+            onChange={e => setOnboardingWeightUnit(normalizeWeightUnit(e.target.value))}
+            style={{
+              width: '100%',
+              padding: 10,
+              fontSize: 16,
+              borderRadius: 4,
+              border: `1px solid ${THEME.border}`,
+              boxSizing: 'border-box',
+              background: THEME.bg,
+              color: THEME.text
+            }}
+          >
+            <option value={WEIGHT_UNITS.KG}>{t.weightUnitKg}</option>
+            <option value={WEIGHT_UNITS.LB}>{t.weightUnitLb}</option>
+          </select>
+        </div>
 
         {[
           [t.squat1RM, squat, setSquat],
@@ -5288,7 +5469,7 @@ function Onboarding({ onStart, t }) {
                 fontSize: 16,
                 pointerEvents: 'none'
               }}>
-                {t.kg}
+                {onboardingWeightUnit}
               </span>
             </div>
           </div>
@@ -5584,6 +5765,7 @@ function App() {
   const [restTimeSeconds, setRestTimeSeconds] = useState(DEFAULT_REST_TIME_SECONDS);
   const [accessoryMode, setAccessoryMode] = useState('off');
   const [preparationMode, setPreparationMode] = useState('basic');
+  const [weightUnit, setWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
 
   function startTimer(seconds, placement = null) {
     setTimer({
@@ -5597,6 +5779,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('language', language);
   }, [language]);
+
+  useEffect(() => {
+    localStorage.setItem('weightUnit', normalizeWeightUnit(weightUnit));
+  }, [weightUnit]);
 
   const t = translations[language];
   const [screen, setScreen] = useState('onboarding');
@@ -5859,6 +6045,10 @@ function App() {
     localStorage.removeItem('kel-powerlifting');
     localStorage.removeItem('app_version');
 
+    const selectedWeightUnit = normalizeWeightUnit(profile.weightUnit || weightUnit);
+    setWeightUnit(selectedWeightUnit);
+    localStorage.setItem('weightUnit', selectedWeightUnit);
+
     setWorkouts(generateProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode));
     setCurrentWorkoutIndex(0);
   setSelectedIndex(0);
@@ -5896,7 +6086,7 @@ function App() {
 
     setPrs({ Squat: s, Bench: b, Deadlift: d });
     setAccessoryPRs({});
-    setUserProfile(profile);
+    setUserProfile({ ...profile, weightUnit: selectedWeightUnit });
     setMeetPlannerAttempts({});
     setBodyWeights(initialBodyData ? [
       {
@@ -7658,6 +7848,7 @@ const latestBodyDataRows = [
           newCyclePRs={prs}
           onStartNewCycle={handleStartNewCycle}
           t={t}
+          weightUnit={weightUnit}
           timer={timer}
           setTimer={setTimer}
           onToggleMeetPrepItem={toggleMeetPrepItem}
@@ -7838,6 +8029,8 @@ const latestBodyDataRows = [
     <ProfileSection
       userProfile={userProfile}
       onSave={setUserProfile}
+      weightUnit={weightUnit}
+      setWeightUnit={setWeightUnit}
       t={t}
     />
 
