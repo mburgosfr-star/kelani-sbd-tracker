@@ -4370,6 +4370,35 @@ function meetAttemptValue(lift, key, fallback) {
   return custom;
 }
 
+function formatMeetAttemptInput(valueKg) {
+  if (valueKg === undefined || valueKg === null || valueKg === '') return '';
+  return formatWeightValue(kgToDisplayWeight(valueKg, statsWeightUnit), statsWeightUnit);
+}
+
+function roundMeetAttemptDisplay(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return '';
+
+  return statsWeightUnit === WEIGHT_UNITS.LB
+    ? roundToStep(numericValue, 5)
+    : roundAttempt(numericValue);
+}
+
+function commitMeetAttempt(lift, key, displayValue) {
+  const roundedDisplay = roundMeetAttemptDisplay(displayValue);
+
+  if (roundedDisplay === '') {
+    updateMeetAttempt(lift, key, '');
+    return;
+  }
+
+  const valueKg = statsWeightUnit === WEIGHT_UNITS.LB
+    ? displayWeightToKg(roundedDisplay, statsWeightUnit)
+    : roundedDisplay;
+
+  updateMeetAttempt(lift, key, valueKg);
+}
+
 const suggestedMeetPlan = LIFT_ORDER.map(lift => {
   const e1rm = bestStats[lift]?.e1rm || 0;
 
@@ -4705,7 +4734,7 @@ const meetTotals = {
         </div>
 
         <div style={{ color: THEME.text, fontSize: 22, fontWeight: 900, lineHeight: 1 }}>
-          {meetTotals.third ? `${meetTotals.third} ${t.kg}` : '—'}
+          {meetTotals.third ? formatWeightFromKg(meetTotals.third, statsWeightUnit) : '—'}
         </div>
       </div>
     </div>
@@ -4738,7 +4767,7 @@ const meetTotals = {
               fontWeight: 700,
               whiteSpace: 'nowrap'
             }}>
-              {t.e1RM} {row.e1rm ? `${row.e1rm} ${t.kg}` : '—'}
+              {t.e1RM} {row.e1rm ? formatWeightFromKg(row.e1rm, statsWeightUnit) : '—'}
             </span>
           </div>
 
@@ -4781,15 +4810,12 @@ const meetTotals = {
                 </div>
 
                 <input
+                  key={`${statsWeightUnit}-${row.lift}-${key}-${value}`}
                   type="number"
                   inputMode="decimal"
-                  step="2.5"
-                  value={value}
-                  onChange={e => updateMeetAttempt(row.lift, key, e.target.value)}
-                  onBlur={e => {
-                    const rounded = roundAttempt(e.target.value);
-                    updateMeetAttempt(row.lift, key, rounded || '');
-                  }}
+                  step={statsWeightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"}
+                  defaultValue={formatMeetAttemptInput(value)}
+                  onBlur={e => commitMeetAttempt(row.lift, key, e.target.value)}
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
@@ -4805,7 +4831,7 @@ const meetTotals = {
                 />
 
                 <div style={{ color: THEME.muted, fontSize: 10, marginTop: 3 }}>
-                  {t.kg}
+                  {statsWeightUnit}
                 </div>
               </div>
             ))}
@@ -4831,7 +4857,7 @@ const meetTotals = {
       ].map(([label, value]) => (
         <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
           <span style={{ color: THEME.text, fontWeight: 800 }}>{label}</span>
-          <strong>{value ? `${value} ${t.kg}` : '—'}</strong>
+          <strong>{value ? formatWeightFromKg(value, statsWeightUnit) : '—'}</strong>
         </div>
       ))}
     </div>
