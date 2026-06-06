@@ -1,0 +1,5 @@
+Fix completed workout state persistence for preparation, accessories, and cooldown items.
+
+Improve workout row layout on smaller screens.
+
+Add clearer preparation options for first big lift vs all big lifts.
