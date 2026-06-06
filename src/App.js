@@ -335,9 +335,68 @@ function hydrateWorkoutsWithHistory(workouts, history, cycle) {
         };
       }
 
+      const snapshot = savedSnapshot.workoutSnapshot;
+
+      if (snapshot.type === 'training' && (snapshot.lifts || []).length > 0) {
+        const restoredLifts = (snapshot.lifts || workout.lifts || []).map((liftBlock, index) => {
+          const generatedLiftBlock = (workout.lifts || [])[index] || {};
+
+          return {
+            ...liftBlock,
+            prepItems: (liftBlock.prepItems || generatedLiftBlock.prepItems || []).map(item => ({
+              ...item,
+              done: item.done ?? true,
+            })),
+            warmups: (liftBlock.warmups || generatedLiftBlock.warmups || []).map(item => ({
+              ...item,
+              done: item.done ?? true,
+            })),
+            sets: (liftBlock.sets || generatedLiftBlock.sets || []).map(item => ({
+              ...item,
+              done: item.done ?? true,
+            })),
+          };
+        });
+
+        const primaryLiftBlock = restoredLifts[0] || {};
+
+        return {
+          ...snapshot,
+          lifts: restoredLifts,
+          lift: primaryLiftBlock.lift || snapshot.lift,
+          prepItems: primaryLiftBlock.prepItems || snapshot.prepItems || [],
+          warmups: primaryLiftBlock.warmups || snapshot.warmups || [],
+          sets: primaryLiftBlock.sets || snapshot.sets || [],
+          accessories: (snapshot.accessories || workout.accessories || []).map(accessory => ({
+            ...accessory,
+            done: accessory.done || [],
+          })),
+          cooldownItems: (snapshot.cooldownItems || workout.cooldownItems || []).map(item => ({
+            ...item,
+            done: true,
+          })),
+        };
+      }
+
       return {
-        ...savedSnapshot.workoutSnapshot,
-        prepItems: (savedSnapshot.workoutSnapshot.prepItems || workout.prepItems || []).map(item => ({
+        ...snapshot,
+        prepItems: (snapshot.prepItems || workout.prepItems || []).map(item => ({
+          ...item,
+          done: item.done ?? true,
+        })),
+        warmups: (snapshot.warmups || workout.warmups || []).map(item => ({
+          ...item,
+          done: item.done ?? true,
+        })),
+        sets: (snapshot.sets || workout.sets || []).map(item => ({
+          ...item,
+          done: item.done ?? true,
+        })),
+        accessories: (snapshot.accessories || workout.accessories || []).map(accessory => ({
+          ...accessory,
+          done: accessory.done || [],
+        })),
+        cooldownItems: (snapshot.cooldownItems || workout.cooldownItems || []).map(item => ({
           ...item,
           done: true,
         })),
@@ -756,20 +815,75 @@ function generateAccessoriesForLift(lift, accessoryMode = 'off', accessoryPRs = 
 }
 
 function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedCount) {
+  function mergePrepItems(currentItems = [], generatedItems = []) {
+    return (generatedItems || []).map((item, index) => ({
+      ...item,
+      done: currentItems?.[index]?.done ?? item.done ?? false,
+    }));
+  }
+
+  function accessoryKey(accessory) {
+    return accessory?.key || accessory?.nameKey || accessory?.name;
+  }
+
+  function mergeAccessory(currentAccessory, generatedAccessory) {
+    if (!currentAccessory) return generatedAccessory;
+
+    const generatedDone = generatedAccessory.done || [];
+    const currentDone = currentAccessory.done || [];
+    const currentWeights = currentAccessory.weights || [];
+    const generatedWeights = generatedAccessory.weights || [];
+
+    return {
+      ...generatedAccessory,
+      done: generatedDone.map((done, index) => currentDone[index] ?? done),
+      weights: generatedWeights.map((weight, index) => currentWeights[index] ?? weight),
+      originalWeights: currentAccessory.originalWeights || generatedAccessory.originalWeights,
+      failed: (generatedAccessory.failed || generatedDone.map(() => false)).map((value, index) =>
+        currentAccessory.failed?.[index] ?? value
+      ),
+      failedWeights: (generatedAccessory.failedWeights || generatedDone.map(() => null)).map((value, index) =>
+        currentAccessory.failedWeights?.[index] ?? value
+      ),
+      skipped: (generatedAccessory.skipped || generatedDone.map(() => false)).map((value, index) =>
+        currentAccessory.skipped?.[index] ?? value
+      ),
+      adjustedWeights: (generatedAccessory.adjustedWeights || generatedWeights).map((value, index) =>
+        currentAccessory.adjustedWeights?.[index] ?? value
+      ),
+      adjustedFromFailedSet: (generatedAccessory.adjustedFromFailedSet || generatedDone.map(() => false)).map((value, index) =>
+        currentAccessory.adjustedFromFailedSet?.[index] ?? value
+      ),
+      adjustedFromOriginal: (generatedAccessory.adjustedFromOriginal || generatedDone.map(() => false)).map((value, index) =>
+        currentAccessory.adjustedFromOriginal?.[index] ?? value
+      ),
+    };
+  }
+
   return (workouts || []).map((workout, index) => {
     if (index < completedCount) return workout;
 
     const generated = generatedWorkouts[index];
     if (!generated || workout.type === 'meet') return workout;
 
+    const currentAccessoriesByKey = new Map(
+      (workout.accessories || []).map(accessory => [accessoryKey(accessory), accessory])
+    );
+
     return {
       ...workout,
-      prepItems: generated.prepItems || [],
-      lifts: (workout.lifts || []).map((liftBlock, liftIndex) => ({
-        ...liftBlock,
-        prepItems: generated.lifts?.[liftIndex]?.prepItems || [],
-      })),
-      accessories: generated.accessories || [],
+      prepItems: mergePrepItems(workout.prepItems, generated.prepItems),
+      lifts: (workout.lifts || generated.lifts || []).map((liftBlock, liftIndex) => {
+        const generatedLiftBlock = generated.lifts?.[liftIndex] || {};
+
+        return {
+          ...liftBlock,
+          prepItems: mergePrepItems(liftBlock.prepItems, generatedLiftBlock.prepItems),
+        };
+      }),
+      accessories: (generated.accessories || []).map(generatedAccessory =>
+        mergeAccessory(currentAccessoriesByKey.get(accessoryKey(generatedAccessory)), generatedAccessory)
+      ),
     };
   });
 }
@@ -1463,7 +1577,10 @@ function WorkoutActionRow({
   borderMode = 'full',
   leftOffset = 0,
 }) {
-  const borderStyle = borderMode === 'group'
+  const isGroupedRow = borderMode === 'group';
+  const actionsWidth = WORKOUT_CIRCLE_SIZE * 3 + 16;
+
+  const borderStyle = isGroupedRow
     ? {}
     : {
       border: `1px solid ${THEME.border}`,
@@ -1474,10 +1591,14 @@ function WorkoutActionRow({
       ref={rowRef}
       style={{
         display: 'grid',
-        gridTemplateColumns: `auto minmax(0, 1fr) ${WORKOUT_CIRCLE_SIZE * 3 + 16}px`,
+        gridTemplateColumns: isGroupedRow
+          ? `minmax(0, 1fr) ${actionsWidth}px`
+          : `auto minmax(0, 1fr) ${actionsWidth}px`,
         alignItems: 'center',
-        gap: 10,
-        padding: `${WORKOUT_ROW_PADDING_Y}px 10px ${WORKOUT_ROW_PADDING_Y}px 6px`,
+        gap: isGroupedRow ? '6px 10px' : 10,
+        padding: isGroupedRow
+          ? `${WORKOUT_ROW_PADDING_Y}px 10px ${WORKOUT_ROW_PADDING_Y}px 10px`
+          : `${WORKOUT_ROW_PADDING_Y}px 10px ${WORKOUT_ROW_PADDING_Y}px 6px`,
         background: THEME.card,
         boxShadow: active ? 'inset 0 0 0 1px #f39c12' : 'none',
         borderLeft: activeBorder ? `4px solid ${THEME.primary}` : '4px solid transparent',
@@ -1485,11 +1606,13 @@ function WorkoutActionRow({
       }}
     >
       <div style={{
+        gridColumn: isGroupedRow ? '1 / 2' : '1 / 2',
+        gridRow: isGroupedRow ? '2 / 3' : '1 / 2',
         flexShrink: 0,
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        transform: leftOffset ? `translateX(${leftOffset}px)` : 'none',
+        justifyContent: isGroupedRow ? 'flex-start' : 'center',
+        transform: leftOffset && !isGroupedRow ? `translateX(${leftOffset}px)` : 'none',
       }}>
         {left}
       </div>
@@ -1497,42 +1620,62 @@ function WorkoutActionRow({
       <div
         onClick={isReadOnly ? undefined : onBodyClick}
         style={{
+          gridColumn: isGroupedRow ? '1 / -1' : '2 / 3',
+          gridRow: isGroupedRow ? '1 / 2' : '1 / 2',
           minWidth: 0,
           textAlign: 'left',
           cursor: isReadOnly || !onBodyClick ? 'default' : 'pointer',
         }}
       >
-        <div style={{
-          color: THEME.text,
-          fontSize: WORKOUT_TITLE_FONT_SIZE,
-          fontWeight: 900,
-          lineHeight: 1.15,
-        }}>
-          {title}
-        </div>
-
-        {detail && (
+        {isGroupedRow ? (
           <div style={{
-            color: THEME.muted,
-            fontSize: WORKOUT_TEXT_FONT_SIZE,
-            fontWeight: 800,
-            marginTop: 1,
-            lineHeight: 1.15,
+            color: THEME.text,
+            fontSize: WORKOUT_TITLE_FONT_SIZE,
+            fontWeight: 900,
+            lineHeight: 1.35,
+            paddingBottom: 1,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}>
-            {detail}
+            {title}{detail ? <>: <span style={{ color: THEME.muted }}>{detail}</span></> : null}
           </div>
-        )}
+        ) : (
+          <>
+            <div style={{
+              color: THEME.text,
+              fontSize: WORKOUT_TITLE_FONT_SIZE,
+              fontWeight: 900,
+              lineHeight: 1.25,
+            }}>
+              {title}
+            </div>
 
-        {meta}
+            {detail && (
+              <div style={{
+                color: THEME.muted,
+                fontSize: WORKOUT_TEXT_FONT_SIZE,
+                fontWeight: 800,
+                marginTop: 1,
+                lineHeight: 1.25,
+              }}>
+                {detail}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <div style={{
+        gridColumn: isGroupedRow ? '2 / 3' : '3 / 4',
+        gridRow: isGroupedRow ? '2 / 3' : '1 / 2',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'flex-end',
         gap: 8,
-        minWidth: WORKOUT_CIRCLE_SIZE * 3 + 16,
+        minWidth: actionsWidth,
       }}>
+        {meta}
         {actions}
       </div>
 
@@ -1587,15 +1730,12 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
     if (e.key === 'Escape') setEditing(false);
   }
 
+  const isSetComplete = !!set.done || !!set.skipped;
+
   const detail = (
-    <>
-      <div style={{ color: isAdjusted ? '#f39c12' : THEME.muted }}>
-        1 × {set.reps}
-      </div>
-      <div style={{ color: isAdjusted ? '#f39c12' : THEME.muted }}>
-        {formatWeightFromKg(set.weight, weightUnit)}{displayPct ? ` (${displayPct}%)` : ''}
-      </div>
-    </>
+    <span style={{ color: isAdjusted ? '#f39c12' : THEME.muted }}>
+      1 × {set.reps} × {formatWeightFromKg(set.weight, weightUnit)}{displayPct ? ` (${displayPct}%)` : ''}
+    </span>
   );
 
   const meta = effortLabel ? (
@@ -1614,7 +1754,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
     </div>
   ) : null;
 
-  const actions = editing ? (
+  const actions = isSetComplete || isReadOnly ? null : editing ? (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <input
         ref={inputRef}
@@ -1638,7 +1778,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
     </div>
   ) : (
     <>
-      {!isWarmup && !set.done && !isReadOnly && (
+      {!isWarmup && (
         <SetActionButton
           title={t.edit}
           borderColor={THEME.primary}
@@ -1648,7 +1788,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
         </SetActionButton>
       )}
 
-      {onRestoreWeight && !isWarmup && !isReadOnly && (
+      {onRestoreWeight && !isWarmup && (
         <SetActionButton
           title={t.restoreOriginalWeight}
           borderColor="#f39c12"
@@ -3351,19 +3491,15 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
     Number(set.weight) !== Number(set.originalWeight ?? set.weight)
   );
   const detailColor = isAdjusted ? '#f39c12' : THEME.muted;
+  const isGroupComplete = entries.every(({ set }) => set.done || set.skipped);
 
   const detail = (
-    <>
-      <div style={{ color: detailColor }}>
-        {entries.length} × {allSameReps ? firstSet.reps : '—'}
-      </div>
-      <div style={{ color: detailColor }}>
-        {allSameWeight ? formatWeightFromKg(firstSet.weight, weightUnit) : normalizeWeightUnit(weightUnit)}{displayPct ? ` (${displayPct}%)` : ''}
-      </div>
-    </>
+    <span style={{ color: detailColor }}>
+      {entries.length} × {allSameReps ? firstSet.reps : '—'} × {allSameWeight ? formatWeightFromKg(firstSet.weight, weightUnit) : normalizeWeightUnit(weightUnit)}{displayPct ? ` (${displayPct}%)` : ''}
+    </span>
   );
 
-  const actions = editing ? (
+  const actions = isGroupComplete || isReadOnly ? null : editing ? (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <input
         type="number"
@@ -3521,6 +3657,7 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
     .find(Boolean);
 
   const accessoryLabel = acc.nameKey ? t[acc.nameKey] : acc.name;
+  const isAccessoryComplete = (acc.done || []).length > 0 && (acc.done || []).every(Boolean);
 
   const detail = (
     <>
@@ -3528,7 +3665,7 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
     </>
   );
 
-  const actions = editing ? (
+  const actions = isAccessoryComplete || isReadOnly ? null : editing ? (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <input
         type="number"
@@ -3846,6 +3983,12 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           t={t}
           title={`${t.workout} ${workout.number} — ${getWorkoutTitle(workout, t, benchPressVariant)}`}
           subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${workout.number} / ${totalWorkouts}${isMeetDay ? ` · ${t.meetDay}` : ''}`}
+          titleStyle={{
+            fontSize: 'clamp(20px, 6vw, 24px)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}
         />
 
         {renderActivateWorkoutCard()}
@@ -5533,7 +5676,7 @@ function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPres
   });
 }
 
-function AppHeader({ t, title, subtitle, meta, children }) {
+function AppHeader({ t, title, subtitle, meta, children, titleStyle = {} }) {
   return (
     <div style={{ textAlign: 'center', marginBottom: 16 }}>
       <div style={{
@@ -5551,7 +5694,8 @@ function AppHeader({ t, title, subtitle, meta, children }) {
         margin: 0,
         fontSize: 30,
         fontWeight: 900,
-        lineHeight: 1.15
+        lineHeight: 1.15,
+        ...titleStyle
       }}>
         {title}
       </h2>
@@ -6836,16 +6980,28 @@ function togglePrepItem(index) {
   setTimer(null);
 
   setWorkouts(prev =>
-    prev.map((w, wi) =>
-      wi !== selectedIndex
-        ? w
-        : {
-            ...w,
-            prepItems: (w.prepItems || []).map((item, i) =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      const nextPrepItems = (w.prepItems || []).map((item, i) =>
+        i === index ? { ...item, done: !item.done } : item
+      );
+
+      return {
+        ...w,
+        prepItems: nextPrepItems,
+        lifts: (w.lifts || []).map((liftBlock, liftIndex) => {
+          if (liftIndex !== 0) return liftBlock;
+
+          return {
+            ...liftBlock,
+            prepItems: (liftBlock.prepItems || []).map((item, i) =>
               i === index ? { ...item, done: !item.done } : item
             ),
-          }
-    )
+          };
+        }),
+      };
+    })
   );
 }
 
@@ -8004,6 +8160,10 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   setHistory(nextHistory);
   setPrs(calculatePrsFromHistory(nextHistory));
 
+  setWorkouts(prev =>
+    prev.map((w, wi) => wi === selectedIndex ? finishedWorkout : w)
+  );
+
   setCompletedWorkout(finishedWorkout);
   setCompletedWorkoutIndex(selectedIndex);
   const nextWorkoutIndex = Math.min(selectedIndex + 1, workouts.length - 1);
@@ -8204,6 +8364,10 @@ setCompletedSummary({
       });
     });
   }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => wi === selectedIndex ? finishedWorkout : w)
+  );
 
   setCompletedWorkout(finishedWorkout);
   setCompletedWorkoutIndex(selectedIndex);
