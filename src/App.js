@@ -6992,7 +6992,7 @@ function App() {
   }, [benchPressVariant]);
 
   const t = translations[language];
-  const [screen, setScreen] = useState('onboarding');
+  const [screen, setScreen] = useState(null);
   const [workouts, setWorkouts] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [currentWorkoutIndex, setCurrentWorkoutIndex] = useState(0);
@@ -8924,6 +8924,15 @@ setCompletedSummary({
   setSelectedIndex(nextWorkoutIndex);
 
   setScreen('completed');
+}
+
+if (screen === null) {
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: THEME.bg
+    }} />
+  );
 }
 
 if (screen === 'onboarding') return <Onboarding onStart={handleStart} t={t}/>;
