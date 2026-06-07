@@ -8603,7 +8603,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       : 0;
 
     const e1RMToday = sets.length
-      ? Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0)))
+      ? oneRMToday
       : 0;
 
     const previousLiftHistory = history.filter(h =>
