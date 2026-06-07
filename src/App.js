@@ -1892,7 +1892,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
   );
 }
 
-function SettingsListRow({ label, value, valueColor = THEME.text, actionLabel, onAction, actionContent, danger = false, noBorder = false, compact = false }) {
+function SettingsListRow({ label, description, value, valueColor = THEME.text, actionLabel, onAction, actionContent, danger = false, noBorder = false, compact = false }) {
   return (
     <div style={{
       display: 'grid',
@@ -1903,12 +1903,28 @@ function SettingsListRow({ label, value, valueColor = THEME.text, actionLabel, o
       borderBottom: noBorder ? 'none' : `1px solid ${THEME.border}`
     }}>
       <div style={{
-        color: danger ? THEME.red : THEME.text,
-        fontSize: 16,
-        fontWeight: 800,
         minWidth: 0
       }}>
-        {label}
+        <div style={{
+          color: danger ? THEME.red : THEME.text,
+          fontSize: 16,
+          fontWeight: 800,
+          lineHeight: 1.2
+        }}>
+          {label}
+        </div>
+
+        {description && (
+          <div style={{
+            color: THEME.muted,
+            fontSize: 13,
+            fontWeight: 700,
+            lineHeight: 1.3,
+            marginTop: 6
+          }}>
+            {description}
+          </div>
+        )}
       </div>
 
       <div style={{
@@ -2582,20 +2598,20 @@ function SupportActionButton({ children, onClick }) {
 function SupportSection({ t }) {
   const links = [
     {
+      label: t.supportWebsite || 'Website',
+      url: 'https://kelani-site.mburgosfr.workers.dev/',
+    },
+    {
       label: t.sendFeedbackShort || t.sendFeedback,
       url: 'mailto:mburgosfr@gmail.com?subject=Kelani%20SBD%20Tracker%20feedback',
     },
     {
-      label: t.reportBugShort || t.reportBug,
+      label: t.reportIssueShort || t.reportBug,
       url: 'https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new',
     },
     {
-      label: t.supportDevelopmentShort || t.supportDevelopment,
-      url: 'https://kelani-site.mburgosfr.workers.dev/',
-    },
-    {
-      label: t.joinTestingOrCoachingShort || t.joinTestingOrCoaching,
-      url: 'mailto:mburgosfr@gmail.com?subject=Kelani%20SBD%20Tracker%20testing%20or%20coaching%20interest',
+      label: t.sourceCode || 'Source code',
+      url: 'https://github.com/mburgosfr-star/kelani-sbd-tracker',
     },
   ];
 
@@ -2606,6 +2622,7 @@ function SupportSection({ t }) {
   return (
     <SettingsListRow
       label={t.support}
+      description={t.supportDescription}
       actionContent={(
         <div style={{
           display: 'grid',
