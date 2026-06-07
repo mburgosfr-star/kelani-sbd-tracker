@@ -6214,7 +6214,11 @@ function Onboarding({ onStart, t }) {
       }}>
         {onboardingStep !== 1 && (
           <h2 style={{ marginTop: 0, marginBottom: 8, color: THEME.text, textAlign: 'center' }}>
-            {t.enterDetails}
+            {onboardingStep === 2
+              ? t.onboardingTrainingTitle
+              : onboardingStep === 3
+              ? t.onboardingProfileTitle
+              : t.onboardingBodyTitle}
           </h2>
         )}
 
@@ -6550,10 +6554,6 @@ function Onboarding({ onStart, t }) {
 
         {onboardingStep === 4 && (
           <>
-        <h3 style={{ margin: '4px 0 16px', color: THEME.text, textAlign: 'center' }}>
-          {t.optionalBodyData}
-        </h3>
-
         {bodyFields.map(field => (
           <div key={field.key} style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
