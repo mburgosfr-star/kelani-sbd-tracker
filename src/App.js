@@ -3100,7 +3100,7 @@ function RestTimeSection({ restTimeSeconds, setRestTimeSeconds, t }) {
                 style={{
                   width: '100%',
                   padding: 12,
-                  fontSize: 14,
+                  fontSize: 15,
                   fontWeight: 800,
                   borderRadius: 8,
                   border: `1px solid ${restTimeSeconds === seconds ? THEME.primary : THEME.border}`,
@@ -3174,7 +3174,7 @@ function PreparationSection({ preparationMode, setPreparationMode, t }) {
                 style={{
                   width: '100%',
                   padding: 12,
-                  fontSize: 14,
+                  fontSize: 15,
                   fontWeight: 800,
                   borderRadius: 8,
                   border: `1px solid ${normalizedPreparationMode === mode ? THEME.primary : THEME.border}`,
@@ -3297,7 +3297,7 @@ function BenchPressVariantSection({ benchPressVariant, setBenchPressVariant, t }
                 style={{
                   width: '100%',
                   padding: 12,
-                  fontSize: 14,
+                  fontSize: 15,
                   fontWeight: 800,
                   borderRadius: 8,
                   border: `1px solid ${benchPressVariant === mode ? THEME.primary : THEME.border}`,
@@ -3351,7 +3351,7 @@ function AccessorySection({ accessoryMode, setAccessoryMode, t }) {
                 style={{
                   width: '100%',
                   padding: 12,
-                  fontSize: 14,
+                  fontSize: 15,
                   fontWeight: 800,
                   borderRadius: 8,
                   border: `1px solid ${accessoryMode === mode ? THEME.primary : THEME.border}`,
@@ -3963,7 +3963,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   border: `1px solid ${THEME.border}`,
                   background: 'transparent',
                   color: THEME.text,
-                  fontSize: 14,
+                  fontSize: 15,
                   fontWeight: 800,
                   cursor: 'pointer'
                 }}
@@ -6026,6 +6026,8 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
 }
 
 function Onboarding({ onStart, t }) {
+  const [onboardingStep, setOnboardingStep] = useState(1);
+  const [onboardingError, setOnboardingError] = useState('');
   const [onboardingWeightUnit, setOnboardingWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
   const [squat, setSquat] = useState('');
   const [bench, setBench] = useState('');
@@ -6128,6 +6130,34 @@ function Onboarding({ onStart, t }) {
     return `${yearRaw}-${monthRaw.padStart(2, '0')}-${dayRaw.padStart(2, '0')}`;
   }
 
+  function hasRequiredTrainingDetails() {
+    const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
+    const squatKg = displayWeightToKg(parseFloat(squat), selectedWeightUnit);
+    const benchKg = displayWeightToKg(parseFloat(bench), selectedWeightUnit);
+    const deadliftKg = displayWeightToKg(parseFloat(deadlift), selectedWeightUnit);
+
+    return Boolean(squatKg && benchKg && deadliftKg);
+  }
+
+  function hasRequiredProfileDetails() {
+    return Boolean(parseBirthDateInput(birthDate) && sex);
+  }
+
+  function goToNextOnboardingStep() {
+    if (onboardingStep === 2 && !hasRequiredTrainingDetails()) {
+      setOnboardingError(t.fillRequiredFields);
+      return;
+    }
+
+    if (onboardingStep === 3 && !hasRequiredProfileDetails()) {
+      setOnboardingError(t.fillRequiredFields);
+      return;
+    }
+
+    setOnboardingError('');
+    setOnboardingStep(step => Math.min(4, step + 1));
+  }
+
   function handleStart() {
     const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
     const s = displayWeightToKg(parseFloat(squat), selectedWeightUnit);
@@ -6137,10 +6167,11 @@ function Onboarding({ onStart, t }) {
     const normalizedBirthDate = parseBirthDateInput(birthDate);
 
     if (!s || !b || !d || !normalizedBirthDate || !sex) {
-      alert(t.fillRequiredFields);
+      setOnboardingError(t.fillRequiredFields);
       return;
     }
 
+    setOnboardingError('');
     onStart(s, b, d, { birthDate: normalizedBirthDate, sex, weightUnit: selectedWeightUnit }, buildInitialBodyData());
   }
 
@@ -6164,21 +6195,133 @@ function Onboarding({ onStart, t }) {
       background: THEME.bg,
       color: THEME.text
     }}>
-      <h1 style={{ textAlign: 'center', marginTop: 0, marginBottom: 24 }}>
+      <h1 style={{
+        textAlign: 'center',
+        marginTop: 0,
+        marginBottom: 28,
+        color: THEME.primary,
+        fontSize: 34,
+        fontWeight: 900,
+        letterSpacing: 1.2,
+        lineHeight: 1.05,
+        textTransform: 'uppercase'
+      }}>
         {t.appName}
       </h1>
 
       <div style={{
-        background: THEME.card,
-        padding: 24,
-        borderRadius: 8,
-        border: `1px solid ${THEME.border}`
+        padding: 0
       }}>
-        <h2 style={{ marginTop: 0, color: THEME.text, textAlign: 'center' }}>
-          {t.enterDetails}
-        </h2>
+        {onboardingStep !== 1 && (
+          <h2 style={{ marginTop: 0, marginBottom: 8, color: THEME.text, textAlign: 'center' }}>
+            {t.enterDetails}
+          </h2>
+        )}
+
+        {onboardingStep === 2 && (
+          <p style={{
+            margin: '0 0 14px',
+            color: THEME.muted,
+            fontSize: 14,
+            fontWeight: 700,
+            lineHeight: 1.4,
+            textAlign: 'center'
+          }}>
+            {t.onboardingMaxHelp}
+          </p>
+        )}
 
 
+        {onboardingError && (
+          <div style={{
+            margin: '0 0 16px',
+            padding: '10px 12px',
+            borderRadius: 8,
+            border: `1px solid ${THEME.red}`,
+            background: 'rgba(231, 76, 60, 0.12)',
+            color: THEME.text,
+            fontSize: 14,
+            fontWeight: 800,
+            lineHeight: 1.35,
+            textAlign: 'center'
+          }}>
+            {onboardingError}
+          </div>
+        )}
+
+        {onboardingStep === 1 && (
+          <div style={{ marginBottom: 26, textAlign: 'left' }}>
+            <h3 style={{
+              margin: '4px 0 14px',
+              color: THEME.red,
+              fontSize: 30,
+              fontWeight: 900,
+              lineHeight: 1.15,
+              textAlign: 'center'
+            }}>
+              {t.onboardingHeroTitle}
+            </h3>
+
+            <p style={{
+              margin: '0 0 22px',
+              maxWidth: 'none',
+              color: THEME.text,
+              fontSize: 18,
+              fontWeight: 800,
+              lineHeight: 1.55
+            }}>
+              {t.onboardingHeroText}
+            </p>
+
+            <div style={{
+              display: 'grid',
+              gap: 8,
+              margin: '0 0 22px',
+              maxWidth: 'none',
+              textAlign: 'left'
+            }}>
+              {[t.onboardingBenefitWorkouts, t.onboardingBenefitProgress, t.onboardingBenefitMeetDay].map(item => (
+                <div key={item} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  color: THEME.text,
+                  fontSize: 15,
+                  fontWeight: 800
+                }}>
+                  <span style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    background: THEME.primary,
+                    color: THEME.bg,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 12,
+                    fontWeight: 900,
+                    flexShrink: 0
+                  }}>✓</span>
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+
+            <p style={{
+              margin: 0,
+              maxWidth: 'none',
+              color: THEME.muted,
+              fontSize: 13,
+              fontWeight: 700,
+              lineHeight: 1.55
+            }}>
+              {t.onboardingResponsibilityText}
+            </p>
+          </div>
+        )}
+
+        {onboardingStep === 2 && (
+          <>
         <div style={{ marginBottom: 16 }}>
           <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
             {t.weightUnit}
@@ -6249,7 +6392,7 @@ function Onboarding({ onStart, t }) {
                 {t.estimateE1RM}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '44px 170px minmax(0, 1fr)', gap: 8, marginBottom: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
                 <input
                   type="number"
                   min="0"
@@ -6309,7 +6452,11 @@ function Onboarding({ onStart, t }) {
             </div>
           </div>
         ))}
+          </>
+        )}
 
+        {onboardingStep === 3 && (
+          <>
         <div style={{ marginBottom: 16 }}>
           <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
             {t.birthDate}
@@ -6398,7 +6545,11 @@ function Onboarding({ onStart, t }) {
             <option value="other">{t.other}</option>
           </select>
         </div>
+          </>
+        )}
 
+        {onboardingStep === 4 && (
+          <>
         <h3 style={{ margin: '4px 0 16px', color: THEME.text, textAlign: 'center' }}>
           {t.optionalBodyData}
         </h3>
@@ -6441,24 +6592,53 @@ function Onboarding({ onStart, t }) {
             </div>
           </div>
         ))}
+          </>
+        )}
 
-        <button
-          onClick={handleStart}
-          style={{
-            width: '100%',
-            padding: 14,
-            fontSize: 16,
-            background: THEME.primary,
-            color: '#ffffff',
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 4,
-            cursor: 'pointer',
-            marginTop: 8,
-            fontWeight: 600
-          }}
-        >
-          {t.startProgram}
-        </button>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: onboardingStep === 1 ? '1fr' : '1fr 1fr',
+          gap: 8,
+          marginTop: 8
+        }}>
+          {onboardingStep > 1 && (
+            <button
+              type="button"
+              onClick={() => { setOnboardingError(''); setOnboardingStep(step => Math.max(1, step - 1)); }}
+              style={{
+                width: '100%',
+                padding: 14,
+                fontSize: 16,
+                background: 'transparent',
+                color: THEME.text,
+                border: `1px solid ${THEME.border}`,
+                borderRadius: 4,
+                cursor: 'pointer',
+                fontWeight: 700
+              }}
+            >
+              {t.onboardingBack}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onboardingStep < 4 ? goToNextOnboardingStep : handleStart}
+            style={{
+              width: '100%',
+              padding: 14,
+              fontSize: 16,
+              background: THEME.primary,
+              color: '#ffffff',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontWeight: 700
+            }}
+          >
+            {onboardingStep === 1 ? t.onboardingStartSetup : onboardingStep < 4 ? t.onboardingNext : t.startProgram}
+          </button>
+        </div>
       </div>
     </div>
   );
