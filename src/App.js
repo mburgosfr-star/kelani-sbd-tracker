@@ -2598,8 +2598,8 @@ function SupportActionButton({ children, onClick }) {
 function SupportSection({ t }) {
   const links = [
     {
-      label: t.supportWebsite || 'Website',
-      url: 'https://kelani-site.mburgosfr.workers.dev/',
+      label: t.supportKelani || 'Support Kelani',
+      url: 'https://kelani-site.mburgosfr.workers.dev/#support',
     },
     {
       label: t.sendFeedbackShort || t.sendFeedback,
