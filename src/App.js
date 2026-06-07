@@ -1572,6 +1572,192 @@ function getWorkoutEffortText(effort, t) {
     : label;
 }
 
+function getCompletedWorkoutSuggestions(workout, t, benchPressVariant = 'standard') {
+  if (!workout) return [];
+
+  const suggestions = [];
+  const lifts = (workout.lifts || []).length
+    ? workout.lifts
+    : [{ lift: workout.lift, sets: workout.sets || [] }];
+
+  function isAttemptSet(set) {
+    return ['opener', 'secondAttempt', 'thirdAttempt'].includes(set?.labelKey);
+  }
+
+  function setSubject(liftName, set, index) {
+    const setLabel = set?.labelKey ? t[set.labelKey] : set?.label || `${t.set} ${index + 1}`;
+    return `${liftName} ${String(setLabel).toLowerCase()}`;
+  }
+
+  function pushTrainingSetSuggestion(subject, effort, attemptSet) {
+    if (effort === 'max') {
+      suggestions.push(
+        (attemptSet
+          ? t.attemptEffortReviewHigh || '{set} felt maximal. Your attempt plan may be too aggressive; review Meet Planner or your attempt choices.'
+          : t.setEffortReviewMaxesHigh || '{set} felt maximal. Your 1RM/e1RM may be too high; consider reviewing Settings → Maxes.'
+        ).replace('{set}', subject)
+      );
+      return;
+    }
+
+    if (effort === 'easy') {
+      suggestions.push(
+        (attemptSet
+          ? t.attemptEffortReviewLow || '{set} felt easy. Your attempt plan may be conservative; review Meet Planner or your attempt choices.'
+          : t.setEffortReviewMaxesLow || '{set} felt easy. Your 1RM/e1RM may be too low; consider reviewing Settings → Maxes.'
+        ).replace('{set}', subject)
+      );
+      return;
+    }
+
+    if (effort === 'hard') {
+      suggestions.push(
+        (attemptSet
+          ? t.attemptEffortReviewHard || '{set} felt hard but manageable. That can be appropriate for attempt practice.'
+          : t.setEffortReviewHard || '{set} felt hard but manageable. Keep the plan, and pay attention to technique and recovery.'
+        ).replace('{set}', subject)
+      );
+      return;
+    }
+
+    if (effort === 'good') {
+      suggestions.push(
+        (attemptSet
+          ? t.attemptEffortReviewGood || '{set} looked appropriate. Keep the attempt plan.'
+          : t.setEffortReviewGood || '{set} feedback looks good. Keep following the plan.'
+        ).replace('{set}', subject)
+      );
+    }
+  }
+
+  function pushMeetSetSuggestion(subject, set) {
+    if (set.failed) {
+      if (set.labelKey === 'opener') {
+        suggestions.push((t.meetAttemptFailedOpener || '{set} was missed. The opener may have been too aggressive, or execution on meet day was off. Review opener selection for your next meet.').replace('{set}', subject));
+        return;
+      }
+
+      if (set.labelKey === 'secondAttempt') {
+        suggestions.push((t.meetAttemptFailedSecond || '{set} was missed. Review the jump from opener to second attempt for future meets.').replace('{set}', subject));
+        return;
+      }
+
+      if (set.labelKey === 'thirdAttempt') {
+        suggestions.push((t.meetAttemptFailedThird || '{set} was missed. This is useful limit data, but it may have been beyond today’s capacity.').replace('{set}', subject));
+        return;
+      }
+
+      suggestions.push((t.meetAttemptFailedGeneric || '{set} was missed. Review attempt selection and execution for the next meet.').replace('{set}', subject));
+      return;
+    }
+
+    if (set.effort === 'easy') {
+      suggestions.push((t.meetAttemptEasy || '{set} looked conservative. That can be a good opener or safe attempt choice.').replace('{set}', subject));
+      return;
+    }
+
+    if (set.effort === 'good') {
+      suggestions.push((t.meetAttemptGood || '{set} looked well chosen. Keep this as useful attempt-planning data.').replace('{set}', subject));
+      return;
+    }
+
+    if (set.effort === 'hard') {
+      suggestions.push((t.meetAttemptHard || '{set} was hard but successful. Good information for future meet attempt jumps.').replace('{set}', subject));
+      return;
+    }
+
+    if (set.effort === 'max') {
+      suggestions.push((t.meetAttemptMax || '{set} was near your limit. Be careful using this as a future jump reference.').replace('{set}', subject));
+    }
+  }
+
+  lifts.forEach(liftBlock => {
+    const liftName = workoutLiftLabel(liftBlock.lift, t, benchPressVariant);
+    const completedSets = (liftBlock.sets || [])
+      .map((set, index) => ({ set, index }))
+      .filter(({ set }) =>
+        workout.type === 'meet'
+          ? (set.done || set.failed) && isAttemptSet(set)
+          : (set.done || set.failed) && !set.skipped
+      );
+
+    if (!completedSets.length) return;
+
+    if (workout.type === 'meet') {
+      completedSets
+        .filter(({ set }) => isAttemptSet(set))
+        .forEach(({ set, index }) => pushMeetSetSuggestion(setSubject(liftName, set, index), set));
+      return;
+    }
+
+    if (workout.type !== 'training') return;
+
+    const effortSets = completedSets.filter(({ set }) => set.effort);
+    const attemptSets = effortSets.filter(({ set }) => isAttemptSet(set));
+
+    if (attemptSets.length > 0) {
+      attemptSets.forEach(({ set, index }) => {
+        pushTrainingSetSuggestion(setSubject(liftName, set, index), set.effort, true);
+      });
+      return;
+    }
+
+    const priority =
+      effortSets.find(({ set }) => set.effort === 'max') ||
+      effortSets.find(({ set }) => set.effort === 'easy') ||
+      effortSets.find(({ set }) => set.effort === 'hard') ||
+      effortSets.find(({ set }) => set.effort === 'good');
+
+    if (!priority) return;
+
+    pushTrainingSetSuggestion(
+      setSubject(liftName, priority.set, priority.index),
+      priority.set.effort,
+      false
+    );
+  });
+
+  if (workout.type === 'meet') {
+    if (workout.workoutEffort === 'easy') {
+      suggestions.push(t.meetWorkoutEffortEasy || 'The whole meet felt easy. Your attempt selection may have been too conservative for today.');
+    }
+
+    if (workout.workoutEffort === 'good') {
+      suggestions.push(t.meetWorkoutEffortGood || 'The whole meet felt good. Solid execution; review whether there was room for a slightly bigger total.');
+    }
+
+    if (workout.workoutEffort === 'hard') {
+      suggestions.push(t.meetWorkoutEffortHard || 'The whole meet felt hard. That is normal for meet day; use the attempts as useful planning data.');
+    }
+
+    if (workout.workoutEffort === 'tooMuch') {
+      suggestions.push(t.meetWorkoutEffortTooMuch || 'The whole meet felt too much. That can happen on meet day; review attempt jumps, recovery and execution.');
+    }
+
+    return suggestions;
+  }
+
+  if (workout.type === 'training') {
+    if (workout.workoutEffort === 'easy') {
+      suggestions.push(t.workoutEffortRecoveryEasy || 'The whole workout felt easy. Keep the plan; if this happens often, review rest time or training frequency.');
+    }
+
+    if (workout.workoutEffort === 'good') {
+      suggestions.push(t.workoutEffortRecoveryGood || 'The whole workout felt good. This is the target: keep following the plan.');
+    }
+
+    if (workout.workoutEffort === 'hard') {
+      suggestions.push(t.workoutEffortRecoveryHard || 'The whole workout felt hard. That can be okay; keep the plan, but pay attention to recovery.');
+    }
+
+    if (workout.workoutEffort === 'tooMuch') {
+      suggestions.push(t.workoutEffortRecoveryTooMuch || 'The whole workout felt too much. Consider more rest between sets or more recovery between workouts.');
+    }
+  }
+
+  return suggestions;
+}
+
 function SetActionButton({ title, onClick, borderColor, disabled = false, children }) {
   return (
     <button
@@ -9328,23 +9514,38 @@ const latestBodyDataRows = [
           {t.workoutAndCycleSaved}
         </p>
 
-        {getWorkoutEffortText(completedWorkout?.workoutEffort, t) && (
+        {getCompletedWorkoutSuggestions(completedWorkout, t, 'standard').length > 0 && (
           <div style={{
             margin: '0 auto 16px',
-            padding: '10px 14px',
+            padding: '12px 14px',
             borderRadius: 10,
-            border: `1px solid ${THEME.border}`,
+            border: `1px solid ${THEME.primary}`,
             background: THEME.bg,
-            maxWidth: 260,
-            textAlign: 'center'
+            textAlign: 'left'
           }}>
             <div style={{
               color: THEME.primary,
-              fontSize: 18,
+              fontSize: 13,
               fontWeight: 900,
-              lineHeight: 1.15
+              marginBottom: 7
             }}>
-              {getWorkoutEffortText(completedWorkout.workoutEffort, t)}
+              {t.kelaniSuggestion || 'Kelani suggestion'}
+            </div>
+
+            <div style={{ display: 'grid', gap: 7 }}>
+              {getCompletedWorkoutSuggestions(completedWorkout, t, 'standard').map((suggestion, index) => (
+                <div
+                  key={`meet-suggestion-${index}`}
+                  style={{
+                    color: THEME.text,
+                    fontSize: 14,
+                    fontWeight: 800,
+                    lineHeight: 1.4
+                  }}
+                >
+                  {suggestion}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -9692,6 +9893,45 @@ const latestBodyDataRows = [
               lineHeight: 1.1
             }}>
               {getWorkoutEffortText(completedWorkout.workoutEffort, t)}
+            </div>
+          </div>
+        )}
+
+        {getCompletedWorkoutSuggestions(completedWorkout, t, benchPressVariant).length > 0 && (
+          <div style={{
+            margin: '0 auto 16px',
+            padding: '12px 14px',
+            borderRadius: 10,
+            border: `1px solid ${THEME.primary}`,
+            background: THEME.bg,
+            textAlign: 'left'
+          }}>
+            <div style={{
+              color: THEME.primary,
+              fontSize: 13,
+              fontWeight: 900,
+              marginBottom: 7
+            }}>
+              {t.kelaniSuggestion || 'Kelani suggestion'}
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gap: 7
+            }}>
+              {getCompletedWorkoutSuggestions(completedWorkout, t, benchPressVariant).map((suggestion, index) => (
+                <div
+                  key={`completed-suggestion-${index}`}
+                  style={{
+                    color: THEME.text,
+                    fontSize: 14,
+                    fontWeight: 800,
+                    lineHeight: 1.4
+                  }}
+                >
+                  {suggestion}
+                </div>
+              ))}
             </div>
           </div>
         )}
