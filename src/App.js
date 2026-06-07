@@ -3457,7 +3457,6 @@ function NewCycleModal({ prs, onStart, t, weightUnit = WEIGHT_UNITS.KG }) {
         <p style={{ color: THEME.muted, fontSize: 14, margin: '0 0 20px', textAlign: 'center' }}>
           {t.newCycleWeights}
         </p>
-
         <div style={{
           background: THEME.card,
           border: `1px solid ${THEME.border}`,
@@ -9696,7 +9695,6 @@ const latestBodyDataRows = [
             </div>
           </div>
         )}
-
         <div style={{
           background: THEME.card,
           border: `1px solid ${THEME.border}`,
