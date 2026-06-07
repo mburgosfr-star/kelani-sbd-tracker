@@ -460,12 +460,56 @@ function liftLabel(lift, t) {
   return lift;
 }
 
+function normalizeBenchPressVariant(variant) {
+  if (variant === 'floorPress') return 'floorPress';
+  if (variant === 'standingLandminePress') return 'standingLandminePress';
+  return 'standard';
+}
+
+function isStandingLandminePress(lift, benchPressVariant = 'standard') {
+  return lift === 'Bench' && normalizeBenchPressVariant(benchPressVariant) === 'standingLandminePress';
+}
+
 function workoutLiftLabel(lift, t, benchPressVariant = 'standard') {
-  if (lift === 'Bench' && benchPressVariant === 'floorPress') {
+  const normalizedBenchPressVariant = normalizeBenchPressVariant(benchPressVariant);
+
+  if (lift === 'Bench' && normalizedBenchPressVariant === 'floorPress') {
     return t.benchPressFloorPress || 'Floor Press';
   }
 
+  if (lift === 'Bench' && normalizedBenchPressVariant === 'standingLandminePress') {
+    return t.benchPressStandingLandminePress || 'Landmine';
+  }
+
   return liftLabel(lift, t);
+}
+
+function workoutDisplayWeightKg(weightKg, lift, benchPressVariant = 'standard') {
+  const numericWeight = Number(weightKg);
+  if (!Number.isFinite(numericWeight)) return weightKg;
+
+  return isStandingLandminePress(lift, benchPressVariant)
+    ? numericWeight / 2
+    : numericWeight;
+}
+
+function workoutInputWeightKg(displayWeight, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard') {
+  const baseKg = displayWeightToKg(displayWeight, weightUnit);
+  return isStandingLandminePress(lift, benchPressVariant)
+    ? baseKg * 2
+    : baseKg;
+}
+
+function formatWorkoutWeightFromKg(weightKg, weightUnit = WEIGHT_UNITS.KG, t, lift, benchPressVariant = 'standard') {
+  const formatted = formatWeightFromKg(workoutDisplayWeightKg(weightKg, lift, benchPressVariant), weightUnit);
+
+  return isStandingLandminePress(lift, benchPressVariant)
+    ? `${formatted.replace(/\s/g, '\u00a0')}\u00a0${(t.perArm || '/ arm').replace(/\s/g, '\u00a0')}`
+    : formatted;
+}
+
+function shouldTrackWorkoutStrength(lift, benchPressVariant = 'standard') {
+  return !isStandingLandminePress(lift, benchPressVariant);
 }
 
 function getWorkoutTypeLabel(workout, t) {
@@ -1322,7 +1366,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
 }
 
 
-function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, t, weightUnit = WEIGHT_UNITS.KG }) {
+function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   if (!warmups.length) return null;
 
   const columnCount = warmups.length <= 2
@@ -1381,7 +1425,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
                   marginTop: 1,
                   lineHeight: 1.15
                 }}>
-                  {warmup.reps} × {formatWeightFromKg(warmup.weight, weightUnit)}
+                  {warmup.reps} × {formatWorkoutWeightFromKg(warmup.weight, weightUnit, t, lift, benchPressVariant)}
                 </div>
               </div>
             </div>
@@ -1634,9 +1678,10 @@ function WorkoutActionRow({
             fontWeight: 900,
             lineHeight: 1.35,
             paddingBottom: 1,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
+            whiteSpace: 'normal',
+            overflow: 'visible',
+            textOverflow: 'clip',
+            overflowWrap: 'normal',
           }}>
             {title}{detail ? <>: <span style={{ color: THEME.muted }}>{detail}</span></> : null}
           </div>
@@ -1695,7 +1740,7 @@ function WorkoutActionRow({
 }
 
 
-function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG }) {
+function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
   const displayPct = set.pct ? Number((set.pct * 100).toFixed(1)) : null;
   const effortLabel = getSetEffortLabel(set.effort, t);
@@ -1709,7 +1754,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
 
   function handleEditClick(e) {
     e.stopPropagation();
-    setInputVal(formatWeightValue(kgToDisplayWeight(set.weight, weightUnit), weightUnit));
+    setInputVal(formatWeightValue(kgToDisplayWeight(workoutDisplayWeightKg(set.weight, lift, benchPressVariant), weightUnit), weightUnit));
     setEditing(true);
   }
 
@@ -1717,9 +1762,9 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
     const val = parseFloat(inputVal);
 
     if (!isNaN(val) && val > 0) {
-      onWeightChange(displayWeightToKg(val, weightUnit));
+      onWeightChange(workoutInputWeightKg(val, weightUnit, lift, benchPressVariant));
     } else {
-      setInputVal(formatWeightValue(kgToDisplayWeight(set.weight, weightUnit), weightUnit));
+      setInputVal(formatWeightValue(kgToDisplayWeight(workoutDisplayWeightKg(set.weight, lift, benchPressVariant), weightUnit), weightUnit));
     }
 
     setEditing(false);
@@ -1734,7 +1779,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
 
   const detail = (
     <span style={{ color: isAdjusted ? '#f39c12' : THEME.muted }}>
-      1 × {set.reps} × {formatWeightFromKg(set.weight, weightUnit)}{displayPct ? ` (${displayPct}%)` : ''}
+      1 × {set.reps} × {formatWorkoutWeightFromKg(set.weight, weightUnit, t, lift, benchPressVariant)}{displayPct ? ` (${displayPct}%)` : ''}
     </span>
   );
 
@@ -3202,10 +3247,11 @@ function WorkoutSection({
 function BenchPressVariantSection({ benchPressVariant, setBenchPressVariant, t }) {
   const [showOptions, setShowOptions] = useState(false);
 
-  const modes = ['standard', 'floorPress'];
+  const modes = ['standard', 'floorPress', 'standingLandminePress'];
   const labels = {
     standard: t.benchPressStandard,
     floorPress: t.benchPressFloorPress,
+    standingLandminePress: t.benchPressStandingLandminePress,
   };
 
   return (
@@ -3442,7 +3488,7 @@ function NewCycleModal({ prs, onStart, t, weightUnit = WEIGHT_UNITS.KG }) {
   );
 }
 
-function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, label, t, weightUnit = WEIGHT_UNITS.KG }) {
+function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, label, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
   const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
@@ -3454,9 +3500,9 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
 
   useEffect(() => {
     if (editing) {
-      setInputVal(formatWeightValue(kgToDisplayWeight(firstSet.weight || '', weightUnit), weightUnit));
+      setInputVal(formatWeightValue(kgToDisplayWeight(workoutDisplayWeightKg(firstSet.weight || '', lift, benchPressVariant), weightUnit), weightUnit));
     }
-  }, [editing, firstSet.weight, weightUnit]);
+  }, [editing, firstSet.weight, weightUnit, lift, benchPressVariant]);
 
   if (!entries?.length) return null;
 
@@ -3464,7 +3510,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
     const val = parseFloat(inputVal);
 
     if (!Number.isNaN(val) && val > 0) {
-      onEditAll(displayWeightToKg(val, weightUnit));
+      onEditAll(workoutInputWeightKg(val, weightUnit, lift, benchPressVariant));
     }
 
     setEditing(false);
@@ -3472,7 +3518,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
 
   function handleEditClick(e) {
     e.stopPropagation();
-    setInputVal(formatWeightValue(kgToDisplayWeight(firstSet.weight || '', weightUnit), weightUnit));
+    setInputVal(formatWeightValue(kgToDisplayWeight(workoutDisplayWeightKg(firstSet.weight || '', lift, benchPressVariant), weightUnit), weightUnit));
     setEditing(true);
   }
 
@@ -3495,7 +3541,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
 
   const detail = (
     <span style={{ color: detailColor }}>
-      {entries.length} × {allSameReps ? firstSet.reps : '—'} × {allSameWeight ? formatWeightFromKg(firstSet.weight, weightUnit) : normalizeWeightUnit(weightUnit)}{displayPct ? ` (${displayPct}%)` : ''}
+      {entries.length} × {allSameReps ? firstSet.reps : '—'} × {allSameWeight ? formatWorkoutWeightFromKg(firstSet.weight, weightUnit, t, lift, benchPressVariant) : normalizeWeightUnit(weightUnit)}{displayPct ? ` (${displayPct}%)` : ''}
     </span>
   );
 
@@ -3785,6 +3831,7 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
 }
 
 function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer }) {
+  const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
 
   function isTimerFor(placement) {
@@ -3981,7 +4028,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
         <AppHeader
           t={t}
-          title={`${t.workout} ${workout.number} — ${getWorkoutTitle(workout, t, benchPressVariant)}`}
+          title={`${t.workout} ${workout.number} — ${getWorkoutTitle(workout, t, effectiveBenchPressVariant)}`}
           subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${workout.number} / ${totalWorkouts}${isMeetDay ? ` · ${t.meetDay}` : ''}`}
           titleStyle={{
             fontSize: 'clamp(20px, 6vw, 24px)',
@@ -4032,7 +4079,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 textAlign: 'center',
                 borderBottom: `1px solid ${THEME.border}`,
               }}>
-                {workoutLiftLabel(liftBlock.lift, t, benchPressVariant)}
+                {workoutLiftLabel(liftBlock.lift, t, effectiveBenchPressVariant)}
               </div>
 
               {visiblePrepItems.length > 0 && (
@@ -4078,7 +4125,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 renderTimer={wi => renderInlineTimer({ type: 'meetWarmup', liftIndex: li, index: wi })}
                 followsPrep={visiblePrepItems.length > 0}
                 t={t}
-                  weightUnit={weightUnit}
+                weightUnit={weightUnit}
+                lift={workout.lift}
+                benchPressVariant={effectiveBenchPressVariant}
               />
 
               {(liftBlock.sets || []).map((set, si) => {
@@ -4119,7 +4168,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                         renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
                         label={backoffGroupLabel}
                         t={t}
-                  weightUnit={weightUnit}
+                        weightUnit={weightUnit}
+                        lift={liftBlock.lift}
+                        benchPressVariant={effectiveBenchPressVariant}
                       />
                     </React.Fragment>
                   );
@@ -4150,7 +4201,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                         renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
                         label={backoffGroupLabel}
                         t={t}
-                  weightUnit={weightUnit}
+                        weightUnit={weightUnit}
+                        lift={liftBlock.lift}
+                        benchPressVariant={effectiveBenchPressVariant}
                       />
                     </React.Fragment>
                   );
@@ -4229,7 +4282,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                     onRestoreWeight={() => handleToggle(() => onRestoreMeetSetWeight(li, si))}
                     onWeightChange={val => onMeetWeightChange(li, si, val)}
                     t={t}
-                  weightUnit={weightUnit}
+                    weightUnit={weightUnit}
+                    lift={liftBlock.lift}
+                    benchPressVariant={effectiveBenchPressVariant}
                   />
                   {renderInlineTimer({ type: 'meetSet', liftIndex: li, index: si })}
                   {set.done && !set.failed && !set.skipped && !set.effort && (
@@ -4289,6 +4344,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   renderTimer={si => renderInlineTimer({ type: 'accessory', accIndex: ai, index: si })}
                   t={t}
                   weightUnit={weightUnit}
+                  lift={workout.lift}
+                  benchPressVariant={effectiveBenchPressVariant}
                 />
               );
             })}
@@ -4351,7 +4408,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       fontFamily: 'sans-serif'
     }}>
       <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
-        {t.workout} {workout.number} — {workoutLiftLabel(workout.lift, t, benchPressVariant)}
+        {t.workout} {workout.number} — {workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant)}
       </h2>
 
       <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
@@ -4410,7 +4467,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             renderTimer={i => renderInlineTimer({ type: 'warmup', index: i })}
             followsPrep={(workout.prepItems || []).length > 0}
             t={t}
-                  weightUnit={weightUnit}
+            weightUnit={weightUnit}
+            lift={workout.lift}
+            benchPressVariant={effectiveBenchPressVariant}
           />
         </div>
       )}
@@ -4429,7 +4488,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           color: THEME.text,
           textAlign: 'center'
         }}>
-          {workoutLiftLabel(workout.lift, t, benchPressVariant)}
+          {workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant)}
         </div>
 
         {workout.sets.map((set, i) => {
@@ -4463,6 +4522,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   label={backoffGroupLabel}
                   t={t}
                   weightUnit={weightUnit}
+                  lift={workout.lift}
+                  benchPressVariant={effectiveBenchPressVariant}
                 />
               </React.Fragment>
             );
@@ -4519,7 +4580,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 onRestoreWeight={() => handleToggle(() => onRestoreSetWeight(i))}
                 onWeightChange={val => onWeightChange('set', i, val)}
                 t={t}
-                  weightUnit={weightUnit}
+                weightUnit={weightUnit}
+                lift={workout.lift}
+                benchPressVariant={effectiveBenchPressVariant}
               />
               {!set.failed && renderInlineTimer({ type: 'main', index: i })}
               {set.done && !set.failed && !set.skipped && !set.effort && (
@@ -4528,6 +4591,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   onChange={effort => handleToggle(() => onSetEffortChange(i, effort))}
                   t={t}
                   weightUnit={weightUnit}
+                  lift={workout.lift}
+                  benchPressVariant={effectiveBenchPressVariant}
                 />
               )}
             </React.Fragment>
@@ -5615,6 +5680,7 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
 }
 
 function getWorkoutTitle(workout, t, benchPressVariant = 'standard') {
+  const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
   if (!workout || workout.type === 'rest') return t.deload;
   if (workout.type === 'meet') return t.sbdMeetDay || t.meetDay;
 
@@ -5623,13 +5689,14 @@ function getWorkoutTitle(workout, t, benchPressVariant = 'standard') {
     .filter(Boolean);
 
   if (lifts.length > 0) {
-    return lifts.map(lift => workoutLiftLabel(lift, t, benchPressVariant)).join(' + ');
+    return lifts.map(lift => workoutLiftLabel(lift, t, effectiveBenchPressVariant)).join(' + ');
   }
 
-  return workoutLiftLabel(workout.lift, t, benchPressVariant);
+  return workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant);
 }
 
 function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard') {
+  const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
   if (!workout || workout.type === 'rest') return [];
 
   const liftBlocks = (workout.lifts || []).length > 0
@@ -5665,13 +5732,21 @@ function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPres
     });
 
     const onlyBackoff = groups.length > 0 && groups.every(group => group.labelKey === 'backoff');
+    const showLiftName = (workout.lifts || []).length > 1;
+    const liftName = workoutLiftLabel(liftBlock.lift, t, effectiveBenchPressVariant);
 
     return groups.map(group => {
+      const weightText = formatWorkoutWeightFromKg(group.weight, weightUnit, t, liftBlock.lift, effectiveBenchPressVariant);
+
       if (onlyBackoff || !group.labelKey) {
-        return `${workoutLiftLabel(liftBlock.lift, t, benchPressVariant)}: ${group.count}×${group.reps}×${formatWeightFromKg(group.weight, weightUnit)}`;
+        return showLiftName
+          ? `${liftName}: ${group.count}×${group.reps}×${weightText}`
+          : `${group.count}×${group.reps}×${weightText}`;
       }
 
-      return `${workoutLiftLabel(liftBlock.lift, t, benchPressVariant)} · ${group.label}: ${group.count}×${group.reps}×${formatWeightFromKg(group.weight, weightUnit)}`;
+      return showLiftName
+        ? `${liftName} · ${group.label}: ${group.count}×${group.reps}×${weightText}`
+        : `${group.label}: ${group.count}×${group.reps}×${weightText}`;
     });
   });
 }
@@ -5729,9 +5804,49 @@ function AppHeader({ t, title, subtitle, meta, children, titleStyle = {} }) {
   );
 }
 
-function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCycle, onSelect, onBack, onStats, onStartNewCycle, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard' }) {
+function isCompletedHistoryEntry(entry) {
+  return Boolean(entry?.workoutSnapshot?.completed);
+}
+
+function applyCompletedHistorySnapshotsToWorkouts(workouts = [], history = [], currentCycle) {
+  const completedSnapshotsByWorkoutNumber = new Map();
+
+  (history || []).forEach(entry => {
+    if (
+      Number(entry?.cycle) === Number(currentCycle) &&
+      Number.isFinite(Number(entry?.workoutNumber)) &&
+      entry?.workoutSnapshot?.completed
+    ) {
+      completedSnapshotsByWorkoutNumber.set(Number(entry.workoutNumber), entry.workoutSnapshot);
+    }
+  });
+
+  if (!completedSnapshotsByWorkoutNumber.size) return workouts;
+
+  let changed = false;
+
+  const nextWorkouts = (workouts || []).map(workout => {
+    const snapshot = completedSnapshotsByWorkoutNumber.get(Number(workout?.number));
+    if (!snapshot) return workout;
+
+    if (
+      workout?.completed &&
+      workout?.completedAt === snapshot.completedAt
+    ) {
+      return workout;
+    }
+
+    changed = true;
+    return snapshot;
+  });
+
+  return changed ? nextWorkouts : workouts;
+}
+
+function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedWorkoutNumbers = [], currentCycle, onSelect, onBack, onStats, onStartNewCycle, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard' }) {
   const currentWorkoutRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
+  const completedWorkoutNumberSet = new Set(completedWorkoutNumbers.map(Number));
 
   const visibleStart = Math.max(0, currentIndex - 3);
   const visibleEnd = Math.min(workouts.length, currentIndex + 4);
@@ -5767,7 +5882,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCyc
 
       {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
-        const isDone = idx < completedWorkoutCount;
+        const isDone = completedWorkoutNumberSet.has(Number(workout.number)) || Boolean(workout.completed);
         const headerBg = isCurrent ? THEME.primary : workout.type === 'rest' ? THEME.brown : THEME.border;
         const planLines = getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant);
         const typeLabel = getWorkoutTypeLabel(workout, t);
@@ -5851,8 +5966,8 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, currentCyc
                     key={lineIndex}
                     style={{
                       whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
+                      overflow: 'visible',
+                      textOverflow: 'clip'
                     }}
                   >
                     {line}
@@ -6117,7 +6232,7 @@ function Onboarding({ onStart, t }) {
                 {t.estimateE1RM}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '44px 170px minmax(0, 1fr)', gap: 8, marginBottom: 8 }}>
                 <input
                   type="number"
                   min="0"
@@ -6469,7 +6584,7 @@ function App() {
   const [accessoryMode, setAccessoryMode] = useState('off');
   const [preparationMode, setPreparationMode] = useState('basicFirst');
   const [benchPressVariant, setBenchPressVariant] = useState(() =>
-    localStorage.getItem('benchPressVariant') === 'floorPress' ? 'floorPress' : 'standard'
+    normalizeBenchPressVariant(localStorage.getItem('benchPressVariant'))
   );
   const [weightUnit, setWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
 
@@ -6491,7 +6606,7 @@ function App() {
   }, [weightUnit]);
 
   useEffect(() => {
-    localStorage.setItem('benchPressVariant', benchPressVariant === 'floorPress' ? 'floorPress' : 'standard');
+    localStorage.setItem('benchPressVariant', normalizeBenchPressVariant(benchPressVariant));
   }, [benchPressVariant]);
 
   const t = translations[language];
@@ -6513,7 +6628,22 @@ function App() {
   const [meetPlannerAttempts, setMeetPlannerAttempts] = useState({});
   const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  useEffect(() => {
+    if (!workouts.length) return;
+
+    setWorkouts(prev => applyCompletedHistorySnapshotsToWorkouts(prev, history, currentCycle));
+  }, [history, currentCycle, workouts.length]);
+
   const completedWorkoutCount = getCompletedWorkoutCount(history, currentCycle);
+  const completedWorkoutNumbers = Array.from(new Set(
+    (history || [])
+      .filter(entry =>
+        Number(entry.cycle) === Number(currentCycle) &&
+        isCompletedHistoryEntry(entry)
+      )
+      .map(entry => Number(entry.workoutNumber))
+      .filter(Number.isFinite)
+  ));
   const currentIndex = Math.max(completedWorkoutCount, currentWorkoutIndex);
   const PROGRAM_VERSION = 'cube-27-v5';
 
@@ -8057,6 +8187,8 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     setTimer(null);
 
     const finishedWorkout = JSON.parse(JSON.stringify(workout));
+    finishedWorkout.completed = true;
+    finishedWorkout.completedAt = new Date().toISOString();
 
     if (workout.type === 'training' && (finishedWorkout.lifts || []).length > 0) {
       const primaryLiftBlock = finishedWorkout.lifts[0];
@@ -8182,7 +8314,10 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       const today = new Date().toLocaleDateString('nl-NL');
 
       const results = (workout.lifts || []).map(liftBlock => {
-        const sets = (liftBlock.sets || []).filter(s => s.done && !s.failed && !s.skipped);
+        const trackStrength = shouldTrackWorkoutStrength(liftBlock.lift, benchPressVariant);
+        const sets = trackStrength
+          ? (liftBlock.sets || []).filter(s => s.done && !s.failed && !s.skipped)
+          : [];
 
         const topSet = sets.length
           ? sets.reduce(
@@ -8220,6 +8355,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 
         return {
           lift: liftBlock.lift,
+          trackStrength,
           oneRMToday,
           e1RMToday,
           previousBest1RM,
@@ -8255,12 +8391,13 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       );
 
       const newEntries = results.map(result => ({
+        completionOnly: result.trackStrength === false,
         workoutNumber: workout.number,
         cycle: currentCycle,
         lift: result.lift,
-        topWeight: result.oneRMToday,
-        topReps: result.topSet?.reps || 0,
-        e1rm: result.e1RMToday,
+        topWeight: result.trackStrength === false ? 0 : result.oneRMToday,
+        topReps: result.trackStrength === false ? 0 : (result.topSet?.reps || 0),
+        e1rm: result.trackStrength === false ? 0 : result.e1RMToday,
         date: today,
         workoutEffort: finishedWorkout.workoutEffort,
         workoutSnapshot: finishedWorkout,
@@ -8273,7 +8410,33 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     }
 
   
-    if (workout.type === 'training' && LIFT_ORDER.includes(workout.lift)) {
+    if (workout.type === 'training' && LIFT_ORDER.includes(workout.lift) && !shouldTrackWorkoutStrength(workout.lift, benchPressVariant)) {
+  setCompletedSummary(null);
+
+  setHistory(prev => {
+    const withoutCurrent = prev.filter(
+      h => !(Number(h.cycle) === Number(currentCycle) && Number(h.workoutNumber) === Number(workout.number) && h.lift === workout.lift)
+    );
+
+    return [
+      ...withoutCurrent,
+      {
+        workoutNumber: workout.number,
+        cycle: currentCycle,
+        lift: workout.lift,
+        topWeight: 0,
+        topReps: 0,
+        e1rm: 0,
+        date: new Date().toLocaleDateString('nl-NL'),
+        workoutEffort: finishedWorkout.workoutEffort,
+        workoutSnapshot: finishedWorkout,
+        completionOnly: true,
+      },
+    ];
+  });
+}
+
+if (workout.type === 'training' && LIFT_ORDER.includes(workout.lift) && shouldTrackWorkoutStrength(workout.lift, benchPressVariant)) {
     const sets = (workout.sets || []).filter(s => s.done && !s.failed && !s.skipped);
 
 if (sets.length > 0) {
@@ -8827,6 +8990,7 @@ const latestBodyDataRows = [
           workouts={workouts}
           currentIndex={currentIndex}
           completedWorkoutCount={completedWorkoutCount}
+          completedWorkoutNumbers={completedWorkoutNumbers}
           currentCycle={currentCycle}
           onSelect={(idx) => {
             setSelectedIndex(idx);
