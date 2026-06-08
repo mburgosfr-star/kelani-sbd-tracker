@@ -5209,7 +5209,9 @@ const meetTotals = {
       );
     }
 
-    const visibleData = data.map((item, index) => ({
+    const visibleSourceData = data.length > 10 ? data.slice(-10) : data;
+
+    const visibleData = visibleSourceData.map((item, index) => ({
       ...item,
       chartIndex: index + 1,
     }));
@@ -6035,7 +6037,14 @@ function AppHeader({ t, title, subtitle, meta, children, titleStyle = {} }) {
 }
 
 function isCompletedHistoryEntry(entry) {
-  return Boolean(entry?.workoutSnapshot?.completed);
+  if (!entry) return false;
+  if (entry.workoutSnapshot?.completed) return true;
+
+  return Boolean(
+    Number.isFinite(Number(entry.workoutNumber)) &&
+    Number(entry.workoutNumber) > 0 &&
+    entry.lift
+  );
 }
 
 function applyCompletedHistorySnapshotsToWorkouts(workouts = [], history = [], currentCycle) {
