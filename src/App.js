@@ -5218,6 +5218,50 @@ const meetTotals = {
       chartIndex: index + 1,
     }));
 
+    const yValues = visibleData
+      .flatMap(item => dataKeys.map(key => Number(item[key])))
+      .filter(value => Number.isFinite(value));
+
+    let yDomain = ['auto', 'auto'];
+
+    if (yValues.length > 0) {
+      const minY = Math.min(...yValues);
+      const maxY = Math.max(...yValues);
+      const range = maxY - minY;
+      const padding = range > 0
+        ? range * 0.15
+        : Math.max(Math.abs(maxY) * 0.05, 1);
+
+      const rawMin = minY - padding;
+      const rawMax = maxY + padding;
+      const rawRange = Math.max(rawMax - rawMin, 1);
+      const roughStep = rawRange / 4;
+      const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+      const normalizedStep = roughStep / magnitude;
+      const niceMultiplier = normalizedStep <= 1
+        ? 1
+        : normalizedStep <= 2
+        ? 2
+        : normalizedStep <= 5
+        ? 5
+        : 10;
+
+      const minimumStep = maxY >= 50
+        ? 10
+        : maxY >= 20
+        ? 5
+        : maxY >= 5
+        ? 1
+        : 0.1;
+
+      const step = Math.max(niceMultiplier * magnitude, minimumStep);
+
+      yDomain = [
+        Math.floor(rawMin / step) * step,
+        Math.ceil(rawMax / step) * step,
+      ];
+    }
+
     const allXTicks = [...new Set(
       visibleData
         .map(item => Number(item.chartIndex))
@@ -5257,7 +5301,8 @@ const meetTotals = {
           <YAxis
             stroke={THEME.text}
             width={42}
-            allowDecimals={false}
+            domain={yDomain}
+            allowDecimals={true}
           />
           <Tooltip
   labelFormatter={(value, payload) => payload?.[0]?.payload?.label || labelByX[value] || value}
@@ -5316,8 +5361,8 @@ const meetTotals = {
           <div
             key={chart.key}
             style={{
-              background: THEME.card,
-              border: `1px solid ${THEME.border}`,
+              background: 'transparent',
+              border: 'none',
               borderRadius: 8,
               padding: 12,
               marginBottom: 10
@@ -5384,8 +5429,8 @@ const meetTotals = {
     <div
       key={lift}
       style={{
-        background: THEME.card,
-        border: `1px solid ${THEME.border}`,
+        background: 'transparent',
+        border: 'none',
         borderRadius: 8,
         padding: 16,
         marginBottom: 16
@@ -5408,8 +5453,8 @@ const meetTotals = {
       {activescreen === 'totaal' && (
         <div>
           <div style={{
-            background: THEME.card,
-            border: `1px solid ${THEME.border}`,
+            background: 'transparent',
+            border: 'none',
             borderRadius: 8,
             padding: 16,
             marginBottom: 16
@@ -5419,8 +5464,8 @@ const meetTotals = {
           </div>
 
           <div style={{
-            background: THEME.card,
-            border: `1px solid ${THEME.border}`,
+            background: 'transparent',
+            border: 'none',
             borderRadius: 8,
             padding: 16
           }}>
