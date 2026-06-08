@@ -5533,7 +5533,7 @@ const meetTotals = {
       ])}
 
 {activescreen === 'meet' && (
-  <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
+  <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 16 }}>
     <div style={{
       display: 'grid',
       gridTemplateColumns: 'minmax(0, 1fr) auto',
@@ -5561,7 +5561,7 @@ const meetTotals = {
         padding: '10px 12px',
         border: `1px solid ${THEME.primary}`,
         borderRadius: 10,
-        background: THEME.bg,
+        background: 'rgba(243, 156, 18, 0.08)',
         textAlign: 'center'
       }}>
         <div style={{ color: THEME.muted, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>
@@ -5579,10 +5579,10 @@ const meetTotals = {
         <div
           key={row.lift}
           style={{
-            border: `1px solid ${THEME.border}`,
+            border: 'none',
             borderRadius: 10,
             padding: 12,
-            background: THEME.bg
+            background: 'transparent'
           }}
         >
           <div style={{
@@ -5615,11 +5615,15 @@ const meetTotals = {
               <div
                 key={key}
                 style={{
-                  border: `1px solid ${THEME.border}`,
+                  border: `1px solid ${COLORS[row.lift]}`,
                   borderRadius: 8,
                   padding: 7,
                   textAlign: 'center',
-                  background: THEME.card
+                  background: row.lift === 'Squat'
+                    ? 'rgba(231, 76, 60, 0.08)'
+                    : row.lift === 'Bench'
+                    ? 'rgba(243, 156, 18, 0.08)'
+                    : 'rgba(241, 196, 15, 0.08)'
                 }}
               >
                 <div style={{
@@ -5678,9 +5682,9 @@ const meetTotals = {
     <div style={{
       marginTop: 14,
       padding: 12,
-      border: `1px solid ${THEME.border}`,
+      border: 'none',
       borderRadius: 10,
-      background: THEME.bg,
+      background: 'transparent',
       display: 'grid',
       gap: 8,
       fontSize: 14
