@@ -5209,7 +5209,12 @@ const meetTotals = {
       );
     }
 
-    const visibleSourceData = data.length > 10 ? data.slice(-10) : data;
+    const visibleSourceData = data.length <= 10
+      ? data
+      : Array.from({ length: 10 }, (_, index) => {
+          const sourceIndex = Math.round(index * (data.length - 1) / 9);
+          return data[sourceIndex];
+        });
 
     const visibleData = visibleSourceData.map((item, index) => ({
       ...item,
@@ -5221,43 +5226,63 @@ const meetTotals = {
       .filter(value => Number.isFinite(value));
 
     let yDomain = ['auto', 'auto'];
+    let yTicks = undefined;
+
+    function buildTicks(min, max, step) {
+      const ticks = [];
+      const safeStep = Number(step) || 1;
+
+      for (let value = min; value <= max + safeStep / 2; value += safeStep) {
+        const rounded = Math.round(value * 100) / 100;
+        ticks.push(Object.is(rounded, -0) ? 0 : rounded);
+      }
+
+      return ticks;
+    }
+
+    function chooseTickStep(range) {
+      if (range <= 30) return 5;
+      if (range <= 60) return 10;
+      if (range <= 120) return 20;
+      if (range <= 300) return 50;
+      if (range <= 600) return 100;
+      return 200;
+    }
 
     if (yValues.length > 0) {
       const minY = Math.min(...yValues);
       const maxY = Math.max(...yValues);
-      const range = maxY - minY;
-      const padding = range > 0
-        ? range * 0.15
-        : Math.max(Math.abs(maxY) * 0.05, 1);
 
-      const rawMin = minY - padding;
-      const rawMax = maxY + padding;
-      const rawRange = Math.max(rawMax - rawMin, 1);
-      const roughStep = rawRange / 4;
-      const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
-      const normalizedStep = roughStep / magnitude;
-      const niceMultiplier = normalizedStep <= 1
-        ? 1
-        : normalizedStep <= 2
-        ? 2
-        : normalizedStep <= 5
-        ? 5
-        : 10;
+      if (maxY >= 10) {
+        let lower = Math.floor(minY / 10) * 10;
+        let upper = Math.ceil(maxY / 10) * 10;
 
-      const minimumStep = maxY >= 50
-        ? 10
-        : maxY >= 20
-        ? 5
-        : maxY >= 5
-        ? 1
-        : 0.1;
+        if (lower === upper) {
+          lower -= 10;
+          upper += 10;
+        }
 
-      const step = Math.max(niceMultiplier * magnitude, minimumStep);
+        const range = upper - lower;
+        const tickStep = chooseTickStep(range);
 
-      yDomain = [
-        Math.floor(rawMin / step) * step,
-        Math.ceil(rawMax / step) * step,
-      ];
+        yDomain = [lower, upper];
+        yTicks = buildTicks(lower, upper, tickStep);
+      } else {
+        const step = maxY <= 2 ? 0.1 : 0.5;
+        let lower = Math.floor(minY / step) * step;
+        let upper = Math.ceil(maxY / step) * step;
+
+        if (lower === upper) {
+          lower -= step;
+          upper += step;
+        }
+
+        yDomain = [
+          Math.round(lower * 100) / 100,
+          Math.round(upper * 100) / 100,
+        ];
+        yTicks = buildTicks(yDomain[0], yDomain[1], step);
+      }
     }
 
     const allXTicks = [...new Set(
@@ -5300,6 +5325,7 @@ const meetTotals = {
             stroke={THEME.text}
             width={42}
             domain={yDomain}
+            ticks={yTicks}
             allowDecimals={true}
           />
           <Tooltip
