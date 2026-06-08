@@ -1,0 +1,4 @@
+- Polished app UI with calmer transparent surfaces across Dashboard, Workout, Stats, Meet Planner, Settings, Program and completed workout screens.
+- Improved Stats charts to show all history and use clearer dynamic Y-axis scaling.
+- Standardized Dutch action labels for a more consistent interface.
+- Improved Workout rest timer and completed-workout presentation.
