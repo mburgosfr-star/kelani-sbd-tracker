@@ -1454,14 +1454,14 @@ function generateCooldownItems() {
   ];
 }
 
-function CooldownBlock({ items = [], onToggleItem = () => {}, t, isReadOnly = false }) {
+function CooldownBlock({ items = [], onToggleItem = () => {}, t, isReadOnly = false, activeEnabled = true }) {
   const cooldownItems = items.length > 0 ? items : generateCooldownItems();
   const firstIncompleteIndex = cooldownItems.findIndex(item => !item.done);
 
   return (
     <div style={{
-      background: THEME.card,
-      border: `1px solid ${THEME.border}`,
+      background: 'transparent',
+      border: 'none',
       borderRadius: 8,
       overflow: 'hidden',
       marginBottom: 10
@@ -1472,7 +1472,6 @@ function CooldownBlock({ items = [], onToggleItem = () => {}, t, isReadOnly = fa
         fontWeight: 900,
         color: THEME.text,
         textAlign: 'center',
-        borderBottom: `1px solid ${THEME.border}`
       }}>
         {t.cooldownTitle}
       </div>
@@ -1482,7 +1481,7 @@ function CooldownBlock({ items = [], onToggleItem = () => {}, t, isReadOnly = fa
           <PrepRow
             key={index}
             item={item}
-            isActive={!isReadOnly && index === firstIncompleteIndex}
+            isActive={!isReadOnly && activeEnabled && index === firstIncompleteIndex}
             isReadOnly={isReadOnly}
             onToggle={() => onToggleItem(index)}
             t={t}
@@ -1810,11 +1809,7 @@ function WorkoutActionRow({
   const isGroupedRow = borderMode === 'group';
   const actionsWidth = WORKOUT_CIRCLE_SIZE * 3 + 16;
 
-  const borderStyle = isGroupedRow
-    ? {}
-    : {
-      border: `1px solid ${THEME.border}`,
-    };
+  const borderStyle = {};
 
   return (
     <div
@@ -1829,7 +1824,7 @@ function WorkoutActionRow({
         padding: isGroupedRow
           ? `${WORKOUT_ROW_PADDING_Y}px 10px ${WORKOUT_ROW_PADDING_Y}px 10px`
           : `${WORKOUT_ROW_PADDING_Y}px 10px ${WORKOUT_ROW_PADDING_Y}px 6px`,
-        background: THEME.card,
+        background: 'transparent',
         boxShadow: active ? 'inset 0 0 0 1px #f39c12' : 'none',
         borderLeft: activeBorder ? `4px solid ${THEME.primary}` : '4px solid transparent',
         ...borderStyle,
@@ -4211,6 +4206,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       (liftBlock.sets || []).every(s => s.done)
     );
     const allMainLiftSetsDone = allMeetDone;
+    const allAccessoriesDone = (workout.accessories || []).every(acc =>
+      (acc.done || []).every(Boolean)
+    );
 
     const meetDayProjectedTotal = (workout.lifts || []).reduce((total, liftBlock) => {
       const thirdAttempt = liftBlock.sets?.[2]?.weight;
@@ -4246,9 +4244,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 <div style={{
   marginBottom: 10,
   padding: 10,
-  border: `1px solid ${THEME.primary}`,
+  border: 'none',
   borderRadius: 10,
-  background: THEME.card,
+  background: 'transparent',
   textAlign: 'center'
 }}>
   <div style={{ color: THEME.muted, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
@@ -4271,7 +4269,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           return (
             <div
               key={liftBlock.lift}
-              style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}
+              style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}
             >
               <div style={{
                 padding: '6px 10px',
@@ -4279,7 +4277,6 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 fontWeight: 900,
                 color: THEME.text,
                 textAlign: 'center',
-                borderBottom: `1px solid ${THEME.border}`,
               }}>
                 {workoutLiftLabel(liftBlock.lift, t, effectiveBenchPressVariant)}
               </div>
@@ -4505,8 +4502,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
         {!isMeetDay && (workout.accessories || []).length > 0 && (
           <div style={{
-            background: THEME.card,
-            border: `1px solid ${THEME.border}`,
+            background: 'transparent',
+            border: 'none',
             borderRadius: 8,
             overflow: 'hidden',
             marginBottom: 10
@@ -4517,8 +4514,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
               fontWeight: 900,
               color: THEME.text,
               textAlign: 'center',
-              borderBottom: `1px solid ${THEME.border}`
-            }}>
+              }}>
               {t.accessories}
             </div>
 
@@ -4560,6 +4556,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             onToggleItem={index => handleToggle(() => onToggleCooldownItem(index))}
             t={t}
             isReadOnly={isReadOnly}
+            activeEnabled={allMainLiftSetsDone && allAccessoriesDone}
           />
         )}
 
@@ -4594,6 +4591,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
   }
 
   const allDone = (workout.sets || []).every(s => s.done);
+  const allAccessoriesDone = (workout.accessories || []).every(acc =>
+    (acc.done || []).every(Boolean)
+  );
   const allPrepDone = (workout.prepItems || []).every(item => item.done);
 
   function handleToggle(fn) {
@@ -4620,7 +4620,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       {renderActivateWorkoutCard()}
 
       {(workout.prepItems || []).length > 0 && (
-        <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
+        <div style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
           <div style={{
             padding: '6px 10px',
             fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
@@ -4655,8 +4655,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
       {(workout.warmups || []).length > 0 && (
         <div style={{
-          background: THEME.card,
-          border: `1px solid ${THEME.border}`,
+          background: 'transparent',
+          border: 'none',
           borderRadius: 8,
           overflow: 'hidden',
           marginBottom: 10
@@ -4677,8 +4677,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       )}
 
       <div style={{
-        background: THEME.card,
-        border: `1px solid ${THEME.border}`,
+        background: 'transparent',
+        border: 'none',
         borderRadius: 8,
         overflow: 'hidden',
         marginBottom: 10
@@ -4804,8 +4804,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
       {(workout.accessories || []).length > 0 && (
         <div style={{
-          background: THEME.card,
-          border: `1px solid ${THEME.border}`,
+          background: 'transparent',
+          border: 'none',
           borderRadius: 8,
           overflow: 'hidden',
           marginBottom: 10
@@ -4816,7 +4816,6 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             fontWeight: 900,
             color: THEME.text,
             textAlign: 'center',
-            borderBottom: `1px solid ${THEME.border}`
           }}>
             {t.accessories}
           </div>
@@ -4856,6 +4855,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
         onToggleItem={index => handleToggle(() => onToggleCooldownItem(index))}
         t={t}
         isReadOnly={isReadOnly}
+        activeEnabled={allDone && allAccessoriesDone}
       />
 
       <button
@@ -9263,8 +9263,8 @@ const latestBodyDataRows = [
 
     {workouts[currentIndex] && (
       <div style={{
-        background: THEME.card,
-        border: `1px solid ${THEME.border}`,
+        background: 'transparent',
+        border: 'none',
         borderRadius: 10,
         padding: 14,
         marginBottom: 12,
@@ -9290,7 +9290,7 @@ const latestBodyDataRows = [
         </div>
       </div>
     )}
-    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 18, marginBottom: 12 }}>
+    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 18, marginBottom: 12 }}>
       {[
         [t.squat, THEME.red, best1RMs.Squat, bestE1RMs.Squat],
         [t.bench, THEME.primary, best1RMs.Bench, bestE1RMs.Bench],
@@ -9312,7 +9312,7 @@ const latestBodyDataRows = [
       ))}
     </div>
 
-    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 18, marginBottom: 12 }}>
+    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 18, marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.total1rm}</span>
         <strong style={{ color: '#ffffff', fontSize: 15 }}>{total1RM ? formatWeightFromKg(total1RM, weightUnit) : '—'}</strong>
@@ -9331,7 +9331,7 @@ const latestBodyDataRows = [
       </div>
     </div>
 
-    <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 16 }}>
+    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 16 }}>
       {latestBodyDataRows.length > 0 ? (
         latestBodyDataRows.map((row, index) => (
           <div
