@@ -1204,8 +1204,6 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
     return (
       <div style={{
         background: THEME.bg,
-        borderTop: `1px solid ${THEME.border}`,
-        borderBottom: `1px solid ${THEME.border}`,
         padding: '16px',
         textAlign: 'center',
         color: THEME.primary,
@@ -1220,8 +1218,6 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
   return (
     <div style={{
       background: THEME.bg,
-      borderTop: `1px solid ${THEME.border}`,
-      borderBottom: `1px solid ${THEME.border}`,
       padding: '12px 16px',
       display: 'flex',
       alignItems: 'center',
@@ -2081,7 +2077,7 @@ function SettingsListRow({ label, description, value, valueColor = THEME.text, a
       alignItems: 'center',
       gap: 12,
       padding: compact ? '6px 0' : '10px 0',
-      borderBottom: noBorder ? 'none' : `1px solid ${THEME.border}`
+      borderBottom: 'none'
     }}>
       <div style={{
         minWidth: 0
@@ -5812,40 +5808,23 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
   return (
     <>
       <Toast message={notice} />
-      <div style={{
-        marginTop: 6,
-        padding: 12,
-        border: `1px solid ${THEME.border}`,
-        borderRadius: 10,
-        background: THEME.card
-      }}>
-        <p style={{
-          margin: '0 0 10px',
-          color: THEME.muted,
-          fontSize: 13,
-          lineHeight: 1.4,
-          textAlign: 'center'
-        }}>
-          {t.startNewCycleHint}
-        </p>
-
-        <button
-          onClick={() => setShowStartCycleConfirm(true)}
-          style={{
-            width: '100%',
-            padding: 12,
-            fontSize: 14,
-            fontWeight: 800,
-            background: THEME.card,
-            color: '#ffffff',
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 8,
-            cursor: 'pointer'
-          }}
-        >
-          {t.startNewCycle}
-        </button>
-      </div>
+      <button
+        onClick={() => setShowStartCycleConfirm(true)}
+        style={{
+          width: '100%',
+          marginTop: 6,
+          padding: 12,
+          fontSize: 14,
+          fontWeight: 800,
+          background: THEME.card,
+          color: '#ffffff',
+          border: `1px solid ${THEME.primary}`,
+          borderRadius: 8,
+          cursor: 'pointer'
+        }}
+      >
+        {t.startNewCycle}
+      </button>
 
       {showStartCycleConfirm && (
         <div style={{
@@ -6153,8 +6132,8 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
               padding: '12px 16px',
               marginBottom: 10,
               borderRadius: 8,
-              border: isCurrent ? `2px solid ${THEME.primary}` : `1px solid ${THEME.border}`,
-              background: THEME.card,
+              border: isCurrent ? `2px solid ${THEME.primary}` : 'none',
+              background: 'transparent',
               cursor: 'pointer',
               opacity: 1
             }}
@@ -9472,8 +9451,8 @@ const latestBodyDataRows = [
   />
 
   <div style={{
-    background: THEME.card,
-    border: `1px solid ${THEME.border}`,
+    background: 'transparent',
+    border: 'none',
     borderRadius: 8,
     padding: '5px 14px',
     marginBottom: 10
@@ -9556,8 +9535,8 @@ const latestBodyDataRows = [
   }}>
     {completedWorkout?.type === 'meet' ? (
       <div style={{
-        background: THEME.card,
-        border: `1px solid ${THEME.border}`,
+        background: 'transparent',
+        border: 'none',
         borderRadius: 12,
         padding: 24,
         textAlign: 'center'
@@ -9577,7 +9556,7 @@ const latestBodyDataRows = [
             margin: '0 auto 16px',
             padding: '12px 14px',
             borderRadius: 10,
-            border: `1px solid ${THEME.primary}`,
+            border: 'none',
             background: THEME.bg,
             textAlign: 'left'
           }}>
@@ -9632,8 +9611,8 @@ const latestBodyDataRows = [
 
           return (
             <div style={{
-              background: THEME.bg,
-              border: `1px solid ${THEME.primary}`,
+              background: 'transparent',
+              border: 'none',
               color: THEME.text,
               borderRadius: 10,
               padding: 16,
@@ -9670,8 +9649,8 @@ const latestBodyDataRows = [
                     style={{
                       padding: '8px 6px',
                       borderRadius: 8,
-                      border: `1px solid ${THEME.border}`,
-                      background: THEME.card
+                      border: 'none',
+                      background: 'transparent'
                     }}
                   >
                     <div style={{
@@ -9697,8 +9676,8 @@ const latestBodyDataRows = [
         })()}
 
         <div style={{
-          background: THEME.card,
-          border: `1px solid ${THEME.border}`,
+          background: 'transparent',
+          border: 'none',
           color: THEME.text,
           borderRadius: 8,
           padding: 14,
@@ -9740,8 +9719,8 @@ const latestBodyDataRows = [
         </div>
 
         <div style={{
-          background: THEME.card,
-          border: `1px solid ${THEME.border}`,
+          background: 'transparent',
+          border: 'none',
           color: THEME.text,
           borderRadius: 8,
           padding: 16,
@@ -9877,7 +9856,7 @@ const latestBodyDataRows = [
         </button>
       </div>
     ) : (
-      <div style={{ background: THEME.card, border: `1px solid ${THEME.border}`, borderRadius: 12, padding: 24, textAlign: 'center' }}>
+      <div style={{ background: 'transparent', border: 'none', borderRadius: 12, padding: 24, textAlign: 'center' }}>
         <div style={{ fontSize: 40, marginBottom: 10 }}>🎉</div>
 
         <h2 style={{ margin: '0 0 8px', color: THEME.text }}>{t.workoutCompleted}</h2>
@@ -9908,8 +9887,8 @@ const latestBodyDataRows = [
 
           return (
             <div style={{
-              background: THEME.card,
-              border: `1px solid ${THEME.border}`,
+              background: 'transparent',
+              border: 'none',
               color: THEME.text,
               borderRadius: 8,
               padding: 12,
@@ -9930,8 +9909,8 @@ const latestBodyDataRows = [
             margin: '0 auto 16px',
             padding: '10px 14px',
             borderRadius: 10,
-            border: `1px solid ${THEME.border}`,
-            background: THEME.bg,
+            border: 'none',
+            background: 'transparent',
             maxWidth: 260,
             textAlign: 'center'
           }}>
@@ -9960,7 +9939,7 @@ const latestBodyDataRows = [
             margin: '0 auto 16px',
             padding: '12px 14px',
             borderRadius: 10,
-            border: `1px solid ${THEME.primary}`,
+            border: 'none',
             background: THEME.bg,
             textAlign: 'left'
           }}>
@@ -9994,8 +9973,8 @@ const latestBodyDataRows = [
           </div>
         )}
         <div style={{
-          background: THEME.card,
-          border: `1px solid ${THEME.border}`,
+          background: 'transparent',
+          border: 'none',
           color: THEME.text,
           borderRadius: 8,
           padding: 12,
@@ -10068,8 +10047,8 @@ const latestBodyDataRows = [
         {/* FORCE_MULTI_LIFT_COMPLETED_SETS_START */}
         {(completedWorkout?.lifts || []).length > 0 && (
           <div style={{
-            background: THEME.card,
-            border: `1px solid ${THEME.border}`,
+            background: 'transparent',
+            border: 'none',
             color: THEME.text,
             borderRadius: 8,
             padding: 16,
@@ -10082,7 +10061,6 @@ const latestBodyDataRows = [
                 style={{
                   marginTop: liftIndex === 0 ? 0 : 16,
                   paddingTop: liftIndex === 0 ? 0 : 14,
-                  borderTop: liftIndex === 0 ? 'none' : `1px solid ${THEME.border}`
                 }}
               >
                 <div style={{
@@ -10111,7 +10089,6 @@ const latestBodyDataRows = [
                         gridTemplateColumns: '1fr auto',
                         gap: 12,
                         padding: '7px 0',
-                        borderTop: i === 0 ? 'none' : `1px solid ${THEME.border}`,
                         opacity: isInvalidSet ? 0.75 : 1
                       }}
                     >
