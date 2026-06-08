@@ -5213,7 +5213,7 @@ const meetTotals = {
       );
     }
 
-    const visibleData = (data.length > 10 ? data.slice(-10) : data).map((item, index) => ({
+    const visibleData = data.map((item, index) => ({
       ...item,
       chartIndex: index + 1,
     }));
