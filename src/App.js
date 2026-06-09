@@ -1011,14 +1011,14 @@ function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedCoun
     );
 
     return {
-      ...workout,
+      ...generated,
       prepItems: mergePrepItems(workout.prepItems, generated.prepItems),
-      lifts: (workout.lifts || generated.lifts || []).map((liftBlock, liftIndex) => {
-        const generatedLiftBlock = generated.lifts?.[liftIndex] || {};
+      lifts: (generated.lifts || []).map((generatedLiftBlock, liftIndex) => {
+        const currentLiftBlock = (workout.lifts || [])[liftIndex] || {};
 
         return {
-          ...liftBlock,
-          prepItems: mergePrepItems(liftBlock.prepItems, generatedLiftBlock.prepItems),
+          ...generatedLiftBlock,
+          prepItems: mergePrepItems(currentLiftBlock.prepItems, generatedLiftBlock.prepItems),
         };
       }),
       accessories: (generated.accessories || []).map(generatedAccessory =>
