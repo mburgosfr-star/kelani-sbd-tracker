@@ -466,6 +466,11 @@ function normalizeBenchPressVariant(variant) {
   return 'standard';
 }
 
+function normalizeDeadliftVariant(variant) {
+  if (variant === 'alternative') return 'alternative';
+  return 'standard';
+}
+
 function isStandingLandminePress(lift, benchPressVariant = 'standard') {
   return lift === 'Bench' && normalizeBenchPressVariant(benchPressVariant) === 'standingLandminePress';
 }
@@ -482,6 +487,14 @@ function workoutLiftLabel(lift, t, benchPressVariant = 'standard') {
   }
 
   return liftLabel(lift, t);
+}
+
+function workoutLiftBlockLabel(liftBlock, t, benchPressVariant = 'standard') {
+  if (isDeadliftAlternativeLiftBlock(liftBlock)) {
+    return t.deadliftAlternativeWorkout || 'Posterior Chain';
+  }
+
+  return workoutLiftLabel(liftBlock?.lift, t, benchPressVariant);
 }
 
 function workoutDisplayWeightKg(weightKg, lift, benchPressVariant = 'standard') {
@@ -510,6 +523,18 @@ function formatWorkoutWeightFromKg(weightKg, weightUnit = WEIGHT_UNITS.KG, t, li
 
 function shouldTrackWorkoutStrength(lift, benchPressVariant = 'standard') {
   return !isStandingLandminePress(lift, benchPressVariant);
+}
+
+function isDeadliftAlternativeLiftBlock(liftBlock = {}) {
+  return liftBlock?.lift === 'Deadlift' && (
+    liftBlock.deadliftVariant === 'alternative' ||
+    (liftBlock.sets || []).some(set => String(set.groupKey || '').startsWith('deadliftAlternative'))
+  );
+}
+
+function shouldTrackLiftBlockStrength(liftBlock = {}, benchPressVariant = 'standard') {
+  if (isDeadliftAlternativeLiftBlock(liftBlock)) return false;
+  return shouldTrackWorkoutStrength(liftBlock.lift, benchPressVariant);
 }
 
 function getWorkoutTypeLabel(workout, t) {
@@ -743,6 +768,38 @@ function getBackoffGroupLabelForSets(sets = [], t) {
     : (t.workSets || t.set);
 }
 
+function isGroupedWorkoutSet(set = {}) {
+  return Boolean(set.groupKey) || ['backoff', 'workSets'].includes(set.labelKey);
+}
+
+function getWorkoutSetGroupEntries(sets = [], currentSet = {}) {
+  if (currentSet.groupKey) {
+    return sets
+      .map((groupSet, groupIndex) => ({ set: groupSet, index: groupIndex }))
+      .filter(({ set }) => set.groupKey === currentSet.groupKey);
+  }
+
+  return sets
+    .map((groupSet, groupIndex) => ({ set: groupSet, index: groupIndex }))
+    .filter(({ set }) => ['backoff', 'workSets'].includes(set.labelKey));
+}
+
+function getWorkoutSetGroupLabel(currentSet = {}, sets = [], t) {
+  if (currentSet.groupLabelKey) {
+    return t[currentSet.groupLabelKey] || currentSet.groupLabelKey;
+  }
+
+  if (currentSet.groupKey && currentSet.labelKey) {
+    return t[currentSet.labelKey] || currentSet.label || currentSet.groupKey;
+  }
+
+  if (currentSet.groupKey) {
+    return currentSet.label || currentSet.groupKey;
+  }
+
+  return getBackoffGroupLabelForSets(sets, t);
+}
+
 
 function isAttemptSetLabel(labelKey) {
   return ['opener', 'secondAttempt', 'thirdAttempt'].includes(labelKey);
@@ -801,7 +858,7 @@ const ACCESSORY_TEMPLATES = {
   ],
   Deadlift: [
     { key: 'row', labelKey: 'accessoryRow', sets: 3, reps: 10, source: 'deadlift', pct: 0.25 },
-    { key: 'legPressModerate', labelKey: 'accessoryLegPressModerate', sets: 2, reps: 12, source: 'squat', pct: 0.60, optional: true },
+    { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 2, reps: 12, source: 'squat', pct: 0.15, optional: true },
   ],
 };
 
@@ -829,6 +886,45 @@ function getAccessoryBaseWeight(template, oneRMs, accessoryPRs = {}) {
   }
 
   return Math.max(2.5, roundMeetWeight(sourceWeight * template.pct));
+}
+
+function makeWorkoutSet({ labelKey, groupKey, reps, weight }) {
+  return {
+    labelKey,
+    groupLabelKey: labelKey,
+    groupKey,
+    reps,
+    weight,
+    originalWeight: weight,
+    done: false,
+  };
+}
+
+function generateDeadliftAlternativeSets(oneRMs = {}) {
+  const legPressWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.60));
+  const hamstringCurlWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.20));
+  const cablePullThroughWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Deadlift) || 0) * 0.20));
+
+  return [
+    ...Array.from({ length: 3 }, () => makeWorkoutSet({
+      labelKey: 'deadliftAlternativeLegPress',
+      groupKey: 'deadliftAlternativeLegPress',
+      reps: 10,
+      weight: legPressWeight,
+    })),
+    ...Array.from({ length: 3 }, () => makeWorkoutSet({
+      labelKey: 'deadliftAlternativeHamstringCurl',
+      groupKey: 'deadliftAlternativeHamstringCurl',
+      reps: 12,
+      weight: hamstringCurlWeight,
+    })),
+    ...Array.from({ length: 3 }, () => makeWorkoutSet({
+      labelKey: 'deadliftAlternativeCablePullThrough',
+      groupKey: 'deadliftAlternativeCablePullThrough',
+      reps: 12,
+      weight: cablePullThroughWeight,
+    })),
+  ];
 }
 
 function generateAccessoriesForLift(lift, accessoryMode = 'off', accessoryPRs = {}, oneRMs = {}) {
@@ -933,7 +1029,7 @@ function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedCoun
 }
 
 
-function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst') {
+function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard') {
   function round25(w) {
     return Math.round(w / 2.5) * 2.5;
   }
@@ -945,6 +1041,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
   };
 
   const normalizedPreparationMode = normalizePreparationMode(preparationMode);
+  const normalizedDeadliftVariant = normalizeDeadliftVariant(deadliftVariant);
 
   const program = [
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'backoff' }] }] },
@@ -979,26 +1076,33 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
   const workouts = [];
 
   function buildLiftBlock(liftConfig, liftIndex = 0) {
-    const sets = [];
+    const isDeadliftAlternative =
+      liftConfig.lift === 'Deadlift' && normalizedDeadliftVariant === 'alternative';
 
-    liftConfig.blocks.forEach(block => {
-      for (let i = 0; i < block.sets; i++) {
-        const weight = round25(oneRMs[liftConfig.lift] * block.pct);
+    const sets = isDeadliftAlternative
+      ? generateDeadliftAlternativeSets(oneRMs)
+      : [];
 
-        sets.push({
-          labelKey: liftConfig.isSecondaryLight && block.labelKey === 'backoff'
-            ? null
-            : block.labelKey || null,
-          label: block.label || null,
-          reps: block.reps,
-          pct: block.pct,
-          weight,
-          originalWeight: weight,
-          originalPct: block.pct,
-          done: false,
-        });
-      }
-    });
+    if (!isDeadliftAlternative) {
+      liftConfig.blocks.forEach(block => {
+        for (let i = 0; i < block.sets; i++) {
+          const weight = round25(oneRMs[liftConfig.lift] * block.pct);
+
+          sets.push({
+            labelKey: liftConfig.isSecondaryLight && block.labelKey === 'backoff'
+              ? null
+              : block.labelKey || null,
+            label: block.label || null,
+            reps: block.reps,
+            pct: block.pct,
+            weight,
+            originalWeight: weight,
+            originalPct: block.pct,
+            done: false,
+          });
+        }
+      });
+    }
 
     const firstWorkWeight = sets.length ? sets[0].weight : 20;
 
@@ -1008,6 +1112,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
 
     return {
       lift: liftConfig.lift,
+      deadliftVariant: liftConfig.lift === 'Deadlift' ? normalizedDeadliftVariant : undefined,
       prepItems: includePreparation ? generatePrepItems(liftConfig.lift, normalizedPreparationMode) : [],
       warmups: generateWarmups(firstWorkWeight),
       sets,
@@ -1667,7 +1772,7 @@ function getCompletedWorkoutSuggestions(workout, t, benchPressVariant = 'standar
   }
 
   lifts.forEach(liftBlock => {
-    const liftName = workoutLiftLabel(liftBlock.lift, t, benchPressVariant);
+    const liftName = workoutLiftBlockLabel(liftBlock, t, benchPressVariant);
     const completedSets = (liftBlock.sets || [])
       .map((set, index) => ({ set, index }))
       .filter(({ set }) =>
@@ -3378,6 +3483,8 @@ function WorkoutSection({
   setAccessoryMode,
   benchPressVariant,
   setBenchPressVariant,
+  deadliftVariant,
+  setDeadliftVariant,
   t,
 }) {
   const [showWorkoutSettings, setShowWorkoutSettings] = useState(false);
@@ -3410,6 +3517,12 @@ function WorkoutSection({
           <BenchPressVariantSection
             benchPressVariant={benchPressVariant}
             setBenchPressVariant={setBenchPressVariant}
+            t={t}
+          />
+
+          <DeadliftVariantSection
+            deadliftVariant={deadliftVariant}
+            setDeadliftVariant={setDeadliftVariant}
             t={t}
           />
 
@@ -3480,6 +3593,61 @@ function BenchPressVariantSection({ benchPressVariant, setBenchPressVariant, t }
                   border: `1px solid ${benchPressVariant === mode ? THEME.primary : THEME.border}`,
                   background: benchPressVariant === mode ? THEME.primary : THEME.card,
                   color: benchPressVariant === mode ? THEME.bg : THEME.text,
+                  cursor: 'pointer'
+                }}
+              >
+                {labels[mode]}
+              </button>
+            ))}
+          </div>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
+function DeadliftVariantSection({ deadliftVariant, setDeadliftVariant, t }) {
+  const [showOptions, setShowOptions] = useState(false);
+
+  const modes = ['standard', 'alternative'];
+  const labels = {
+    standard: t.deadliftStandard,
+    alternative: t.deadliftAlternative,
+  };
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.deadliftVariant}
+        actionLabel={labels[deadliftVariant] || labels.standard}
+        onAction={() => setShowOptions(true)}
+        noBorder
+      />
+
+      {showOptions && (
+        <SettingsModal
+          title={t.deadliftVariant}
+          onClose={() => setShowOptions(false)}
+        >
+          <div style={{ display: 'grid', gap: 8 }}>
+            {modes.map(mode => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setDeadliftVariant(mode);
+                  setShowOptions(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  fontSize: 15,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  border: `1px solid ${deadliftVariant === mode ? THEME.primary : THEME.border}`,
+                  background: deadliftVariant === mode ? THEME.primary : THEME.card,
+                  color: deadliftVariant === mode ? THEME.bg : THEME.text,
                   cursor: 'pointer'
                 }}
               >
@@ -4274,7 +4442,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 color: THEME.text,
                 textAlign: 'center',
               }}>
-                {workoutLiftLabel(liftBlock.lift, t, effectiveBenchPressVariant)}
+                {workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}
               </div>
 
               {visiblePrepItems.length > 0 && (
@@ -4326,10 +4494,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
               />
 
               {(liftBlock.sets || []).map((set, si) => {
-                const backoffSetEntries = (liftBlock.sets || [])
-                  .map((backoffSet, backoffIndex) => ({ set: backoffSet, index: backoffIndex }))
-                  .filter(({ set: backoffSet }) => ['backoff', 'workSets'].includes(backoffSet.labelKey));
-                const backoffGroupLabel = getBackoffGroupLabelForSets(liftBlock.sets || [], t);
+                const groupedSetEntries = getWorkoutSetGroupEntries(liftBlock.sets || [], set);
+                const groupedSetLabel = getWorkoutSetGroupLabel(set, liftBlock.sets || [], t);
 
                 const secondarySetEntries = (liftBlock.sets || [])
                   .map((secondarySet, secondaryIndex) => ({ set: secondarySet, index: secondaryIndex }));
@@ -4361,7 +4527,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                         onRestoreAll={() => secondarySetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
                         onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
                         renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
-                        label={backoffGroupLabel}
+                        label={groupedSetLabel}
                         t={t}
                         weightUnit={weightUnit}
                         lift={liftBlock.lift}
@@ -4371,15 +4537,15 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   );
                 }
 
-                if (['backoff', 'workSets'].includes(set.labelKey)) {
-                  if (backoffSetEntries[0]?.index !== si) return null;
+                if (isGroupedWorkoutSet(set)) {
+                  if (groupedSetEntries[0]?.index !== si) return null;
 
-                  const firstIncompleteBackoff = backoffSetEntries.find(({ set: backoffSet }) => !backoffSet.done && !backoffSet.skipped)?.index ?? -1;
+                  const firstIncompleteBackoff = groupedSetEntries.find(({ set: groupedSet }) => !groupedSet.done && !groupedSet.skipped)?.index ?? -1;
 
                   return (
-                    <React.Fragment key={`backoff-group-${li}-${si}`}>
+                    <React.Fragment key={`set-group-${li}-${si}`}>
                       <BackoffGroup
-                        entries={backoffSetEntries}
+                        entries={groupedSetEntries}
                         activeIndex={
                           !isReadOnly &&
                           li === firstIncompleteLiftIndex &&
@@ -4390,11 +4556,11 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                         }
                         isReadOnly={isReadOnly}
                         onToggle={index => handleToggle(() => onToggleMeetSet(li, index))}
-                        onEditAll={val => backoffSetEntries.forEach(({ index }) => onMeetWeightChange(li, index, val))}
-                        onRestoreAll={() => backoffSetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
+                        onEditAll={val => groupedSetEntries.forEach(({ index }) => onMeetWeightChange(li, index, val))}
+                        onRestoreAll={() => groupedSetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
                         onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
                         renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
-                        label={backoffGroupLabel}
+                        label={groupedSetLabel}
                         t={t}
                         weightUnit={weightUnit}
                         lift={liftBlock.lift}
@@ -4691,33 +4857,31 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
         {workout.sets.map((set, i) => {
           const allWarmupsDone = allPrepDone && (workout.warmups || []).every(w => w.done);
-          const backoffSetEntries = (workout.sets || [])
-            .map((backoffSet, backoffIndex) => ({ set: backoffSet, index: backoffIndex }))
-            .filter(({ set: backoffSet }) => ['backoff', 'workSets'].includes(backoffSet.labelKey));
-          const backoffGroupLabel = getBackoffGroupLabelForSets(workout.sets || [], t);
+          const groupedSetEntries = getWorkoutSetGroupEntries(workout.sets || [], set);
+          const groupedSetLabel = getWorkoutSetGroupLabel(set, workout.sets || [], t);
           const firstIncomplete = workout.sets.findIndex(s => !s.done);
           const hasLaterSetAction = workout.sets.some((laterSet, laterIndex) =>
             laterIndex > i && (laterSet.done || laterSet.failed || laterSet.skipped)
           );
           const showSetNotice = set.failed || (set.skipped && !hasLaterSetAction);
 
-          if (['backoff', 'workSets'].includes(set.labelKey)) {
-            if (backoffSetEntries[0]?.index !== i) return null;
+          if (isGroupedWorkoutSet(set)) {
+            if (groupedSetEntries[0]?.index !== i) return null;
 
-            const firstIncompleteBackoff = backoffSetEntries.find(({ set: backoffSet }) => !backoffSet.done && !backoffSet.skipped)?.index ?? -1;
+            const firstIncompleteBackoff = groupedSetEntries.find(({ set: groupedSet }) => !groupedSet.done && !groupedSet.skipped)?.index ?? -1;
 
             return (
-              <React.Fragment key={`backoff-group-${i}`}>
+              <React.Fragment key={`set-group-${i}`}>
                 <BackoffGroup
-                  entries={backoffSetEntries}
+                  entries={groupedSetEntries}
                   activeIndex={!isReadOnly && allWarmupsDone ? firstIncompleteBackoff : -1}
                   isReadOnly={isReadOnly}
                   onToggle={index => handleToggle(() => onToggleSet(index))}
-                  onEditAll={val => backoffSetEntries.forEach(({ index }) => onWeightChange('set', index, val))}
-                  onRestoreAll={() => backoffSetEntries.forEach(({ index }) => onRestoreSetWeight(index))}
+                  onEditAll={val => groupedSetEntries.forEach(({ index }) => onWeightChange('set', index, val))}
+                  onRestoreAll={() => groupedSetEntries.forEach(({ index }) => onRestoreSetWeight(index))}
                   onMarkFailed={index => handleToggle(() => onMarkSetFailed(index))}
                   renderTimer={index => renderInlineTimer({ type: 'main', index })}
-                  label={backoffGroupLabel}
+                  label={groupedSetLabel}
                   t={t}
                   weightUnit={weightUnit}
                   lift={workout.lift}
@@ -5947,7 +6111,7 @@ function getWorkoutTitle(workout, t, benchPressVariant = 'standard') {
     .filter(Boolean);
 
   if (lifts.length > 0) {
-    return lifts.map(lift => workoutLiftLabel(lift, t, effectiveBenchPressVariant)).join(' + ');
+    return (workout.lifts || []).map(liftBlock => workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)).join(' + ');
   }
 
   return workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant);
@@ -5966,12 +6130,18 @@ function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPres
 
     (liftBlock.sets || []).forEach(set => {
       const labelKey = set.labelKey || null;
-      const label = labelKey ? t[labelKey] : set.label || t.set;
+      const groupLabelKey = set.groupLabelKey || null;
+      const label = groupLabelKey
+        ? t[groupLabelKey]
+        : labelKey
+          ? t[labelKey]
+          : set.label || t.set;
       const last = groups[groups.length - 1];
 
       if (
         last &&
         last.labelKey === labelKey &&
+        last.groupLabelKey === groupLabelKey &&
         last.label === label &&
         last.reps === set.reps &&
         last.weight === set.weight
@@ -5982,6 +6152,7 @@ function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPres
 
       groups.push({
         labelKey,
+        groupLabelKey,
         label,
         reps: set.reps,
         weight: set.weight,
@@ -5991,10 +6162,14 @@ function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPres
 
     const onlyBackoff = groups.length > 0 && groups.every(group => group.labelKey === 'backoff');
     const showLiftName = (workout.lifts || []).length > 1;
-    const liftName = workoutLiftLabel(liftBlock.lift, t, effectiveBenchPressVariant);
+    const liftName = workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant);
 
     return groups.map(group => {
       const weightText = formatWorkoutWeightFromKg(group.weight, weightUnit, t, liftBlock.lift, effectiveBenchPressVariant);
+
+      if (group.groupLabelKey) {
+        return `${group.label}: ${group.count}×${group.reps}×${weightText}`;
+      }
 
       if (onlyBackoff || !group.labelKey) {
         return showLiftName
@@ -7031,6 +7206,9 @@ function App() {
   const [benchPressVariant, setBenchPressVariant] = useState(() =>
     normalizeBenchPressVariant(localStorage.getItem('benchPressVariant'))
   );
+  const [deadliftVariant, setDeadliftVariant] = useState(() =>
+    normalizeDeadliftVariant(localStorage.getItem('deadliftVariant'))
+  );
   const [weightUnit, setWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
 
   function startTimer(seconds, placement = null) {
@@ -7053,6 +7231,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('benchPressVariant', normalizeBenchPressVariant(benchPressVariant));
   }, [benchPressVariant]);
+
+  useEffect(() => {
+    localStorage.setItem('deadliftVariant', normalizeDeadliftVariant(deadliftVariant));
+  }, [deadliftVariant]);
 
   const t = translations[language];
   const [screen, setScreen] = useState(null);
@@ -7180,7 +7362,8 @@ function App() {
       const savedHistory = data.history || [];
       const savedCycle = data.currentCycle || 1;
       const savedPreparationMode = normalizePreparationMode(data.preparationMode);
-      const generatedWorkouts = generateProgram(squat, bench, deadlift, normalizeAccessoryMode(data.accessoryMode), data.accessoryPRs || {}, savedPreparationMode);
+      const savedDeadliftVariant = normalizeDeadliftVariant(data.deadliftVariant);
+      const generatedWorkouts = generateProgram(squat, bench, deadlift, normalizeAccessoryMode(data.accessoryMode), data.accessoryPRs || {}, savedPreparationMode, savedDeadliftVariant);
       const savedInProgress = data.inProgress || null;
       const savedMeetPlannerAttempts = data.meetPlannerAttempts || {};
       const savedMeetPrepChecklist = data.meetPrepChecklist || {};
@@ -7219,6 +7402,7 @@ function App() {
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
       setAccessoryMode(normalizeAccessoryMode(data.accessoryMode));
       setPreparationMode(savedPreparationMode);
+      setDeadliftVariant(savedDeadliftVariant);
 
       const completedWorkoutCount = getCompletedWorkoutCount(savedHistory, savedCycle);
       const restorableSelectedIndex = getRestorableSelectedIndex(
@@ -7269,6 +7453,7 @@ function App() {
       restTimeSeconds,
       accessoryMode,
       preparationMode,
+      deadliftVariant,
       inProgress: {
         programVersion: PROGRAM_VERSION,
         currentCycle,
@@ -7277,7 +7462,7 @@ function App() {
         workouts,
       },
     }));
-  }, [history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, accessoryMode, preparationMode, selectedIndex, workouts]);
+  }, [history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, accessoryMode, preparationMode, deadliftVariant, selectedIndex, workouts]);
 
   useEffect(() => {
     if (!prs.Squat || !prs.Bench || !prs.Deadlift) return;
@@ -7288,7 +7473,8 @@ function App() {
       prs.Deadlift,
       accessoryMode,
       accessoryPRs,
-      preparationMode
+      preparationMode,
+      deadliftVariant
     );
 
     setWorkouts(prev => applyAccessoryPlanToWorkouts(
@@ -7296,7 +7482,7 @@ function App() {
       generatedWorkouts,
       getCompletedWorkoutCount(history, currentCycle)
     ));
-  }, [accessoryMode, preparationMode, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
+  }, [accessoryMode, preparationMode, deadliftVariant, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
 
   useEffect(() => {
     if (screen !== 'completed' || !completedWorkout) return;
@@ -7335,16 +7521,19 @@ function App() {
     const defaultAccessoryMode = 'off';
     const defaultPreparationMode = 'off';
     const defaultBenchPressVariant = 'standard';
+    const defaultDeadliftVariant = 'standard';
 
     setWeightUnit(selectedWeightUnit);
     localStorage.setItem('weightUnit', selectedWeightUnit);
     localStorage.setItem('benchPressVariant', defaultBenchPressVariant);
+    localStorage.setItem('deadliftVariant', defaultDeadliftVariant);
 
     setAccessoryMode(defaultAccessoryMode);
     setPreparationMode(defaultPreparationMode);
     setBenchPressVariant(defaultBenchPressVariant);
+    setDeadliftVariant(defaultDeadliftVariant);
 
-    setWorkouts(generateProgram(s, b, d, defaultAccessoryMode, {}, defaultPreparationMode));
+    setWorkouts(generateProgram(s, b, d, defaultAccessoryMode, {}, defaultPreparationMode, defaultDeadliftVariant));
     setCurrentWorkoutIndex(0);
     setSelectedIndex(0);
     setCurrentCycle(1);
@@ -7408,6 +7597,7 @@ function handleResetApp() {
   localStorage.removeItem('bodyweight_prompt_date');
 
   localStorage.setItem('benchPressVariant', 'standard');
+  localStorage.setItem('deadliftVariant', 'standard');
 
   setWorkouts([]);
   setCurrentWorkoutIndex(0);
@@ -7428,6 +7618,7 @@ function handleResetApp() {
   setAccessoryMode('off');
   setPreparationMode('off');
   setBenchPressVariant('standard');
+  setDeadliftVariant('standard');
   setScreen('onboarding');
 }
 
@@ -7446,7 +7637,7 @@ function handleSaveMaxes(lift, values) {
   };
 
   setPrs(updatedPrs);
-  setWorkouts(generateProgram(updatedPrs.Squat, updatedPrs.Bench, updatedPrs.Deadlift, accessoryMode, accessoryPRs, preparationMode));
+  setWorkouts(generateProgram(updatedPrs.Squat, updatedPrs.Bench, updatedPrs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant));
   setMeetPlannerAttempts({});
 
   setHistory(prev => {
@@ -7492,7 +7683,7 @@ function handleStartNewCycle() {
   }
 
   const nextCycle = currentCycle + 1;
-  const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift, accessoryMode, accessoryPRs, preparationMode);
+  const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant);
 
   setCurrentCycle(nextCycle);
   setMeetPlannerAttempts({});
@@ -8759,7 +8950,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       const today = new Date().toLocaleDateString('nl-NL');
 
       const results = (workout.lifts || []).map(liftBlock => {
-        const trackStrength = shouldTrackWorkoutStrength(liftBlock.lift, benchPressVariant);
+        const trackStrength = shouldTrackLiftBlockStrength(liftBlock, benchPressVariant);
         const sets = trackStrength
           ? (liftBlock.sets || []).filter(s => s.done && !s.failed && !s.skipped)
           : [];
@@ -9529,6 +9720,8 @@ const latestBodyDataRows = [
       setAccessoryMode={setAccessoryMode}
       benchPressVariant={benchPressVariant}
       setBenchPressVariant={setBenchPressVariant}
+      deadliftVariant={deadliftVariant}
+      setDeadliftVariant={setDeadliftVariant}
       t={t}
     />
 
@@ -9794,7 +9987,7 @@ const latestBodyDataRows = [
                 fontWeight: 900,
                 marginBottom: 6
               }}>
-                {workoutLiftLabel(liftBlock.lift, t, benchPressVariant)}
+                {workoutLiftBlockLabel(liftBlock, t, benchPressVariant)}
               </div>
 
               {(liftBlock.sets || []).map((set, i) => {
@@ -9902,7 +10095,7 @@ const latestBodyDataRows = [
 
         {(completedWorkout?.lifts || []).length > 0 && (() => {
           const liftNames = (completedWorkout.lifts || [])
-            .map(liftBlock => workoutLiftLabel(liftBlock.lift, t, benchPressVariant))
+            .map(liftBlock => workoutLiftBlockLabel(liftBlock, t, benchPressVariant))
             .filter(Boolean)
             .join(' + ');
 
@@ -10008,6 +10201,7 @@ const latestBodyDataRows = [
           </div>
         )}
         <div style={{
+          display: completedSummary?.type === 'multiTraining' && !(completedSummary?.results || []).some(result => result.trackStrength !== false) ? 'none' : undefined,
           background: 'transparent',
           border: 'none',
           color: THEME.text,
@@ -10021,13 +10215,13 @@ const latestBodyDataRows = [
               Squat: THEME.red,
               Bench: THEME.primary,
               Deadlift: THEME.yellow,
-            }[completedSummary?.results?.[0]?.lift || completedWorkout?.lift] || THEME.primary),
+            }[(completedSummary?.results || []).find(result => result.trackStrength !== false)?.lift || completedWorkout?.lift] || THEME.primary),
             fontSize: 16,
             fontWeight: 900,
             marginBottom: 10,
             textAlign: 'center'
           }}>
-            {liftLabel(completedSummary?.results?.[0]?.lift || completedWorkout?.lift, t)} · 1RM / e1RM
+            {liftLabel((completedSummary?.results || []).find(result => result.trackStrength !== false)?.lift || completedWorkout?.lift, t)} · 1RM / e1RM
           </div>
 
           {(() => {
@@ -10041,7 +10235,7 @@ const latestBodyDataRows = [
             );
 
             const primaryResult = completedSummary?.type === 'multiTraining'
-              ? completedSummary.results?.[0]
+              ? (completedSummary.results || []).find(result => result.trackStrength !== false)
               : null;
 
             const sets = (completedWorkout?.sets || []).filter(s => s.done && !s.failed && !s.skipped);
@@ -10108,7 +10302,7 @@ const latestBodyDataRows = [
                   fontWeight: 900,
                   marginBottom: 8
                 }}>
-                  {workoutLiftLabel(liftBlock.lift, t, benchPressVariant)}
+                  {workoutLiftBlockLabel(liftBlock, t, benchPressVariant)}
                 </div>
 
                 {(liftBlock.sets || []).map((set, i) => {
