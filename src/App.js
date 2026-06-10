@@ -2947,11 +2947,11 @@ function SupportSection({ t }) {
     },
     {
       label: t.sendFeedbackShort || t.sendFeedback,
-      url: 'mailto:mburgosfr@gmail.com?subject=Kelani%20SBD%20Tracker%20feedback',
+      url: 'https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=feedback.md',
     },
     {
       label: t.reportIssueShort || t.reportBug,
-      url: 'https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new',
+      url: 'https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=bug_report.md',
     },
     {
       label: t.sourceCode || 'Source code',
