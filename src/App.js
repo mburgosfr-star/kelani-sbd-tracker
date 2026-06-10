@@ -90,6 +90,7 @@ const THEME = {
   primary: '#ff8a3d',
   red: '#ff5c45',
   yellow: '#ffd166',
+  green: '#2ecc71',
   brown: '#a86f45'
   
 };
@@ -3033,7 +3034,7 @@ function ProfileSection({ userProfile, onSave, weightUnit, setWeightUnit, t }) {
           onClose={() => setIsEditing(false)}
         >
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.birthDate}</label>
+            <label style={{ display: 'block', marginBottom: 12, fontWeight: 700, fontSize: 14 }}>{t.birthDate}</label>
             <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} style={modalInputStyle()} />
           </div>
 
@@ -3215,7 +3216,7 @@ function MaxesSection({ best1RMs = {}, bestE1RMs = {}, prs = {}, onSaveMaxes, t,
             <input type="number" min="0" step={weightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"} value={e1RMInput} onChange={e => setE1RMInput(e.target.value)} style={modalInputStyle()} />
           </div>
 
-          <div style={{ background: THEME.bg, border: `1px solid ${THEME.border}`, borderRadius: 10, padding: 12, marginBottom: 14 }}>
+          <div style={{ background: THEME.bg, border: `1px solid ${THEME.border}`, borderRadius: 16, padding: 12, marginBottom: 14 }}>
             <div style={{ fontWeight: 900, color: THEME.text, marginBottom: 10 }}>
               {t.estimateE1RM}
             </div>
@@ -4254,9 +4255,181 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
   );
 }
 
+function getExerciseGuide(lift, t) {
+  const guides = {
+    Squat: {
+      title: t.squat,
+      videoUrl: '',
+      steps: [
+        t.squatGuideStep1 || 'Set the bar on your upper back and grip it firmly.',
+        t.squatGuideStep2 || 'Step out, set your feet, breathe in and brace.',
+        t.squatGuideStep3 || 'Squat down with knees and hips moving together.',
+        t.squatGuideStep4 || 'Reach consistent depth, then drive back up with control.',
+      ],
+      safety: [
+        t.squatGuideSafety1 || 'Use safety arms or spotters when training heavy.',
+        t.squatGuideSafety2 || 'Do not cut depth by using more weight than you can control.',
+      ],
+    },
+    Bench: {
+      title: t.bench,
+      videoUrl: '',
+      steps: [
+        t.benchGuideStep1 || 'Set your feet and pull your shoulder blades back and down.',
+        t.benchGuideStep2 || 'Grip the bar evenly and unrack with control.',
+        t.benchGuideStep3 || 'Lower the bar to your chest with a stable upper back.',
+        t.benchGuideStep4 || 'Press up to lockout without losing position.',
+      ],
+      safety: [
+        t.benchGuideSafety1 || 'Use safeties or a spotter when benching heavy.',
+        t.benchGuideSafety2 || 'Do not bounce the bar off your chest.',
+      ],
+    },
+    Deadlift: {
+      title: t.deadlift,
+      videoUrl: '',
+      steps: [
+        t.deadliftGuideStep1 || 'Stand with the bar over the middle of your foot.',
+        t.deadliftGuideStep2 || 'Grip the bar, brace, and build tension before pulling.',
+        t.deadliftGuideStep3 || 'Push the floor away and keep the bar close.',
+        t.deadliftGuideStep4 || 'Stand tall at lockout, then lower the bar with control.',
+      ],
+      safety: [
+        t.deadliftGuideSafety1 || 'Do not jerk the bar from a loose position.',
+        t.deadliftGuideSafety2 || 'Stop the set if your position breaks down.',
+      ],
+    },
+  };
+
+  return guides[lift] || null;
+}
+
+function isExerciseGuideAvailableForLiftBlock(liftBlock, benchPressVariant = 'standard') {
+  if (!liftBlock || !['Squat', 'Bench', 'Deadlift'].includes(liftBlock.lift)) return false;
+  if (isDeadliftAlternativeLiftBlock(liftBlock)) return false;
+  if (isBenchMachineAlternativeLiftBlock(liftBlock)) return false;
+
+  if (liftBlock.lift === 'Bench') {
+    return normalizeBenchPressVariant(liftBlock.benchPressVariant || benchPressVariant) === 'standard';
+  }
+
+  return true;
+}
+
+function ExerciseGuideModal({ lift, t, onClose }) {
+  const guide = getExerciseGuide(lift, t);
+  if (!guide) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.68)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 950,
+      padding: 16
+    }}>
+      <div style={{
+        background: THEME.card,
+        border: `1px solid ${THEME.border}`,
+        borderRadius: 14,
+        padding: 18,
+        maxWidth: 420,
+        width: '100%',
+        color: THEME.text
+      }}>
+        <h3 style={{
+          margin: '0 0 10px',
+          textAlign: 'center',
+          color: getLiftThemeColor(lift),
+          fontSize: 22,
+          fontWeight: 900
+        }}>
+          {guide.title}
+        </h3>
+
+        {guide.videoUrl ? (
+          <button
+            type="button"
+            onClick={() => window.open(guide.videoUrl, '_blank', 'noopener,noreferrer')}
+            style={{
+              width: '100%',
+              padding: 11,
+              marginBottom: 14,
+              borderRadius: 8,
+              border: `1px solid ${THEME.primary}`,
+              background: THEME.card,
+              color: '#ffffff',
+              fontWeight: 900,
+              cursor: 'pointer'
+            }}
+          >
+            {t.watchVideo || 'Watch video'}
+          </button>
+        ) : (
+          <div style={{
+            padding: 11,
+            marginBottom: 14,
+            borderRadius: 8,
+            border: `1px solid ${THEME.border}`,
+            color: THEME.muted,
+            textAlign: 'center',
+            fontSize: 13,
+            fontWeight: 800
+          }}>
+            {t.videoComingSoon || 'Video coming soon'}
+          </div>
+        )}
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ color: THEME.primary, fontWeight: 900, marginBottom: 8 }}>
+            {t.howToPerform || 'How to perform'}
+          </div>
+          <ol style={{ margin: 0, paddingLeft: 20, color: THEME.text, lineHeight: 1.45, fontSize: 14 }}>
+            {guide.steps.map((step, index) => (
+              <li key={`step-${index}`} style={{ marginBottom: 6 }}>{step}</li>
+            ))}
+          </ol>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ color: THEME.primary, fontWeight: 900, marginBottom: 8 }}>
+            {t.safetyNotes || 'Safety notes'}
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 20, color: THEME.muted, lineHeight: 1.45, fontSize: 14 }}>
+            {guide.safety.map((note, index) => (
+              <li key={`safety-${index}`} style={{ marginBottom: 6 }}>{note}</li>
+            ))}
+          </ul>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            width: '100%',
+            padding: 11,
+            borderRadius: 8,
+            border: `1px solid ${THEME.border}`,
+            background: 'transparent',
+            color: THEME.text,
+            fontWeight: 800,
+            cursor: 'pointer'
+          }}
+        >
+          {t.close || 'Close'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer }) {
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
+  const [selectedExerciseGuideLift, setSelectedExerciseGuideLift] = useState(null);
 
   function isTimerFor(placement) {
     if (!timer || !timer.placement) return false;
@@ -4453,9 +4626,17 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
     return (
       <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
+        {selectedExerciseGuideLift && (
+          <ExerciseGuideModal
+            lift={selectedExerciseGuideLift}
+            t={t}
+            onClose={() => setSelectedExerciseGuideLift(null)}
+          />
+        )}
+
         <AppHeader
           t={t}
-          title={`${t.workout} ${workout.number} — ${getWorkoutTitle(workout, t, effectiveBenchPressVariant)}`}
+          title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
           subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${workout.number} / ${totalWorkouts}${isMeetDay ? ` · ${t.meetDay}` : ''}`}
           titleStyle={{
             fontSize: 'clamp(20px, 6vw, 24px)',
@@ -4500,12 +4681,59 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             >
               <div style={{
                 padding: '6px 10px',
-                fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
-                fontWeight: 900,
-                color: THEME.text,
                 textAlign: 'center',
               }}>
-                {workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}
+                {(() => {
+                  const guideAvailable = isExerciseGuideAvailableForLiftBlock(liftBlock, effectiveBenchPressVariant);
+                  const liftColor = ({
+                    Squat: THEME.red,
+                    Bench: THEME.primary,
+                    Deadlift: THEME.yellow,
+                  }[liftBlock.lift] || THEME.text);
+
+                  return (
+                    <button
+                      type="button"
+                      disabled={!guideAvailable}
+                      onClick={() => guideAvailable && setSelectedExerciseGuideLift(liftBlock.lift)}
+                      title={guideAvailable ? (t.exerciseGuide || 'Guide') : undefined}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        padding: 0,
+                        border: 'none',
+                        background: 'transparent',
+                        color: guideAvailable ? liftColor : THEME.text,
+                        fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+                        fontWeight: 900,
+                        cursor: guideAvailable ? 'pointer' : 'default',
+                      }}
+                    >
+                      <span>{workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}</span>
+                      {guideAvailable && (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: 11,
+                          height: 11,
+                          borderRadius: 999,
+                          border: `1px solid ${liftColor}`,
+                          color: liftColor,
+                          fontSize: 8,
+                          fontWeight: 900,
+                          lineHeight: 1,
+                          transform: 'translateY(-7px)',
+                          marginLeft: 1,
+                        }}>
+                          i
+                        </span>
+                      )}
+                    </button>
+                  );
+                })()}
               </div>
 
               {visiblePrepItems.length > 0 && (
@@ -6054,6 +6282,21 @@ const meetTotals = {
   );
 }
 
+function programActionButtonStyle(accentColor = THEME.primary, margin = '0') {
+  return {
+    width: '100%',
+    margin,
+    padding: 12,
+    fontSize: 14,
+    fontWeight: 800,
+    background: THEME.card,
+    color: '#ffffff',
+    border: `1px solid ${accentColor}`,
+    borderRadius: 8,
+    cursor: 'pointer',
+  };
+}
+
 function StartNewCycleSection({ onStartNewCycle, t }) {
   const [showStartCycleConfirm, setShowStartCycleConfirm] = useState(false);
   const [notice, setNotice] = useState('');
@@ -6069,18 +6312,7 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
       <Toast message={notice} />
       <button
         onClick={() => setShowStartCycleConfirm(true)}
-        style={{
-          width: '100%',
-          marginTop: 6,
-          padding: 12,
-          fontSize: 14,
-          fontWeight: 800,
-          background: THEME.card,
-          color: '#ffffff',
-          border: `1px solid ${THEME.primary}`,
-          borderRadius: 8,
-          cursor: 'pointer'
-        }}
+        style={programActionButtonStyle(THEME.primary, '6px 0 0')}
       >
         {t.startNewCycle}
       </button>
@@ -6168,20 +6400,38 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
   );
 }
 
-function getWorkoutTitle(workout, t, benchPressVariant = 'standard') {
+function getLiftThemeColor(lift) {
+  return ({
+    Squat: THEME.red,
+    Bench: THEME.primary,
+    Deadlift: THEME.yellow,
+  }[lift] || THEME.text);
+}
+
+function WorkoutTitle({ workout, t, benchPressVariant = 'standard' }) {
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
+
   if (!workout || workout.type === 'rest') return t.deload;
   if (workout.type === 'meet') return t.sbdMeetDay || t.meetDay;
 
-  const lifts = (workout.lifts || [])
-    .map(liftBlock => liftBlock.lift)
-    .filter(Boolean);
+  const liftBlocks = (workout.lifts || []).length > 0
+    ? workout.lifts
+    : [{ lift: workout.lift }];
 
-  if (lifts.length > 0) {
-    return (workout.lifts || []).map(liftBlock => workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)).join(' + ');
-  }
-
-  return workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant);
+  return (
+    <>
+      {liftBlocks.map((liftBlock, index) => (
+        <React.Fragment key={`workout-title-${liftBlock.lift}-${index}`}>
+          {index > 0 && (
+            <span style={{ color: THEME.muted }}> + </span>
+          )}
+          <span style={{ color: getLiftThemeColor(liftBlock.lift) }}>
+            {workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}
+          </span>
+        </React.Fragment>
+      ))}
+    </>
+  );
 }
 
 function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard') {
@@ -6255,14 +6505,24 @@ function AppHeader({ t, title, subtitle, meta, children, titleStyle = {} }) {
   return (
     <div style={{ textAlign: 'center', marginBottom: 16 }}>
       <div style={{
-        color: THEME.primary,
-        fontSize: 15,
-        fontWeight: 900,
-        letterSpacing: 1.2,
-        textTransform: 'uppercase',
-        marginBottom: 6
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 14
       }}>
-        {t.appName}
+        <img
+          src="/kelani-banner.png"
+          alt=""
+          aria-hidden="true"
+          style={{
+            width: 'min(340px, 82vw)',
+            maxHeight: 98,
+            objectFit: 'contain',
+            background: 'transparent',
+            border: 'none',
+            boxShadow: 'none'
+          }}
+        />
       </div>
 
       <h2 style={{
@@ -6381,6 +6641,21 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
     return () => window.clearTimeout(id);
   }, [currentIndex, workouts.length]);
 
+  function renderWorkoutListToggleButton(position = 'top') {
+    if (!hasHiddenWorkouts) return null;
+    if (position === 'bottom' && !showAllWorkouts) return null;
+
+    return (
+      <button
+        type="button"
+        onClick={() => setShowAllWorkouts(value => !value)}
+        style={programActionButtonStyle(THEME.primary, position === 'top' ? '0 0 12px' : '4px 0 10px')}
+      >
+        {showAllWorkouts ? t.showFewerWorkouts : t.showAllWorkouts}
+      </button>
+    );
+  }
+
   return (
     <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
       <AppHeader
@@ -6389,11 +6664,12 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
         subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${Math.min(currentIndex + 1, workouts.length)} / ${workouts.length}`}
       />
 
+      {renderWorkoutListToggleButton('top')}
 
       {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
         const isDone = completedWorkoutNumberSet.has(Number(workout.number)) || Boolean(workout.completed);
-        const headerBg = isCurrent ? THEME.primary : workout.type === 'rest' ? THEME.brown : THEME.border;
+        const headerBg = isCurrent ? THEME.green : workout.type === 'rest' ? THEME.brown : THEME.border;
         const planLines = getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant);
         const typeLabel = getWorkoutTypeLabel(workout, t);
         const showTypeLabel = false;
@@ -6412,7 +6688,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
               padding: '12px 16px',
               marginBottom: 10,
               borderRadius: 8,
-              border: isCurrent ? `2px solid ${THEME.primary}` : 'none',
+              border: isCurrent ? `2px solid ${THEME.green}` : 'none',
               background: 'transparent',
               cursor: 'pointer',
               opacity: 1
@@ -6436,12 +6712,12 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
             </div>
 
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: isCurrent ? 700 : 500, color: isCurrent ? THEME.primary : '#ffffff' }}>
-                {getWorkoutTitle(workout, t, benchPressVariant)}
+              <div style={{ fontWeight: isCurrent ? 800 : 700 }}>
+                <WorkoutTitle workout={workout} t={t} benchPressVariant={benchPressVariant} />
                 {isCurrent && (
                   <span style={{
                     fontSize: 11,
-                    background: THEME.primary,
+                    background: THEME.green,
                     color: '#ffffff',
                     padding: '1px 6px',
                     borderRadius: 3,
@@ -6491,24 +6767,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
         );
       })}
 
-      {hasHiddenWorkouts && (
-        <button
-          onClick={() => setShowAllWorkouts(value => !value)}
-          style={{
-            width: '100%',
-            margin: '4px 0 6px',
-            padding: 10,
-            borderRadius: 8,
-            border: `1px solid ${THEME.border}`,
-            background: THEME.card,
-            color: THEME.primary,
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
-        >
-          {showAllWorkouts ? t.showFewerWorkouts : t.showAllWorkouts}
-        </button>
-      )}
+      {renderWorkoutListToggleButton('bottom')}
 
       <StartNewCycleSection
         onStartNewCycle={onStartNewCycle}
@@ -9388,12 +9647,10 @@ function makeStatus(label, color, symbol = '•') {
 }
 
 function bodyFatStatus(value) {
-  if (!value || !userProfile?.birthDate || !userProfile?.sex) return null;
+  if (!value) return null;
 
-  const age = calculateAge(userProfile.birthDate);
-  const sex = userProfile.sex;
-
-  if (!age || age < 18 || age > 99 || !['male', 'female'].includes(sex)) return null;
+  const age = calculateAge(userProfile?.birthDate);
+  const sex = userProfile?.sex;
 
   const ranges = {
     male: [
@@ -9408,34 +9665,47 @@ function bodyFatStatus(value) {
     ],
   };
 
-  const range = ranges[sex].find(r => age >= r.minAge && age <= r.maxAge);
-  if (!range) return null;
+  const range = age && age >= 18 && age <= 99 && ['male', 'female'].includes(sex)
+    ? ranges[sex].find(r => age >= r.minAge && age <= r.maxAge)
+    : null;
 
-  if (value < range.healthyMin) return makeStatus(t.bodyMetricUnderfat, THEME.primary, '');
-  if (value <= range.healthyMax) return makeStatus(t.bodyMetricHealthy, THEME.yellow, '');
-  if (value <= range.overfatMax) return makeStatus(t.bodyMetricOverfat, THEME.primary, '');
+  if (range) {
+    if (value < range.healthyMin) return makeStatus(t.bodyMetricUnderfat, THEME.red, '');
+    if (value <= range.healthyMax) return makeStatus(t.bodyMetricHealthy, THEME.green, '');
+    if (value <= range.overfatMax) return makeStatus(t.bodyMetricOverfat, THEME.primary, '');
+    return makeStatus(t.bodyMetricObese, THEME.red, '');
+  }
+
+  if (value >= 8 && value <= 25) return makeStatus(t.bodyMetricHealthy, THEME.green, '');
+  if (value > 25 && value <= 35) return makeStatus(t.bodyMetricOverfat, THEME.primary, '');
   return makeStatus(t.bodyMetricObese, THEME.red, '');
 }
 
 function bodyWaterStatus(value) {
-  if (!value || !userProfile?.sex) return null;
+  if (!value) return null;
 
-  if (userProfile.sex === 'male' && value >= 50 && value <= 65) {
-    return makeStatus(t.bodyMetricHealthy, THEME.yellow, '');
+  if (userProfile?.sex === 'male') {
+    return value >= 50 && value <= 65
+      ? makeStatus(t.bodyMetricHealthy, THEME.green, '')
+      : makeStatus(t.bodyMetricAverage, THEME.primary, '');
   }
 
-  if (userProfile.sex === 'female' && value >= 45 && value <= 60) {
-    return makeStatus(t.bodyMetricHealthy, THEME.yellow, '');
+  if (userProfile?.sex === 'female') {
+    return value >= 45 && value <= 60
+      ? makeStatus(t.bodyMetricHealthy, THEME.green, '')
+      : makeStatus(t.bodyMetricAverage, THEME.primary, '');
   }
 
-  return null;
+  return value >= 45 && value <= 65
+    ? makeStatus(t.bodyMetricHealthy, THEME.green, '')
+    : makeStatus(t.bodyMetricAverage, THEME.primary, '');
 }
 
 function visceralFatStatus(value) {
   if (!value) return null;
 
   if (value >= 1 && value <= 12) {
-    return makeStatus(t.bodyMetricNormal, THEME.yellow, '');
+    return makeStatus(t.bodyMetricNormal, THEME.green, '');
   }
 
   if (value >= 13) {
@@ -9469,19 +9739,27 @@ function boneMassAverage(bodyWeight, sex) {
 }
 
 function boneMassStatus(value) {
-  if (!value || !latestBodyDataEntry?.bodyWeight || !userProfile?.sex) return null;
+  if (!value || !latestBodyDataEntry?.bodyWeight) return null;
 
-  const average = boneMassAverage(latestBodyDataEntry.bodyWeight, userProfile.sex);
+  const bodyWeight = latestBodyDataEntry.bodyWeight;
+  const average = ['male', 'female'].includes(userProfile?.sex)
+    ? boneMassAverage(bodyWeight, userProfile.sex)
+    : bodyWeight < 65
+      ? 2.6
+      : bodyWeight < 95
+        ? 3.1
+        : 3.5;
+
   if (!average) return null;
 
   const diff = Math.round((value - average) * 10) / 10;
 
   if (Math.abs(diff) < 0.1) {
-    return makeStatus(t.bodyMetricAverage, THEME.yellow, '');
+    return makeStatus(t.bodyMetricAverage, THEME.primary, '');
   }
 
   if (diff > 0) {
-    return makeStatus(t.bodyMetricAboveAverage, THEME.yellow, '');
+    return makeStatus(t.bodyMetricAboveAverage, THEME.green, '');
   }
 
   return makeStatus(t.bodyMetricBelowAverage, THEME.red, '');
@@ -9492,6 +9770,16 @@ const latestBodyDataRows = [
     key: 'bodyWeight',
     label: t.bodyweight,
     value: latestBodyDataEntry?.bodyWeight ? formatWeightFromKg(latestBodyDataEntry.bodyWeight, weightUnit, { body: true }) : null,
+  },
+  {
+    key: 'strength',
+    label: t.strength,
+    value: strengthRatio || null,
+  },
+  {
+    key: 'eStrength',
+    label: t.eStrength,
+    value: eStrengthRatio || null,
   },
   {
     key: 'bodyFat',
@@ -9606,7 +9894,7 @@ const latestBodyDataRows = [
           textTransform: 'uppercase',
           marginBottom: 6
         }}>
-          {t.nextWorkout} · W{workouts[currentIndex].number}
+          {t.nextWorkout}
         </div>
 
         <div style={{
@@ -9614,49 +9902,104 @@ const latestBodyDataRows = [
           fontSize: 22,
           fontWeight: 900
         }}>
-          {getWorkoutTitle(workouts[currentIndex], t, benchPressVariant)}
+          <WorkoutTitle workout={workouts[currentIndex]} t={t} benchPressVariant={benchPressVariant} />
         </div>
       </div>
     )}
-    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 18, marginBottom: 12 }}>
-      {[
-        [t.squat, THEME.red, best1RMs.Squat, bestE1RMs.Squat],
-        [t.bench, THEME.primary, best1RMs.Bench, bestE1RMs.Bench],
-        [t.deadlift, THEME.yellow, best1RMs.Deadlift, bestE1RMs.Deadlift],
-      ].map(([lift, color, oneRM, e1RM]) => (
-        <div key={lift} style={{ marginBottom: lift === t.deadlift ? 0 : 14 }}>
-          <div style={{ marginBottom: 6 }}>
-            <strong style={{ color, fontSize: 18 }}>{lift}</strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.oneRM}:</span>
-            <strong style={{ fontSize: 15 }}>{oneRM ? formatWeightFromKg(oneRM, weightUnit) : '—'}</strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.e1RM}:</span>
-            <strong style={{ fontSize: 15 }}>{e1RM ? formatWeightFromKg(e1RM, weightUnit) : '—'}</strong>
-          </div>
-        </div>
-      ))}
-    </div>
+    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 14, marginBottom: 12 }}>
+      {(() => {
+        const cards = [
+          {
+            key: 'Squat',
+            label: t.squat,
+            color: THEME.red,
+            background: 'rgba(231, 76, 60, 0.08)',
+            oneRM: best1RMs.Squat,
+            e1RM: bestE1RMs.Squat,
+          },
+          {
+            key: 'Bench',
+            label: t.bench,
+            color: THEME.primary,
+            background: 'rgba(243, 156, 18, 0.08)',
+            oneRM: best1RMs.Bench,
+            e1RM: bestE1RMs.Bench,
+          },
+          {
+            key: 'Deadlift',
+            label: t.deadlift,
+            color: THEME.yellow,
+            background: 'rgba(241, 196, 15, 0.08)',
+            oneRM: best1RMs.Deadlift,
+            e1RM: bestE1RMs.Deadlift,
+          },
+          {
+            key: 'Total',
+            label: t.total || 'Total',
+            color: '#ffffff',
+            background: 'rgba(255, 255, 255, 0.05)',
+            oneRM: total1RM,
+            e1RM: totalE1RM,
+          },
+        ];
 
-    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 18, marginBottom: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.total1rm}</span>
-        <strong style={{ color: '#ffffff', fontSize: 15 }}>{total1RM ? formatWeightFromKg(total1RM, weightUnit) : '—'}</strong>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.totalE1rm}</span>
-        <strong style={{ color: '#ffffff', fontSize: 15 }}>{totalE1RM ? formatWeightFromKg(totalE1RM, weightUnit) : '—'}</strong>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.strength}</span>
-        <strong style={{ color: '#ffffff', fontSize: 15 }}>{strengthRatio || '—'}</strong>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>{t.eStrength}</span>
-        <strong style={{ color: '#ffffff', fontSize: 15 }}>{eStrengthRatio || '—'}</strong>
-      </div>
+        const value = weight => weight ? formatWeightFromKg(weight, weightUnit) : '—';
+
+        return (
+          <>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 10
+            }}>
+              {cards.map(card => (
+                <div
+                  key={card.key}
+                  style={{
+                    border: `1px solid ${card.color}`,
+                    borderRadius: 10,
+                    padding: 11,
+                    background: card.background,
+                    minHeight: 92
+                  }}
+                >
+                  <div style={{
+                    color: card.color,
+                    fontSize: 17,
+                    fontWeight: 900,
+                    marginBottom: 9,
+                    lineHeight: 1.1
+                  }}>
+                    {card.label}
+                  </div>
+
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'auto 1fr',
+                    gap: '5px 8px',
+                    alignItems: 'baseline'
+                  }}>
+                    <span style={{ color: THEME.muted, fontSize: 12, fontWeight: 900 }}>
+                      {t.oneRM}
+                    </span>
+                    <strong style={{ color: '#ffffff', fontSize: 15, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {value(card.oneRM)}
+                    </strong>
+
+                    <span style={{ color: THEME.muted, fontSize: 12, fontWeight: 900 }}>
+                      {t.e1RM}
+                    </span>
+                    <strong style={{ color: '#ffffff', fontSize: 15, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {value(card.e1RM)}
+                    </strong>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+          </>
+        );
+      })()}
     </div>
 
     <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 16 }}>
@@ -9666,32 +10009,25 @@ const latestBodyDataRows = [
             key={row.key}
             style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 70px 150px',
+              gridTemplateColumns: '1fr auto',
               alignItems: 'center',
-              columnGap: 8,
+              columnGap: 12,
               marginBottom: index === latestBodyDataRows.length - 1 ? 0 : 10
             }}
           >
             <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>
-              {row.label}:
+              {row.label}
             </span>
 
-            <strong style={{ textAlign: 'right', whiteSpace: 'nowrap', minWidth: 70, fontSize: 15 }}>
+            <strong style={{
+              textAlign: 'right',
+              whiteSpace: 'nowrap',
+              minWidth: 70,
+              fontSize: 15,
+              color: row.status?.color || THEME.primary
+            }}>
               {row.value}
             </strong>
-
-            <span style={{ minWidth: 160, textAlign: 'right' }}>
-              {row.status && (
-                <span style={{
-                  color: row.status.color,
-                  fontSize: 13,
-                  fontWeight: 800,
-                  whiteSpace: 'nowrap'
-                }}>
-                  {row.status.label}
-                </span>
-              )}
-            </span>
           </div>
         ))
       ) : (

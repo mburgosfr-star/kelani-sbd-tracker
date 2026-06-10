@@ -750,7 +750,7 @@ export const translations = {
     practice: 'Practice',
     volume: 'Volume',
     preMeet: 'Pre-competition',
-    workoutProgress: 'Training',
+    workoutProgress: 'Workout',
     nextWorkout: 'Next workout',
 
     meetPrepChecklist: 'Meet day checklist',
