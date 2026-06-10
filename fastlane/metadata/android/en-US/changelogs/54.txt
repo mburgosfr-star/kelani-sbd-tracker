@@ -1,0 +1,6 @@
+Added a Bench Machine Alternative and improved feedback channels.
+
+- Added Bench Press → Machine Alternative with Chest Press Machine, Pec Deck, and Triceps Pushdown.
+- Kept Bench Press 1RM/e1RM tracking clean when using the machine alternative.
+- Improved the GitHub README with clearer project positioning, feedback links, and support information.
+- Added GitHub issue templates for bug reports, feature requests, and general feedback.
