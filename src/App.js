@@ -6433,7 +6433,7 @@ const meetTotals = {
         width: '100%',
         color: THEME.text
       }}>
-        <h3 style={{ margin: '0 0 10px', textAlign: 'center' }}>
+        <h3 style={{ margin: '0 0 10px', textAlign: 'center', color: THEME.brown || '#a67c52' }}>
           {t.resetMeetPlannerConfirmTitle}
         </h3>
 
@@ -6544,7 +6544,7 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
             width: '100%',
             color: THEME.text
           }}>
-            <h3 style={{ margin: '0 0 10px', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 10px', textAlign: 'center', color: THEME.brown || '#a67c52' }}>
               {t.startNewCycleConfirmTitle}
             </h3>
 
@@ -6737,6 +6737,7 @@ function AppHeader({ t, title, subtitle, meta, children, titleStyle = {} }) {
         fontSize: 30,
         fontWeight: 900,
         lineHeight: 1.15,
+        color: THEME.brown || '#a67c52',
         ...titleStyle
       }}>
         {title}
@@ -10414,7 +10415,7 @@ const latestBodyDataRows = [
       }}>
         <div style={{ fontSize: 40, marginBottom: 10 }}>🎉</div>
 
-        <h2 style={{ margin: '0 0 8px', color: THEME.text }}>
+        <h2 style={{ margin: '0 0 8px', color: THEME.brown || '#a67c52' }}>
           {t.workoutAndCycleCompleted}
         </h2>
 
@@ -10730,7 +10731,7 @@ const latestBodyDataRows = [
       <div style={{ background: 'transparent', border: 'none', borderRadius: 12, padding: 24, textAlign: 'center' }}>
         <div style={{ fontSize: 40, marginBottom: 10 }}>🎉</div>
 
-        <h2 style={{ margin: '0 0 8px', color: THEME.text }}>{t.workoutCompleted}</h2>
+        <h2 style={{ margin: '0 0 8px', color: THEME.brown || '#a67c52' }}>{t.workoutCompleted}</h2>
 
         <p style={{ color: THEME.muted, margin: '0 0 12px' }}>
           {t.goodJobSaved}
@@ -11073,7 +11074,7 @@ const latestBodyDataRows = [
     }}>
       <h3 style={{
         margin: '0 0 8px',
-        color: THEME.text,
+        color: THEME.brown || '#a67c52',
         textAlign: 'center'
       }}>
         {t.workoutEffortQuestion}
@@ -11157,7 +11158,7 @@ const latestBodyDataRows = [
       width: '100%',
       color: THEME.text
     }}>
-      <h3 style={{ margin: '0 0 10px', color: THEME.text }}>
+      <h3 style={{ margin: '0 0 10px', color: THEME.brown || '#a67c52' }}>
         {t.resetConfirmTitle}
       </h3>
 
