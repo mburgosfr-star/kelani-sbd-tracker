@@ -8,7 +8,7 @@ import { Share } from '@capacitor/share';
 
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
 const REST_TIME_OPTIONS = [90, 180, 300];
-const ACCESSORY_MODES = ['off', 'basic', 'full'];
+const ACCESSORY_MODES = ['off', 'standard', 'upperBackFriendly'];
 const SET_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'max'];
 const WORKOUT_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'tooMuch'];
 const LIFT_ORDER = ['Squat', 'Bench', 'Deadlift'];
@@ -125,6 +125,7 @@ function calculateBmrEstimate(leanMass) {
 
 
 function normalizeAccessoryMode(value) {
+  if (value === 'basic' || value === 'full') return 'standard';
   return ACCESSORY_MODES.includes(value) ? value : 'off';
 }
 
@@ -471,6 +472,11 @@ function normalizeBenchPressVariant(variant) {
   return 'standard';
 }
 
+function normalizeSquatVariant(variant) {
+  if (variant === 'beltSquat') return 'beltSquat';
+  return 'standard';
+}
+
 function normalizeDeadliftVariant(variant) {
   if (variant === 'alternative') return 'alternative';
   return 'standard';
@@ -484,8 +490,13 @@ function isBenchMachineAlternative(lift, benchPressVariant = 'standard') {
   return lift === 'Bench' && normalizeBenchPressVariant(benchPressVariant) === 'machineAlternative';
 }
 
-function workoutLiftLabel(lift, t, benchPressVariant = 'standard') {
+function workoutLiftLabel(lift, t, benchPressVariant = 'standard', squatVariant = 'standard') {
   const normalizedBenchPressVariant = normalizeBenchPressVariant(benchPressVariant);
+  const normalizedSquatVariant = normalizeSquatVariant(squatVariant);
+
+  if (lift === 'Squat' && normalizedSquatVariant === 'beltSquat') {
+    return t.squatAlternativeWorkout || 'Belt Squat';
+  }
 
   if (lift === 'Bench' && normalizedBenchPressVariant === 'floorPress') {
     return t.benchPressFloorPress || 'Floor Press';
@@ -503,6 +514,10 @@ function workoutLiftLabel(lift, t, benchPressVariant = 'standard') {
 }
 
 function workoutLiftBlockLabel(liftBlock, t, benchPressVariant = 'standard') {
+  if (isSquatBeltAlternativeLiftBlock(liftBlock)) {
+    return t.squatAlternativeWorkout || 'Belt Squat';
+  }
+
   if (isDeadliftAlternativeLiftBlock(liftBlock)) {
     return t.deadliftAlternativeWorkout || 'Posterior Chain';
   }
@@ -510,7 +525,8 @@ function workoutLiftBlockLabel(liftBlock, t, benchPressVariant = 'standard') {
   return workoutLiftLabel(
     liftBlock?.lift,
     t,
-    liftBlock?.benchPressVariant || 'standard'
+    liftBlock?.benchPressVariant || 'standard',
+    liftBlock?.squatVariant || 'standard'
   );
 }
 
@@ -544,6 +560,13 @@ function shouldTrackWorkoutStrength(lift, benchPressVariant = 'standard') {
   return true;
 }
 
+function isSquatBeltAlternativeLiftBlock(liftBlock = {}) {
+  return liftBlock?.lift === 'Squat' && (
+    liftBlock.squatVariant === 'beltSquat' ||
+    (liftBlock.sets || []).some(set => String(set.groupKey || '').startsWith('squatAlternative'))
+  );
+}
+
 function isDeadliftAlternativeLiftBlock(liftBlock = {}) {
   return liftBlock?.lift === 'Deadlift' && (
     liftBlock.deadliftVariant === 'alternative' ||
@@ -559,6 +582,7 @@ function isBenchMachineAlternativeLiftBlock(liftBlock = {}) {
 }
 
 function shouldTrackLiftBlockStrength(liftBlock = {}, benchPressVariant = 'standard') {
+  if (isSquatBeltAlternativeLiftBlock(liftBlock)) return false;
   if (isDeadliftAlternativeLiftBlock(liftBlock)) return false;
   if (isBenchMachineAlternativeLiftBlock(liftBlock)) return false;
 
@@ -879,18 +903,33 @@ function applyMeetPlannerAttemptsToWorkouts(workouts, attempts = {}, prs = {}) {
 }
 
 const ACCESSORY_TEMPLATES = {
-  Squat: [
-    { key: 'pulldown', labelKey: 'accessoryPulldown', sets: 3, reps: 10, source: 'deadlift', pct: 0.25 },
-    { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.20 },
-  ],
-  Bench: [
-    { key: 'hipThrust', labelKey: 'accessoryHipThrust', sets: 3, reps: 8, source: 'deadlift', pct: 0.40 },
-    { key: 'shoulderRotations', labelKey: 'accessoryShoulderRotations', sets: 2, reps: 15, source: 'fixed', weight: 2.5, optional: true, perSide: true },
-  ],
-  Deadlift: [
-    { key: 'row', labelKey: 'accessoryRow', sets: 3, reps: 10, source: 'deadlift', pct: 0.25 },
-    { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 2, reps: 12, source: 'squat', pct: 0.15, optional: true },
-  ],
+  standard: {
+    Squat: [
+      { key: 'pulldown', labelKey: 'accessoryPulldown', sets: 3, reps: 10, source: 'deadlift', pct: 0.25 },
+      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.20 },
+    ],
+    Bench: [
+      { key: 'hipThrust', labelKey: 'accessoryHipThrust', sets: 3, reps: 8, source: 'deadlift', pct: 0.40 },
+      { key: 'shoulderRotations', labelKey: 'accessoryShoulderRotations', sets: 2, reps: 15, source: 'fixed', weight: 2.5, perSide: true },
+    ],
+    Deadlift: [
+      { key: 'row', labelKey: 'accessoryRow', sets: 3, reps: 10, source: 'deadlift', pct: 0.25 },
+      { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 2, reps: 12, source: 'squat', pct: 0.15 },
+    ],
+  },
+  upperBackFriendly: {
+    Squat: [
+      { key: 'hipAbduction', labelKey: 'accessoryHipAbduction', sets: 3, reps: 12, source: 'fixed', weight: 20 },
+      { key: 'hipAdduction', labelKey: 'accessoryHipAdduction', sets: 3, reps: 12, source: 'fixed', weight: 20 },
+    ],
+    Bench: [
+      { key: 'lateralRaise', labelKey: 'accessoryLateralRaise', sets: 3, reps: 12, source: 'fixed', weight: 5 },
+    ],
+    Deadlift: [
+      { key: 'machineCrunch', labelKey: 'accessoryMachineCrunch', sets: 3, reps: 12, source: 'fixed', weight: 20 },
+      { key: 'seatedCalfRaise', labelKey: 'accessorySeatedCalfRaise', sets: 3, reps: 12, source: 'fixed', weight: 20 },
+    ],
+  },
 };
 
 function getAccessoryBaseWeight(template, oneRMs, accessoryPRs = {}) {
@@ -931,6 +970,17 @@ function makeWorkoutSet({ labelKey, groupKey, reps, weight }) {
   };
 }
 
+function generateSquatAlternativeSets(oneRMs = {}) {
+  const beltSquatWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.50));
+
+  return Array.from({ length: 4 }, () => makeWorkoutSet({
+    labelKey: 'squatAlternativeBeltSquat',
+    groupKey: 'squatAlternativeBeltSquat',
+    reps: 10,
+    weight: beltSquatWeight,
+  }));
+}
+
 function generateBenchMachineAlternativeSets(oneRMs = {}) {
   const chestPressWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.50));
   const pecDeckWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.20));
@@ -960,8 +1010,8 @@ function generateBenchMachineAlternativeSets(oneRMs = {}) {
 
 function generateDeadliftAlternativeSets(oneRMs = {}) {
   const legPressWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.60));
-  const hamstringCurlWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.20));
   const cablePullThroughWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Deadlift) || 0) * 0.20));
+  const cableGluteKickbackWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.10));
 
   return [
     ...Array.from({ length: 3 }, () => makeWorkoutSet({
@@ -971,27 +1021,25 @@ function generateDeadliftAlternativeSets(oneRMs = {}) {
       weight: legPressWeight,
     })),
     ...Array.from({ length: 3 }, () => makeWorkoutSet({
-      labelKey: 'deadliftAlternativeHamstringCurl',
-      groupKey: 'deadliftAlternativeHamstringCurl',
-      reps: 12,
-      weight: hamstringCurlWeight,
-    })),
-    ...Array.from({ length: 3 }, () => makeWorkoutSet({
       labelKey: 'deadliftAlternativeCablePullThrough',
       groupKey: 'deadliftAlternativeCablePullThrough',
       reps: 12,
       weight: cablePullThroughWeight,
     })),
+    ...Array.from({ length: 3 }, () => makeWorkoutSet({
+      labelKey: 'deadliftAlternativeCableGluteKickback',
+      groupKey: 'deadliftAlternativeCableGluteKickback',
+      reps: 12,
+      weight: cableGluteKickbackWeight,
+    })),
   ];
 }
 
 function generateAccessoriesForLift(lift, accessoryMode = 'off', accessoryPRs = {}, oneRMs = {}) {
-  if (accessoryMode === 'off') return [];
+  const normalizedMode = normalizeAccessoryMode(accessoryMode);
+  if (normalizedMode === 'off') return [];
 
-  const includeOptional = accessoryMode === 'full';
-
-  return (ACCESSORY_TEMPLATES[lift] || [])
-    .filter(template => includeOptional || !template.optional)
+  return (ACCESSORY_TEMPLATES[normalizedMode]?.[lift] || [])
     .map(template => {
       const weight = getAccessoryBaseWeight(template, oneRMs, accessoryPRs);
 
@@ -1174,7 +1222,7 @@ function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedWork
 }
 
 
-function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard') {
+function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard') {
   function round25(w) {
     return Math.round(w / 2.5) * 2.5;
   }
@@ -1188,6 +1236,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
   const normalizedPreparationMode = normalizePreparationMode(preparationMode);
   const normalizedDeadliftVariant = normalizeDeadliftVariant(deadliftVariant);
   const normalizedBenchPressVariant = normalizeBenchPressVariant(benchPressVariant);
+  const normalizedSquatVariant = normalizeSquatVariant(squatVariant);
 
   const program = [
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'backoff' }] }] },
@@ -1222,18 +1271,22 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
   const workouts = [];
 
   function buildLiftBlock(liftConfig, liftIndex = 0) {
+    const isSquatBeltAlternative =
+      liftConfig.lift === 'Squat' && normalizedSquatVariant === 'beltSquat';
     const isDeadliftAlternative =
       liftConfig.lift === 'Deadlift' && normalizedDeadliftVariant === 'alternative';
     const isBenchMachineAlternative =
       liftConfig.lift === 'Bench' && normalizedBenchPressVariant === 'machineAlternative';
 
-    const sets = isDeadliftAlternative
-      ? generateDeadliftAlternativeSets(oneRMs)
-      : isBenchMachineAlternative
-        ? generateBenchMachineAlternativeSets(oneRMs)
-        : [];
+    const sets = isSquatBeltAlternative
+      ? generateSquatAlternativeSets(oneRMs)
+      : isDeadliftAlternative
+        ? generateDeadliftAlternativeSets(oneRMs)
+        : isBenchMachineAlternative
+          ? generateBenchMachineAlternativeSets(oneRMs)
+          : [];
 
-    if (!isDeadliftAlternative && !isBenchMachineAlternative) {
+    if (!isSquatBeltAlternative && !isDeadliftAlternative && !isBenchMachineAlternative) {
       liftConfig.blocks.forEach(block => {
         for (let i = 0; i < block.sets; i++) {
           const weight = round25(oneRMs[liftConfig.lift] * block.pct);
@@ -1262,6 +1315,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
 
     return {
       lift: liftConfig.lift,
+      squatVariant: liftConfig.lift === 'Squat' ? normalizedSquatVariant : undefined,
       deadliftVariant: liftConfig.lift === 'Deadlift' ? normalizedDeadliftVariant : undefined,
       benchPressVariant: liftConfig.lift === 'Bench' ? normalizedBenchPressVariant : undefined,
       prepItems: includePreparation ? generatePrepItems(liftConfig.lift, normalizedPreparationMode) : [],
@@ -3632,6 +3686,8 @@ function WorkoutSection({
   setPreparationMode,
   accessoryMode,
   setAccessoryMode,
+  squatVariant,
+  setSquatVariant,
   benchPressVariant,
   setBenchPressVariant,
   deadliftVariant,
@@ -3665,6 +3721,12 @@ function WorkoutSection({
             t={t}
           />
 
+          <SquatVariantSection
+            squatVariant={squatVariant}
+            setSquatVariant={setSquatVariant}
+            t={t}
+          />
+
           <BenchPressVariantSection
             benchPressVariant={benchPressVariant}
             setBenchPressVariant={setBenchPressVariant}
@@ -3695,6 +3757,61 @@ function WorkoutSection({
           >
             {t.done || 'Done'}
           </button>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
+function SquatVariantSection({ squatVariant, setSquatVariant, t }) {
+  const [showOptions, setShowOptions] = useState(false);
+
+  const modes = ['standard', 'beltSquat'];
+  const labels = {
+    standard: t.squatStandard,
+    beltSquat: t.squatBeltSquat,
+  };
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.squatVariant}
+        actionLabel={labels[squatVariant] || labels.standard}
+        onAction={() => setShowOptions(true)}
+        noBorder
+      />
+
+      {showOptions && (
+        <SettingsModal
+          title={t.squatVariant}
+          onClose={() => setShowOptions(false)}
+        >
+          <div style={{ display: 'grid', gap: 8 }}>
+            {modes.map(mode => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setSquatVariant(mode);
+                  setShowOptions(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  fontSize: 15,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  border: `1px solid ${squatVariant === mode ? THEME.primary : THEME.border}`,
+                  background: squatVariant === mode ? THEME.primary : THEME.card,
+                  color: squatVariant === mode ? THEME.bg : THEME.text,
+                  cursor: 'pointer'
+                }}
+              >
+                {labels[mode]}
+              </button>
+            ))}
+          </div>
         </SettingsModal>
       )}
     </>
@@ -3819,8 +3936,8 @@ function AccessorySection({ accessoryMode, setAccessoryMode, t }) {
 
   const labels = {
     off: t.accessoriesOff,
-    basic: t.accessoriesBasic,
-    full: t.accessoriesFull,
+    standard: t.accessoriesStandard || t.accessoriesBasic,
+    upperBackFriendly: t.accessoriesUpperBackFriendly || t.accessoriesFull,
   };
 
   return (
@@ -7620,6 +7737,9 @@ function App() {
   const [restTimeSeconds, setRestTimeSeconds] = useState(DEFAULT_REST_TIME_SECONDS);
   const [accessoryMode, setAccessoryMode] = useState('off');
   const [preparationMode, setPreparationMode] = useState('basicFirst');
+  const [squatVariant, setSquatVariant] = useState(() =>
+    normalizeSquatVariant(localStorage.getItem('squatVariant'))
+  );
   const [benchPressVariant, setBenchPressVariant] = useState(() =>
     normalizeBenchPressVariant(localStorage.getItem('benchPressVariant'))
   );
@@ -7644,6 +7764,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('weightUnit', normalizeWeightUnit(weightUnit));
   }, [weightUnit]);
+
+  useEffect(() => {
+    localStorage.setItem('squatVariant', normalizeSquatVariant(squatVariant));
+  }, [squatVariant]);
 
   useEffect(() => {
     localStorage.setItem('benchPressVariant', normalizeBenchPressVariant(benchPressVariant));
@@ -7779,9 +7903,10 @@ function App() {
       const savedHistory = data.history || [];
       const savedCycle = data.currentCycle || 1;
       const savedPreparationMode = normalizePreparationMode(data.preparationMode);
+      const savedSquatVariant = normalizeSquatVariant(data.squatVariant || localStorage.getItem('squatVariant'));
       const savedDeadliftVariant = normalizeDeadliftVariant(data.deadliftVariant);
       const savedBenchPressVariant = normalizeBenchPressVariant(data.benchPressVariant || localStorage.getItem('benchPressVariant'));
-      const generatedWorkouts = generateProgram(squat, bench, deadlift, normalizeAccessoryMode(data.accessoryMode), data.accessoryPRs || {}, savedPreparationMode, savedDeadliftVariant, savedBenchPressVariant);
+      const generatedWorkouts = generateProgram(squat, bench, deadlift, normalizeAccessoryMode(data.accessoryMode), data.accessoryPRs || {}, savedPreparationMode, savedDeadliftVariant, savedBenchPressVariant, savedSquatVariant);
       const savedInProgress = data.inProgress || null;
       const savedMeetPlannerAttempts = data.meetPlannerAttempts || {};
       const savedMeetPrepChecklist = data.meetPrepChecklist || {};
@@ -7820,6 +7945,7 @@ function App() {
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
       setAccessoryMode(normalizeAccessoryMode(data.accessoryMode));
       setPreparationMode(savedPreparationMode);
+      setSquatVariant(savedSquatVariant);
       setDeadliftVariant(savedDeadliftVariant);
       setBenchPressVariant(savedBenchPressVariant);
 
@@ -7872,6 +7998,7 @@ function App() {
       restTimeSeconds,
       accessoryMode,
       preparationMode,
+      squatVariant,
       deadliftVariant,
       benchPressVariant,
       inProgress: {
@@ -7882,7 +8009,7 @@ function App() {
         workouts,
       },
     }));
-  }, [history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, accessoryMode, preparationMode, deadliftVariant, benchPressVariant, selectedIndex, workouts]);
+  }, [history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, accessoryMode, preparationMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts]);
 
   useEffect(() => {
     if (!prs.Squat || !prs.Bench || !prs.Deadlift) return;
@@ -7895,7 +8022,8 @@ function App() {
       accessoryPRs,
       preparationMode,
       deadliftVariant,
-      benchPressVariant
+      benchPressVariant,
+      squatVariant
     );
 
     setWorkouts(prev => applyAccessoryPlanToWorkouts(
@@ -7903,7 +8031,7 @@ function App() {
       generatedWorkouts,
       getCompletedWorkoutNumbers(history, currentCycle)
     ));
-  }, [accessoryMode, preparationMode, deadliftVariant, benchPressVariant, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
+  }, [accessoryMode, preparationMode, squatVariant, deadliftVariant, benchPressVariant, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
 
   useEffect(() => {
     if (screen !== 'completed' || !completedWorkout) return;
@@ -7941,20 +8069,23 @@ function App() {
     const selectedWeightUnit = normalizeWeightUnit(profile.weightUnit || weightUnit);
     const defaultAccessoryMode = 'off';
     const defaultPreparationMode = 'off';
+    const defaultSquatVariant = 'standard';
     const defaultBenchPressVariant = 'standard';
     const defaultDeadliftVariant = 'standard';
 
     setWeightUnit(selectedWeightUnit);
     localStorage.setItem('weightUnit', selectedWeightUnit);
+    localStorage.setItem('squatVariant', defaultSquatVariant);
     localStorage.setItem('benchPressVariant', defaultBenchPressVariant);
     localStorage.setItem('deadliftVariant', defaultDeadliftVariant);
 
     setAccessoryMode(defaultAccessoryMode);
     setPreparationMode(defaultPreparationMode);
+    setSquatVariant(defaultSquatVariant);
     setBenchPressVariant(defaultBenchPressVariant);
     setDeadliftVariant(defaultDeadliftVariant);
 
-    setWorkouts(generateProgram(s, b, d, defaultAccessoryMode, {}, defaultPreparationMode, defaultDeadliftVariant, defaultBenchPressVariant));
+    setWorkouts(generateProgram(s, b, d, defaultAccessoryMode, {}, defaultPreparationMode, defaultDeadliftVariant, defaultBenchPressVariant, defaultSquatVariant));
     setCurrentWorkoutIndex(0);
     setSelectedIndex(0);
     setCurrentCycle(1);
@@ -8017,6 +8148,7 @@ function handleResetApp() {
   localStorage.removeItem('app_version');
   localStorage.removeItem('bodyweight_prompt_date');
 
+  localStorage.setItem('squatVariant', 'standard');
   localStorage.setItem('benchPressVariant', 'standard');
   localStorage.setItem('deadliftVariant', 'standard');
 
@@ -8038,6 +8170,7 @@ function handleResetApp() {
   setBodyWeights([]);
   setAccessoryMode('off');
   setPreparationMode('off');
+  setSquatVariant('standard');
   setBenchPressVariant('standard');
   setDeadliftVariant('standard');
   setScreen('onboarding');
@@ -8058,7 +8191,7 @@ function handleSaveMaxes(lift, values) {
   };
 
   setPrs(updatedPrs);
-  setWorkouts(generateProgram(updatedPrs.Squat, updatedPrs.Bench, updatedPrs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant));
+  setWorkouts(generateProgram(updatedPrs.Squat, updatedPrs.Bench, updatedPrs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant));
   setMeetPlannerAttempts({});
 
   setHistory(prev => {
@@ -8104,7 +8237,7 @@ function handleStartNewCycle() {
   }
 
   const nextCycle = currentCycle + 1;
-  const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant);
+  const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant);
 
   setCurrentCycle(nextCycle);
   setMeetPlannerAttempts({});
@@ -10216,6 +10349,8 @@ const latestBodyDataRows = [
       setPreparationMode={setPreparationMode}
       accessoryMode={accessoryMode}
       setAccessoryMode={setAccessoryMode}
+      squatVariant={squatVariant}
+      setSquatVariant={setSquatVariant}
       benchPressVariant={benchPressVariant}
       setBenchPressVariant={setBenchPressVariant}
       deadliftVariant={deadliftVariant}
