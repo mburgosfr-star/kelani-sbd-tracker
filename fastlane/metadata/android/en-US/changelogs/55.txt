@@ -1,0 +1,9 @@
+v1.2.6
+
+- Polished the app UI across Dashboard, Program, Stats, Meet Planner, Workout, and Settings.
+- Added upper-back friendly accessory mode.
+- Added Belt Squat as a Squat alternative.
+- Updated Deadlift Alternative to avoid duplicate accessory/replacement exercises.
+- Preserved workout progress when changing accessory settings during an active workout.
+- Improved workout circle sizing and replacement workout labels.
+- Documented the video/YouTube structure for future exercise guide videos.
