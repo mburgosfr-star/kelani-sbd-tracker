@@ -1058,6 +1058,92 @@ function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedWork
     };
   }
 
+  function setHasUserState(set) {
+    if (!set) return false;
+
+    return Boolean(
+      set.done ||
+      set.failed ||
+      set.skipped ||
+      set.failedAttempts ||
+      set.failedWeight != null ||
+      set.adjustedWeight != null ||
+      set.adjustedFromFailedSet ||
+      set.adjustedFromOriginal ||
+      Number(set.weight) !== Number(set.originalWeight ?? set.weight)
+    );
+  }
+
+  function mergeSet(currentSet, generatedSet) {
+    if (!currentSet || !setHasUserState(currentSet)) return generatedSet;
+
+    return {
+      ...generatedSet,
+      weight: currentSet.weight ?? generatedSet.weight,
+      pct: currentSet.pct ?? generatedSet.pct,
+      originalWeight: currentSet.originalWeight ?? generatedSet.originalWeight,
+      originalPct: currentSet.originalPct ?? generatedSet.originalPct,
+      done: currentSet.done ?? generatedSet.done,
+      failed: currentSet.failed ?? generatedSet.failed,
+      skipped: currentSet.skipped ?? generatedSet.skipped,
+      failedAttempts: currentSet.failedAttempts ?? generatedSet.failedAttempts,
+      failedWeight: currentSet.failedWeight ?? generatedSet.failedWeight,
+      adjustedWeight: currentSet.adjustedWeight ?? generatedSet.adjustedWeight,
+      adjustedFromFailedSet: currentSet.adjustedFromFailedSet ?? generatedSet.adjustedFromFailedSet,
+      adjustedFromOriginal: currentSet.adjustedFromOriginal ?? generatedSet.adjustedFromOriginal,
+    };
+  }
+
+  function mergeWarmup(currentWarmup, generatedWarmup) {
+    if (!currentWarmup?.done) return generatedWarmup;
+
+    return {
+      ...generatedWarmup,
+      done: currentWarmup.done,
+    };
+  }
+
+  function cooldownKey(item) {
+    return item?.key || item?.labelKey || item?.label || item?.prescription;
+  }
+
+  function mergeCooldownItems(currentCooldownItems = [], generatedCooldownItems = []) {
+    const currentItemsByKey = new Map(
+      (currentCooldownItems || []).map(item => [cooldownKey(item), item])
+    );
+
+    return (generatedCooldownItems || []).map(generatedItem => {
+      const currentItem = currentItemsByKey.get(cooldownKey(generatedItem));
+      if (!currentItem) return generatedItem;
+
+      return {
+        ...generatedItem,
+        done: currentItem.done ?? generatedItem.done,
+      };
+    });
+  }
+
+  function mergeLiftBlock(currentLiftBlock, generatedLiftBlock) {
+    if (!currentLiftBlock) return generatedLiftBlock;
+
+    const sameVariant =
+      currentLiftBlock.deadliftVariant === generatedLiftBlock.deadliftVariant &&
+      currentLiftBlock.benchPressVariant === generatedLiftBlock.benchPressVariant;
+
+    if (!sameVariant) return generatedLiftBlock;
+
+    return {
+      ...generatedLiftBlock,
+      prepItems: mergePrepItems(currentLiftBlock.prepItems, generatedLiftBlock.prepItems),
+      warmups: (generatedLiftBlock.warmups || []).map((warmup, index) =>
+        mergeWarmup(currentLiftBlock.warmups?.[index], warmup)
+      ),
+      sets: (generatedLiftBlock.sets || []).map((set, index) =>
+        mergeSet(currentLiftBlock.sets?.[index], set)
+      ),
+    };
+  }
+
   return (workouts || []).map((workout, index) => {
     const generated = generatedWorkouts[index];
     if (completedWorkoutNumbers.has(Number(generated?.number || workout.number))) return workout;
@@ -1067,17 +1153,19 @@ function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedWork
       (workout.accessories || []).map(accessory => [accessoryKey(accessory), accessory])
     );
 
+    const mergedLifts = (generated.lifts || []).map((generatedLiftBlock, liftIndex) =>
+      mergeLiftBlock((workout.lifts || [])[liftIndex], generatedLiftBlock)
+    );
+    const primaryLiftBlock = mergedLifts[0] || {};
+    const mergedCooldownItems = mergeCooldownItems(workout.cooldownItems, generated.cooldownItems);
+
     return {
       ...generated,
-      prepItems: mergePrepItems(workout.prepItems, generated.prepItems),
-      lifts: (generated.lifts || []).map((generatedLiftBlock, liftIndex) => {
-        const currentLiftBlock = (workout.lifts || [])[liftIndex] || {};
-
-        return {
-          ...generatedLiftBlock,
-          prepItems: mergePrepItems(currentLiftBlock.prepItems, generatedLiftBlock.prepItems),
-        };
-      }),
+      prepItems: primaryLiftBlock.prepItems || mergePrepItems(workout.prepItems, generated.prepItems),
+      warmups: primaryLiftBlock.warmups || generated.warmups || [],
+      sets: primaryLiftBlock.sets || generated.sets || [],
+      lifts: mergedLifts,
+      cooldownItems: mergedCooldownItems,
       accessories: (generated.accessories || []).map(generatedAccessory =>
         mergeAccessory(currentAccessoriesByKey.get(accessoryKey(generatedAccessory)), generatedAccessory)
       ),
