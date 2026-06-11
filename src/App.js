@@ -1776,7 +1776,7 @@ function CooldownBlock({ items = [], onToggleItem = () => {}, t, isReadOnly = fa
         padding: '5px 10px',
         fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
         fontWeight: 900,
-        color: THEME.text,
+        color: THEME.brown || '#a67c52',
         textAlign: 'center',
       }}>
         {t.cooldownTitle}
@@ -2385,8 +2385,8 @@ function SettingsListRow({ label, description, value, valueColor = THEME.text, a
       display: 'grid',
       gridTemplateColumns: 'minmax(0, 1fr) minmax(180px, 190px)',
       alignItems: 'center',
-      gap: 12,
-      padding: compact ? '6px 0' : '10px 0',
+      gap: 10,
+      padding: compact ? '4px 0' : '7px 0',
       borderBottom: 'none'
     }}>
       <div style={{
@@ -2406,8 +2406,8 @@ function SettingsListRow({ label, description, value, valueColor = THEME.text, a
             color: THEME.muted,
             fontSize: 13,
             fontWeight: 700,
-            lineHeight: 1.3,
-            marginTop: 6
+            lineHeight: 1.25,
+            marginTop: 3
           }}>
             {description}
           </div>
@@ -2428,8 +2428,8 @@ function SettingsListRow({ label, description, value, valueColor = THEME.text, a
               onClick={onAction}
               style={{
                 width: '100%',
-                padding: '9px 11px',
-                fontSize: 15,
+                padding: '7px 9px',
+                fontSize: 14,
                 fontWeight: 800,
                 background: danger ? '#8b1e1e' : THEME.card,
                 color: '#ffffff',
@@ -2462,8 +2462,8 @@ function SettingsActionButton({ children, onClick, variant = 'primary', style = 
       disabled={disabled}
       style={{
         width: '100%',
-        padding: 12,
-        fontSize: 16,
+        padding: 9,
+        fontSize: 15,
         fontWeight: 800,
         background: isPrimary ? THEME.card : THEME.bg,
         color: disabled ? THEME.muted : THEME.text,
@@ -2893,8 +2893,8 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
               onClick={exportData}
               style={{
                 width: '100%',
-                padding: '9px 11px',
-                fontSize: 15,
+                padding: '7px 9px',
+                fontSize: 14,
                 fontWeight: 800,
                 background: THEME.card,
                 color: THEME.text,
@@ -2914,8 +2914,8 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
               onClick={() => importInputRef.current?.click()}
               style={{
                 width: '100%',
-                padding: '9px 11px',
-                fontSize: 15,
+                padding: '7px 9px',
+                fontSize: 14,
                 fontWeight: 800,
                 background: THEME.card,
                 color: THEME.text,
@@ -5175,7 +5175,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
               padding: '6px 10px',
               fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
               fontWeight: 900,
-              color: THEME.text,
+              color: THEME.brown || '#a67c52',
               textAlign: 'center',
               }}>
               {t.accessories}
@@ -5288,7 +5288,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             padding: '6px 10px',
             fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
             fontWeight: 900,
-            color: THEME.text,
+            color: THEME.brown || '#a67c52',
             textAlign: 'center'
           }}>
             {t.prepTitle}
@@ -5475,7 +5475,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             padding: '6px 10px',
             fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
             fontWeight: 900,
-            color: THEME.text,
+            color: THEME.brown || '#a67c52',
             textAlign: 'center',
           }}>
             {t.accessories}
@@ -6058,7 +6058,7 @@ const meetTotals = {
               marginBottom: 8
             }}
           >
-            <h3 style={{ margin: '0 0 8px' }}>{chart.title}</h3>
+            <h3 style={{ margin: '0 0 6px', color: neutralChartColor }}>{chart.title}</h3>
             {renderChart(chart.data, [chart.key], [chart.color])}
           </div>
         ))}
@@ -6236,7 +6236,7 @@ const meetTotals = {
       background: `${neutralChartColor}14`
     }}>
       <div>
-        <h3 style={{ margin: '0 0 6px' }}>
+        <h3 style={{ margin: '0 0 6px', color: neutralChartColor }}>
           {t.meetPlanner}
         </h3>
 
@@ -10321,8 +10321,8 @@ const latestBodyDataRows = [
     background: 'transparent',
     border: 'none',
     borderRadius: 8,
-    padding: '5px 14px',
-    marginBottom: 10
+    padding: '0 8px',
+    marginBottom: 6
   }}>
     <ProfileSection
       userProfile={userProfile}
