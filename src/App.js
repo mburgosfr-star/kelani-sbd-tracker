@@ -4831,7 +4831,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
     );
 
     return (
-      <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
+      <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
         {selectedExerciseGuideLift && (
           <ExerciseGuideModal
             lift={selectedExerciseGuideLift}
@@ -5571,6 +5571,7 @@ const hasCustomMeetAttempts = Object.values(customMeetAttempts).some(liftAttempt
   Bench: THEME.primary,
   Deadlift: THEME.yellow
 };
+const neutralChartColor = THEME.brown || '#a67c52';
 
 const statsWeightUnit = normalizeWeightUnit(weightUnit);
 
@@ -6050,11 +6051,11 @@ const meetTotals = {
           <div
             key={chart.key}
             style={{
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 8,
-              padding: 12,
-              marginBottom: 10
+              background: `${neutralChartColor}14`,
+              border: `1px solid ${neutralChartColor}`,
+              borderRadius: 10,
+              padding: 10,
+              marginBottom: 8
             }}
           >
             <h3 style={{ margin: '0 0 8px' }}>{chart.title}</h3>
@@ -6066,7 +6067,7 @@ const meetTotals = {
   }
 
   return (
-    <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
+    <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
       <AppHeader
         t={t}
         title={t.stats}
@@ -6076,8 +6077,8 @@ const meetTotals = {
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-        gap: 8,
-        marginBottom: 20
+        gap: 6,
+        marginBottom: 8
       }}>
         {statsTabs.map(tab => (
           <button
@@ -6085,8 +6086,8 @@ const meetTotals = {
             onClick={() => setActivescreen(tab.key)}
             style={{
               width: '100%',
-              minHeight: 44,
-              padding: '10px 6px',
+              minHeight: 38,
+              padding: '8px 6px',
               fontSize: 15,
               lineHeight: 1.2,
               background: THEME.card,
@@ -6118,14 +6119,14 @@ const meetTotals = {
     <div
       key={lift}
       style={{
-        background: 'transparent',
-        border: 'none',
-        borderRadius: 8,
-        padding: 16,
-        marginBottom: 16
+        background: `${COLORS[lift]}14`,
+        border: `1px solid ${COLORS[lift]}`,
+        borderRadius: 10,
+        padding: 10,
+        marginBottom: 8
       }}
     >
-      <h3 style={{ margin: '0 0 8px', color: COLORS[lift] }}>
+      <h3 style={{ margin: '0 0 6px', color: COLORS[lift] }}>
         {liftLabel}
       </h3>
       {renderChart(
@@ -6142,23 +6143,23 @@ const meetTotals = {
       {activescreen === 'totaal' && (
         <div>
           <div style={{
-            background: 'transparent',
-            border: 'none',
-            borderRadius: 8,
-            padding: 16,
-            marginBottom: 16
+            background: `${neutralChartColor}14`,
+            border: `1px solid ${neutralChartColor}`,
+            borderRadius: 10,
+            padding: 10,
+            marginBottom: 8
           }}>
-            <h3 style={{ margin: '0 0 8px' }}>{t.totalSBD}</h3>
+            <h3 style={{ margin: '0 0 6px', color: neutralChartColor }}>{t.totalSBD}</h3>
             {renderChart(totalData.map(entry => ({ ...entry, oneRM: chartWeightFromKg(entry.oneRM), e1rm: chartWeightFromKg(entry.e1rm) })), ['oneRM', 'e1rm'], [THEME.muted, THEME.primary])}
           </div>
 
           <div style={{
-            background: 'transparent',
-            border: 'none',
-            borderRadius: 8,
-            padding: 16
+            background: `${neutralChartColor}14`,
+            border: `1px solid ${neutralChartColor}`,
+            borderRadius: 10,
+            padding: 10
           }}>
-            <h3 style={{ margin: '0 0 8px' }}>{t.strengthTotalBodyweight}</h3>
+            <h3 style={{ margin: '0 0 6px', color: neutralChartColor }}>{t.strengthTotalBodyweight}</h3>
             {renderChart(strengthData, ['strength', 'eStrength'], [THEME.muted, THEME.primary])}
           </div>
         </div>
@@ -6855,7 +6856,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
       <button
         type="button"
         onClick={() => setShowAllWorkouts(value => !value)}
-        style={programActionButtonStyle(THEME.primary, position === 'top' ? '0 0 12px' : '4px 0 10px')}
+        style={programActionButtonStyle(THEME.primary, position === 'top' ? '0 0 8px' : '2px 0 6px')}
       >
         {showAllWorkouts ? t.showFewerWorkouts : t.showAllWorkouts}
       </button>
@@ -6863,7 +6864,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
   }
 
   return (
-    <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
+    <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
       <AppHeader
         t={t}
         title={t.program}
@@ -6875,7 +6876,8 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
       {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
         const isDone = completedWorkoutNumberSet.has(Number(workout.number)) || Boolean(workout.completed);
-        const headerBg = isCurrent ? THEME.green : workout.type === 'rest' ? THEME.brown : THEME.border;
+        const focusColor = getLiftThemeColor(workout.lift);
+        const headerBg = isCurrent ? focusColor : workout.type === 'rest' ? THEME.brown : THEME.border;
         const planLines = getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant);
         const typeLabel = getWorkoutTypeLabel(workout, t);
         const showTypeLabel = false;
@@ -6891,18 +6893,18 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
             style={{
               display: 'flex',
               alignItems: 'center',
-              padding: '12px 16px',
-              marginBottom: 10,
+              padding: '9px 12px',
+              marginBottom: 6,
               borderRadius: 8,
-              border: isCurrent ? `2px solid ${THEME.green}` : 'none',
+              border: isCurrent ? `2px solid ${focusColor}` : 'none',
               background: 'transparent',
               cursor: 'pointer',
               opacity: 1
             }}
           >
             <div style={{
-              width: 40,
-              height: 40,
+              width: 38,
+              height: 38,
               borderRadius: 8,
               background: headerBg,
               display: 'flex',
@@ -6911,7 +6913,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
               color: '#ffffff',
               fontWeight: 700,
               fontSize: 16,
-              marginRight: 14,
+              marginRight: 10,
               flexShrink: 0
             }}>
               {workout.number}
@@ -6923,7 +6925,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
                 {isCurrent && (
                   <span style={{
                     fontSize: 11,
-                    background: THEME.green,
+                    background: focusColor,
                     color: '#ffffff',
                     padding: '1px 6px',
                     borderRadius: 3,
@@ -10308,7 +10310,7 @@ const latestBodyDataRows = [
 )}
 
       {screen === 'settings' && (
-       <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
+       <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
   <AppHeader
     t={t}
     title={t.settings}
