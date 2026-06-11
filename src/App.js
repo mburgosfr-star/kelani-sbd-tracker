@@ -4511,6 +4511,7 @@ function getExerciseGuide(lift, t) {
 
 function isExerciseGuideAvailableForLiftBlock(liftBlock, benchPressVariant = 'standard') {
   if (!liftBlock || !['Squat', 'Bench', 'Deadlift'].includes(liftBlock.lift)) return false;
+  if (isSquatBeltAlternativeLiftBlock(liftBlock)) return false;
   if (isDeadliftAlternativeLiftBlock(liftBlock)) return false;
   if (isBenchMachineAlternativeLiftBlock(liftBlock)) return false;
 
@@ -4910,7 +4911,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                         padding: 0,
                         border: 'none',
                         background: 'transparent',
-                        color: guideAvailable ? liftColor : THEME.text,
+                        color: liftColor,
                         fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
                         fontWeight: 900,
                         cursor: guideAvailable ? 'pointer' : 'default',
