@@ -4025,7 +4025,7 @@ function LanguageSection({ language, setLanguage, t }) {
                 border: `1px solid ${language === l ? THEME.primary : THEME.border}`,
                 borderRadius: 8,
                 cursor: 'pointer',
-                marginBottom: 8
+                marginBottom: 6
               }}
             >
               {languageNames[l]}
@@ -6223,13 +6223,17 @@ const meetTotals = {
       ])}
 
 {activescreen === 'meet' && (
-  <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 16 }}>
+  <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 0 }}>
     <div style={{
       display: 'grid',
       gridTemplateColumns: 'minmax(0, 1fr) auto',
       alignItems: 'center',
-      gap: 12,
-      marginBottom: 14
+      gap: 10,
+      marginBottom: 8,
+      padding: 10,
+      border: `1px solid ${neutralChartColor}`,
+      borderRadius: 10,
+      background: `${neutralChartColor}14`
     }}>
       <div>
         <h3 style={{ margin: '0 0 6px' }}>
@@ -6247,11 +6251,11 @@ const meetTotals = {
       </div>
 
       <div style={{
-        minWidth: 118,
-        padding: '10px 12px',
-        border: `1px solid ${THEME.primary}`,
+        minWidth: 108,
+        padding: '8px 10px',
+        border: `1px solid ${neutralChartColor}`,
         borderRadius: 10,
-        background: 'rgba(243, 156, 18, 0.08)',
+        background: `${neutralChartColor}1f`,
         textAlign: 'center'
       }}>
         <div style={{ color: THEME.muted, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>
@@ -6264,15 +6268,15 @@ const meetTotals = {
       </div>
     </div>
 
-    <div style={{ display: 'grid', gap: 12 }}>
+    <div style={{ display: 'grid', gap: 8 }}>
       {meetPlan.map(row => (
         <div
           key={row.lift}
           style={{
-            border: 'none',
+            border: `1px solid ${COLORS[row.lift]}`,
             borderRadius: 10,
-            padding: 12,
-            background: 'transparent'
+            padding: 10,
+            background: `${COLORS[row.lift]}14`
           }}
         >
           <div style={{
@@ -6305,15 +6309,11 @@ const meetTotals = {
               <div
                 key={key}
                 style={{
-                  border: `1px solid ${COLORS[row.lift]}`,
+                  border: 'none',
                   borderRadius: 8,
-                  padding: 7,
+                  padding: 4,
                   textAlign: 'center',
-                  background: row.lift === 'Squat'
-                    ? 'rgba(231, 76, 60, 0.08)'
-                    : row.lift === 'Bench'
-                    ? 'rgba(243, 156, 18, 0.08)'
-                    : 'rgba(241, 196, 15, 0.08)'
+                  background: 'transparent'
                 }}
               >
                 <div style={{
@@ -6321,7 +6321,7 @@ const meetTotals = {
                   fontSize: 11,
                   fontWeight: 800,
                   lineHeight: 1.15,
-                  minHeight: 25,
+                  minHeight: 22,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center'
@@ -6348,7 +6348,7 @@ const meetTotals = {
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
-                    padding: '7px 4px',
+                    padding: '6px 4px',
                     borderRadius: 6,
                     border: `1px solid ${THEME.border}`,
                     background: THEME.bg,
@@ -6370,13 +6370,13 @@ const meetTotals = {
     </div>
 
     <div style={{
-      marginTop: 14,
-      padding: 12,
-      border: 'none',
+      marginTop: 8,
+      padding: 10,
+      border: `1px solid ${neutralChartColor}`,
       borderRadius: 10,
-      background: 'transparent',
+      background: `${neutralChartColor}14`,
       display: 'grid',
-      gap: 8,
+      gap: 6,
       fontSize: 14
     }}>
       {[
