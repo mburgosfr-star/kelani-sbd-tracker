@@ -5407,7 +5407,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   lineHeight: 1.35,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 10
+                  gap: 8
                 }}>
                   <span style={{
                     width: 24,
@@ -6709,12 +6709,12 @@ function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPres
 
 function AppHeader({ t, title, subtitle, meta, children, titleStyle = {} }) {
   return (
-    <div style={{ textAlign: 'center', marginBottom: 16 }}>
+    <div style={{ textAlign: 'center', marginBottom: 8 }}>
       <div style={{
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 14
+        marginBottom: 6
       }}>
         <img
           src="/kelani-banner.png"
@@ -9893,12 +9893,12 @@ function bodyFatStatus(value) {
 
   if (range) {
     if (value < range.healthyMin) return makeStatus(t.bodyMetricUnderfat, THEME.red, '');
-    if (value <= range.healthyMax) return makeStatus(t.bodyMetricHealthy, THEME.green, '');
+    if (value <= range.healthyMax) return makeStatus(t.bodyMetricHealthy, THEME.yellow, '');
     if (value <= range.overfatMax) return makeStatus(t.bodyMetricOverfat, THEME.primary, '');
     return makeStatus(t.bodyMetricObese, THEME.red, '');
   }
 
-  if (value >= 8 && value <= 25) return makeStatus(t.bodyMetricHealthy, THEME.green, '');
+  if (value >= 8 && value <= 25) return makeStatus(t.bodyMetricHealthy, THEME.yellow, '');
   if (value > 25 && value <= 35) return makeStatus(t.bodyMetricOverfat, THEME.primary, '');
   return makeStatus(t.bodyMetricObese, THEME.red, '');
 }
@@ -9908,18 +9908,18 @@ function bodyWaterStatus(value) {
 
   if (userProfile?.sex === 'male') {
     return value >= 50 && value <= 65
-      ? makeStatus(t.bodyMetricHealthy, THEME.green, '')
+      ? makeStatus(t.bodyMetricHealthy, THEME.yellow, '')
       : makeStatus(t.bodyMetricAverage, THEME.primary, '');
   }
 
   if (userProfile?.sex === 'female') {
     return value >= 45 && value <= 60
-      ? makeStatus(t.bodyMetricHealthy, THEME.green, '')
+      ? makeStatus(t.bodyMetricHealthy, THEME.yellow, '')
       : makeStatus(t.bodyMetricAverage, THEME.primary, '');
   }
 
   return value >= 45 && value <= 65
-    ? makeStatus(t.bodyMetricHealthy, THEME.green, '')
+    ? makeStatus(t.bodyMetricHealthy, THEME.yellow, '')
     : makeStatus(t.bodyMetricAverage, THEME.primary, '');
 }
 
@@ -9927,7 +9927,7 @@ function visceralFatStatus(value) {
   if (!value) return null;
 
   if (value >= 1 && value <= 12) {
-    return makeStatus(t.bodyMetricNormal, THEME.green, '');
+    return makeStatus(t.bodyMetricNormal, THEME.yellow, '');
   }
 
   if (value >= 13) {
@@ -9943,7 +9943,14 @@ function physiqueStatus(value) {
   const key = `physique${Math.round(value)}`;
   if (!t[key]) return null;
 
-  return makeStatus(t[key], THEME.primary, '');
+  const rounded = Math.round(value);
+  const color = rounded >= 9
+    ? THEME.yellow
+    : rounded >= 5
+      ? THEME.primary
+      : THEME.red;
+
+  return makeStatus(t[key], color, '');
 }
 
 function boneMassAverage(bodyWeight, sex) {
@@ -9981,7 +9988,7 @@ function boneMassStatus(value) {
   }
 
   if (diff > 0) {
-    return makeStatus(t.bodyMetricAboveAverage, THEME.green, '');
+    return makeStatus(t.bodyMetricAboveAverage, THEME.yellow, '');
   }
 
   return makeStatus(t.bodyMetricBelowAverage, THEME.red, '');
@@ -10092,7 +10099,7 @@ const latestBodyDataRows = [
       )}
 
       {screen === 'dashboard' && (
-  <div style={{ maxWidth: 500, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' }}>
+  <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
     <AppHeader
       t={t}
       title={t.dashboard}
@@ -10104,17 +10111,17 @@ const latestBodyDataRows = [
         background: 'transparent',
         border: 'none',
         borderRadius: 10,
-        padding: 14,
-        marginBottom: 12,
+        padding: 8,
+        marginBottom: 6,
         textAlign: 'center'
       }}>
         <div style={{
-          color: THEME.primary,
+          color: '#ffffff',
           fontSize: 14,
           fontWeight: 900,
           letterSpacing: 0.8,
           textTransform: 'uppercase',
-          marginBottom: 6
+          marginBottom: 3
         }}>
           {t.nextWorkout}
         </div>
@@ -10128,7 +10135,7 @@ const latestBodyDataRows = [
         </div>
       </div>
     )}
-    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 14, marginBottom: 12 }}>
+    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 6, marginBottom: 6 }}>
       {(() => {
         const cards = [
           {
@@ -10158,8 +10165,8 @@ const latestBodyDataRows = [
           {
             key: 'Total',
             label: t.total || 'Total',
-            color: '#ffffff',
-            background: 'rgba(255, 255, 255, 0.05)',
+            color: '#a67c52',
+            background: 'rgba(166, 124, 82, 0.10)',
             oneRM: total1RM,
             e1RM: totalE1RM,
           },
@@ -10180,16 +10187,16 @@ const latestBodyDataRows = [
                   style={{
                     border: `1px solid ${card.color}`,
                     borderRadius: 10,
-                    padding: 11,
+                    padding: 9,
                     background: card.background,
-                    minHeight: 92
+                    minHeight: 82
                   }}
                 >
                   <div style={{
                     color: card.color,
                     fontSize: 17,
                     fontWeight: 900,
-                    marginBottom: 9,
+                    marginBottom: 6,
                     lineHeight: 1.1
                   }}>
                     {card.label}
@@ -10224,7 +10231,7 @@ const latestBodyDataRows = [
       })()}
     </div>
 
-    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 16 }}>
+    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 8 }}>
       {latestBodyDataRows.length > 0 ? (
         latestBodyDataRows.map((row, index) => (
           <div
@@ -10234,7 +10241,7 @@ const latestBodyDataRows = [
               gridTemplateColumns: '1fr auto',
               alignItems: 'center',
               columnGap: 12,
-              marginBottom: index === latestBodyDataRows.length - 1 ? 0 : 10
+              marginBottom: index === latestBodyDataRows.length - 1 ? 0 : 6
             }}
           >
             <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>
