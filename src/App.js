@@ -923,7 +923,7 @@ const ACCESSORY_TEMPLATES = {
       { key: 'hipAdduction', labelKey: 'accessoryHipAdduction', sets: 3, reps: 12, source: 'fixed', weight: 20 },
     ],
     Bench: [
-      { key: 'lateralRaise', labelKey: 'accessoryLateralRaise', sets: 3, reps: 12, source: 'fixed', weight: 5 },
+      { key: 'lateralRaise', labelKey: 'accessoryLateralRaise', sets: 3, reps: 12, source: 'fixed', weight: 5, perSide: true },
     ],
     Deadlift: [
       { key: 'machineCrunch', labelKey: 'accessoryMachineCrunch', sets: 3, reps: 12, source: 'fixed', weight: 20 },
@@ -958,7 +958,7 @@ function getAccessoryBaseWeight(template, oneRMs, accessoryPRs = {}) {
   return Math.max(2.5, roundMeetWeight(sourceWeight * template.pct));
 }
 
-function makeWorkoutSet({ labelKey, groupKey, reps, weight }) {
+function makeWorkoutSet({ labelKey, groupKey, reps, weight, perSide = false }) {
   return {
     labelKey,
     groupLabelKey: labelKey,
@@ -966,6 +966,7 @@ function makeWorkoutSet({ labelKey, groupKey, reps, weight }) {
     reps,
     weight,
     originalWeight: weight,
+    perSide,
     done: false,
   };
 }
@@ -1031,6 +1032,7 @@ function generateDeadliftAlternativeSets(oneRMs = {}) {
       groupKey: 'deadliftAlternativeCableGluteKickback',
       reps: 12,
       weight: cableGluteKickbackWeight,
+      perSide: true,
     })),
   ];
 }
@@ -1118,6 +1120,7 @@ function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedWork
       set.adjustedWeight != null ||
       set.adjustedFromFailedSet ||
       set.adjustedFromOriginal ||
+      set.effort ||
       Number(set.weight) !== Number(set.originalWeight ?? set.weight)
     );
   }
@@ -1137,6 +1140,7 @@ function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedWork
       failedAttempts: currentSet.failedAttempts ?? generatedSet.failedAttempts,
       failedWeight: currentSet.failedWeight ?? generatedSet.failedWeight,
       adjustedWeight: currentSet.adjustedWeight ?? generatedSet.adjustedWeight,
+      effort: currentSet.effort ?? generatedSet.effort,
       adjustedFromFailedSet: currentSet.adjustedFromFailedSet ?? generatedSet.adjustedFromFailedSet,
       adjustedFromOriginal: currentSet.adjustedFromOriginal ?? generatedSet.adjustedFromOriginal,
     };
@@ -2266,7 +2270,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
 
   const detail = (
     <span style={{ color: isAdjusted ? '#f39c12' : THEME.muted }}>
-      1 × {set.reps} × {formatWorkoutWeightFromKg(set.weight, weightUnit, t, lift, benchPressVariant)}{displayPct ? ` (${displayPct}%)` : ''}
+      1 × {set.reps} × {formatWorkoutWeightFromKg(set.weight, weightUnit, t, lift, benchPressVariant)}{set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}{displayPct ? ` (${displayPct}%)` : ''}
     </span>
   );
 
@@ -4171,7 +4175,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
 
   const detail = (
     <span style={{ color: detailColor }}>
-      {entries.length} × {allSameReps ? firstSet.reps : '—'} × {allSameWeight ? formatWorkoutWeightFromKg(firstSet.weight, weightUnit, t, lift, benchPressVariant) : normalizeWeightUnit(weightUnit)}{displayPct ? ` (${displayPct}%)` : ''}
+      {entries.length} × {allSameReps ? firstSet.reps : '—'} × {allSameWeight ? formatWorkoutWeightFromKg(firstSet.weight, weightUnit, t, lift, benchPressVariant) : normalizeWeightUnit(weightUnit)}{firstSet.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}{displayPct ? ` (${displayPct}%)` : ''}
     </span>
   );
 
@@ -4337,7 +4341,7 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
 
   const detail = (
     <>
-      {(acc.done || []).length} × {acc.reps}{acc.perSide ? ` ${t.perSide}` : ''} × {allSameWeight ? formatWeightFromKg(firstWeight, weightUnit) : normalizeWeightUnit(weightUnit)}
+      {(acc.done || []).length} × {acc.reps} × {allSameWeight ? formatWeightFromKg(firstWeight, weightUnit) : normalizeWeightUnit(weightUnit)}{acc.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}
     </>
   );
 
@@ -5042,6 +5046,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   if (groupedSetEntries[0]?.index !== si) return null;
 
                   const firstIncompleteBackoff = groupedSetEntries.find(({ set: groupedSet }) => !groupedSet.done && !groupedSet.skipped)?.index ?? -1;
+                  const groupContainsNextSet = groupedSetEntries.some(({ index }) => index === firstIncompleteSet);
 
                   return (
                     <React.Fragment key={`set-group-${li}-${si}`}>
@@ -5051,7 +5056,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                           !isReadOnly &&
                           li === firstIncompleteLiftIndex &&
                           allPrepDone &&
-                          allWarmupsDone
+                          allWarmupsDone &&
+                          groupContainsNextSet
                             ? firstIncompleteBackoff
                             : -1
                         }
@@ -5370,12 +5376,13 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             if (groupedSetEntries[0]?.index !== i) return null;
 
             const firstIncompleteBackoff = groupedSetEntries.find(({ set: groupedSet }) => !groupedSet.done && !groupedSet.skipped)?.index ?? -1;
+            const groupContainsNextSet = groupedSetEntries.some(({ index }) => index === firstIncomplete);
 
             return (
               <React.Fragment key={`set-group-${i}`}>
                 <BackoffGroup
                   entries={groupedSetEntries}
-                  activeIndex={!isReadOnly && allWarmupsDone ? firstIncompleteBackoff : -1}
+                  activeIndex={!isReadOnly && allWarmupsDone && groupContainsNextSet ? firstIncompleteBackoff : -1}
                   isReadOnly={isReadOnly}
                   onToggle={index => handleToggle(() => onToggleSet(index))}
                   onEditAll={val => groupedSetEntries.forEach(({ index }) => onWeightChange('set', index, val))}
@@ -5907,7 +5914,7 @@ const meetTotals = {
     }
 
     function chooseTickStep(range) {
-      if (range <= 30) return 5;
+      if (range <= 10) return 5;
       if (range <= 60) return 10;
       if (range <= 120) return 20;
       if (range <= 300) return 50;
@@ -5933,8 +5940,8 @@ const meetTotals = {
 
         yDomain = [lower, upper];
         yTicks = buildTicks(lower, upper, tickStep);
-      } else {
-        const step = maxY <= 2 ? 0.1 : 0.5;
+      } else if (maxY <= 2) {
+        const step = 0.1;
         let lower = Math.floor(minY / step) * step;
         let upper = Math.ceil(maxY / step) * step;
 
@@ -5948,6 +5955,19 @@ const meetTotals = {
           Math.round(upper * 100) / 100,
         ];
         yTicks = buildTicks(yDomain[0], yDomain[1], step);
+      } else {
+        let lower = Math.floor(minY);
+        let upper = Math.ceil(maxY);
+
+        if (lower === upper) {
+          lower -= 1;
+          upper += 1;
+        }
+
+        const smallMetricTickStep = dataKeys.includes('physiqueRating') ? 1 : 0.5;
+
+        yDomain = [lower, upper];
+        yTicks = buildTicks(lower, upper, smallMetricTickStep);
       }
     }
 
@@ -6851,8 +6871,6 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
 
   function renderWorkoutListToggleButton(position = 'top') {
     if (!hasHiddenWorkouts) return null;
-    if (position === 'bottom' && !showAllWorkouts) return null;
-
     return (
       <button
         type="button"
