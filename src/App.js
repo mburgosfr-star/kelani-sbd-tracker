@@ -5901,74 +5901,46 @@ const meetTotals = {
     let yDomain = ['auto', 'auto'];
     let yTicks = undefined;
 
-    function buildTicks(min, max, step) {
-      const ticks = [];
-      const safeStep = Number(step) || 1;
-
-      for (let value = min; value <= max + safeStep / 2; value += safeStep) {
+    function midpointTicks(lower, upper) {
+      const midpoint = (lower + upper) / 2;
+      return [lower, midpoint, upper].map(value => {
         const rounded = Math.round(value * 100) / 100;
-        ticks.push(Object.is(rounded, -0) ? 0 : rounded);
-      }
-
-      return ticks;
+        return Object.is(rounded, -0) ? 0 : rounded;
+      });
     }
 
-    function chooseTickStep(range) {
-      if (range <= 10) return 5;
-      if (range <= 60) return 10;
-      if (range <= 120) return 20;
-      if (range <= 300) return 50;
-      if (range <= 600) return 100;
-      return 200;
+    function chooseDomainUnit(minY, maxY) {
+      const largest = Math.max(Math.abs(minY), Math.abs(maxY));
+
+      if (largest >= 1000) return 100;
+      if (largest >= 100) return 10;
+      if (largest >= 10) return 10;
+      if (largest >= 2) return 1;
+      return 0.1;
     }
 
     if (yValues.length > 0) {
       const minY = Math.min(...yValues);
       const maxY = Math.max(...yValues);
+      const unit = chooseDomainUnit(minY, maxY);
 
-      if (maxY >= 10) {
-        let lower = Math.floor(minY / 10) * 10;
-        let upper = Math.ceil(maxY / 10) * 10;
+      let lower = Math.floor(minY / unit) * unit;
+      let upper = Math.ceil(maxY / unit) * unit;
 
-        if (lower === upper) {
-          lower -= 10;
-          upper += 10;
-        }
-
-        const range = upper - lower;
-        const tickStep = chooseTickStep(range);
-
-        yDomain = [lower, upper];
-        yTicks = buildTicks(lower, upper, tickStep);
-      } else if (maxY <= 2) {
-        const step = 0.1;
-        let lower = Math.floor(minY / step) * step;
-        let upper = Math.ceil(maxY / step) * step;
-
-        if (lower === upper) {
-          lower -= step;
-          upper += step;
-        }
-
-        yDomain = [
-          Math.round(lower * 100) / 100,
-          Math.round(upper * 100) / 100,
-        ];
-        yTicks = buildTicks(yDomain[0], yDomain[1], step);
-      } else {
-        let lower = Math.floor(minY);
-        let upper = Math.ceil(maxY);
-
-        if (lower === upper) {
-          lower -= 1;
-          upper += 1;
-        }
-
-        const smallMetricTickStep = dataKeys.includes('physiqueRating') ? 1 : 0.5;
-
-        yDomain = [lower, upper];
-        yTicks = buildTicks(lower, upper, smallMetricTickStep);
+      if (lower === upper) {
+        lower -= unit;
+        upper += unit;
       }
+
+      if (minY <= lower) lower -= unit;
+      if (maxY >= upper) upper += unit;
+
+      lower = Math.round(lower * 100) / 100;
+      upper = Math.round(upper * 100) / 100;
+
+      yDomain = [lower, upper];
+
+      yTicks = midpointTicks(lower, upper);
     }
 
     const allXTicks = [...new Set(
