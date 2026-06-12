@@ -5866,11 +5866,11 @@ const meetTotals = {
   third: meetPlan.reduce((sum, row) => sum + (Number(row.third) || 0), 0),
 };
 
-  function renderChart(data, dataKeys, colors) {
+  function renderChart(data, dataKeys, colors, emptyMessage = t.noStatsData) {
     if (!data || data.length === 0) {
       return (
         <p style={{ color: THEME.text, textAlign: 'center', padding: 14 }}>
-          {t.noStatsData}
+          {emptyMessage}
         </p>
       );
     }
@@ -5972,8 +5972,8 @@ const meetTotals = {
     }, {});
 
     return (
-      <ResponsiveContainer width="100%" height={180}>
-        <LineChart data={visibleData} margin={{ top: 4, right: 12, left: 4, bottom: 2 }}>
+      <ResponsiveContainer width="100%" height={150}>
+        <LineChart data={visibleData} margin={{ top: 2, right: 12, left: 4, bottom: 0 }}>
           <CartesianGrid stroke={THEME.border} vertical={false} />
           <XAxis
             dataKey="chartIndex"
@@ -6054,11 +6054,11 @@ const meetTotals = {
               background: `${neutralChartColor}14`,
               border: `1px solid ${neutralChartColor}`,
               borderRadius: 10,
-              padding: 10,
-              marginBottom: 8
+              padding: 8,
+              marginBottom: 6
             }}
           >
-            <h3 style={{ margin: '0 0 6px', color: neutralChartColor }}>{chart.title}</h3>
+            <h3 style={{ margin: '0 0 4px', color: neutralChartColor }}>{chart.title}</h3>
             {renderChart(chart.data, [chart.key], [chart.color])}
           </div>
         ))}
@@ -6157,10 +6157,10 @@ const meetTotals = {
             background: `${neutralChartColor}14`,
             border: `1px solid ${neutralChartColor}`,
             borderRadius: 10,
-            padding: 10
+            padding: 8
           }}>
-            <h3 style={{ margin: '0 0 6px', color: neutralChartColor }}>{t.strengthTotalBodyweight}</h3>
-            {renderChart(strengthData, ['strength', 'eStrength'], [THEME.muted, THEME.primary])}
+            <h3 style={{ margin: '0 0 4px', color: neutralChartColor }}>{t.strengthTotalBodyweight}</h3>
+            {renderChart(strengthData, ['strength', 'eStrength'], [THEME.muted, THEME.primary], t.noMetricData || t.noStatsData)}
           </div>
         </div>
       )}
@@ -7100,17 +7100,8 @@ function Onboarding({ onStart, t }) {
     return Boolean(squatKg && benchKg && deadliftKg);
   }
 
-  function hasRequiredProfileDetails() {
-    return Boolean(parseBirthDateInput(birthDate) && sex);
-  }
-
   function goToNextOnboardingStep() {
     if (onboardingStep === 2 && !hasRequiredTrainingDetails()) {
-      setOnboardingError(t.fillRequiredFields);
-      return;
-    }
-
-    if (onboardingStep === 3 && !hasRequiredProfileDetails()) {
       setOnboardingError(t.fillRequiredFields);
       return;
     }
@@ -7125,9 +7116,9 @@ function Onboarding({ onStart, t }) {
     const b = displayWeightToKg(parseFloat(bench), selectedWeightUnit);
     const d = displayWeightToKg(parseFloat(deadlift), selectedWeightUnit);
 
-    const normalizedBirthDate = parseBirthDateInput(birthDate);
+    const normalizedBirthDate = birthDate ? parseBirthDateInput(birthDate) : '';
 
-    if (!s || !b || !d || !normalizedBirthDate || !sex) {
+    if (!s || !b || !d || (birthDate && !normalizedBirthDate)) {
       setOnboardingError(t.fillRequiredFields);
       return;
     }
@@ -7137,12 +7128,12 @@ function Onboarding({ onStart, t }) {
   }
 
   const bodyFields = [
-    { key: 'bodyWeight', label: t.bodyweight, unit: onboardingWeightUnit },
-    { key: 'bodyFat', label: t.bodyFatPercent, unit: '%' },
-    { key: 'bodyWater', label: t.bodyWaterPercent, unit: '%' },
-    { key: 'visceralFat', label: t.visceralFatRating },
-    { key: 'physiqueRating', label: t.physiqueRating },
-    { key: 'boneMass', label: t.boneMassKg, unit: onboardingWeightUnit },
+    { key: 'bodyWeight', label: `${t.bodyweight} (${t.optional})`, unit: onboardingWeightUnit },
+    { key: 'bodyFat', label: `${t.bodyFatPercent} (${t.optional})`, unit: '%' },
+    { key: 'bodyWater', label: `${t.bodyWaterPercent} (${t.optional})`, unit: '%' },
+    { key: 'visceralFat', label: `${t.visceralFatRating} (${t.optional})` },
+    { key: 'physiqueRating', label: `${t.physiqueRating} (${t.optional})` },
+    { key: 'boneMass', label: `${t.boneMassKg} (${t.optional})`, unit: onboardingWeightUnit },
   ];
 
   return (
@@ -7150,25 +7141,24 @@ function Onboarding({ onStart, t }) {
       maxWidth: 500,
       margin: '0 auto',
       padding: 24,
-      paddingTop: 60,
+      paddingTop: 24,
       minHeight: '100vh',
       fontFamily: 'sans-serif',
       background: THEME.bg,
       color: THEME.text
     }}>
-      <h1 style={{
-        textAlign: 'center',
-        marginTop: 0,
-        marginBottom: 28,
-        color: THEME.primary,
-        fontSize: 34,
-        fontWeight: 900,
-        letterSpacing: 1.2,
-        lineHeight: 1.05,
-        textTransform: 'uppercase'
-      }}>
-        {t.appName}
-      </h1>
+      <div style={{ textAlign: 'center', marginBottom: 14 }}>
+        <img
+          src="/kelani-banner.png"
+          alt={t.appName}
+          style={{
+            width: 'min(360px, 92vw)',
+            height: 'auto',
+            display: 'block',
+            margin: '0 auto'
+          }}
+        />
+      </div>
 
       <div style={{
         padding: 0
@@ -7183,7 +7173,7 @@ function Onboarding({ onStart, t }) {
           </h2>
         )}
 
-        {onboardingStep === 2 && (
+        {onboardingStep !== 1 && (
           <p style={{
             margin: '0 0 14px',
             color: THEME.muted,
@@ -7192,7 +7182,11 @@ function Onboarding({ onStart, t }) {
             lineHeight: 1.4,
             textAlign: 'center'
           }}>
-            {t.onboardingMaxHelp}
+            {onboardingStep === 2
+              ? t.onboardingMaxHelp
+              : onboardingStep === 3
+              ? t.onboardingProfileHelp
+              : t.onboardingBodyHelp}
           </p>
         )}
 
@@ -7217,12 +7211,12 @@ function Onboarding({ onStart, t }) {
         {onboardingStep === 1 && (
           <div style={{ marginBottom: 26, textAlign: 'left' }}>
             <h3 style={{
-              margin: '4px 0 14px',
+              margin: '0 0 10px',
               color: THEME.red,
               fontSize: 30,
               fontWeight: 900,
               lineHeight: 1.15,
-              textAlign: 'center'
+              textAlign: 'left'
             }}>
               {t.onboardingHeroTitle}
             </h3>
@@ -7315,9 +7309,25 @@ function Onboarding({ onStart, t }) {
           ['Squat', t.squat1RM, squat, setSquat],
           ['Bench', t.bench1RM, bench, setBench],
           ['Deadlift', t.deadlift1RM, deadlift, setDeadlift],
-        ].map(([lift, label, val, setter]) => (
-          <div key={lift} style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
+        ].map(([lift, label, val, setter]) => {
+          const liftColor = lift === 'Squat'
+            ? THEME.red
+            : lift === 'Deadlift'
+              ? THEME.yellow
+              : THEME.primary;
+
+          return (
+          <div
+            key={lift}
+            style={{
+              marginBottom: 16,
+              padding: 10,
+              borderRadius: 10,
+              border: `1px solid ${liftColor}`,
+              background: `${liftColor}14`
+            }}
+          >
+            <label style={{ display: 'block', marginBottom: 10, fontWeight: 800, color: liftColor }}>
               {label}
             </label>
 
@@ -7333,7 +7343,7 @@ function Onboarding({ onStart, t }) {
                   padding: '10px 42px 10px 10px',
                   fontSize: 16,
                   borderRadius: 4,
-                  border: `1px solid ${THEME.border}`,
+                  border: `1px solid ${liftColor}`,
                   boxSizing: 'border-box',
                   background: THEME.bg,
                   color: THEME.text
@@ -7352,8 +7362,8 @@ function Onboarding({ onStart, t }) {
               </span>
             </div>
 
-            <div style={{ background: THEME.bg, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: 10 }}>
-              <div style={{ fontWeight: 800, fontSize: 13, color: THEME.text, marginBottom: 8 }}>
+            <div style={{ background: THEME.bg, border: `1px solid ${liftColor}`, borderRadius: 8, padding: 10 }}>
+              <div style={{ fontWeight: 800, fontSize: 13, color: liftColor, marginBottom: 8 }}>
                 {t.estimateE1RM}
               </div>
 
@@ -7407,7 +7417,7 @@ function Onboarding({ onStart, t }) {
                   fontWeight: 800,
                   background: 'transparent',
                   color: THEME.text,
-                  border: `1px solid ${THEME.border}`,
+                  border: `1px solid ${liftColor}`,
                   borderRadius: 6,
                   cursor: 'pointer'
                 }}
@@ -7416,7 +7426,8 @@ function Onboarding({ onStart, t }) {
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
           </>
         )}
 
@@ -10263,9 +10274,14 @@ const latestBodyDataRows = [
           </div>
         ))
       ) : (
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ color: THEME.text, fontWeight: 700 }}>{t.bodyweight}</span>
-          <strong>—</strong>
+        <div style={{
+          color: THEME.muted,
+          fontSize: 14,
+          fontWeight: 700,
+          lineHeight: 1.4,
+          textAlign: 'center'
+        }}>
+          {t.noBodyDataYet}
         </div>
       )}
     </div>
