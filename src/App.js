@@ -1805,17 +1805,20 @@ function CooldownBlock({ items = [], onToggleItem = () => {}, t, isReadOnly = fa
 function EffortPicker({ value, onChange, t }) {
   return (
     <div style={{
-      background: THEME.bg,
-      borderTop: `1px solid ${THEME.border}`,
-      borderBottom: `1px solid ${THEME.border}`,
-      padding: '7px 10px',
+      margin: '7px 10px 9px',
+      padding: '10px',
       display: 'grid',
-      gap: 6
+      gap: 8,
+      borderRadius: 12,
+      border: `1px solid ${THEME.primary}`,
+      background: 'rgba(243, 156, 18, 0.14)',
+      boxShadow: '0 0 0 1px rgba(243, 156, 18, 0.08)'
     }}>
       <div style={{
         color: THEME.text,
-        fontSize: 12,
-        fontWeight: 800,
+        fontSize: 13,
+        fontWeight: 900,
+        lineHeight: 1.25,
         textAlign: 'center'
       }}>
         {t.setEffortQuestion}
@@ -1824,7 +1827,7 @@ function EffortPicker({ value, onChange, t }) {
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-        gap: 6
+        gap: 7
       }}>
         {SET_EFFORT_OPTIONS.map(option => (
           <button
@@ -1832,13 +1835,14 @@ function EffortPicker({ value, onChange, t }) {
             type="button"
             onClick={() => onChange(option)}
             style={{
-              padding: '6px 3px',
-              borderRadius: 8,
+              minHeight: 36,
+              padding: '8px 4px',
+              borderRadius: 10,
               border: `1px solid ${value === option ? THEME.primary : THEME.border}`,
-              background: value === option ? THEME.primary : THEME.card,
+              background: value === option ? THEME.primary : 'rgba(255, 255, 255, 0.06)',
               color: value === option ? THEME.bg : THEME.text,
-              fontSize: 11,
-              fontWeight: 800,
+              fontSize: 12,
+              fontWeight: 900,
               cursor: 'pointer'
             }}
           >
