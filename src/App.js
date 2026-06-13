@@ -466,19 +466,21 @@ function liftLabel(lift, t) {
 }
 
 function normalizeBenchPressVariant(variant) {
-  if (variant === 'floorPress') return 'floorPress';
   if (variant === 'standingLandminePress') return 'standingLandminePress';
+  if (variant === 'shoulderPress') return 'shoulderPress';
   if (variant === 'machineAlternative') return 'machineAlternative';
   return 'standard';
 }
 
 function normalizeSquatVariant(variant) {
   if (variant === 'beltSquat') return 'beltSquat';
+  if (variant === 'zercherSquat') return 'zercherSquat';
   return 'standard';
 }
 
 function normalizeDeadliftVariant(variant) {
   if (variant === 'alternative') return 'alternative';
+  if (variant === 'hipThrust') return 'hipThrust';
   return 'standard';
 }
 
@@ -490,6 +492,10 @@ function isBenchMachineAlternative(lift, benchPressVariant = 'standard') {
   return lift === 'Bench' && normalizeBenchPressVariant(benchPressVariant) === 'machineAlternative';
 }
 
+function isBenchHomeAlternative(lift, benchPressVariant = 'standard') {
+  return lift === 'Bench' && normalizeBenchPressVariant(benchPressVariant) === 'shoulderPress';
+}
+
 function workoutLiftLabel(lift, t, benchPressVariant = 'standard', squatVariant = 'standard') {
   const normalizedBenchPressVariant = normalizeBenchPressVariant(benchPressVariant);
   const normalizedSquatVariant = normalizeSquatVariant(squatVariant);
@@ -498,12 +504,16 @@ function workoutLiftLabel(lift, t, benchPressVariant = 'standard', squatVariant 
     return t.squatAlternativeWorkout || 'Belt Squat';
   }
 
-  if (lift === 'Bench' && normalizedBenchPressVariant === 'floorPress') {
-    return t.benchPressFloorPress || 'Floor Press';
+  if (lift === 'Squat' && normalizedSquatVariant === 'zercherSquat') {
+    return t.squatAlternativeZercherSquat || 'Zercher Squat';
   }
 
   if (lift === 'Bench' && normalizedBenchPressVariant === 'standingLandminePress') {
     return t.benchPressStandingLandminePress || 'Landmine';
+  }
+
+  if (lift === 'Bench' && normalizedBenchPressVariant === 'shoulderPress') {
+    return t.benchPressShoulderPress || 'Shoulder Press';
   }
 
   if (lift === 'Bench' && normalizedBenchPressVariant === 'machineAlternative') {
@@ -514,8 +524,17 @@ function workoutLiftLabel(lift, t, benchPressVariant = 'standard', squatVariant 
 }
 
 function workoutLiftBlockLabel(liftBlock, t, benchPressVariant = 'standard') {
-  if (isSquatBeltAlternativeLiftBlock(liftBlock)) {
-    return t.squatAlternativeWorkout || 'Belt Squat';
+  if (liftBlock?.lift === 'Squat' && normalizeSquatVariant(liftBlock?.squatVariant) !== 'standard') {
+    return workoutLiftLabel(
+      liftBlock?.lift,
+      t,
+      liftBlock?.benchPressVariant || 'standard',
+      liftBlock?.squatVariant || 'standard'
+    );
+  }
+
+  if (liftBlock?.lift === 'Deadlift' && normalizeDeadliftVariant(liftBlock?.deadliftVariant) === 'hipThrust') {
+    return t.deadliftHipThrustWorkout || 'Barbell Hip Thrust';
   }
 
   if (isDeadliftAlternativeLiftBlock(liftBlock)) {
@@ -556,6 +575,7 @@ function formatWorkoutWeightFromKg(weightKg, weightUnit = WEIGHT_UNITS.KG, t, li
 
 function shouldTrackWorkoutStrength(lift, benchPressVariant = 'standard') {
   if (isStandingLandminePress(lift, benchPressVariant)) return false;
+  if (isBenchHomeAlternative(lift, benchPressVariant)) return false;
   if (isBenchMachineAlternative(lift, benchPressVariant)) return false;
   return true;
 }
@@ -563,6 +583,7 @@ function shouldTrackWorkoutStrength(lift, benchPressVariant = 'standard') {
 function isSquatBeltAlternativeLiftBlock(liftBlock = {}) {
   return liftBlock?.lift === 'Squat' && (
     liftBlock.squatVariant === 'beltSquat' ||
+    liftBlock.squatVariant === 'zercherSquat' ||
     (liftBlock.sets || []).some(set => String(set.groupKey || '').startsWith('squatAlternative'))
   );
 }
@@ -570,7 +591,9 @@ function isSquatBeltAlternativeLiftBlock(liftBlock = {}) {
 function isDeadliftAlternativeLiftBlock(liftBlock = {}) {
   return liftBlock?.lift === 'Deadlift' && (
     liftBlock.deadliftVariant === 'alternative' ||
-    (liftBlock.sets || []).some(set => String(set.groupKey || '').startsWith('deadliftAlternative'))
+    liftBlock.deadliftVariant === 'hipThrust' ||
+    (liftBlock.sets || []).some(set => String(set.groupKey || '').startsWith('deadliftAlternative')) ||
+    (liftBlock.sets || []).some(set => String(set.groupKey || '').startsWith('deadliftHomeAlternative'))
   );
 }
 
@@ -581,10 +604,18 @@ function isBenchMachineAlternativeLiftBlock(liftBlock = {}) {
   );
 }
 
+function isBenchHomeAlternativeLiftBlock(liftBlock = {}) {
+  return liftBlock?.lift === 'Bench' && (
+    liftBlock.benchPressVariant === 'shoulderPress' ||
+    (liftBlock.sets || []).some(set => String(set.groupKey || '').startsWith('benchHomeAlternative'))
+  );
+}
+
 function shouldTrackLiftBlockStrength(liftBlock = {}, benchPressVariant = 'standard') {
   if (isSquatBeltAlternativeLiftBlock(liftBlock)) return false;
   if (isDeadliftAlternativeLiftBlock(liftBlock)) return false;
   if (isBenchMachineAlternativeLiftBlock(liftBlock)) return false;
+  if (isBenchHomeAlternativeLiftBlock(liftBlock)) return false;
 
   return shouldTrackWorkoutStrength(
     liftBlock.lift,
@@ -982,6 +1013,17 @@ function generateSquatAlternativeSets(oneRMs = {}) {
   }));
 }
 
+function generateSquatHomeAlternativeSets(oneRMs = {}) {
+  const zercherSquatWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.40));
+
+  return Array.from({ length: 4 }, () => makeWorkoutSet({
+    labelKey: 'squatAlternativeZercherSquat',
+    groupKey: 'squatAlternativeZercherSquat',
+    reps: 6,
+    weight: zercherSquatWeight,
+  }));
+}
+
 function generateBenchMachineAlternativeSets(oneRMs = {}) {
   const chestPressWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.50));
   const pecDeckWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.20));
@@ -1007,6 +1049,17 @@ function generateBenchMachineAlternativeSets(oneRMs = {}) {
       weight: tricepsPushdownWeight,
     })),
   ];
+}
+
+function generateBenchHomeAlternativeSets(oneRMs = {}) {
+  const shoulderPressWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.35));
+
+  return Array.from({ length: 4 }, () => makeWorkoutSet({
+    labelKey: 'benchHomeAlternativeShoulderPress',
+    groupKey: 'benchHomeAlternativeShoulderPress',
+    reps: 6,
+    weight: shoulderPressWeight,
+  }));
 }
 
 function generateDeadliftAlternativeSets(oneRMs = {}) {
@@ -1035,6 +1088,17 @@ function generateDeadliftAlternativeSets(oneRMs = {}) {
       perSide: true,
     })),
   ];
+}
+
+function generateDeadliftHomeAlternativeSets(oneRMs = {}) {
+  const hipThrustWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Deadlift) || 0) * 0.50));
+
+  return Array.from({ length: 4 }, () => makeWorkoutSet({
+    labelKey: 'deadliftHomeAlternativeBarbellHipThrust',
+    groupKey: 'deadliftHomeAlternativeBarbellHipThrust',
+    reps: 8,
+    weight: hipThrustWeight,
+  }));
 }
 
 function generateAccessoriesForLift(lift, accessoryMode = 'off', accessoryPRs = {}, oneRMs = {}) {
@@ -1277,20 +1341,32 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
   function buildLiftBlock(liftConfig, liftIndex = 0) {
     const isSquatBeltAlternative =
       liftConfig.lift === 'Squat' && normalizedSquatVariant === 'beltSquat';
+    const isSquatHomeAlternative =
+      liftConfig.lift === 'Squat' && normalizedSquatVariant === 'zercherSquat';
     const isDeadliftAlternative =
       liftConfig.lift === 'Deadlift' && normalizedDeadliftVariant === 'alternative';
+    const isDeadliftHomeAlternative =
+      liftConfig.lift === 'Deadlift' && normalizedDeadliftVariant === 'hipThrust';
     const isBenchMachineAlternative =
       liftConfig.lift === 'Bench' && normalizedBenchPressVariant === 'machineAlternative';
+    const isBenchHomeAlternative =
+      liftConfig.lift === 'Bench' && normalizedBenchPressVariant === 'shoulderPress';
 
     const sets = isSquatBeltAlternative
       ? generateSquatAlternativeSets(oneRMs)
-      : isDeadliftAlternative
-        ? generateDeadliftAlternativeSets(oneRMs)
-        : isBenchMachineAlternative
-          ? generateBenchMachineAlternativeSets(oneRMs)
-          : [];
+      : isSquatHomeAlternative
+        ? generateSquatHomeAlternativeSets(oneRMs)
+        : isDeadliftAlternative
+          ? generateDeadliftAlternativeSets(oneRMs)
+          : isDeadliftHomeAlternative
+            ? generateDeadliftHomeAlternativeSets(oneRMs)
+            : isBenchMachineAlternative
+              ? generateBenchMachineAlternativeSets(oneRMs)
+              : isBenchHomeAlternative
+                ? generateBenchHomeAlternativeSets(oneRMs)
+                : [];
 
-    if (!isSquatBeltAlternative && !isDeadliftAlternative && !isBenchMachineAlternative) {
+    if (!isSquatBeltAlternative && !isSquatHomeAlternative && !isDeadliftAlternative && !isDeadliftHomeAlternative && !isBenchMachineAlternative && !isBenchHomeAlternative) {
       liftConfig.blocks.forEach(block => {
         for (let i = 0; i < block.sets; i++) {
           const weight = round25(oneRMs[liftConfig.lift] * block.pct);
@@ -3775,10 +3851,11 @@ function WorkoutSection({
 function SquatVariantSection({ squatVariant, setSquatVariant, t }) {
   const [showOptions, setShowOptions] = useState(false);
 
-  const modes = ['standard', 'beltSquat'];
+  const modes = ['standard', 'beltSquat', 'zercherSquat'];
   const labels = {
     standard: t.squatStandard,
     beltSquat: t.squatBeltSquat,
+    zercherSquat: t.squatZercherSquat,
   };
 
   return (
@@ -3830,11 +3907,11 @@ function SquatVariantSection({ squatVariant, setSquatVariant, t }) {
 function BenchPressVariantSection({ benchPressVariant, setBenchPressVariant, t }) {
   const [showOptions, setShowOptions] = useState(false);
 
-  const modes = ['standard', 'floorPress', 'standingLandminePress', 'machineAlternative'];
+  const modes = ['standard', 'shoulderPress', 'machineAlternative'];
   const labels = {
     standard: t.benchPressStandard,
-    floorPress: t.benchPressFloorPress,
     standingLandminePress: t.benchPressStandingLandminePress,
+    shoulderPress: t.benchPressShoulderPress,
     machineAlternative: t.benchPressMachineAlternative,
   };
 
@@ -3887,10 +3964,11 @@ function BenchPressVariantSection({ benchPressVariant, setBenchPressVariant, t }
 function DeadliftVariantSection({ deadliftVariant, setDeadliftVariant, t }) {
   const [showOptions, setShowOptions] = useState(false);
 
-  const modes = ['standard', 'alternative'];
+  const modes = ['standard', 'alternative', 'hipThrust'];
   const labels = {
     standard: t.deadliftStandard,
     alternative: t.deadliftAlternative,
+    hipThrust: t.deadliftHipThrust,
   };
 
   return (
