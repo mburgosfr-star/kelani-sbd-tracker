@@ -6711,7 +6711,7 @@ function AppHeader({ t, title, subtitle, meta, children, titleStyle = {} }) {
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 6
+        marginBottom: 3
       }}>
         <img
           src="/kelani-banner.png"
@@ -6726,6 +6726,16 @@ function AppHeader({ t, title, subtitle, meta, children, titleStyle = {} }) {
             boxShadow: 'none'
           }}
         />
+      </div>
+
+      <div style={{
+        color: THEME.muted,
+        fontSize: 11,
+        fontWeight: 800,
+        lineHeight: 1,
+        marginBottom: 7
+      }}>
+        {process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev'}
       </div>
 
       <h2 style={{
@@ -7149,9 +7159,17 @@ function Onboarding({ onStart, t }) {
             width: 'min(360px, 92vw)',
             height: 'auto',
             display: 'block',
-            margin: '0 auto'
+            margin: '0 auto 4px'
           }}
         />
+        <div style={{
+          color: THEME.muted,
+          fontSize: 11,
+          fontWeight: 800,
+          lineHeight: 1
+        }}>
+          {process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev'}
+        </div>
       </div>
 
       <div style={{
@@ -10325,7 +10343,6 @@ const latestBodyDataRows = [
   <AppHeader
     t={t}
     title={t.settings}
-    meta={`${t.appName} · ${process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev'}`}
   />
 
   <div style={{
