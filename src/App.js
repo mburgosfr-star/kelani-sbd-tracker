@@ -673,6 +673,22 @@ function roundToStep(value, step) {
   return Math.round(numericValue / step) * step;
 }
 
+function decimalLocale() {
+  const savedLanguage = localStorage.getItem('language');
+  const browserLanguage = (navigator.language || navigator.userLanguage || '').toLowerCase();
+  const language = savedLanguage || (
+    browserLanguage.startsWith('nl')
+      ? 'nl'
+      : browserLanguage.startsWith('ca')
+        ? 'ca'
+        : 'en'
+  );
+
+  if (language === 'nl') return 'nl-NL';
+  if (language === 'ca') return 'ca-ES';
+  return 'en-US';
+}
+
 function formatWeightValue(value, unit = WEIGHT_UNITS.KG, { body = false } = {}) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return '—';
@@ -689,11 +705,29 @@ function formatWeightValue(value, unit = WEIGHT_UNITS.KG, { body = false } = {})
   return Number(rounded.toFixed(decimals)).toString();
 }
 
+function formatDecimalDisplay(value, { minimumFractionDigits, maximumFractionDigits = 1 } = {}) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return '—';
+
+  const hasDecimal = !Number.isInteger(numericValue);
+  const minDigits = minimumFractionDigits ?? (hasDecimal ? 1 : 0);
+
+  return numericValue.toLocaleString(decimalLocale(), {
+    minimumFractionDigits: minDigits,
+    maximumFractionDigits,
+  });
+}
+
+function formatWeightDisplayValue(value, unit = WEIGHT_UNITS.KG, options = {}) {
+  const rawValue = formatWeightValue(value, unit, options);
+  return formatDecimalDisplay(rawValue, { maximumFractionDigits: 1 });
+}
+
 function formatWeightFromKg(weightKg, unit = WEIGHT_UNITS.KG, options = {}) {
   const displayWeight = kgToDisplayWeight(weightKg, unit);
   if (displayWeight === '') return '—';
 
-  return `${formatWeightValue(displayWeight, unit, options)} ${normalizeWeightUnit(unit)}`;
+  return `${formatWeightDisplayValue(displayWeight, unit, options)} ${normalizeWeightUnit(unit)}`;
 }
 
 
@@ -2313,7 +2347,7 @@ function WorkoutActionRow({
 
 function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
-  const displayPct = set.pct ? Number((set.pct * 100).toFixed(1)) : null;
+  const displayPct = set.pct ? formatDecimalDisplay(Number((set.pct * 100).toFixed(1))) : null;
   const effortLabel = getSetEffortLabel(set.effort, t);
   const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(set.weight));
@@ -4211,7 +4245,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   const failedEntry = entries.find(({ set }) => set.failed || set.skipped);
   const allSameWeight = entries.every(({ set }) => Number(set.weight) === Number(firstSet.weight));
   const allSameReps = entries.every(({ set }) => Number(set.reps) === Number(firstSet.reps));
-  const displayPct = firstSet.pct ? Number((firstSet.pct * 100).toFixed(1)) : null;
+  const displayPct = firstSet.pct ? formatDecimalDisplay(Number((firstSet.pct * 100).toFixed(1))) : null;
   const [inputVal, setInputVal] = useState(String(firstSet.weight || ''));
 
   useEffect(() => {
@@ -5930,16 +5964,38 @@ function commitMeetAttempt(lift, key, displayValue) {
   updateMeetAttempt(lift, key, valueKg);
 }
 
+function ensureStrictMeetAttempts(attempts) {
+  const minStep = 2.5;
+  const opener = Number(attempts.opener) || 0;
+  let second = Number(attempts.second) || 0;
+  let third = Number(attempts.third) || 0;
+
+  if (opener > 0 && second <= opener) {
+    second = opener + minStep;
+  }
+
+  if (second > 0 && third <= second) {
+    third = second + minStep;
+  }
+
+  return {
+    ...attempts,
+    opener,
+    second,
+    third,
+  };
+}
+
 const suggestedMeetPlan = LIFT_ORDER.map(lift => {
   const e1rm = bestStats[lift]?.e1rm || 0;
 
-  return {
+  return ensureStrictMeetAttempts({
     lift,
     e1rm,
     opener: roundAttempt(e1rm * 0.90),
     second: roundAttempt(e1rm * 0.975),
     third: roundAttempt(e1rm * 1.025),
-  };
+  });
 });
 
 const meetPlan = suggestedMeetPlan.map(row => ({
@@ -6045,9 +6101,20 @@ const meetTotals = {
       return labels;
     }, {});
 
+    const isStrengthChart = dataKeys.some(key => ['strength', 'eStrength'].includes(key));
+
+    function formatChartValue(value) {
+      const numericValue = Number(value);
+      if (!Number.isFinite(numericValue)) return value;
+
+      return formatDecimalDisplay(numericValue, {
+        maximumFractionDigits: isStrengthChart ? 2 : 1,
+      });
+    }
+
     return (
       <ResponsiveContainer width="100%" height={150}>
-        <LineChart data={visibleData} margin={{ top: 2, right: 12, left: 4, bottom: 0 }}>
+        <LineChart data={visibleData} margin={{ top: 2, right: 12, left: 10, bottom: 0 }}>
           <CartesianGrid stroke={THEME.border} vertical={false} />
           <XAxis
             dataKey="chartIndex"
@@ -6063,14 +6130,16 @@ const meetTotals = {
           />
           <YAxis
             stroke={THEME.text}
-            width={42}
+            width={58}
             domain={yDomain}
             ticks={yTicks}
+            tickFormatter={formatChartValue}
+            tickMargin={4}
             allowDecimals={true}
           />
           <Tooltip
   labelFormatter={(value, payload) => payload?.[0]?.payload?.label || labelByX[value] || value}
-  formatter={(value, name) => [value, chartMetricLabel(name)]}
+  formatter={(value, name) => [formatChartValue(value), chartMetricLabel(name)]}
   contentStyle={{
     backgroundColor: THEME.card,
     border: `1px solid ${THEME.border}`,
@@ -9948,7 +10017,12 @@ const eStrengthRatio = latestBodyWeight
 
 function bodyMetricValue(value, suffix = '') {
   if (!value) return null;
-  return suffix ? `${value} ${suffix}` : `${value}`;
+
+  const formattedValue = Number.isInteger(Number(value))
+    ? formatDecimalDisplay(value, { maximumFractionDigits: 0 })
+    : formatDecimalDisplay(value, { maximumFractionDigits: 1 });
+
+  return suffix ? `${formattedValue} ${suffix}` : formattedValue;
 }
 
 function calculateAge(birthDate) {
@@ -10107,12 +10181,12 @@ const latestBodyDataRows = [
   {
     key: 'strength',
     label: t.strength,
-    value: strengthRatio || null,
+    value: strengthRatio ? formatDecimalDisplay(strengthRatio, { maximumFractionDigits: 2 }) : null,
   },
   {
     key: 'eStrength',
     label: t.eStrength,
-    value: eStrengthRatio || null,
+    value: eStrengthRatio ? formatDecimalDisplay(eStrengthRatio, { maximumFractionDigits: 2 }) : null,
   },
   {
     key: 'bodyFat',
