@@ -6944,7 +6944,7 @@ function applyCompletedHistorySnapshotsToWorkouts(workouts = [], history = [], c
 
   (history || []).forEach(entry => {
     if (
-      Number(entry?.cycle) === Number(currentCycle) &&
+      Number(getEntryCycle(entry)) === Number(currentCycle) &&
       Number.isFinite(Number(entry?.workoutNumber)) &&
       entry?.workoutSnapshot?.completed
     ) {
@@ -7980,7 +7980,7 @@ function App() {
   const completedWorkoutNumbers = Array.from(new Set(
     (history || [])
       .filter(entry =>
-        Number(entry.cycle) === Number(currentCycle) &&
+        Number(getEntryCycle(entry)) === Number(currentCycle) &&
         isCompletedHistoryEntry(entry)
       )
       .map(entry => Number(entry.workoutNumber))
