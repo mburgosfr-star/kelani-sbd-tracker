@@ -6989,6 +6989,20 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
     }));
   const hasHiddenWorkouts = workouts.length > (visibleEnd - visibleStart);
 
+  function formatCompletedAt(value) {
+    if (!value) return null;
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+
+    return date.toLocaleString(decimalLocale(), {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
   useEffect(() => {
     if (!currentWorkoutRef.current) return;
 
@@ -7028,6 +7042,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
       {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
         const isDone = completedWorkoutNumberSet.has(Number(workout.number)) || Boolean(workout.completed);
+        const completedAtLabel = isDone ? formatCompletedAt(workout.completedAt) : null;
         const focusColor = getLiftThemeColor(workout.lift);
         const headerBg = isCurrent ? focusColor : workout.type === 'rest' ? THEME.brown : THEME.border;
         const planLines = getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant);
@@ -7093,6 +7108,17 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
                   {typeLabel}
                 </div>
               )}
+
+              {completedAtLabel && (
+                <div style={{
+                  fontSize: 11,
+                  color: THEME.muted,
+                  fontWeight: 700,
+                  marginTop: 3
+                }}>
+                  ✓ {completedAtLabel}
+                </div>
+              )}
             </div>
 
             {planLines.length > 0 && (
@@ -7122,7 +7148,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
               </div>
             )}
 
-            {isDone && <span style={{ color: THEME.primary, fontSize: 18, marginLeft: 8 }}>✅</span>}
+            {isDone && !completedAtLabel && <span style={{ color: THEME.primary, fontSize: 18, marginLeft: 8 }}>✅</span>}
           </div>
         );
       })}
