@@ -9758,7 +9758,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         };
       });
 
-      const primaryResult = results[0];
+      const primaryResult = results.find(result => result.trackStrength !== false);
 
       setCompletedSummary({
         type: 'multiTraining',
@@ -11050,7 +11050,7 @@ const latestBodyDataRows = [
           </div>
         )}
         <div style={{
-          display: completedSummary?.type === 'multiTraining' && !(completedSummary?.results || []).some(result => result.trackStrength !== false) ? 'none' : undefined,
+          display: !(completedSummary?.results || []).some(result => result.trackStrength !== false) ? 'none' : undefined,
           background: 'transparent',
           border: 'none',
           color: THEME.text,
@@ -11083,9 +11083,8 @@ const latestBodyDataRows = [
               </div>
             );
 
-            const primaryResult = completedSummary?.type === 'multiTraining'
-              ? (completedSummary.results || []).find(result => result.trackStrength !== false)
-              : null;
+            const primaryResult = (completedSummary?.results || []).find(result => result.trackStrength !== false);
+            if (!primaryResult) return null;
 
             const sets = (completedWorkout?.sets || []).filter(s => s.done && !s.failed && !s.skipped);
 
