@@ -11153,48 +11153,83 @@ const latestBodyDataRows = [
                   {workoutLiftBlockLabel(liftBlock, t, benchPressVariant)}
                 </div>
 
-                {(liftBlock.sets || []).map((set, i) => {
-                  const setLabel = set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`;
-                  const isInvalidSet = set.failed || set.skipped || !set.done;
-                  const effortLabel = getSetEffortLabel(set.effort, t);
+                {(() => {
+                  const groups = [];
 
-                  return (
+                  (liftBlock.sets || []).forEach((set, i) => {
+                    const setLabel = set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`;
+                    const isInvalidSet = set.failed || set.skipped || !set.done;
+                    const effortLabel = getSetEffortLabel(set.effort, t);
+                    const weightText = `${formatWorkoutWeightFromKg(
+                      set.weight,
+                      weightUnit,
+                      t,
+                      liftBlock.lift,
+                      liftBlock.benchPressVariant || benchPressVariant
+                    )}${set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}`;
+                    const key = [
+                      setLabel,
+                      set.reps,
+                      weightText,
+                      isInvalidSet ? 'invalid' : 'done',
+                      effortLabel || '',
+                    ].join('|');
+
+                    const previous = groups[groups.length - 1];
+                    if (previous?.key === key) {
+                      previous.count += 1;
+                      return;
+                    }
+
+                    groups.push({
+                      key,
+                      label: setLabel,
+                      reps: set.reps,
+                      weightText,
+                      isInvalidSet,
+                      effortLabel,
+                      count: 1,
+                    });
+                  });
+
+                  return groups.map((group, i) => (
                     <div
-                      key={`force-${liftBlock.lift}-${i}`}
+                      key={`force-${liftBlock.lift}-${i}-${group.key}`}
                       style={{
                         display: 'grid',
                         gridTemplateColumns: '1fr auto',
                         gap: 12,
                         padding: '7px 0',
-                        opacity: isInvalidSet ? 0.75 : 1
+                        opacity: group.isInvalidSet ? 0.75 : 1
                       }}
                     >
                       <div>
                         <div style={{ color: THEME.text, fontWeight: 800 }}>
-                          {isInvalidSet ? '✕ ' : '✓ '}
-                          {setLabel}
+                          {group.isInvalidSet ? '✕ ' : '✓ '}
+                          {group.label}
                         </div>
 
-                        <div style={{
-                          color: THEME.muted,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          marginTop: 2
-                        }}>
-                          {set.reps} {t.reps}
-                          {effortLabel ? ` · ${effortLabel}` : ''}
-                        </div>
+                        {group.effortLabel && (
+                          <div style={{
+                            color: THEME.muted,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            marginTop: 2
+                          }}>
+                            {group.effortLabel}
+                          </div>
+                        )}
                       </div>
 
                       <strong style={{
-                        color: isInvalidSet ? '#e74c3c' : '#ffffff',
+                        color: group.isInvalidSet ? '#e74c3c' : '#ffffff',
                         whiteSpace: 'nowrap'
                       }}>
-                        {formatWeightFromKg(set.weight, weightUnit)}
+                        {group.count}×{group.reps}×{group.weightText}
                       </strong>
                     </div>
-                  );
-                })}
+                  ));
+                })()}
               </div>
             ))}
           </div>
