@@ -1,0 +1,6 @@
+- Restores completed workout snapshots and completion status after program/exercise changes.
+- Adds program profiles from the Program screen: Kelani SBD, Kelani SBD Plus, Kelani SBD Safe and Kelani SBD Safe Plus.
+- Adds home-friendly alternatives including Shoulder Press and Hip Thrust.
+- Shows completed workout timestamps in the Program screen.
+- Makes Workout Complete summaries more compact and hides strength summaries for replacement workouts.
+- Improves localized decimal formatting and Stats chart axis spacing.

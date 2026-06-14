@@ -6740,15 +6740,15 @@ function AppHeader({ t, title, subtitle, meta, children, titleStyle = {} }) {
 function isCompletedHistoryEntry(entry) {
   if (!entry) return false;
 
+  const hasWorkoutNumber =
+    Number.isFinite(Number(entry.workoutNumber)) &&
+    Number(entry.workoutNumber) > 0;
+
   if (entry.workoutSnapshot) {
-    return entry.workoutSnapshot.completed === true;
+    return hasWorkoutNumber;
   }
 
-  return Boolean(
-    Number.isFinite(Number(entry.workoutNumber)) &&
-    Number(entry.workoutNumber) > 0 &&
-    entry.lift
-  );
+  return Boolean(hasWorkoutNumber && entry.lift);
 }
 
 function applyCompletedHistorySnapshotsToWorkouts(workouts = [], history = [], currentCycle) {
@@ -6758,9 +6758,15 @@ function applyCompletedHistorySnapshotsToWorkouts(workouts = [], history = [], c
     if (
       Number(getEntryCycle(entry)) === Number(currentCycle) &&
       Number.isFinite(Number(entry?.workoutNumber)) &&
-      entry?.workoutSnapshot?.completed
+      entry?.workoutSnapshot &&
+      isCompletedHistoryEntry(entry)
     ) {
-      completedSnapshotsByWorkoutNumber.set(Number(entry.workoutNumber), entry.workoutSnapshot);
+      completedSnapshotsByWorkoutNumber.set(Number(entry.workoutNumber), {
+        ...entry.workoutSnapshot,
+        completed: true,
+        completedAt: entry.workoutSnapshot.completedAt || entry.completedAt || null,
+        completedDate: entry.workoutSnapshot.completedDate || entry.date || null,
+      });
     }
   });
 
@@ -6801,11 +6807,12 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
     }));
   const hasHiddenWorkouts = workouts.length > (visibleEnd - visibleStart);
 
-  function formatCompletedAt(value) {
+  function formatCompletedAt(value, fallbackDate = null) {
+    if (!value && fallbackDate) return fallbackDate;
     if (!value) return null;
 
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return null;
+    if (Number.isNaN(date.getTime())) return fallbackDate;
 
     return date.toLocaleString(decimalLocale(), {
       day: '2-digit',
@@ -6854,7 +6861,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
       {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
         const isDone = completedWorkoutNumberSet.has(Number(workout.number)) || Boolean(workout.completed);
-        const completedAtLabel = isDone ? formatCompletedAt(workout.completedAt) : null;
+        const completedAtLabel = isDone ? formatCompletedAt(workout.completedAt, workout.completedDate || workout.date) : null;
         const focusColor = getLiftThemeColor(workout.lift);
         const headerBg = isCurrent ? focusColor : workout.type === 'rest' ? THEME.brown : THEME.border;
         const planLines = getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant);
@@ -7927,7 +7934,8 @@ function App() {
 
       const savedHistory = data.history || [];
       const savedCycle = data.currentCycle || 1;
-      const savedProgramProfile = data.programProfile
+      const hasSavedProgramProfile = Boolean(data.programProfile);
+      const savedProgramProfile = hasSavedProgramProfile
         ? normalizeProgramProfile(data.programProfile)
         : detectProgramProfile({
             preparationMode: data.preparationMode,
@@ -7937,11 +7945,25 @@ function App() {
             deadliftVariant: data.deadliftVariant,
           });
       const profileSettings = settingsForProgramProfile(savedProgramProfile);
-      const savedPreparationMode = normalizePreparationMode(profileSettings.preparationMode);
-      const savedSquatVariant = normalizeSquatVariant(profileSettings.squatVariant);
-      const savedDeadliftVariant = normalizeDeadliftVariant(profileSettings.deadliftVariant);
-      const savedBenchPressVariant = normalizeBenchPressVariant(profileSettings.benchPressVariant);
-      const generatedWorkouts = generateProgram(squat, bench, deadlift, normalizeAccessoryMode(profileSettings.accessoryMode), data.accessoryPRs || {}, savedPreparationMode, savedDeadliftVariant, savedBenchPressVariant, savedSquatVariant, profileSettings.includeCooldown);
+      const savedAccessoryMode = hasSavedProgramProfile
+        ? normalizeAccessoryMode(profileSettings.accessoryMode)
+        : normalizeAccessoryMode(data.accessoryMode);
+      const savedPreparationMode = hasSavedProgramProfile
+        ? normalizePreparationMode(profileSettings.preparationMode)
+        : normalizePreparationMode(data.preparationMode);
+      const savedSquatVariant = hasSavedProgramProfile
+        ? normalizeSquatVariant(profileSettings.squatVariant)
+        : normalizeSquatVariant(data.squatVariant || localStorage.getItem('squatVariant'));
+      const savedDeadliftVariant = hasSavedProgramProfile
+        ? normalizeDeadliftVariant(profileSettings.deadliftVariant)
+        : normalizeDeadliftVariant(data.deadliftVariant);
+      const savedBenchPressVariant = hasSavedProgramProfile
+        ? normalizeBenchPressVariant(profileSettings.benchPressVariant)
+        : normalizeBenchPressVariant(data.benchPressVariant || localStorage.getItem('benchPressVariant'));
+      const includeCooldown = hasSavedProgramProfile
+        ? profileSettings.includeCooldown
+        : true;
+      const generatedWorkouts = generateProgram(squat, bench, deadlift, savedAccessoryMode, data.accessoryPRs || {}, savedPreparationMode, savedDeadliftVariant, savedBenchPressVariant, savedSquatVariant, includeCooldown);
       const savedInProgress = data.inProgress || null;
       const savedMeetPlannerAttempts = data.meetPlannerAttempts || {};
       const savedMeetPrepChecklist = data.meetPrepChecklist || {};
@@ -7979,7 +8001,7 @@ function App() {
       setMeetPrepChecklist(savedMeetPrepChecklist);
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
       setProgramProfile(savedProgramProfile);
-      setAccessoryMode(normalizeAccessoryMode(profileSettings.accessoryMode));
+      setAccessoryMode(savedAccessoryMode);
       setPreparationMode(savedPreparationMode);
       setSquatVariant(savedSquatVariant);
       setDeadliftVariant(savedDeadliftVariant);
