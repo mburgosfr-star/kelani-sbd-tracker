@@ -9,7 +9,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
 const REST_TIME_OPTIONS = [90, 180, 300];
-const ACCESSORY_MODES = ['off', 'standard', 'upperBackFriendly'];
+const ACCESSORY_MODES = ['off', 'standard', 'upperBackFriendly', 'lowerBodyFriendly'];
 const SET_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'max'];
 const WORKOUT_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'tooMuch'];
 const LIFT_ORDER = ['Squat', 'Bench', 'Deadlift'];
@@ -529,6 +529,7 @@ function normalizeBenchPressVariant(variant) {
   if (variant === 'standingLandminePress') return 'standingLandminePress';
   if (variant === 'shoulderPress') return 'shoulderPress';
   if (variant === 'machineAlternative') return 'machineAlternative';
+  if (variant === 'goodMorning') return 'goodMorning';
   return 'standard';
 }
 
@@ -561,25 +562,28 @@ const PROGRAM_PROFILES = {
     deadliftVariant: 'standard',
     includeCooldown: true,
   },
-  kelaniSbdSafe: {
+  kelaniSbdLower: {
     preparationMode: 'shoulderThoracic',
     accessoryMode: 'off',
     squatVariant: 'standard',
-    benchPressVariant: 'shoulderPress',
+    benchPressVariant: 'goodMorning',
     deadliftVariant: 'hipThrust',
     includeCooldown: true,
   },
-  kelaniSbdSafePlus: {
+  kelaniSbdLowerPlus: {
     preparationMode: 'shoulderThoracic',
-    accessoryMode: 'upperBackFriendly',
+    accessoryMode: 'lowerBodyFriendly',
     squatVariant: 'standard',
-    benchPressVariant: 'shoulderPress',
+    benchPressVariant: 'goodMorning',
     deadliftVariant: 'hipThrust',
     includeCooldown: true,
   },
 };
 
 function normalizeProgramProfile(profile) {
+  if (profile === 'kelaniSbdSafe') return 'kelaniSbdLower';
+  if (profile === 'kelaniSbdSafePlus') return 'kelaniSbdLowerPlus';
+
   return Object.prototype.hasOwnProperty.call(PROGRAM_PROFILES, profile)
     ? profile
     : 'kelaniSbd';
@@ -618,7 +622,12 @@ function isBenchMachineAlternative(lift, benchPressVariant = 'standard') {
 }
 
 function isBenchHomeAlternative(lift, benchPressVariant = 'standard') {
-  return lift === 'Bench' && normalizeBenchPressVariant(benchPressVariant) === 'shoulderPress';
+  const normalizedBenchPressVariant = normalizeBenchPressVariant(benchPressVariant);
+
+  return lift === 'Bench' && (
+    normalizedBenchPressVariant === 'shoulderPress' ||
+    normalizedBenchPressVariant === 'goodMorning'
+  );
 }
 
 function workoutLiftLabel(lift, t, benchPressVariant = 'standard', squatVariant = 'standard') {
@@ -639,6 +648,10 @@ function workoutLiftLabel(lift, t, benchPressVariant = 'standard', squatVariant 
 
   if (lift === 'Bench' && normalizedBenchPressVariant === 'shoulderPress') {
     return t.benchPressShoulderPress || 'Shoulder Press';
+  }
+
+  if (lift === 'Bench' && normalizedBenchPressVariant === 'goodMorning') {
+    return t.benchPressGoodMorning || 'Good Morning';
   }
 
   if (lift === 'Bench' && normalizedBenchPressVariant === 'machineAlternative') {
@@ -732,6 +745,7 @@ function isBenchMachineAlternativeLiftBlock(liftBlock = {}) {
 function isBenchHomeAlternativeLiftBlock(liftBlock = {}) {
   return liftBlock?.lift === 'Bench' && (
     liftBlock.benchPressVariant === 'shoulderPress' ||
+    liftBlock.benchPressVariant === 'goodMorning' ||
     (liftBlock.sets || []).some(set => String(set.groupKey || '').startsWith('benchHomeAlternative'))
   );
 }
@@ -1152,6 +1166,19 @@ const ACCESSORY_TEMPLATES = {
       { key: 'seatedCalfRaise', labelKey: 'accessorySeatedCalfRaise', sets: 3, reps: 12, source: 'fixed', weight: 20 },
     ],
   },
+  lowerBodyFriendly: {
+    Squat: [
+      { key: 'hipAbduction', labelKey: 'accessoryHipAbduction', sets: 3, reps: 12, source: 'fixed', weight: 20 },
+      { key: 'hipAdduction', labelKey: 'accessoryHipAdduction', sets: 3, reps: 12, source: 'fixed', weight: 20 },
+    ],
+    Bench: [
+      { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 3, reps: 12, source: 'squat', pct: 0.15 },
+    ],
+    Deadlift: [
+      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.20 },
+      { key: 'seatedCalfRaise', labelKey: 'accessorySeatedCalfRaise', sets: 3, reps: 12, source: 'fixed', weight: 20 },
+    ],
+  },
 };
 
 function getAccessoryBaseWeight(template, oneRMs, accessoryPRs = {}) {
@@ -1250,6 +1277,17 @@ function generateBenchHomeAlternativeSets(oneRMs = {}) {
     groupKey: 'benchHomeAlternativeShoulderPress',
     reps: 6,
     weight: shoulderPressWeight,
+  }));
+}
+
+function generateBenchGoodMorningSets(oneRMs = {}) {
+  const goodMorningWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.35));
+
+  return Array.from({ length: 4 }, () => makeWorkoutSet({
+    labelKey: 'benchHomeAlternativeGoodMorning',
+    groupKey: 'benchHomeAlternativeGoodMorning',
+    reps: 8,
+    weight: goodMorningWeight,
   }));
 }
 
@@ -1542,6 +1580,8 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
       liftConfig.lift === 'Bench' && normalizedBenchPressVariant === 'machineAlternative';
     const isBenchHomeAlternative =
       liftConfig.lift === 'Bench' && normalizedBenchPressVariant === 'shoulderPress';
+    const isBenchGoodMorningAlternative =
+      liftConfig.lift === 'Bench' && normalizedBenchPressVariant === 'goodMorning';
 
     const sets = isSquatBeltAlternative
       ? generateSquatAlternativeSets(oneRMs)
@@ -1555,9 +1595,11 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
               ? generateBenchMachineAlternativeSets(oneRMs)
               : isBenchHomeAlternative
                 ? generateBenchHomeAlternativeSets(oneRMs)
-                : [];
+                : isBenchGoodMorningAlternative
+                  ? generateBenchGoodMorningSets(oneRMs)
+                  : [];
 
-    if (!isSquatBeltAlternative && !isSquatHomeAlternative && !isDeadliftAlternative && !isDeadliftHomeAlternative && !isBenchMachineAlternative && !isBenchHomeAlternative) {
+    if (!isSquatBeltAlternative && !isSquatHomeAlternative && !isDeadliftAlternative && !isDeadliftHomeAlternative && !isBenchMachineAlternative && !isBenchHomeAlternative && !isBenchGoodMorningAlternative) {
       liftConfig.blocks.forEach(block => {
         for (let i = 0; i < block.sets; i++) {
           const weight = round25(oneRMs[liftConfig.lift] * block.pct);
@@ -6495,18 +6537,18 @@ function ProgramProfileSection({ programProfile, onChangeProgramProfile, t }) {
   const labels = {
     kelaniSbd: t.programProfileKelaniSbd || 'Kelani SBD',
     kelaniSbdPlus: t.programProfileKelaniSbdPlus || 'Kelani SBD Plus',
-    kelaniSbdSafe: t.programProfileKelaniSbdSafe || 'Kelani SBD Safe',
-    kelaniSbdSafePlus: t.programProfileKelaniSbdSafePlus || 'Kelani SBD Safe Plus',
+    kelaniSbdLower: t.programProfileKelaniSbdLower || 'Kelani SBD Lower',
+    kelaniSbdLowerPlus: t.programProfileKelaniSbdLowerPlus || 'Kelani SBD Lower Plus',
   };
 
   const descriptions = {
     kelaniSbd: t.programProfileKelaniSbdText || 'Basic Squat, Bench Press and Deadlift. No preparation, accessories, alternatives or cooldown.',
     kelaniSbdPlus: t.programProfileKelaniSbdPlusText || 'Adds general preparation, standard accessories and cooldown. Best for regular gym training.',
-    kelaniSbdSafe: t.programProfileKelaniSbdSafeText || 'Uses upper-back friendly preparation, cooldown and replacements where needed. No accessories.',
-    kelaniSbdSafePlus: t.programProfileKelaniSbdSafePlusText || 'Kelani SBD Safe with upper-back friendly accessories added.',
+    kelaniSbdLower: t.programProfileKelaniSbdLowerText || 'Lower-body focused version with Squat, Good Morning and Hip Thrust. No upper-body main lifts.',
+    kelaniSbdLowerPlus: t.programProfileKelaniSbdLowerPlusText || 'Kelani SBD Lower with lower-body friendly accessories added.',
   };
 
-  const profiles = ['kelaniSbd', 'kelaniSbdPlus', 'kelaniSbdSafe', 'kelaniSbdSafePlus'];
+  const profiles = ['kelaniSbd', 'kelaniSbdPlus', 'kelaniSbdLower', 'kelaniSbdLowerPlus'];
 
   return (
     <>
