@@ -867,6 +867,39 @@ function normalizePreparationMode(mode) {
   return 'basicFirst';
 }
 
+const DEPRECATED_PREP_LABEL_KEYS = new Set([
+  'prepThoracicRotationSideLying',
+]);
+
+function removeDeprecatedPrepItemsFromWorkout(workout) {
+  if (!workout) return workout;
+
+  const cleanPrepItems = items => Array.isArray(items)
+    ? items.filter(item => !DEPRECATED_PREP_LABEL_KEYS.has(item?.labelKey))
+    : items;
+
+  const cleanLiftBlock = liftBlock => liftBlock
+    ? {
+        ...liftBlock,
+        prepItems: cleanPrepItems(liftBlock.prepItems),
+      }
+    : liftBlock;
+
+  return {
+    ...workout,
+    prepItems: cleanPrepItems(workout.prepItems),
+    liftBlocks: Array.isArray(workout.liftBlocks)
+      ? workout.liftBlocks.map(cleanLiftBlock)
+      : workout.liftBlocks,
+  };
+}
+
+function removeDeprecatedPrepItemsFromWorkouts(workouts) {
+  return Array.isArray(workouts)
+    ? workouts.map(removeDeprecatedPrepItemsFromWorkout)
+    : workouts;
+}
+
 function generatePrepItems(lift, preparationMode = 'basicFirst') {
   const normalizedPreparationMode = normalizePreparationMode(preparationMode);
 
@@ -874,7 +907,6 @@ function generatePrepItems(lift, preparationMode = 'basicFirst') {
 
   if (normalizedPreparationMode === 'shoulderThoracic') {
     return [
-      { labelKey: 'prepThoracicRotationSideLying', prescription: '2×8', perSide: true },
       { labelKey: 'prepBeachStretch', prescription: '2×8', perSide: true },
       { labelKey: 'prepThoracicFoamRoller', prescription: '2×8' },
       { labelKey: 'prepWallRollsExternalRotation', prescription: '3×8' },
@@ -8091,8 +8123,10 @@ function App() {
         savedCycle
       );
 
+      const cleanedWorkouts = removeDeprecatedPrepItemsFromWorkouts(normalizedWorkouts);
+
       setWorkouts(applyMeetPlannerAttemptsToWorkouts(
-        normalizedWorkouts,
+        cleanedWorkouts,
         savedMeetPlannerAttempts,
         savedPrs
       ));
@@ -8191,11 +8225,11 @@ function App() {
       settingsForProgramProfile(programProfile).includeCooldown
     );
 
-    setWorkouts(prev => applyAccessoryPlanToWorkouts(
+    setWorkouts(prev => removeDeprecatedPrepItemsFromWorkouts(applyAccessoryPlanToWorkouts(
       prev,
       generatedWorkouts,
       getCompletedWorkoutNumbers(history, currentCycle)
-    ));
+    )));
   }, [accessoryMode, preparationMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
 
   useEffect(() => {
