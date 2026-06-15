@@ -5,6 +5,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
 const REST_TIME_OPTIONS = [90, 180, 300];
@@ -15,6 +16,9 @@ const LIFT_ORDER = ['Squat', 'Bench', 'Deadlift'];
 const DEFAULT_REST_TIME_SECONDS = 300;
 const AUTO_BACKUP_PATH = 'Kelani/kelani-sbd-tracker-autosave.json';
 const AUTO_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-auto-backup-status';
+const REST_TIMER_NOTIFICATION_ID = 1208;
+const REST_TIMER_NOTIFICATION_CHANNEL_ID = 'kelani_rest_timer_v4';
+const REST_TIMER_NOTIFICATION_SOUND = 'kelani_rest_timer_quiet.wav';
 
 function buildBackupSummary(data) {
   const currentCycle = data?.currentCycle || 1;
@@ -46,6 +50,62 @@ function buildBackupPayload(data) {
     summary: buildBackupSummary(data),
     data,
   };
+}
+
+async function cancelRestTimerNotification() {
+  if (!Capacitor.isNativePlatform()) return;
+
+  try {
+    await LocalNotifications.cancel({
+      notifications: [{ id: REST_TIMER_NOTIFICATION_ID }],
+    });
+  } catch (e) {}
+}
+
+async function ensureRestTimerNotificationChannel() {
+  if (!Capacitor.isNativePlatform()) return;
+
+  try {
+    await LocalNotifications.createChannel({
+      id: REST_TIMER_NOTIFICATION_CHANNEL_ID,
+      name: 'Kelani rest timer',
+      description: 'Rest timer alerts',
+      importance: 5,
+      visibility: 1,
+      sound: REST_TIMER_NOTIFICATION_SOUND,
+      vibration: true,
+    });
+  } catch (e) {}
+}
+
+async function scheduleRestTimerNotification(
+  endTime,
+  doneTitle = 'Rest finished',
+  doneText = 'Your next set is ready.'
+) {
+  if (!Capacitor.isNativePlatform() || !endTime) return;
+
+  try {
+    const permissions = await LocalNotifications.checkPermissions();
+    if (permissions.display !== 'granted') {
+      const requested = await LocalNotifications.requestPermissions();
+      if (requested.display !== 'granted') return;
+    }
+
+    await cancelRestTimerNotification();
+    await ensureRestTimerNotificationChannel();
+
+    await LocalNotifications.schedule({
+      notifications: [{
+        id: REST_TIMER_NOTIFICATION_ID,
+        title: doneTitle,
+        body: doneText,
+        channelId: REST_TIMER_NOTIFICATION_CHANNEL_ID,
+        sound: REST_TIMER_NOTIFICATION_SOUND,
+        schedule: { at: new Date(endTime) },
+      }],
+    });
+  } catch (e) {}
 }
 
 async function writeAutomaticBackup(data) {
@@ -1578,6 +1638,11 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
   const intervalRef = useRef(null);
   const timeoutRef = useRef(null);
   const hasBeepedRef = useRef(false);
+  const wasHiddenRef = useRef(false);
+  const restTimerDoneTitle = t.restTimerDone || 'Rest finished';
+  const restTimerDoneMessage = t.restTimerDoneMessage || 'Your next set is ready.';
+  const restTimerActiveTitle = t.restTimerActive || 'Rest timer active';
+  const restTimerActiveMessage = t.restTimerActiveMessage || 'Resting…';
 
   useEffect(() => {
     const clearTick = () => {
@@ -1598,6 +1663,13 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
       clearTick();
       setRemaining(0);
 
+      if (document.hidden) {
+        hasBeepedRef.current = true;
+        return;
+      }
+
+      cancelRestTimerNotification();
+
       if (!hasBeepedRef.current) {
         hasBeepedRef.current = true;
         playBeep();
@@ -1615,18 +1687,40 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
 
     const startVisibleTick = () => {
       clearTick();
+
+      if (document.hidden) {
+        wasHiddenRef.current = true;
+        updateRemaining();
+        return;
+      }
+
+      if (wasHiddenRef.current && Date.now() >= endTime) {
+        hasBeepedRef.current = true;
+        setRemaining(0);
+        cancelRestTimerNotification();
+        return;
+      }
+
       updateRemaining();
 
-      if (!document.hidden && Date.now() < endTime) {
+      if (Date.now() < endTime) {
         intervalRef.current = setInterval(updateRemaining, 1000);
       }
     };
 
     hasBeepedRef.current = false;
+    wasHiddenRef.current = document.hidden;
     setRemaining(seconds);
 
     clearFinishTimeout();
     timeoutRef.current = setTimeout(finishTimer, seconds * 1000);
+    scheduleRestTimerNotification(
+      endTime,
+      restTimerDoneTitle,
+      restTimerDoneMessage,
+      restTimerActiveTitle,
+      restTimerActiveMessage
+    );
 
     startVisibleTick();
     document.addEventListener('visibilitychange', startVisibleTick);
@@ -1634,9 +1728,17 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
     return () => {
       clearTick();
       clearFinishTimeout();
+      cancelRestTimerNotification();
       document.removeEventListener('visibilitychange', startVisibleTick);
     };
-  }, [seconds, endTime]);
+  }, [
+    seconds,
+    endTime,
+    restTimerDoneTitle,
+    restTimerDoneMessage,
+    restTimerActiveTitle,
+    restTimerActiveMessage,
+  ]);
 
   function playBeep() {
     try {
@@ -4478,7 +4580,10 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
         key={timer.id}
         seconds={timer.seconds}
         endTime={timer.endTime}
-        onDismiss={() => setTimer(null)}
+        onDismiss={() => {
+          cancelRestTimerNotification();
+          setTimer(null);
+        }}
         t={t}
       />
     );
