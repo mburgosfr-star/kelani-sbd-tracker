@@ -7920,6 +7920,13 @@ function BottomNav({ screen, onChange, t }) {
 
 export default 
 function App() {
+  const [showLaunchSplash, setShowLaunchSplash] = useState(true);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setShowLaunchSplash(false), 1800);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
   const [language, setLanguage] = useState(() => {
     const savedLanguage = localStorage.getItem('language');
     const supportedLanguages = ['ca', 'en', 'nl'];
@@ -9989,6 +9996,53 @@ setCompletedSummary({
   setSelectedIndex(nextWorkoutIndex);
 
   setScreen('completed');
+}
+
+if (showLaunchSplash) {
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: '#000000',
+      color: THEME.text,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 18,
+      overflow: 'hidden'
+    }}>
+      <style>
+        {`
+          @keyframes kelaniSplashIn {
+            0% {
+              opacity: 0;
+              transform: scale(0.88);
+              filter: blur(2px);
+            }
+            45% {
+              opacity: 1;
+              transform: scale(1.03);
+              filter: blur(0);
+            }
+            100% {
+              opacity: 1;
+              transform: scale(1);
+              filter: blur(0);
+            }
+          }
+        `}
+      </style>
+      <img
+        src="/kelani-banner.png"
+        alt="Kelani"
+        style={{
+          width: 'min(185vw, 1320px)',
+          height: 'auto',
+          display: 'block',
+          animation: 'kelaniSplashIn 1150ms ease-out both'
+        }}
+      />
+    </div>
+  );
 }
 
 if (screen === null) {
