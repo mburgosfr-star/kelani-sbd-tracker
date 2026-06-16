@@ -4476,7 +4476,7 @@ function getExerciseGuide(lift, t) {
     },
     Bench: {
       title: t.bench,
-      videoUrl: '',
+      videoUrl: 'https://youtu.be/3iIzDJnSL1M',
       steps: [
         t.benchGuideStep1 || 'Set your feet and pull your shoulder blades back and down.',
         t.benchGuideStep2 || 'Grip the bar evenly and unrack with control.',
@@ -4490,7 +4490,7 @@ function getExerciseGuide(lift, t) {
     },
     Deadlift: {
       title: t.deadlift,
-      videoUrl: '',
+      videoUrl: 'https://youtu.be/F0kTL28Tpb8',
       steps: [
         t.deadliftGuideStep1 || 'Stand with the bar over the middle of your foot.',
         t.deadliftGuideStep2 || 'Grip the bar, brace, and build tension before pulling.',
