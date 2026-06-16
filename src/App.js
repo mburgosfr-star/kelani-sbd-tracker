@@ -4462,7 +4462,7 @@ function getExerciseGuide(lift, t) {
   const guides = {
     Squat: {
       title: t.squat,
-      videoUrl: '',
+      videoUrl: 'https://youtu.be/U4xwuDWMpm8',
       steps: [
         t.squatGuideStep1 || 'Set the bar on your upper back and grip it firmly.',
         t.squatGuideStep2 || 'Step out, set your feet, breathe in and brace.',
