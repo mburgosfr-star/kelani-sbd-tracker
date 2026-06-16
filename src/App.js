@@ -4520,9 +4520,48 @@ function isExerciseGuideAvailableForLiftBlock(liftBlock, benchPressVariant = 'st
   return true;
 }
 
+function getYouTubeVideoId(url = '') {
+  const value = String(url || '').trim();
+  if (!value) return '';
+
+  const patterns = [
+    /youtu\.be\/([A-Za-z0-9_-]{6,})/,
+    /youtube\.com\/watch\?v=([A-Za-z0-9_-]{6,})/,
+    /youtube\.com\/shorts\/([A-Za-z0-9_-]{6,})/,
+    /youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = value.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+
+  return '';
+}
+
+function buildYouTubeEmbedUrl(url = '') {
+  const videoId = getYouTubeVideoId(url);
+  if (!videoId) return '';
+
+  const params = new URLSearchParams({
+    autoplay: '1',
+    mute: '1',
+    loop: '1',
+    playlist: videoId,
+    playsinline: '1',
+    controls: '0',
+    modestbranding: '1',
+    rel: '0',
+  });
+
+  return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
+}
+
 function ExerciseGuideModal({ lift, t, onClose }) {
   const guide = getExerciseGuide(lift, t);
   if (!guide) return null;
+
+  const embedUrl = buildYouTubeEmbedUrl(guide.videoUrl);
 
   return (
     <div style={{
@@ -4554,7 +4593,32 @@ function ExerciseGuideModal({ lift, t, onClose }) {
           {guide.title}
         </h3>
 
-        {guide.videoUrl ? (
+        {guide.videoUrl && embedUrl ? (
+          <div style={{
+            position: 'relative',
+            width: '100%',
+            aspectRatio: '16 / 9',
+            marginBottom: 14,
+            borderRadius: 10,
+            overflow: 'hidden',
+            border: `1px solid ${THEME.border}`,
+            background: '#000'
+          }}>
+            <iframe
+              title={`${guide.title} video`}
+              src={embedUrl}
+              allow="autoplay; encrypted-media; picture-in-picture"
+              allowFullScreen
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                border: 0
+              }}
+            />
+          </div>
+        ) : guide.videoUrl ? (
           <button
             type="button"
             onClick={() => window.open(guide.videoUrl, '_blank', 'noopener,noreferrer')}
