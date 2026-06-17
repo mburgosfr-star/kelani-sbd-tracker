@@ -6,9 +6,11 @@
 
 **Kelani SBD Tracker** is a free, open-source, offline-first powerlifting app for structured Squat, Bench Press and Deadlift training.
 
-It is built for lifters who want a simple, focused training tool without accounts, ads, subscriptions or tracking.
+It is built for lifters who want a focused training tool without accounts, ads, subscriptions, tracking or cloud lock-in. Your training data stays on your device unless you choose to export it.
 
-Website: https://kelani-site.mburgosfr.workers.dev/
+Website: https://kelani-site.mburgosfr.workers.dev/  
+YouTube: https://www.youtube.com/@KelaniFocus  
+Support Kelani: https://kelani-site.mburgosfr.workers.dev/#support
 
 ## Why Kelani?
 
@@ -16,13 +18,14 @@ Most training apps are either too generic, too social, too expensive, or too dep
 
 Kelani is intentionally different:
 
-- **Free** — no subscription or paywall
+- **Free** — no subscription, paywall or locked training features
 - **Open source** — the code is public
 - **Offline-first** — your training data stays on your device
 - **No account required**
 - **No ads**
-- **No tracking**
+- **No analytics or tracking**
 - **Built specifically around Squat, Bench Press and Deadlift**
+- **Made for practical long-term progress, not social media engagement**
 
 ## Features
 
@@ -74,11 +77,13 @@ Good feedback examples:
 
 ## Support Kelani
 
-Kelani is free and open source. If the app helps your training, you can support the project through the website:
+Kelani is free, offline-first and open source. There are no ads, subscriptions or tracking.
+
+If the app helps your training, you can support the project here:
 
 https://kelani-site.mburgosfr.workers.dev/#support
 
-Support helps keep the app maintained, tested and improved.
+Support helps keep Kelani maintained, tested on real devices, improved over time, and independent.
 
 ## Build from source
 
@@ -115,3 +120,4 @@ Maintained by Kel.
 
 - GitHub: https://github.com/mburgosfr-star
 - Website: https://kelani-site.mburgosfr.workers.dev/
+- YouTube: https://www.youtube.com/@KelaniFocus
