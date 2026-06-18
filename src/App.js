@@ -1142,7 +1142,7 @@ const ACCESSORY_TEMPLATES = {
   standard: {
     Squat: [
       { key: 'pulldown', labelKey: 'accessoryPulldown', sets: 3, reps: 10, source: 'deadlift', pct: 0.25 },
-      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.20 },
+      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.35 },
     ],
     Bench: [
       { key: 'hipThrust', labelKey: 'accessoryHipThrust', sets: 3, reps: 8, source: 'deadlift', pct: 0.40 },
@@ -1150,46 +1150,42 @@ const ACCESSORY_TEMPLATES = {
     ],
     Deadlift: [
       { key: 'row', labelKey: 'accessoryRow', sets: 3, reps: 10, source: 'deadlift', pct: 0.25 },
-      { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 2, reps: 12, source: 'squat', pct: 0.15 },
+      { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 2, reps: 12, source: 'squat', pct: 0.35 },
     ],
   },
   upperBackFriendly: {
     Squat: [
-      { key: 'hipAbduction', labelKey: 'accessoryHipAbduction', sets: 3, reps: 12, source: 'fixed', weight: 20 },
-      { key: 'hipAdduction', labelKey: 'accessoryHipAdduction', sets: 3, reps: 12, source: 'fixed', weight: 20 },
+      { key: 'hipAbduction', labelKey: 'accessoryHipAbduction', sets: 3, reps: 12, source: 'squat', pct: 0.45 },
+      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.35 },
     ],
     Bench: [
       { key: 'lateralRaise', labelKey: 'accessoryLateralRaise', sets: 3, reps: 12, source: 'fixed', weight: 5, perSide: true },
     ],
     Deadlift: [
-      { key: 'machineCrunch', labelKey: 'accessoryMachineCrunch', sets: 3, reps: 12, source: 'fixed', weight: 20 },
-      { key: 'seatedCalfRaise', labelKey: 'accessorySeatedCalfRaise', sets: 3, reps: 12, source: 'fixed', weight: 20 },
+      { key: 'machineCrunch', labelKey: 'accessoryMachineCrunch', sets: 3, reps: 12, source: 'squat', pct: 0.40 },
+      { key: 'seatedCalfRaise', labelKey: 'accessorySeatedCalfRaise', sets: 3, reps: 12, source: 'squat', pct: 0.55 },
     ],
   },
   lowerBodyFriendly: {
     Squat: [
-      { key: 'hipAbduction', labelKey: 'accessoryHipAbduction', sets: 3, reps: 12, source: 'fixed', weight: 20 },
-      { key: 'hipAdduction', labelKey: 'accessoryHipAdduction', sets: 3, reps: 12, source: 'fixed', weight: 20 },
+      { key: 'hipAbduction', labelKey: 'accessoryHipAbduction', sets: 3, reps: 12, source: 'squat', pct: 0.45 },
+      { key: 'machineCrunch', labelKey: 'accessoryMachineCrunch', sets: 3, reps: 12, source: 'squat', pct: 0.40 },
     ],
     Bench: [
-      { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 3, reps: 12, source: 'squat', pct: 0.15 },
+      { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 3, reps: 12, source: 'squat', pct: 0.35 },
     ],
     Deadlift: [
-      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.20 },
-      { key: 'seatedCalfRaise', labelKey: 'accessorySeatedCalfRaise', sets: 3, reps: 12, source: 'fixed', weight: 20 },
+      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.35 },
+      { key: 'seatedCalfRaise', labelKey: 'accessorySeatedCalfRaise', sets: 3, reps: 12, source: 'squat', pct: 0.55 },
     ],
   },
 };
 
 function getAccessoryBaseWeight(template, oneRMs, accessoryPRs = {}) {
-  const previous = Number(accessoryPRs?.[template.key]);
-
-  if (previous > 0) {
-    return previous;
-  }
+  const previous = Number(accessoryPRs?.[template.key]) || 0;
 
   if (template.source === 'fixed') {
-    return template.weight || 2.5;
+    return Math.max(template.weight || 2.5, previous || 0);
   }
 
   const sourceLift = {
@@ -1199,12 +1195,11 @@ function getAccessoryBaseWeight(template, oneRMs, accessoryPRs = {}) {
   }[template.source];
 
   const sourceWeight = Number(oneRMs?.[sourceLift]) || 0;
+  const calculated = sourceWeight && template.pct
+    ? Math.max(2.5, roundMeetWeight(sourceWeight * template.pct))
+    : 20;
 
-  if (!sourceWeight || !template.pct) {
-    return 20;
-  }
-
-  return Math.max(2.5, roundMeetWeight(sourceWeight * template.pct));
+  return Math.max(calculated, previous || 0);
 }
 
 function makeWorkoutSet({ labelKey, groupKey, reps, weight, perSide = false }) {
@@ -10065,14 +10060,22 @@ setCompletedSummary({
 if (showLaunchSplash) {
   return (
     <div style={{
-      minHeight: '100vh',
+      position: 'fixed',
+      inset: 0,
+      width: '100vw',
+      height: '100dvh',
+      minHeight: '100dvh',
+      boxSizing: 'border-box',
       background: '#000000',
       color: THEME.text,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       padding: 18,
-      overflow: 'hidden'
+      overflow: 'hidden',
+      overscrollBehavior: 'none',
+      touchAction: 'none',
+      zIndex: 9999
     }}>
       <style>
         {`
