@@ -7382,10 +7382,12 @@ function Onboarding({ onStart, t }) {
       margin: '0 auto',
       padding: 24,
       paddingTop: 24,
-      minHeight: '100vh',
+      boxSizing: 'border-box',
+      minHeight: '100dvh',
       fontFamily: 'sans-serif',
       background: THEME.bg,
-      color: THEME.text
+      color: THEME.text,
+      overflowX: 'hidden'
     }}>
       <div style={{ textAlign: 'center', marginBottom: 14 }}>
         <img
@@ -10115,7 +10117,8 @@ if (showLaunchSplash) {
 if (screen === null) {
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
+      boxSizing: 'border-box',
       background: THEME.bg
     }} />
   );
@@ -10437,9 +10440,11 @@ const latestBodyDataRows = [
     return (
   <div style={{
     paddingBottom: 70,
+    boxSizing: 'border-box',
     background: THEME.bg,
-    minHeight: '100vh',
-    color: THEME.text
+    minHeight: '100dvh',
+    color: THEME.text,
+    overflowX: 'hidden'
   }}>
       {screen === 'current' && (
         <CurrentWorkout
@@ -10773,10 +10778,12 @@ const latestBodyDataRows = [
     maxWidth: 500,
     margin: '0 auto',
     padding: 24,
-    minHeight: '100vh',
+    boxSizing: 'border-box',
+    minHeight: '100dvh',
     background: THEME.bg,
     color: THEME.text,
-    fontFamily: 'sans-serif'
+    fontFamily: 'sans-serif',
+    overflowX: 'hidden'
   }}>
     {completedWorkout?.type === 'meet' ? (
       <div style={{
