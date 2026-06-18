@@ -6623,77 +6623,255 @@ function programActionButtonStyle(accentColor = THEME.primary, margin = '0') {
   };
 }
 
-function ProgramProfileSection({ programProfile, onChangeProgramProfile, t }) {
+function ProgramProfileSection({
+  programProfile,
+  preparationMode = 'off',
+  accessoryMode = 'off',
+  cooldownMode = 'off',
+  benchPressVariant = 'standard',
+  deadliftVariant = 'standard',
+  onChangeProgramProfile,
+  onApplyProgramSettings,
+  t,
+}) {
   const [showProgramOptions, setShowProgramOptions] = useState(false);
-  const profile = normalizeProgramProfile(programProfile);
+  const [step, setStep] = useState(0);
+  const [draft, setDraft] = useState(null);
 
-  const labels = {
-    kelaniSbd: t.programProfileKelaniSbd || 'Kelani SBD',
-    kelaniSbdPlus: t.programProfileKelaniSbdPlus || 'Kelani SBD Plus',
-    kelaniSbdLower: t.programProfileKelaniSbdLower || 'Kelani SBD Lower',
-    kelaniSbdLowerPlus: t.programProfileKelaniSbdLowerPlus || 'Kelani SBD Lower Plus',
-  };
+  const normalizedProfile = normalizeProgramProfile(programProfile);
+  const currentFocus =
+    normalizedProfile === 'kelaniSbdLower' ||
+    normalizedProfile === 'kelaniSbdLowerPlus' ||
+    normalizeBenchPressVariant(benchPressVariant) === 'goodMorning' ||
+    normalizeDeadliftVariant(deadliftVariant) === 'hipThrust'
+      ? 'lower'
+      : 'sbd';
 
-  const descriptions = {
-    kelaniSbd: t.programProfileKelaniSbdText || 'Basic Squat, Bench Press and Deadlift. No preparation, accessories, alternatives or cooldown.',
-    kelaniSbdPlus: t.programProfileKelaniSbdPlusText || 'Adds general preparation, standard accessories and cooldown. Best for regular gym training.',
-    kelaniSbdLower: t.programProfileKelaniSbdLowerText || 'Lower-body focused version with Squat, Good Morning and Hip Thrust. No upper-body main lifts.',
-    kelaniSbdLowerPlus: t.programProfileKelaniSbdLowerPlusText || 'Kelani SBD Lower with lower-body friendly accessories added.',
-  };
+  function openWizard() {
+    setDraft({
+      focus: currentFocus,
+      preparationMode: normalizePreparationMode(preparationMode) === 'off' ? 'off' : 'shoulderThoracic',
+      accessoryMode: normalizeAccessoryMode(accessoryMode),
+      cooldownMode: normalizeCooldownMode(cooldownMode),
+    });
+    setStep(0);
+    setShowProgramOptions(true);
+  }
 
-  const profiles = ['kelaniSbd', 'kelaniSbdPlus', 'kelaniSbdLower', 'kelaniSbdLowerPlus'];
+  function closeWizard() {
+    setShowProgramOptions(false);
+    setDraft(null);
+    setStep(0);
+  }
+
+  function updateDraft(key, value) {
+    setDraft(prev => ({ ...(prev || {}), [key]: value }));
+  }
+
+  function selectAndContinue(key, value) {
+    updateDraft(key, value);
+
+    if (step < 3) {
+      setStep(prev => prev + 1);
+      return;
+    }
+
+    const nextDraft = { ...(draft || {}), [key]: value };
+    const focus = nextDraft.focus || 'sbd';
+
+    const settings = {
+      programProfile: focus === 'lower' ? 'kelaniSbdLower' : 'kelaniSbd',
+      preparationMode: normalizePreparationMode(nextDraft.preparationMode),
+      accessoryMode: normalizeAccessoryMode(nextDraft.accessoryMode),
+      cooldownMode: normalizeCooldownMode(nextDraft.cooldownMode),
+      squatVariant: 'standard',
+      benchPressVariant: focus === 'lower' ? 'goodMorning' : 'standard',
+      deadliftVariant: focus === 'lower' ? 'hipThrust' : 'standard',
+    };
+
+    if (onApplyProgramSettings) {
+      onApplyProgramSettings(settings);
+    } else if (onChangeProgramProfile) {
+      onChangeProgramProfile(settings.programProfile);
+    }
+
+    closeWizard();
+  }
+
+  function optionButton({ value, title, text, selected, onClick }) {
+    const active = selected === value;
+
+    return (
+      <button
+        key={value}
+        type="button"
+        onClick={onClick}
+        autoFocus={active}
+        style={{
+          width: '100%',
+          padding: 12,
+          fontSize: 15,
+          fontWeight: 800,
+          textAlign: 'left',
+          borderRadius: 8,
+          border: `1px solid ${active ? THEME.primary : THEME.border}`,
+          background: active ? THEME.primary : THEME.card,
+          color: active ? THEME.bg : THEME.text,
+          cursor: 'pointer'
+        }}
+      >
+        <div style={{ fontWeight: 900 }}>{title}</div>
+        {text && (
+          <div style={{
+            marginTop: 4,
+            color: active ? THEME.bg : THEME.muted,
+            fontSize: 12,
+            fontWeight: 700,
+            lineHeight: 1.35
+          }}>
+            {text}
+          </div>
+        )}
+      </button>
+    );
+  }
+
+  const friendlyAccessoryMode = draft?.focus === 'lower' ? 'lowerBodyFriendly' : 'upperBackFriendly';
+
+  const steps = [
+    {
+      title: t.programStepFocusTitle || 'Choose program',
+      key: 'focus',
+      selected: draft?.focus,
+      options: [
+        {
+          value: 'sbd',
+          title: t.programFocusSbd || 'Kelani SBD',
+          text: t.programFocusSbdText || 'Squat, Bench Press and Deadlift.',
+        },
+        {
+          value: 'lower',
+          title: t.programFocusLower || 'Kelani Lower',
+          text: t.programFocusLowerText || 'Squat, Good Morning and Hip Thrust. No upper-body main lifts.',
+        },
+      ],
+    },
+    {
+      title: t.programStepPreparationTitle || 'Choose preparation',
+      key: 'preparationMode',
+      selected: draft?.preparationMode,
+      options: [
+        {
+          value: 'off',
+          title: t.programOptionOff || 'Off',
+          text: t.programPreparationOffText || 'No preparation block.',
+        },
+        {
+          value: 'shoulderThoracic',
+          title: t.programPreparationUpperBackFriendly || 'Upper-body friendly',
+          text: t.programPreparationUpperBackFriendlyText || 'Upper-body friendly shoulder, scapula and thoracic preparation.',
+        },
+      ],
+    },
+    {
+      title: t.programStepAccessoriesTitle || 'Choose accessories',
+      key: 'accessoryMode',
+      selected: draft?.accessoryMode,
+      options: [
+        {
+          value: 'off',
+          title: t.programOptionOff || 'Off',
+          text: t.programAccessoriesOffText || 'No accessories after the main work.',
+        },
+        {
+          value: 'standard',
+          title: t.programAccessoriesGeneral || 'General',
+          text: t.programAccessoriesGeneralText || 'General accessories based on the main lift.',
+        },
+        {
+          value: friendlyAccessoryMode,
+          title: t.programAccessoriesUpperBackFriendly || 'Upper-body friendly',
+          text: t.programAccessoriesUpperBackFriendlyText || 'Accessories selected to reduce upper-body stress.',
+        },
+      ],
+    },
+    {
+      title: t.programStepCooldownTitle || 'Choose cool-down',
+      key: 'cooldownMode',
+      selected: draft?.cooldownMode,
+      options: [
+        {
+          value: 'off',
+          title: t.programOptionOff || 'Off',
+          text: t.programCooldownOffText || 'No cool-down block.',
+        },
+        {
+          value: 'upperBackFriendly',
+          title: t.programCooldownUpperBackFriendly || 'Upper-body friendly',
+          text: t.programCooldownUpperBackFriendlyText || 'Rhomboid stretch and upper-back massage.',
+        },
+      ],
+    },
+  ];
+
+  const currentStep = steps[step] || steps[0];
 
   return (
     <>
       <button
         type="button"
-        onClick={() => setShowProgramOptions(true)}
+        onClick={openWizard}
         style={programActionButtonStyle(THEME.primary, '8px 0 0')}
       >
         {t.adjustProgram || 'Adjust program'}
       </button>
 
-      {showProgramOptions && (
+      {showProgramOptions && draft && (
         <SettingsModal
-          title={t.adjustProgram || 'Adjust program'}
-          onClose={() => setShowProgramOptions(false)}
+          title={currentStep.title}
+          onClose={closeWizard}
         >
+          <div style={{
+            marginBottom: 10,
+            color: THEME.muted,
+            fontSize: 12,
+            fontWeight: 800,
+            textAlign: 'center'
+          }}>
+            {step + 1} / {steps.length}
+          </div>
+
           <div style={{ display: 'grid', gap: 8 }}>
-            {profiles.map(option => (
+            {currentStep.options.map(option => optionButton({
+              ...option,
+              selected: currentStep.selected,
+              onClick: () => selectAndContinue(currentStep.key, option.value),
+            }))}
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: step > 0 ? '1fr 1fr' : '1fr',
+            gap: 8,
+            marginTop: 14
+          }}>
+            {step > 0 && (
               <button
-                key={option}
                 type="button"
-                onClick={() => {
-                  onChangeProgramProfile(option);
-                  setShowProgramOptions(false);
-                }}
-                style={{
-                  width: '100%',
-                  padding: 12,
-                  fontSize: 15,
-                  fontWeight: 800,
-                  textAlign: 'left',
-                  borderRadius: 8,
-                  border: `1px solid ${profile === option ? THEME.primary : THEME.border}`,
-                  background: profile === option ? THEME.primary : THEME.card,
-                  color: profile === option ? THEME.bg : THEME.text,
-                  cursor: 'pointer'
-                }}
+                onClick={() => setStep(prev => Math.max(0, prev - 1))}
+                style={programActionButtonStyle(THEME.primary)}
               >
-                <div style={{ fontWeight: 900 }}>
-                  {labels[option]}
-                </div>
-                <div style={{
-                  marginTop: 4,
-                  color: profile === option ? THEME.bg : THEME.muted,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  lineHeight: 1.35
-                }}>
-                  {descriptions[option]}
-                </div>
+                {t.back || 'Back'}
               </button>
-            ))}
+            )}
+
+            <button
+              type="button"
+              onClick={closeWizard}
+              style={programActionButtonStyle(THEME.primary)}
+            >
+              {t.cancel || 'Cancel'}
+            </button>
           </div>
 
           <div style={{
@@ -6706,30 +6884,12 @@ function ProgramProfileSection({ programProfile, onChangeProgramProfile, t }) {
           }}>
             {t.programProfileChangeNote || 'Program changes apply to current and future workouts. Completed workouts stay unchanged.'}
           </div>
-
-          <button
-            type="button"
-            onClick={() => setShowProgramOptions(false)}
-            style={{
-              width: '100%',
-              marginTop: 12,
-              padding: 12,
-              fontSize: 15,
-              fontWeight: 800,
-              background: THEME.card,
-              color: THEME.text,
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 8,
-              cursor: 'pointer'
-            }}
-          >
-            {t.cancel || t.back || 'Cancel'}
-          </button>
         </SettingsModal>
       )}
     </>
   );
 }
+
 
 function StartNewCycleSection({ onStartNewCycle, t }) {
   const [showStartCycleConfirm, setShowStartCycleConfirm] = useState(false);
@@ -7064,7 +7224,7 @@ function applyCompletedHistorySnapshotsToWorkouts(workouts = [], history = [], c
   return changed ? nextWorkouts : workouts;
 }
 
-function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedWorkoutNumbers = [], currentCycle, onSelect, onBack, onStats, onStartNewCycle, programProfile, onChangeProgramProfile, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard' }) {
+function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedWorkoutNumbers = [], currentCycle, onSelect, onBack, onStats, onStartNewCycle, programProfile, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, weightUnit = WEIGHT_UNITS.KG }) {
   const currentWorkoutRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
   const completedWorkoutNumberSet = new Set(completedWorkoutNumbers.map(Number));
@@ -7253,7 +7413,14 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
 
       <ProgramProfileSection
         programProfile={programProfile}
+        preparationMode={preparationMode}
+        accessoryMode={accessoryMode}
+        cooldownMode={cooldownMode}
+        squatVariant={squatVariant}
+        benchPressVariant={benchPressVariant}
+        deadliftVariant={deadliftVariant}
         onChangeProgramProfile={onChangeProgramProfile}
+        onApplyProgramSettings={onApplyProgramSettings}
         t={t}
       />
     </div>
@@ -9734,6 +9901,16 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     setCooldownMode(normalizeCooldownMode(settings.cooldownMode ?? settings.includeCooldown));
   }
 
+  function applyProgramSettings(settings = {}) {
+    setProgramProfile(normalizeProgramProfile(settings.programProfile));
+    setAccessoryMode(normalizeAccessoryMode(settings.accessoryMode));
+    setPreparationMode(normalizePreparationMode(settings.preparationMode));
+    setCooldownMode(normalizeCooldownMode(settings.cooldownMode));
+    setSquatVariant(normalizeSquatVariant(settings.squatVariant));
+    setBenchPressVariant(normalizeBenchPressVariant(settings.benchPressVariant));
+    setDeadliftVariant(normalizeDeadliftVariant(settings.deadliftVariant));
+  }
+
   function completeWorkout(workoutEffortOverride = null) {
     const baseWorkout = workouts[selectedIndex];
     const workout = workoutEffortOverride
@@ -10518,10 +10695,10 @@ const latestBodyDataRows = [
           newCyclePRs={prs}
           onStartNewCycle={handleStartNewCycle}
           programProfile={programProfile}
+          benchPressVariant={benchPressVariant}
           onChangeProgramProfile={changeProgramProfile}
           t={t}
           weightUnit={weightUnit}
-          benchPressVariant={benchPressVariant}
           timer={timer}
           setTimer={setTimer}
           onToggleMeetPrepItem={toggleMeetPrepItem}
@@ -10725,6 +10902,12 @@ const latestBodyDataRows = [
           onStats={() => setScreen('stats')}
           onStartNewCycle={handleStartNewCycle}
           programProfile={programProfile}
+          preparationMode={preparationMode}
+          accessoryMode={accessoryMode}
+          cooldownMode={cooldownMode}
+          squatVariant={squatVariant}
+          deadliftVariant={deadliftVariant}
+          onApplyProgramSettings={applyProgramSettings}
           onChangeProgramProfile={changeProgramProfile}
           t={t}
           weightUnit={weightUnit}
