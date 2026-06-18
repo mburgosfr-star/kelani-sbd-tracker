@@ -184,6 +184,14 @@ function calculateBmrEstimate(leanMass) {
 }
 
 
+const COOLDOWN_MODES = ['off', 'upperBackFriendly'];
+
+function normalizeCooldownMode(value) {
+  if (value === true) return 'upperBackFriendly';
+  if (value === false) return 'off';
+  return COOLDOWN_MODES.includes(value) ? value : 'off';
+}
+
 function normalizeAccessoryMode(value) {
   if (value === 'basic' || value === 'full') return 'standard';
   return ACCESSORY_MODES.includes(value) ? value : 'off';
@@ -553,6 +561,7 @@ const PROGRAM_PROFILES = {
     benchPressVariant: 'standard',
     deadliftVariant: 'standard',
     includeCooldown: false,
+    cooldownMode: 'off',
   },
   kelaniSbdPlus: {
     preparationMode: 'basicFirst',
@@ -561,6 +570,7 @@ const PROGRAM_PROFILES = {
     benchPressVariant: 'standard',
     deadliftVariant: 'standard',
     includeCooldown: true,
+    cooldownMode: 'upperBackFriendly',
   },
   kelaniSbdLower: {
     preparationMode: 'shoulderThoracic',
@@ -569,6 +579,7 @@ const PROGRAM_PROFILES = {
     benchPressVariant: 'goodMorning',
     deadliftVariant: 'hipThrust',
     includeCooldown: true,
+    cooldownMode: 'upperBackFriendly',
   },
   kelaniSbdLowerPlus: {
     preparationMode: 'shoulderThoracic',
@@ -577,6 +588,7 @@ const PROGRAM_PROFILES = {
     benchPressVariant: 'goodMorning',
     deadliftVariant: 'hipThrust',
     includeCooldown: true,
+    cooldownMode: 'upperBackFriendly',
   },
 };
 
@@ -1514,7 +1526,7 @@ function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedWork
 }
 
 
-function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', includeCooldown = true) {
+function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly') {
   function round25(w) {
     return Math.round(w / 2.5) * 2.5;
   }
@@ -1526,6 +1538,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
   };
 
   const normalizedPreparationMode = normalizePreparationMode(preparationMode);
+  const normalizedCooldownMode = normalizeCooldownMode(cooldownMode);
   const normalizedDeadliftVariant = normalizeDeadliftVariant(deadliftVariant);
   const normalizedBenchPressVariant = normalizeBenchPressVariant(benchPressVariant);
   const normalizedSquatVariant = normalizeSquatVariant(squatVariant);
@@ -1652,7 +1665,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
       warmups: liftBlocks[0]?.warmups || [],
       sets: liftBlocks[0]?.sets || [],
       accessories: generateAccessoriesForLift(primaryLift, accessoryMode, accessoryPRs, oneRMs),
-      cooldownItems: includeCooldown ? generateCooldownItems() : [],
+      cooldownItems: generateCooldownItems(normalizedCooldownMode),
     });
   });
 
@@ -2099,7 +2112,9 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
 }
 
 
-function generateCooldownItems() {
+function generateCooldownItems(cooldownMode = 'upperBackFriendly') {
+  if (normalizeCooldownMode(cooldownMode) === 'off') return [];
+
   return [
     {
       labelKey: 'cooldownRhomboidStretch',
@@ -2107,11 +2122,16 @@ function generateCooldownItems() {
       perSide: true,
       done: false,
     },
+    {
+      labelKey: 'cooldownMassage',
+      prescription: '2–5 min',
+      done: false,
+    },
   ];
 }
 
 function CooldownBlock({ items = [], onToggleItem = () => {}, t, isReadOnly = false, activeEnabled = true }) {
-  const cooldownItems = items.length > 0 ? items : generateCooldownItems();
+  const cooldownItems = items.length > 0 ? items : generateCooldownItems('upperBackFriendly');
   const firstIncompleteIndex = cooldownItems.findIndex(item => !item.done);
 
   return (
@@ -2132,16 +2152,30 @@ function CooldownBlock({ items = [], onToggleItem = () => {}, t, isReadOnly = fa
         {t.cooldownTitle}
       </div>
 
-      <div style={{ padding: '6px 10px' }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+        gap: 10,
+        padding: '6px 10px'
+      }}>
         {cooldownItems.map((item, index) => (
-          <PrepRow
+          <div
             key={index}
-            item={item}
-            isActive={!isReadOnly && activeEnabled && index === firstIncompleteIndex}
-            isReadOnly={isReadOnly}
-            onToggle={() => onToggleItem(index)}
-            t={t}
-          />
+            style={{
+              minWidth: 0,
+              background: 'transparent',
+              border: 'none',
+              padding: 0
+            }}
+          >
+            <PrepRow
+              item={item}
+              isActive={!isReadOnly && activeEnabled && index === firstIncompleteIndex}
+              isReadOnly={isReadOnly}
+              onToggle={() => onToggleItem(index)}
+              t={t}
+            />
+          </div>
         ))}
       </div>
     </div>
@@ -8012,6 +8046,9 @@ function App() {
   );
   const [accessoryMode, setAccessoryMode] = useState('off');
   const [preparationMode, setPreparationMode] = useState('basicFirst');
+  const [cooldownMode, setCooldownMode] = useState(() =>
+    normalizeCooldownMode(localStorage.getItem('cooldownMode'))
+  );
   const [squatVariant, setSquatVariant] = useState(() =>
     normalizeSquatVariant(localStorage.getItem('squatVariant'))
   );
@@ -8043,6 +8080,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('programProfile', normalizeProgramProfile(programProfile));
   }, [programProfile]);
+
+  useEffect(() => {
+    localStorage.setItem('cooldownMode', normalizeCooldownMode(cooldownMode));
+  }, [cooldownMode]);
 
   useEffect(() => {
     localStorage.setItem('squatVariant', normalizeSquatVariant(squatVariant));
@@ -8207,10 +8248,10 @@ function App() {
       const savedBenchPressVariant = hasSavedProgramProfile
         ? normalizeBenchPressVariant(profileSettings.benchPressVariant)
         : normalizeBenchPressVariant(data.benchPressVariant || localStorage.getItem('benchPressVariant'));
-      const includeCooldown = hasSavedProgramProfile
-        ? profileSettings.includeCooldown
-        : true;
-      const generatedWorkouts = generateProgram(squat, bench, deadlift, savedAccessoryMode, data.accessoryPRs || {}, savedPreparationMode, savedDeadliftVariant, savedBenchPressVariant, savedSquatVariant, includeCooldown);
+      const savedCooldownMode = normalizeCooldownMode(
+        data.cooldownMode ?? profileSettings.cooldownMode ?? profileSettings.includeCooldown
+      );
+      const generatedWorkouts = generateProgram(squat, bench, deadlift, savedAccessoryMode, data.accessoryPRs || {}, savedPreparationMode, savedDeadliftVariant, savedBenchPressVariant, savedSquatVariant, savedCooldownMode);
       const savedInProgress = data.inProgress || null;
       const savedMeetPlannerAttempts = data.meetPlannerAttempts || {};
       const savedMeetPrepChecklist = data.meetPrepChecklist || {};
@@ -8252,6 +8293,7 @@ function App() {
       setProgramProfile(savedProgramProfile);
       setAccessoryMode(savedAccessoryMode);
       setPreparationMode(savedPreparationMode);
+      setCooldownMode(savedCooldownMode);
       setSquatVariant(savedSquatVariant);
       setDeadliftVariant(savedDeadliftVariant);
       setBenchPressVariant(savedBenchPressVariant);
@@ -8306,6 +8348,7 @@ function App() {
       programProfile,
       accessoryMode,
       preparationMode,
+      cooldownMode,
       squatVariant,
       deadliftVariant,
       benchPressVariant,
@@ -8317,7 +8360,7 @@ function App() {
         workouts,
       },
     }));
-  }, [history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, programProfile, accessoryMode, preparationMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts]);
+  }, [history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts]);
 
   useEffect(() => {
     if (!prs.Squat || !prs.Bench || !prs.Deadlift) return;
@@ -8332,7 +8375,7 @@ function App() {
       deadliftVariant,
       benchPressVariant,
       squatVariant,
-      settingsForProgramProfile(programProfile).includeCooldown
+      cooldownMode
     );
 
     setWorkouts(prev => removeDeprecatedPrepItemsFromWorkouts(applyAccessoryPlanToWorkouts(
@@ -8340,7 +8383,7 @@ function App() {
       generatedWorkouts,
       getCompletedWorkoutNumbers(history, currentCycle)
     )));
-  }, [accessoryMode, preparationMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
+  }, [accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
 
   useEffect(() => {
     if (screen !== 'completed' || !completedWorkout) return;
@@ -8383,6 +8426,7 @@ function App() {
     const defaultSquatVariant = defaultSettings.squatVariant;
     const defaultBenchPressVariant = defaultSettings.benchPressVariant;
     const defaultDeadliftVariant = defaultSettings.deadliftVariant;
+    const defaultCooldownMode = normalizeCooldownMode(defaultSettings.cooldownMode ?? defaultSettings.includeCooldown);
 
     setWeightUnit(selectedWeightUnit);
     localStorage.setItem('weightUnit', selectedWeightUnit);
@@ -8390,6 +8434,7 @@ function App() {
     localStorage.setItem('squatVariant', defaultSquatVariant);
     localStorage.setItem('benchPressVariant', defaultBenchPressVariant);
     localStorage.setItem('deadliftVariant', defaultDeadliftVariant);
+    localStorage.setItem('cooldownMode', defaultCooldownMode);
 
     setProgramProfile(defaultProgramProfile);
     setAccessoryMode(defaultAccessoryMode);
@@ -8397,8 +8442,9 @@ function App() {
     setSquatVariant(defaultSquatVariant);
     setBenchPressVariant(defaultBenchPressVariant);
     setDeadliftVariant(defaultDeadliftVariant);
+    setCooldownMode(defaultCooldownMode);
 
-    setWorkouts(generateProgram(s, b, d, defaultAccessoryMode, {}, defaultPreparationMode, defaultDeadliftVariant, defaultBenchPressVariant, defaultSquatVariant, defaultSettings.includeCooldown));
+    setWorkouts(generateProgram(s, b, d, defaultAccessoryMode, {}, defaultPreparationMode, defaultDeadliftVariant, defaultBenchPressVariant, defaultSquatVariant, defaultCooldownMode));
     setCurrentWorkoutIndex(0);
     setSelectedIndex(0);
     setCurrentCycle(1);
@@ -8504,7 +8550,7 @@ function handleSaveMaxes(lift, values) {
   };
 
   setPrs(updatedPrs);
-  setWorkouts(generateProgram(updatedPrs.Squat, updatedPrs.Bench, updatedPrs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, settingsForProgramProfile(programProfile).includeCooldown));
+  setWorkouts(generateProgram(updatedPrs.Squat, updatedPrs.Bench, updatedPrs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode));
   setMeetPlannerAttempts({});
 
   setHistory(prev => {
@@ -8550,7 +8596,7 @@ function handleStartNewCycle() {
   }
 
   const nextCycle = currentCycle + 1;
-  const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, settingsForProgramProfile(programProfile).includeCooldown);
+  const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode);
 
   setCurrentCycle(nextCycle);
   setMeetPlannerAttempts({});
@@ -9685,6 +9731,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     setSquatVariant(settings.squatVariant);
     setBenchPressVariant(settings.benchPressVariant);
     setDeadliftVariant(settings.deadliftVariant);
+    setCooldownMode(normalizeCooldownMode(settings.cooldownMode ?? settings.includeCooldown));
   }
 
   function completeWorkout(workoutEffortOverride = null) {
