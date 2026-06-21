@@ -141,7 +141,7 @@ async function writeAutomaticBackup(data) {
 
 
 const THEME = {
-  bg: '#18110d',
+  bg: '#080808',
   card: '#2b1f18',
   border: '#6b4a2f',
   text: '#fff4e6',
@@ -150,6 +150,7 @@ const THEME = {
   primary: '#ff8a3d',
   red: '#ff5c45',
   yellow: '#ffd166',
+  meet: '#c62828',
   green: '#2ecc71',
   brown: '#a86f45'
   
@@ -4942,7 +4943,8 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             fontSize: 'clamp(20px, 6vw, 24px)',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
-            textOverflow: 'ellipsis'
+            textOverflow: 'ellipsis',
+            color: isMeetDay ? THEME.meet : THEME.text
           }}
         />
 
@@ -4952,12 +4954,12 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 <div style={{
   marginBottom: 10,
   padding: 10,
-  border: 'none',
+  border: `1px solid ${THEME.meet}`,
   borderRadius: 10,
-  background: 'transparent',
+  background: `${THEME.meet}14`,
   textAlign: 'center'
 }}>
-  <div style={{ color: THEME.muted, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+  <div style={{ color: THEME.meet, fontSize: 13, fontWeight: 800, marginBottom: 4 }}>
     {t.projectedTotal}
   </div>
   <div style={{ color: THEME.text, fontSize: 22, fontWeight: 900, lineHeight: 1 }}>
@@ -6262,24 +6264,24 @@ const meetTotals = {
       {activescreen === 'totaal' && (
         <div>
           <div style={{
-            background: `${neutralChartColor}14`,
-            border: `1px solid ${neutralChartColor}`,
+            background: `${THEME.meet}14`,
+            border: `1px solid ${THEME.meet}`,
             borderRadius: 10,
             padding: 10,
             marginBottom: 8
           }}>
-            <h3 style={{ margin: '0 0 6px', color: neutralChartColor }}>{t.totalSBD}</h3>
-            {renderChart(totalData.map(entry => ({ ...entry, oneRM: chartWeightFromKg(entry.oneRM), e1rm: chartWeightFromKg(entry.e1rm) })), ['oneRM', 'e1rm'], [THEME.muted, THEME.primary])}
+            <h3 style={{ margin: '0 0 6px', color: THEME.meet }}>{t.totalSBD}</h3>
+            {renderChart(totalData.map(entry => ({ ...entry, oneRM: chartWeightFromKg(entry.oneRM), e1rm: chartWeightFromKg(entry.e1rm) })), ['oneRM', 'e1rm'], [THEME.muted, THEME.meet])}
           </div>
 
           <div style={{
-            background: `${neutralChartColor}14`,
-            border: `1px solid ${neutralChartColor}`,
+            background: `${THEME.meet}14`,
+            border: `1px solid ${THEME.meet}`,
             borderRadius: 10,
             padding: 8
           }}>
-            <h3 style={{ margin: '0 0 4px', color: neutralChartColor }}>{t.strengthTotalBodyweight}</h3>
-            {renderChart(strengthData, ['strength', 'eStrength'], [THEME.muted, THEME.primary], t.noMetricData || t.noStatsData)}
+            <h3 style={{ margin: '0 0 4px', color: THEME.meet }}>{t.strengthTotalBodyweight}</h3>
+            {renderChart(strengthData, ['strength', 'eStrength'], [THEME.muted, THEME.meet], t.noMetricData || t.noStatsData)}
           </div>
         </div>
       )}
@@ -6350,12 +6352,12 @@ const meetTotals = {
       gap: 10,
       marginBottom: 8,
       padding: 10,
-      border: `1px solid ${neutralChartColor}`,
+      border: `1px solid ${THEME.meet}`,
       borderRadius: 10,
-      background: `${neutralChartColor}14`
+      background: `${THEME.meet}14`
     }}>
       <div>
-        <h3 style={{ margin: '0 0 6px', color: neutralChartColor }}>
+        <h3 style={{ margin: '0 0 6px', color: THEME.meet }}>
           {t.meetPlanner}
         </h3>
 
@@ -6372,12 +6374,12 @@ const meetTotals = {
       <div style={{
         minWidth: 108,
         padding: '8px 10px',
-        border: `1px solid ${neutralChartColor}`,
+        border: `1px solid ${THEME.meet}`,
         borderRadius: 10,
-        background: `${neutralChartColor}1f`,
+        background: `${THEME.meet}1f`,
         textAlign: 'center'
       }}>
-        <div style={{ color: THEME.muted, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>
+        <div style={{ color: THEME.meet, fontSize: 11, fontWeight: 800, marginBottom: 4 }}>
           {t.projectedTotal}
         </div>
 
@@ -6821,7 +6823,7 @@ function ProgramProfileSection({
       <button
         type="button"
         onClick={openWizard}
-        style={programActionButtonStyle(THEME.primary, '8px 0 0')}
+        style={programActionButtonStyle(THEME.primary, '6px 0 0')}
       >
         {t.adjustProgram || 'Adjust program'}
       </button>
@@ -6999,6 +7001,8 @@ function getLiftThemeColor(lift) {
     Squat: THEME.red,
     Bench: THEME.primary,
     Deadlift: THEME.yellow,
+    SBD: THEME.meet,
+    Meet: THEME.meet,
   }[lift] || THEME.text);
 }
 
@@ -7273,7 +7277,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
       <button
         type="button"
         onClick={() => setShowAllWorkouts(value => !value)}
-        style={programActionButtonStyle(THEME.primary, position === 'top' ? '0 0 8px' : '2px 0 6px')}
+        style={programActionButtonStyle(THEME.primary, position === 'top' ? '0 0 8px' : '6px 0 0')}
       >
         {showAllWorkouts ? t.showFewerWorkouts : t.showAllWorkouts}
       </button>
@@ -7294,7 +7298,8 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
         const isCurrent = idx === currentIndex;
         const isDone = completedWorkoutNumberSet.has(Number(workout.number)) || Boolean(workout.completed);
         const completedAtLabel = isDone ? formatCompletedAt(workout.completedAt, workout.completedDate || workout.date) : null;
-        const focusColor = getLiftThemeColor(workout.lift);
+        const focusColor = workout.type === 'meet' ? THEME.meet : getLiftThemeColor(workout.lift);
+        const titleColor = workout.type === 'meet' ? THEME.meet : THEME.text;
         const headerBg = isCurrent ? focusColor : workout.type === 'rest' ? THEME.brown : THEME.border;
         const planLines = getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant);
         const typeLabel = getWorkoutTypeLabel(workout, t);
@@ -7338,7 +7343,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
             </div>
 
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: isCurrent ? 800 : 700 }}>
+              <div style={{ fontWeight: isCurrent ? 800 : 700, color: titleColor }}>
                 <WorkoutTitle workout={workout} t={t} benchPressVariant={benchPressVariant} />
                 {isCurrent && (
                   <span style={{
@@ -10719,35 +10724,40 @@ const latestBodyDataRows = [
       subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${Math.min(currentIndex + 1, workouts.length)} / ${workouts.length}`}
     />
 
-    {workouts[currentIndex] && (
-      <div style={{
-        background: 'transparent',
-        border: 'none',
-        borderRadius: 10,
-        padding: 8,
-        marginBottom: 6,
-        textAlign: 'center'
-      }}>
-        <div style={{
-          color: '#ffffff',
-          fontSize: 14,
-          fontWeight: 900,
-          letterSpacing: 0.8,
-          textTransform: 'uppercase',
-          marginBottom: 3
-        }}>
-          {t.nextWorkout}
-        </div>
+    {workouts[currentIndex] && (() => {
+      const nextWorkout = workouts[currentIndex];
+      const isNextMeetDay = nextWorkout.type === 'meet';
 
+      return (
         <div style={{
-          color: THEME.text,
-          fontSize: 22,
-          fontWeight: 900
+          background: isNextMeetDay ? `${THEME.meet}14` : 'transparent',
+          border: isNextMeetDay ? `1px solid ${THEME.meet}` : 'none',
+          borderRadius: 10,
+          padding: 8,
+          marginBottom: 6,
+          textAlign: 'center'
         }}>
-          <WorkoutTitle workout={workouts[currentIndex]} t={t} benchPressVariant={benchPressVariant} />
+          <div style={{
+            color: '#ffffff',
+            fontSize: 14,
+            fontWeight: 900,
+            letterSpacing: 0.8,
+            textTransform: 'uppercase',
+            marginBottom: 3
+          }}>
+            {t.nextWorkout}
+          </div>
+
+          <div style={{
+            color: isNextMeetDay ? THEME.meet : THEME.text,
+            fontSize: 22,
+            fontWeight: 900
+          }}>
+            <WorkoutTitle workout={nextWorkout} t={t} benchPressVariant={benchPressVariant} />
+          </div>
         </div>
-      </div>
-    )}
+      );
+    })()}
     <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 6, marginBottom: 6 }}>
       {(() => {
         const cards = [
