@@ -7265,7 +7265,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
     }, 0);
 
     return () => window.clearTimeout(id);
-  }, [currentIndex, workouts.length]);
+  }, [currentIndex, workouts.length, showAllWorkouts]);
 
   function renderWorkoutListToggleButton(position = 'top') {
     if (!hasHiddenWorkouts) return null;
