@@ -1289,7 +1289,7 @@ function generateBenchHomeAlternativeSets(oneRMs = {}) {
 }
 
 function generateBenchGoodMorningSets(oneRMs = {}) {
-  const goodMorningWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.35));
+  const goodMorningWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Deadlift) || 0) * 0.40));
 
   return Array.from({ length: 4 }, () => makeWorkoutSet({
     labelKey: 'benchHomeAlternativeGoodMorning',
@@ -1328,7 +1328,7 @@ function generateDeadliftAlternativeSets(oneRMs = {}) {
 }
 
 function generateDeadliftHomeAlternativeSets(oneRMs = {}) {
-  const hipThrustWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Deadlift) || 0) * 0.50));
+  const hipThrustWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Deadlift) || 0) * 0.60));
 
   return Array.from({ length: 4 }, () => makeWorkoutSet({
     labelKey: 'deadliftHomeAlternativeBarbellHipThrust',
