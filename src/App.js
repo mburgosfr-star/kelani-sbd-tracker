@@ -1229,7 +1229,7 @@ function makeWorkoutSet({ labelKey, groupKey, reps, weight, perSide = false }) {
 }
 
 function generateSquatAlternativeSets(oneRMs = {}) {
-  const beltSquatWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.50));
+  const beltSquatWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.60));
 
   return Array.from({ length: 4 }, () => makeWorkoutSet({
     labelKey: 'squatAlternativeBeltSquat',
@@ -1240,7 +1240,7 @@ function generateSquatAlternativeSets(oneRMs = {}) {
 }
 
 function generateSquatHomeAlternativeSets(oneRMs = {}) {
-  const zercherSquatWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.40));
+  const zercherSquatWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.45));
 
   return Array.from({ length: 4 }, () => makeWorkoutSet({
     labelKey: 'squatAlternativeZercherSquat',
@@ -1251,9 +1251,9 @@ function generateSquatHomeAlternativeSets(oneRMs = {}) {
 }
 
 function generateBenchMachineAlternativeSets(oneRMs = {}) {
-  const chestPressWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.50));
-  const pecDeckWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.20));
-  const tricepsPushdownWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.15));
+  const chestPressWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.60));
+  const pecDeckWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.25));
+  const tricepsPushdownWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.20));
 
   return [
     ...Array.from({ length: 3 }, () => makeWorkoutSet({
@@ -1300,9 +1300,9 @@ function generateBenchGoodMorningSets(oneRMs = {}) {
 }
 
 function generateDeadliftAlternativeSets(oneRMs = {}) {
-  const legPressWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.60));
-  const cablePullThroughWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Deadlift) || 0) * 0.20));
-  const cableGluteKickbackWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.10));
+  const legPressWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.85));
+  const cablePullThroughWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Deadlift) || 0) * 0.25));
+  const cableGluteKickbackWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.125));
 
   return [
     ...Array.from({ length: 3 }, () => makeWorkoutSet({
