@@ -8,7 +8,7 @@ import { Share } from '@capacitor/share';
 import { LocalNotifications } from '@capacitor/local-notifications';
 
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
-const REST_TIME_OPTIONS = [90, 180, 300];
+const REST_TIME_OPTIONS = [90, 180, 300, 450];
 const ACCESSORY_MODES = ['off', 'standard', 'upperBackFriendly', 'lowerBodyFriendly'];
 const SET_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'max'];
 const WORKOUT_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'tooMuch'];
