@@ -4146,6 +4146,22 @@ function NewCycleModal({ prs, onStart, t, weightUnit = WEIGHT_UNITS.KG }) {
   );
 }
 
+function getSkippedSetMessage(set, t) {
+  if (set?.labelKey === 'opener') {
+    return t.openerSkippedWithLoweredPlan || 'Opener missed. This attempt is skipped; the next attempts are lowered.';
+  }
+
+  if (set?.labelKey === 'secondAttempt') {
+    return t.secondAttemptSkippedWithLoweredPlan || 'Second attempt missed. This attempt is skipped; the third attempt is lowered.';
+  }
+
+  if (set?.labelKey === 'thirdAttempt') {
+    return t.thirdAttemptSkipped || 'Third attempt missed. This attempt is skipped. Continue with the back-off sets.';
+  }
+
+  return t.topSetSkipped || 'Set skipped. Continue with the next set.';
+}
+
 function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, label, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
@@ -4280,7 +4296,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
       textAlign: 'center',
     }}>
       {failedEntry.set.skipped
-        ? t.topSetSkipped
+        ? getSkippedSetMessage(failedEntry.set, t)
         : t.failedSetAdjusted.replace('{weight}', formatWeightFromKg(failedEntry.set.adjustedWeight, weightUnit))}
     </div>
   ) : null;
@@ -5218,7 +5234,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                       </span>
                       <span>
                         {set.skipped
-                          ? t.topSetSkipped
+                          ? getSkippedSetMessage(set, t)
                           : t.failedSetAdjusted.replace('{weight}', formatWeightFromKg(set.adjustedWeight, weightUnit))}
                       </span>
                     </div>
@@ -5524,7 +5540,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   </span>
                   <span>
                     {set.skipped
-                      ? t.topSetSkipped
+                      ? getSkippedSetMessage(set, t)
                       : t.failedSetAdjusted.replace('{weight}', formatWeightFromKg(set.adjustedWeight, weightUnit))}
                   </span>
                 </div>
@@ -8988,26 +9004,23 @@ function markSetFailed(setIndex) {
 
       const failedSet = w.sets[setIndex];
       const failedAttempts = (Number(failedSet?.failedAttempts) || 0) + 1;
-      const isPreMeetWorkout = w.number >= 25 && w.number <= 27;
       const isAttemptSet = isAttemptSetLabel(failedSet?.labelKey);
+      const isFinalAttemptSet = failedSet?.labelKey === 'thirdAttempt';
       const isBackoff = failedSet?.labelKey === 'backoff';
       const isZeroWeightFailure = Number(failedSet?.weight) <= 0;
 
       const normalAdjustedWeight = getFailedSetSuggestedWeight(failedSet?.weight);
       const attemptAdjustedWeight = getAdjustedAttemptWeight(failedSet?.weight);
-      const adjustedWeight = isPreMeetWorkout && isAttemptSet
+      const adjustedWeight = isAttemptSet
         ? attemptAdjustedWeight
         : normalAdjustedWeight;
 
       const isTopSet = isTopSetLabel(failedSet?.labelKey);
 
-      const shouldSkipAttempt =
-        isPreMeetWorkout &&
-        isAttemptSet &&
-        failedAttempts >= 2;
+      const shouldSkipAttempt = isAttemptSet;
 
       const shouldSkipTopSet =
-        !isPreMeetWorkout &&
+        !isAttemptSet &&
         isTopSet &&
         failedAttempts >= 2;
 
@@ -9017,8 +9030,8 @@ function markSetFailed(setIndex) {
           const shouldAdjustThisSet = si === setIndex;
 
           const shouldAdjustLaterAttempt =
-            isPreMeetWorkout &&
             isAttemptSet &&
+            !isFinalAttemptSet &&
             si > setIndex &&
             isAttemptSetLabel(s.labelKey) &&
             !s.done &&
@@ -9027,21 +9040,14 @@ function markSetFailed(setIndex) {
           const shouldAdjustLaterBackoff =
             (
               isBackoff ||
-              (!isPreMeetWorkout && isTopSet)
+              (!isAttemptSet && isTopSet)
             ) &&
             si > setIndex &&
             s.labelKey === 'backoff' &&
             !s.done &&
             !s.skipped;
 
-          const shouldLowerBackoffIfTooHeavy =
-            isPreMeetWorkout &&
-            isAttemptSet &&
-            si > setIndex &&
-            s.labelKey === 'backoff' &&
-            !s.done &&
-            !s.skipped &&
-            Number(s.weight) > adjustedWeight;
+          const shouldLowerBackoffIfTooHeavy = false;
 
           if (
             !shouldAdjustThisSet &&
@@ -9539,25 +9545,22 @@ function markMeetSetFailed(liftIndex, setIndex) {
 
             const failedSet = liftBlock.sets[setIndex];
             const failedAttempts = (Number(failedSet?.failedAttempts) || 0) + 1;
-            const isPreMeetWorkout = w.number >= 25 && w.number <= 27;
             const isAttemptSet = isAttemptSetLabel(failedSet?.labelKey);
+            const isFinalAttemptSet = failedSet?.labelKey === 'thirdAttempt';
             const isBackoff = failedSet?.labelKey === 'backoff';
             const isZeroWeightFailure = Number(failedSet?.weight) <= 0;
             const isTopSet = isTopSetLabel(failedSet?.labelKey);
 
             const normalAdjustedWeight = getFailedSetSuggestedWeight(failedSet?.weight);
             const attemptAdjustedWeight = getAdjustedAttemptWeight(failedSet?.weight);
-            const adjustedWeight = isPreMeetWorkout && isAttemptSet
+            const adjustedWeight = isAttemptSet
               ? attemptAdjustedWeight
               : normalAdjustedWeight;
 
-            const shouldSkipAttempt =
-              isPreMeetWorkout &&
-              isAttemptSet &&
-              failedAttempts >= 2;
+            const shouldSkipAttempt = isAttemptSet;
 
             const shouldSkipTopSet =
-              !isPreMeetWorkout &&
+              !isAttemptSet &&
               isTopSet &&
               failedAttempts >= 2;
 
@@ -9567,8 +9570,8 @@ function markMeetSetFailed(liftIndex, setIndex) {
                 const shouldAdjustThisSet = si === setIndex;
 
                 const shouldAdjustLaterAttempt =
-                  isPreMeetWorkout &&
                   isAttemptSet &&
+                  !isFinalAttemptSet &&
                   si > setIndex &&
                   isAttemptSetLabel(s.labelKey) &&
                   !s.done &&
@@ -9577,21 +9580,14 @@ function markMeetSetFailed(liftIndex, setIndex) {
                 const shouldAdjustLaterBackoff =
                   (
                     isBackoff ||
-                    (!isPreMeetWorkout && isTopSet)
+                    (!isAttemptSet && isTopSet)
                   ) &&
                   si > setIndex &&
                   s.labelKey === 'backoff' &&
                   !s.done &&
                   !s.skipped;
 
-                const shouldLowerBackoffIfTooHeavy =
-                  isPreMeetWorkout &&
-                  isAttemptSet &&
-                  si > setIndex &&
-                  s.labelKey === 'backoff' &&
-                  !s.done &&
-                  !s.skipped &&
-                  Number(s.weight) > adjustedWeight;
+                const shouldLowerBackoffIfTooHeavy = false;
 
                 if (
                   !shouldAdjustThisSet &&
