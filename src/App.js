@@ -142,8 +142,8 @@ async function writeAutomaticBackup(data) {
 
 const THEME = {
   bg: '#080808',
-  card: '#2b1f18',
-  border: '#6b4a2f',
+  card: '#101010',
+  border: '#3a1f1f',
   text: '#fff4e6',
   muted: '#fff4e6',
 
@@ -152,7 +152,7 @@ const THEME = {
   yellow: '#ffd166',
   meet: '#c62828',
   green: '#2ecc71',
-  brown: '#a86f45'
+  brown: '#c62828'
   
 };
 
@@ -2189,7 +2189,7 @@ function CooldownBlock({ items = [], onToggleItem = () => {}, t, isReadOnly = fa
         padding: '5px 10px',
         fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
         fontWeight: 900,
-        color: THEME.brown || '#a67c52',
+        color: THEME.meet,
         textAlign: 'center',
       }}>
         {t.cooldownTitle}
@@ -10842,8 +10842,8 @@ const latestBodyDataRows = [
           {
             key: 'Total',
             label: t.total || 'Total',
-            color: '#a67c52',
-            background: 'rgba(166, 124, 82, 0.10)',
+            color: THEME.meet,
+            background: `${THEME.meet}14`,
             oneRM: total1RM,
             e1RM: totalE1RM,
           },
