@@ -1979,52 +1979,86 @@ function formatPrepPrescription(item, t) {
 }
 
 function WorkoutCircle({ done = false, active = false, skipped = false, disabled = false, onClick, label }) {
+  const isActiveOpen = active && !done && !skipped;
+  const isOpen = !done && !skipped;
+
   const borderColor = skipped
     ? '#e74c3c'
-    : done || active
-      ? THEME.primary
-      : THEME.border;
+    : THEME.primary;
 
   const background = skipped
     ? '#e74c3c'
     : done
       ? THEME.primary
-      : THEME.card;
+      : 'rgba(255, 138, 61, 0.08)';
 
   const color = skipped || done ? THEME.bg : THEME.text;
 
   return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={event => {
-        event.stopPropagation();
-        if (!disabled && onClick) onClick(event);
-      }}
-      disabled={disabled}
-      style={{
-        width: WORKOUT_CIRCLE_SIZE,
-        height: WORKOUT_CIRCLE_SIZE,
-        minWidth: WORKOUT_CIRCLE_SIZE,
-        flex: `0 0 ${WORKOUT_CIRCLE_SIZE}px`,
-        borderRadius: '50%',
-        border: `2px solid ${borderColor}`,
-        background,
-        color,
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        fontWeight: 900,
-        fontSize: WORKOUT_CIRCLE_FONT_SIZE,
-        lineHeight: 1,
-        padding: 0,
-        transform: 'scale(1)'
-      }}
-    >
-      {skipped ? '✕' : done ? '✓' : ''}
-    </button>
+    <>
+      {isActiveOpen && (
+        <style>{`
+          @keyframes kelaniActiveWorkoutCirclePulse {
+            0% {
+              box-shadow:
+                0 0 0 2px rgba(255, 138, 61, 0.34),
+                0 0 0 0 rgba(255, 138, 61, 0.56);
+              transform: scale(1);
+            }
+            50% {
+              box-shadow:
+                0 0 0 4px rgba(255, 138, 61, 0.28),
+                0 0 0 11px rgba(255, 138, 61, 0.00);
+              transform: scale(1.12);
+            }
+            100% {
+              box-shadow:
+                0 0 0 2px rgba(255, 138, 61, 0.34),
+                0 0 0 0 rgba(255, 138, 61, 0.00);
+              transform: scale(1);
+            }
+          }
+        `}</style>
+      )}
+
+      <button
+        type="button"
+        aria-label={label}
+        title={label}
+        onClick={event => {
+          event.stopPropagation();
+          if (!disabled && onClick) onClick(event);
+        }}
+        disabled={disabled}
+        style={{
+          width: WORKOUT_CIRCLE_SIZE,
+          height: WORKOUT_CIRCLE_SIZE,
+          minWidth: WORKOUT_CIRCLE_SIZE,
+          flex: `0 0 ${WORKOUT_CIRCLE_SIZE}px`,
+          borderRadius: '50%',
+          border: `${isActiveOpen ? 3 : 2}px solid ${borderColor}`,
+          background,
+          color,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          fontWeight: 900,
+          fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+          lineHeight: 1,
+          padding: 0,
+          opacity: disabled && isOpen ? 0.8 : 1,
+          boxShadow: isActiveOpen
+            ? '0 0 0 4px rgba(255, 138, 61, 0.30)'
+            : isOpen
+              ? '0 0 0 1px rgba(255, 138, 61, 0.08)'
+              : 'none',
+          animation: isActiveOpen ? 'kelaniActiveWorkoutCirclePulse 1.05s ease-in-out infinite' : 'none',
+        }}
+      >
+        {skipped ? '✕' : done ? '✓' : ''}
+      </button>
+    </>
   );
 }
 
