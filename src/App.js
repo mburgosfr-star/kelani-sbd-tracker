@@ -972,47 +972,89 @@ function generatePrepItems(lift, preparationMode = 'basicFirst') {
   }));
 }
 
-function generateWarmups(firstWorkWeight) {
+function generateWarmups(firstWorkWeight, lift = '') {
   function roundDown10(w) {
     return Math.floor(w / 10) * 10;
   }
 
-  function getWarmupReps(index) {
-    if (index <= 1) return 5;
-    if (index === 2) return 3;
-    if (index === 3) return 2;
-    return 1;
+  function uniqueIncreasing(items, targetWeight) {
+    const result = [];
+
+    items.forEach(item => {
+      const weight = Number(item.weight) || 0;
+      if (weight <= 0 || weight >= Number(targetWeight)) return;
+      if (result.some(existing => Number(existing.weight) === weight)) return;
+      if (result.length > 0 && weight <= Number(result[result.length - 1].weight)) return;
+      result.push({ ...item, weight });
+    });
+
+    return result;
+  }
+
+  function hasDescendingJumps(items, targetWeight) {
+    if (items.length <= 1) return true;
+
+    let previousJump = Infinity;
+
+    for (let i = 1; i < items.length; i += 1) {
+      const jump = Number(items[i].weight) - Number(items[i - 1].weight);
+      if (jump > previousJump) return false;
+      previousJump = jump;
+    }
+
+    const finalJump = Number(targetWeight) - Number(items[items.length - 1].weight);
+    return finalJump <= previousJump;
+  }
+
+  function toWarmupItems(items, targetWeight) {
+    const candidates = uniqueIncreasing(items, targetWeight);
+
+    while (candidates.length > 1 && !hasDescendingJumps(candidates, targetWeight)) {
+      let removed = false;
+
+      for (let i = candidates.length - 1; i >= 1; i -= 1) {
+        const test = candidates.filter((_, index) => index !== i);
+        if (hasDescendingJumps(test, targetWeight)) {
+          candidates.splice(i, 1);
+          removed = true;
+          break;
+        }
+      }
+
+      if (!removed) break;
+    }
+
+    return candidates.map(w => ({
+      weight: w.weight,
+      reps: w.reps,
+      isWarmup: true,
+      done: false,
+    }));
   }
 
   const weight = Number(firstWorkWeight) || 0;
 
   if (weight < 30) return [];
 
-  const warmups = [{ weight: 20, reps: 5 }];
-
-  while (weight - warmups[warmups.length - 1].weight > 50) {
-    const previous = warmups[warmups.length - 1].weight;
-    let nextWeight = previous + 50;
-
-    if (weight - nextWeight < 10) {
-      nextWeight = roundDown10(weight - 10);
+  if (lift === 'Deadlift') {
+    if (weight <= 80) {
+      return toWarmupItems([{ weight: 70, reps: 3 }], weight);
     }
 
-    if (nextWeight <= previous || nextWeight >= weight) break;
-
-    warmups.push({
-      weight: nextWeight,
-      reps: getWarmupReps(warmups.length),
-    });
+    return toWarmupItems([
+      { weight: 70, reps: 5 },
+      { weight: roundDown10(weight * 0.68), reps: 2 },
+      { weight: roundDown10(weight * 0.88), reps: 1 },
+    ], weight);
   }
 
-  return warmups.map(w => ({
-    weight: w.weight,
-    reps: w.reps,
-    isWarmup: true,
-    done: false,
-  }));
+  return toWarmupItems([
+    { weight: 20, reps: 5 },
+    { weight: roundDown10(weight * 0.58), reps: 3 },
+    { weight: roundDown10(weight * 0.82), reps: 1 },
+  ], weight);
 }
+
 
 
 const MEET_ATTEMPT_KEYS = ['opener', 'second', 'third'];
@@ -1641,7 +1683,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
       deadliftVariant: liftConfig.lift === 'Deadlift' ? normalizedDeadliftVariant : undefined,
       benchPressVariant: liftConfig.lift === 'Bench' ? normalizedBenchPressVariant : undefined,
       prepItems: includePreparation ? generatePrepItems(liftConfig.lift, normalizedPreparationMode) : [],
-      warmups: generateWarmups(firstWorkWeight),
+      warmups: generateWarmups(firstWorkWeight, liftConfig.lift),
       sets,
     };
   }
@@ -1703,7 +1745,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
     return {
       lift,
       prepItems: [],
-      warmups: generateWarmups(sets[0].weight),
+      warmups: generateWarmups(sets[0].weight, lift),
       sets,
     };
   }),
