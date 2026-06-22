@@ -6668,7 +6668,7 @@ function ProgramProfileSection({
   function openWizard() {
     setDraft({
       focus: currentFocus,
-      preparationMode: normalizePreparationMode(preparationMode) === 'off' ? 'off' : 'shoulderThoracic',
+      preparationMode: normalizePreparationMode(preparationMode),
       accessoryMode: normalizeAccessoryMode(accessoryMode),
       cooldownMode: normalizeCooldownMode(cooldownMode),
     });
@@ -6783,6 +6783,11 @@ function ProgramProfileSection({
           value: 'off',
           title: t.programOptionOff || 'Off',
           text: t.programPreparationOffText || 'No preparation block.',
+        },
+        {
+          value: 'basicFirst',
+          title: t.programPreparationGeneral || 'General',
+          text: t.programPreparationGeneralText || 'General preparation for the first main lift.',
         },
         {
           value: 'shoulderThoracic',
@@ -8430,21 +8435,21 @@ function App() {
             deadliftVariant: data.deadliftVariant,
           });
       const profileSettings = settingsForProgramProfile(savedProgramProfile);
-      const savedAccessoryMode = hasSavedProgramProfile
-        ? normalizeAccessoryMode(profileSettings.accessoryMode)
-        : normalizeAccessoryMode(data.accessoryMode);
-      const savedPreparationMode = hasSavedProgramProfile
-        ? normalizePreparationMode(profileSettings.preparationMode)
-        : normalizePreparationMode(data.preparationMode);
-      const savedSquatVariant = hasSavedProgramProfile
-        ? normalizeSquatVariant(profileSettings.squatVariant)
-        : normalizeSquatVariant(data.squatVariant || localStorage.getItem('squatVariant'));
-      const savedDeadliftVariant = hasSavedProgramProfile
-        ? normalizeDeadliftVariant(profileSettings.deadliftVariant)
-        : normalizeDeadliftVariant(data.deadliftVariant);
-      const savedBenchPressVariant = hasSavedProgramProfile
-        ? normalizeBenchPressVariant(profileSettings.benchPressVariant)
-        : normalizeBenchPressVariant(data.benchPressVariant || localStorage.getItem('benchPressVariant'));
+      const savedAccessoryMode = normalizeAccessoryMode(
+        data.accessoryMode ?? profileSettings.accessoryMode
+      );
+      const savedPreparationMode = normalizePreparationMode(
+        data.preparationMode ?? profileSettings.preparationMode
+      );
+      const savedSquatVariant = normalizeSquatVariant(
+        data.squatVariant ?? profileSettings.squatVariant ?? localStorage.getItem('squatVariant')
+      );
+      const savedDeadliftVariant = normalizeDeadliftVariant(
+        data.deadliftVariant ?? profileSettings.deadliftVariant
+      );
+      const savedBenchPressVariant = normalizeBenchPressVariant(
+        data.benchPressVariant ?? profileSettings.benchPressVariant ?? localStorage.getItem('benchPressVariant')
+      );
       const savedCooldownMode = normalizeCooldownMode(
         data.cooldownMode ?? profileSettings.cooldownMode ?? profileSettings.includeCooldown
       );
