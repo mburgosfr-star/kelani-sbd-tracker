@@ -1,0 +1,10 @@
+Kelani SBD Tracker v1.2.11
+
+- Improved startup and hard-refresh state preservation for program settings, preparation, accessories and cooldown.
+- Added General preparation as a visible Adjust Program wizard option.
+- Improved W22-W24 attempt-practice failure handling: failed attempts are skipped and later attempts are adjusted when appropriate.
+- Added inline attempt-effort feedback during attempt practice and meet day.
+- Improved warm-up progression with 10 kg warm-up weights and decreasing jumps toward the work set.
+- Tuned general accessory templates for Squat and Deadlift days.
+- Added a 7:30 rest timer option.
+- Improved dark UI contrast, SBD-red accents and active workout item visibility.
