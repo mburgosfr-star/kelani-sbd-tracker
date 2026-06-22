@@ -4998,7 +4998,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
           title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
           subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${workout.number} / ${totalWorkouts}${isMeetDay ? ` · ${t.meetDay}` : ''}`}
           titleStyle={{
-            fontSize: 'clamp(20px, 6vw, 24px)',
+            fontSize: 30,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -5331,7 +5331,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
               padding: '6px 10px',
               fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
               fontWeight: 900,
-              color: THEME.brown || '#a67c52',
+              color: THEME.meet,
               textAlign: 'center',
               }}>
               {t.accessories}
@@ -5428,7 +5428,18 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       paddingBottom: 16,
       fontFamily: 'sans-serif'
     }}>
-      <h2 style={{ margin: '12px 0 8px', textAlign: 'center', fontSize: 24 }}>
+      <h2 style={{
+        margin: '12px 0 8px',
+        textAlign: 'center',
+        fontSize: 30,
+        fontWeight: 900,
+        lineHeight: 1.15,
+        color: ({
+          Squat: THEME.red,
+          Bench: THEME.primary,
+          Deadlift: THEME.yellow,
+        }[workout.lift] || THEME.meet)
+      }}>
         {t.workout} {workout.number} — {workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant)}
       </h2>
 
@@ -5439,7 +5450,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       {renderActivateWorkoutCard()}
 
       {(workout.prepItems || []).length > 0 && (
-        <div style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
+        <div style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: (workout.warmups || []).length > 0 ? 0 : 10 }}>
           <div style={{
             padding: '6px 10px',
             fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
@@ -5632,7 +5643,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
             padding: '6px 10px',
             fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
             fontWeight: 900,
-            color: THEME.brown || '#a67c52',
+            color: THEME.meet,
             textAlign: 'center',
           }}>
             {t.accessories}
@@ -6551,9 +6562,9 @@ const meetTotals = {
     <div style={{
       marginTop: 8,
       padding: 10,
-      border: `1px solid ${neutralChartColor}`,
+      border: `1px solid ${THEME.meet}`,
       borderRadius: 10,
-      background: `${neutralChartColor}14`,
+      background: `${THEME.meet}14`,
       display: 'grid',
       gap: 6,
       fontSize: 14
@@ -6564,8 +6575,8 @@ const meetTotals = {
         [t.totalAfterThird, meetTotals.third],
       ].map(([label, value]) => (
         <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-          <span style={{ color: THEME.text, fontWeight: 800 }}>{label}</span>
-          <strong>{value ? formatWeightFromKg(value, statsWeightUnit) : '—'}</strong>
+          <span style={{ color: THEME.meet, fontWeight: 800 }}>{label}</span>
+          <strong style={{ color: THEME.text }}>{value ? formatWeightFromKg(value, statsWeightUnit) : '—'}</strong>
         </div>
       ))}
     </div>
@@ -7201,7 +7212,7 @@ function AppHeader({ t, title, subtitle, meta, children, titleStyle = {} }) {
         fontSize: 30,
         fontWeight: 900,
         lineHeight: 1.15,
-        color: THEME.brown || '#a67c52',
+        color: THEME.meet,
         ...titleStyle
       }}>
         {title}
