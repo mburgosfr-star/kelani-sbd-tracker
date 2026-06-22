@@ -2225,6 +2225,60 @@ function CooldownBlock({ items = [], onToggleItem = () => {}, t, isReadOnly = fa
   );
 }
 
+function getAttemptEffortInlineFeedback(set, t) {
+  if (!isAttemptSetLabel(set?.labelKey) || !set?.effort) return null;
+
+  const isThirdAttempt = set.labelKey === 'thirdAttempt';
+
+  if (set.effort === 'easy') {
+    return isThirdAttempt
+      ? t.attemptInlineThirdEasy || 'Third attempt looked easy. Useful attempt-planning data for next time.'
+      : t.attemptInlineEffortEasy || 'This attempt looked easy. Consider increasing the next attempt.';
+  }
+
+  if (set.effort === 'max') {
+    return isThirdAttempt
+      ? t.attemptInlineThirdMax || 'Third attempt looked maximal. Good cap for today; continue with the next work.'
+      : t.attemptInlineEffortMax || 'This attempt looked maximal. Consider lowering the next attempt.';
+  }
+
+  if (set.effort === 'hard') {
+    return isThirdAttempt
+      ? t.attemptInlineThirdHard || 'Third attempt was hard but acceptable. Use it as useful attempt-planning data.'
+      : t.attemptInlineEffortHard || 'Hard but acceptable for attempt practice. Keep the plan.';
+  }
+
+  if (set.effort === 'good') {
+    return isThirdAttempt
+      ? t.attemptInlineThirdGood || 'Third attempt looked right. Useful attempt-planning data for next time.'
+      : t.attemptInlineEffortGood || 'This attempt looked right. Keep the plan.';
+  }
+
+  return null;
+}
+
+function AttemptEffortFeedback({ set, t }) {
+  const message = getAttemptEffortInlineFeedback(set, t);
+  if (!message) return null;
+
+  return (
+    <div style={{
+      margin: '0 0 4px',
+      padding: '8px 10px',
+      borderTop: `1px solid ${THEME.primary}`,
+      borderBottom: `1px solid ${THEME.primary}`,
+      background: 'rgba(255, 138, 61, 0.12)',
+      color: THEME.text,
+      fontSize: 12,
+      fontWeight: 800,
+      lineHeight: 1.35,
+      textAlign: 'center'
+    }}>
+      {message}
+    </div>
+  );
+}
+
 function EffortPicker({ value, onChange, t }) {
   return (
     <div style={{
@@ -2660,7 +2714,9 @@ function WorkoutActionRow({
 
 function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
-  const displayPct = set.pct ? formatDecimalDisplay(Number((set.pct * 100).toFixed(1))) : null;
+  const displayPct = set.pct
+    ? formatDecimalDisplay(Math.round(Number(set.pct) * 100), { maximumFractionDigits: 0 })
+    : null;
   const effortLabel = getSetEffortLabel(set.effort, t);
   const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(set.weight));
@@ -2721,14 +2777,15 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <input
         ref={inputRef}
-        type="number"
-        step={normalizeWeightUnit(weightUnit) === WEIGHT_UNITS.LB ? "5" : "2.5"}
+        type="text"
+        inputMode="decimal"
         value={inputVal}
         onChange={e => setInputVal(e.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={handleConfirm}
         style={{
-          width: 70,
+          width: 96,
+          boxSizing: 'border-box',
           padding: '4px 8px',
           fontSize: WORKOUT_CIRCLE_FONT_SIZE,
           fontWeight: 700,
@@ -4211,7 +4268,9 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   const failedEntry = entries.find(({ set }) => set.failed || set.skipped);
   const allSameWeight = entries.every(({ set }) => Number(set.weight) === Number(firstSet.weight));
   const allSameReps = entries.every(({ set }) => Number(set.reps) === Number(firstSet.reps));
-  const displayPct = firstSet.pct ? formatDecimalDisplay(Number((firstSet.pct * 100).toFixed(1))) : null;
+  const displayPct = firstSet.pct
+    ? formatDecimalDisplay(Math.round(Number(firstSet.pct) * 100), { maximumFractionDigits: 0 })
+    : null;
   const [inputVal, setInputVal] = useState(String(firstSet.weight || ''));
 
   useEffect(() => {
@@ -5312,6 +5371,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                       t={t}
                     />
                   )}
+                  {set.done && !set.failed && !set.skipped && set.effort && isAttemptSetLabel(set.labelKey) && (
+                    <AttemptEffortFeedback set={set} t={t} />
+                  )}
                 </React.Fragment>
                 );
               })}
@@ -5625,6 +5687,9 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   lift={workout.lift}
                   benchPressVariant={effectiveBenchPressVariant}
                 />
+              )}
+              {set.done && !set.failed && !set.skipped && set.effort && isAttemptSetLabel(set.labelKey) && (
+                <AttemptEffortFeedback set={set} t={t} />
               )}
             </React.Fragment>
           );
