@@ -8231,6 +8231,7 @@ function App() {
     normalizeDeadliftVariant(localStorage.getItem('deadliftVariant'))
   );
   const [weightUnit, setWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
+  const [hasLoadedData, setHasLoadedData] = useState(false);
 
   function startTimer(seconds, placement = null) {
     setTimer({
@@ -8250,24 +8251,29 @@ function App() {
   }, [weightUnit]);
 
   useEffect(() => {
+    if (!hasLoadedData) return;
     localStorage.setItem('programProfile', normalizeProgramProfile(programProfile));
-  }, [programProfile]);
+  }, [hasLoadedData, programProfile]);
 
   useEffect(() => {
+    if (!hasLoadedData) return;
     localStorage.setItem('cooldownMode', normalizeCooldownMode(cooldownMode));
-  }, [cooldownMode]);
+  }, [hasLoadedData, cooldownMode]);
 
   useEffect(() => {
+    if (!hasLoadedData) return;
     localStorage.setItem('squatVariant', normalizeSquatVariant(squatVariant));
-  }, [squatVariant]);
+  }, [hasLoadedData, squatVariant]);
 
   useEffect(() => {
+    if (!hasLoadedData) return;
     localStorage.setItem('benchPressVariant', normalizeBenchPressVariant(benchPressVariant));
-  }, [benchPressVariant]);
+  }, [hasLoadedData, benchPressVariant]);
 
   useEffect(() => {
+    if (!hasLoadedData) return;
     localStorage.setItem('deadliftVariant', normalizeDeadliftVariant(deadliftVariant));
-  }, [deadliftVariant]);
+  }, [hasLoadedData, deadliftVariant]);
 
   const t = translations[language];
   const [screen, setScreen] = useState(null);
@@ -8288,6 +8294,7 @@ function App() {
   const [meetPlannerAttempts, setMeetPlannerAttempts] = useState({});
   const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
   useEffect(() => {
     if (!workouts.length) return;
 
@@ -8376,6 +8383,7 @@ function App() {
 
     if (!saved) {
       setScreen('onboarding');
+      setHasLoadedData(true);
       return;
     }
 
@@ -8389,6 +8397,7 @@ function App() {
 
       if (!squat || !bench || !deadlift) {
         setScreen('onboarding');
+        setHasLoadedData(true);
         return;
       }
 
@@ -8497,14 +8506,16 @@ function App() {
 
       setShowNewCycle(false);
       setScreen('dashboard');
+      setHasLoadedData(true);
     } catch (e) {
       console.error('Kon opgeslagen user data niet laden', e);
       setScreen('onboarding');
+      setHasLoadedData(true);
     }
   }, []);
 
   useEffect(() => {
-    if (!prs.Squat || !prs.Bench || !prs.Deadlift) return;
+    if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       version: 1,
@@ -8532,10 +8543,10 @@ function App() {
         workouts,
       },
     }));
-  }, [history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts]);
+  }, [hasLoadedData, history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts]);
 
   useEffect(() => {
-    if (!prs.Squat || !prs.Bench || !prs.Deadlift) return;
+    if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
 
     const generatedWorkouts = generateProgram(
       prs.Squat,
@@ -8555,7 +8566,7 @@ function App() {
       generatedWorkouts,
       getCompletedWorkoutNumbers(history, currentCycle)
     )));
-  }, [accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
+  }, [hasLoadedData, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
 
   useEffect(() => {
     if (screen !== 'completed' || !completedWorkout) return;
