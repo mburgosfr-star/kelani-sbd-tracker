@@ -1155,7 +1155,7 @@ const ACCESSORY_TEMPLATES = {
   standard: {
     Squat: [
       { key: 'pulldown', labelKey: 'accessoryPulldown', sets: 3, reps: 10, source: 'deadlift', pct: 0.25 },
-      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.35 },
+      { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 3, reps: 12, source: 'squat', pct: 0.35 },
     ],
     Bench: [
       { key: 'hipThrust', labelKey: 'accessoryHipThrust', sets: 3, reps: 8, source: 'deadlift', pct: 0.40 },
@@ -1163,7 +1163,7 @@ const ACCESSORY_TEMPLATES = {
     ],
     Deadlift: [
       { key: 'row', labelKey: 'accessoryRow', sets: 3, reps: 10, source: 'deadlift', pct: 0.25 },
-      { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 2, reps: 12, source: 'squat', pct: 0.35 },
+      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.35 },
     ],
   },
   upperBackFriendly: {
