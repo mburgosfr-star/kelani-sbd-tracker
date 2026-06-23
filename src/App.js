@@ -8,7 +8,7 @@ import { Share } from '@capacitor/share';
 import { LocalNotifications } from '@capacitor/local-notifications';
 
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
-const REST_TIME_OPTIONS = [90, 180, 300, 450];
+const REST_TIME_OPTIONS = [90, 180, 300, 480];
 const ACCESSORY_MODES = ['off', 'standard', 'upperBackFriendly', 'lowerBodyFriendly'];
 const SET_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'max'];
 const WORKOUT_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'tooMuch'];
@@ -256,15 +256,57 @@ function normalizeRestTimeSeconds(value) {
   return REST_TIME_OPTIONS.includes(Number(value)) ? Number(value) : DEFAULT_REST_TIME_SECONDS;
 }
 
-function formatRestTime(seconds) {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${String(secs).padStart(2, '0')}`;
+function epley(weight, reps) {
+  const w = Number(weight) || 0;
+  const r = Number(reps) || 0;
+
+  if (w <= 0 || r <= 0) return 0;
+  if (r <= 1) return w;
+
+  return w * (1 + r / 30);
 }
 
-function epley(weight, reps) {
-  if (reps === 1) return weight;
-  return Math.round(weight * (1 + reps / 30));
+function getRecommendedRestTimeSeconds({ workouts = [], placement = null, fallbackSeconds = 180 } = {}) {
+  if (!placement) return fallbackSeconds;
+
+  const workout = (workouts || []).find(item =>
+    Number(item?.number) === Number(placement.workoutNumber)
+  );
+
+  let set = null;
+
+  if (placement.type === 'main') {
+    set = workout?.sets?.[placement.index];
+  }
+
+  if (placement.type === 'meetSet') {
+    set = workout?.lifts?.[placement.liftIndex]?.sets?.[placement.index];
+  }
+
+  const labelKey = set?.labelKey;
+  const isRealMeetDay = workout?.type === 'meet';
+
+  // Real meet day and real attempt labels need long attempt-style rest.
+  if (isRealMeetDay || isAttemptSetLabel(labelKey)) return 480;
+
+  // Accessories stay short, successful or failed.
+  if (placement.type === 'accessory') return 90;
+
+  if (placement.type === 'warmup') return 90;
+  if (placement.type === 'cooldown') return 90;
+
+  // Failed training work needs extra recovery, but not attempt-level rest.
+  if (placement.failed) return 300;
+
+  if (isTopSetLabel(labelKey)) return 300;
+
+  if (labelKey === 'backoff' || labelKey === 'workSets') return 180;
+
+  // Multi-lift secondary/light training sets often have no labelKey.
+  // They are training work, not meet attempts.
+  if (placement.type === 'main' || placement.type === 'meetSet') return 180;
+
+  return fallbackSeconds;
 }
 
 function calculatePrsFromHistory(history) {
@@ -4179,166 +4221,123 @@ function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) 
   );
 }
 
-function RestTimeSection({ restTimeSeconds, setRestTimeSeconds, t }) {
-  const [showOptions, setShowOptions] = useState(false);
+function RestTimeSection({ t }) {
+  const [showAlertHelp, setShowAlertHelp] = useState(false);
   const [alertStatus, setAlertStatus] = useState(null);
 
   async function handleCheckAlerts() {
     const status = await checkRestTimerAlertReadiness();
     setAlertStatus(status);
+    setShowAlertHelp(true);
   }
 
   return (
     <>
       <SettingsListRow
-        label={t.restTime}
-        actionLabel={formatRestTime(restTimeSeconds)}
-        onAction={() => setShowOptions(true)}
+        label={t.restTimerAlerts || 'Rest timer alerts'}
+        actionLabel={t.check || 'Check'}
+        onAction={handleCheckAlerts}
       />
 
-      {showOptions && (
+      {showAlertHelp && (
         <SettingsModal
-          title={t.restTime}
-          onClose={() => setShowOptions(false)}
+          title={t.restTimerAlerts || 'Rest timer alerts'}
+          onClose={() => setShowAlertHelp(false)}
         >
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-            gap: 6,
-            marginBottom: 12
+            color: THEME.text,
+            fontSize: 13,
+            fontWeight: 700,
+            lineHeight: 1.35,
+            marginBottom: 8
           }}>
-            {REST_TIME_OPTIONS.map(seconds => (
-              <button
-                key={seconds}
-                onClick={() => setRestTimeSeconds(seconds)}
-                style={{
-                  width: '100%',
-                  minHeight: 38,
-                  padding: '8px 4px',
-                  fontSize: 13,
-                  fontWeight: 900,
-                  borderRadius: 8,
-                  border: `1px solid ${restTimeSeconds === seconds ? THEME.primary : THEME.border}`,
-                  background: restTimeSeconds === seconds ? THEME.primary : THEME.card,
-                  color: restTimeSeconds === seconds ? THEME.bg : THEME.text,
-                  cursor: 'pointer'
-                }}
-              >
-                {formatRestTime(seconds)}
-              </button>
-            ))}
+            Rest times are chosen automatically by set type. For reliable screen-off alerts, allow notifications, lock screen notifications, unrestricted battery use, and exact alarms if Android asks.
           </div>
 
           <div style={{
-            paddingTop: 10,
-            borderTop: `1px solid ${THEME.border}`,
-            marginBottom: 10
+            color: THEME.muted,
+            fontSize: 12,
+            fontWeight: 700,
+            lineHeight: 1.3,
+            marginBottom: alertStatus ? 10 : 12
           }}>
-            <div style={{
-              color: THEME.text,
-              fontSize: 15,
-              fontWeight: 900,
-              marginBottom: 6
-            }}>
-              {t.restTimerAlerts || 'Rest timer alerts'}
-            </div>
+            Xiaomi/HyperOS may also require lock screen notifications and no battery restrictions.
+          </div>
 
-            <div style={{
-              color: THEME.text,
-              fontSize: 13,
-              fontWeight: 700,
-              lineHeight: 1.35,
-              marginBottom: 8
-            }}>
-              For reliable screen-off alerts, allow notifications, lock screen notifications,
-              unrestricted battery use, and exact alarms if Android asks.
-            </div>
-
-            <div style={{
-              color: THEME.muted,
-              fontSize: 12,
-              fontWeight: 700,
-              lineHeight: 1.3,
-              marginBottom: alertStatus ? 8 : 10
-            }}>
-              Xiaomi/HyperOS may also require lock screen notifications and no battery restrictions.
-            </div>
-
-            {alertStatus?.native === true && (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr auto',
-                gap: '4px 10px',
-                color: THEME.muted,
-                fontSize: 12,
-                fontWeight: 800,
-                marginBottom: 10
-              }}>
-                <span>Notifications</span>
-                <strong style={{ color: alertStatus.display === 'granted' ? THEME.primary : THEME.red }}>
-                  {alertStatus.display}
-                </strong>
-                <span>Exact alarms</span>
-                <strong style={{ color: alertStatus.exactAlarm === 'granted' ? THEME.primary : THEME.muted }}>
-                  {alertStatus.exactAlarm}
-                </strong>
-              </div>
-            )}
-
-            {alertStatus?.native === false && (
-              <div style={{
-                padding: 8,
-                borderRadius: 8,
-                border: `1px solid ${THEME.border}`,
-                color: THEME.muted,
-                fontSize: 12,
-                fontWeight: 800,
-                lineHeight: 1.3,
-                marginBottom: 10
-              }}>
-                Open the installed Android app to check device alert settings.
-              </div>
-            )}
-
+          {alertStatus?.native === true && (
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              gap: 8
+              gridTemplateColumns: '1fr auto',
+              gap: '4px 10px',
+              color: THEME.muted,
+              fontSize: 12,
+              fontWeight: 800,
+              marginBottom: 12
             }}>
-              <button
-                onClick={handleCheckAlerts}
-                style={{
-                  width: '100%',
-                  padding: 10,
-                  fontSize: 14,
-                  fontWeight: 800,
-                  borderRadius: 8,
-                  border: `1px solid ${THEME.primary}`,
-                  background: THEME.card,
-                  color: THEME.text,
-                  cursor: 'pointer'
-                }}
-              >
-                {t.check || 'Check'}
-              </button>
-
-              <button
-                onClick={() => setShowOptions(false)}
-                style={{
-                  width: '100%',
-                  padding: 10,
-                  fontSize: 14,
-                  fontWeight: 700,
-                  background: 'transparent',
-                  color: THEME.text,
-                  border: `1px solid ${THEME.border}`,
-                  borderRadius: 8,
-                  cursor: 'pointer'
-                }}
-              >
-                {t.close || 'Close'}
-              </button>
+              <span>Notifications</span>
+              <strong style={{ color: alertStatus.display === 'granted' ? THEME.primary : THEME.red }}>
+                {alertStatus.display}
+              </strong>
+              <span>Exact alarms</span>
+              <strong style={{ color: alertStatus.exactAlarm === 'granted' ? THEME.primary : THEME.muted }}>
+                {alertStatus.exactAlarm}
+              </strong>
             </div>
+          )}
+
+          {alertStatus?.native === false && (
+            <div style={{
+              padding: 8,
+              borderRadius: 8,
+              border: `1px solid ${THEME.border}`,
+              color: THEME.muted,
+              fontSize: 12,
+              fontWeight: 800,
+              lineHeight: 1.3,
+              marginBottom: 12
+            }}>
+              Open the installed Android app to check device alert settings.
+            </div>
+          )}
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: 8
+          }}>
+            <button
+              onClick={handleCheckAlerts}
+              style={{
+                width: '100%',
+                padding: 10,
+                fontSize: 14,
+                fontWeight: 800,
+                borderRadius: 8,
+                border: `1px solid ${THEME.primary}`,
+                background: THEME.card,
+                color: THEME.text,
+                cursor: 'pointer'
+              }}
+            >
+              {t.check || 'Check'}
+            </button>
+
+            <button
+              onClick={() => setShowAlertHelp(false)}
+              style={{
+                width: '100%',
+                padding: 10,
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'transparent',
+                color: THEME.text,
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.close || 'Close'}
+            </button>
           </div>
         </SettingsModal>
       )}
@@ -8615,14 +8614,19 @@ function App() {
   const [hasLoadedData, setHasLoadedData] = useState(false);
 
   function startTimer(seconds, placement = null) {
-    const endTime = Date.now() + seconds * 1000;
+    const effectiveSeconds = getRecommendedRestTimeSeconds({
+      workouts,
+      placement,
+      fallbackSeconds: seconds,
+    });
+    const endTime = Date.now() + effectiveSeconds * 1000;
     const currentTranslations = translations[language] || translations.en || {};
     const doneTitle = currentTranslations.restTimerDone || 'Rest finished';
     const doneMessage = currentTranslations.restTimerDoneMessage || 'Your next set is ready.';
 
     setTimer({
       id: Date.now(),
-      seconds,
+      seconds: effectiveSeconds,
       endTime,
       placement,
     });
@@ -9372,6 +9376,7 @@ function markSetFailed(setIndex) {
       workoutNumber: workout.number,
       type: 'main',
       index: setIndex,
+      failed: true,
     });
   } else {
     stopTimer();
@@ -9510,6 +9515,7 @@ function toggleAccessorySet(accIndex, setIndex) {
       type: 'accessory',
       accIndex,
       index: setIndex,
+      failed: true,
     });
   } else {
     const currentDone = workout?.accessories?.[accIndex]?.done?.[setIndex];
@@ -9825,6 +9831,7 @@ function markMeetSetFailed(liftIndex, setIndex) {
       type: 'meetSet',
       liftIndex,
       index: setIndex,
+      failed: true,
     });
   } else {
     stopTimer();
