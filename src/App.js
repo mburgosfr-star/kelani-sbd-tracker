@@ -102,7 +102,10 @@ async function scheduleRestTimerNotification(
         body: doneText,
         channelId: REST_TIMER_NOTIFICATION_CHANNEL_ID,
         sound: REST_TIMER_NOTIFICATION_SOUND,
-        schedule: { at: new Date(endTime) },
+        schedule: {
+          at: new Date(endTime),
+          allowWhileIdle: true,
+        },
       }],
     });
   } catch (e) {}
@@ -1764,11 +1767,6 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
   const timeoutRef = useRef(null);
   const hasBeepedRef = useRef(false);
   const wasHiddenRef = useRef(false);
-  const restTimerDoneTitle = t.restTimerDone || 'Rest finished';
-  const restTimerDoneMessage = t.restTimerDoneMessage || 'Your next set is ready.';
-  const restTimerActiveTitle = t.restTimerActive || 'Rest timer active';
-  const restTimerActiveMessage = t.restTimerActiveMessage || 'Resting…';
-
   useEffect(() => {
     const clearTick = () => {
       if (intervalRef.current) {
@@ -1839,13 +1837,7 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
 
     clearFinishTimeout();
     timeoutRef.current = setTimeout(finishTimer, seconds * 1000);
-    scheduleRestTimerNotification(
-      endTime,
-      restTimerDoneTitle,
-      restTimerDoneMessage,
-      restTimerActiveTitle,
-      restTimerActiveMessage
-    );
+
 
     startVisibleTick();
     document.addEventListener('visibilitychange', startVisibleTick);
@@ -1853,16 +1845,11 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
     return () => {
       clearTick();
       clearFinishTimeout();
-      cancelRestTimerNotification();
       document.removeEventListener('visibilitychange', startVisibleTick);
     };
   }, [
     seconds,
     endTime,
-    restTimerDoneTitle,
-    restTimerDoneMessage,
-    restTimerActiveTitle,
-    restTimerActiveMessage,
   ]);
 
   function playBeep() {
@@ -8407,12 +8394,24 @@ function App() {
   const [hasLoadedData, setHasLoadedData] = useState(false);
 
   function startTimer(seconds, placement = null) {
+    const endTime = Date.now() + seconds * 1000;
+    const currentTranslations = translations[language] || translations.en || {};
+    const doneTitle = currentTranslations.restTimerDone || 'Rest finished';
+    const doneMessage = currentTranslations.restTimerDoneMessage || 'Your next set is ready.';
+
     setTimer({
       id: Date.now(),
       seconds,
-      endTime: Date.now() + seconds * 1000,
+      endTime,
       placement,
     });
+
+    scheduleRestTimerNotification(endTime, doneTitle, doneMessage);
+  }
+
+  function stopTimer() {
+    cancelRestTimerNotification();
+    setTimer(null);
   }
 
   useEffect(() => {
@@ -9012,7 +9011,7 @@ function shouldStartRestTimerAfterToggle(workout, type, index, accIndex = null) 
 }
 
 function togglePrepItem(index) {
-  setTimer(null);
+  stopTimer();
 
   setWorkouts(prev =>
     prev.map((w, wi) => {
@@ -9091,10 +9090,10 @@ function toggleSet(setIndex) {
         index: setIndex,
       });
     } else {
-      setTimer(null);
+      stopTimer();
     }
   } else {
-    setTimer(null);
+    stopTimer();
   }
 
   setWorkouts(prev =>
@@ -9374,7 +9373,7 @@ function toggleAccessorySet(accIndex, setIndex) {
   } else {
     const currentDone = workout?.accessories?.[accIndex]?.done?.[setIndex];
     if (currentDone === false) {
-      setTimer(null);
+      stopTimer();
     }
   }
 
@@ -9503,7 +9502,7 @@ function changeMeetSetEffort(liftIndex, setIndex, effort) {
 }
 
 function toggleMeetPrepItem(liftIndex, prepIndex) {
-  setTimer(null);
+  stopTimer();
 
   setWorkouts(prev =>
     prev.map((w, wi) => {
@@ -9554,10 +9553,10 @@ function toggleMeetWarmup(liftIndex, warmupIndex) {
         index: warmupIndex,
       });
     } else {
-      setTimer(null);
+      stopTimer();
     }
   } else {
-    setTimer(null);
+    stopTimer();
   }
 
   setWorkouts(prev =>
@@ -9612,10 +9611,10 @@ function toggleMeetSet(liftIndex, setIndex) {
         index: setIndex,
       });
     } else {
-      setTimer(null);
+      stopTimer();
     }
   } else {
-    setTimer(null);
+    stopTimer();
   }
 
   setWorkouts(prev =>
@@ -9687,7 +9686,7 @@ function markMeetSetFailed(liftIndex, setIndex) {
       index: setIndex,
     });
   } else {
-    setTimer(null);
+    stopTimer();
   }
 
   if (workout?.type !== 'meet') {
@@ -9934,7 +9933,7 @@ function markAccessorySetFailed(accIndex, setIndex) {
       index: setIndex,
     });
   } else {
-    setTimer(null);
+    stopTimer();
   }
 
   setWorkouts(prev =>
@@ -10092,7 +10091,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     }
 
     setShowWorkoutEffortPrompt(false);
-    setTimer(null);
+    stopTimer();
 
     const finishedWorkout = JSON.parse(JSON.stringify(workout));
     finishedWorkout.completed = true;
@@ -10869,7 +10868,7 @@ const latestBodyDataRows = [
           t={t}
           weightUnit={weightUnit}
           timer={timer}
-          setTimer={setTimer}
+          setTimer={stopTimer}
           onToggleMeetPrepItem={toggleMeetPrepItem}
           onToggleMeetWarmup={toggleMeetWarmup}
           onToggleMeetSet={toggleMeetSet}
