@@ -78,6 +78,57 @@ async function ensureRestTimerNotificationChannel() {
   } catch (e) {}
 }
 
+async function checkRestTimerAlertReadiness() {
+  if (!Capacitor.isNativePlatform()) {
+    return {
+      native: false,
+      display: 'web',
+      exactAlarm: 'web',
+      message: 'Rest timer alerts are only needed on the installed Android app.',
+    };
+  }
+
+  try {
+    let permissions = await LocalNotifications.checkPermissions();
+
+    if (permissions.display !== 'granted') {
+      permissions = await LocalNotifications.requestPermissions();
+    }
+
+    let exactAlarm = 'unknown';
+
+    if (typeof LocalNotifications.checkExactNotificationSetting === 'function') {
+      try {
+        const exactStatus = await LocalNotifications.checkExactNotificationSetting();
+        exactAlarm = exactStatus?.exact_alarm || exactStatus?.exactAlarm || 'unknown';
+
+        if (exactAlarm !== 'granted' && typeof LocalNotifications.changeExactNotificationSetting === 'function') {
+          const changedStatus = await LocalNotifications.changeExactNotificationSetting();
+          exactAlarm = changedStatus?.exact_alarm || changedStatus?.exactAlarm || exactAlarm;
+        }
+      } catch (e) {
+        exactAlarm = 'unknown';
+      }
+    }
+
+    return {
+      native: true,
+      display: permissions.display,
+      exactAlarm,
+      message: permissions.display === 'granted'
+        ? 'Notification permission is allowed. For screen-off alerts, also allow lock screen notifications and unrestricted battery use in Android settings.'
+        : 'Notification permission is not allowed yet. Rest timer alerts may be blocked.',
+    };
+  } catch (e) {
+    return {
+      native: true,
+      display: 'unknown',
+      exactAlarm: 'unknown',
+      message: 'Could not check notification settings. Please allow notifications, lock screen notifications and unrestricted battery use in Android settings.',
+    };
+  }
+}
+
 async function scheduleRestTimerNotification(
   endTime,
   doneTitle = 'Rest finished',
@@ -4071,6 +4122,12 @@ function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) 
 
 function RestTimeSection({ restTimeSeconds, setRestTimeSeconds, t }) {
   const [showOptions, setShowOptions] = useState(false);
+  const [alertStatus, setAlertStatus] = useState(null);
+
+  async function handleCheckAlerts() {
+    const status = await checkRestTimerAlertReadiness();
+    setAlertStatus(status);
+  }
 
   return (
     <>
@@ -4085,19 +4142,22 @@ function RestTimeSection({ restTimeSeconds, setRestTimeSeconds, t }) {
           title={t.restTime}
           onClose={() => setShowOptions(false)}
         >
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gap: 6,
+            marginBottom: 12
+          }}>
             {REST_TIME_OPTIONS.map(seconds => (
               <button
                 key={seconds}
-                onClick={() => {
-                  setRestTimeSeconds(seconds);
-                  setShowOptions(false);
-                }}
+                onClick={() => setRestTimeSeconds(seconds)}
                 style={{
                   width: '100%',
-                  padding: 12,
-                  fontSize: 15,
-                  fontWeight: 800,
+                  minHeight: 38,
+                  padding: '8px 4px',
+                  fontSize: 13,
+                  fontWeight: 900,
                   borderRadius: 8,
                   border: `1px solid ${restTimeSeconds === seconds ? THEME.primary : THEME.border}`,
                   background: restTimeSeconds === seconds ? THEME.primary : THEME.card,
@@ -4108,23 +4168,118 @@ function RestTimeSection({ restTimeSeconds, setRestTimeSeconds, t }) {
                 {formatRestTime(seconds)}
               </button>
             ))}
+          </div>
 
-            <button
-              onClick={() => setShowOptions(false)}
-              style={{
-                width: '100%',
-                padding: 10,
-                fontSize: 14,
-                fontWeight: 700,
-                background: 'transparent',
-                color: THEME.text,
-                border: `1px solid ${THEME.border}`,
+          <div style={{
+            paddingTop: 10,
+            borderTop: `1px solid ${THEME.border}`,
+            marginBottom: 10
+          }}>
+            <div style={{
+              color: THEME.text,
+              fontSize: 15,
+              fontWeight: 900,
+              marginBottom: 6
+            }}>
+              {t.restTimerAlerts || 'Rest timer alerts'}
+            </div>
+
+            <div style={{
+              color: THEME.text,
+              fontSize: 13,
+              fontWeight: 700,
+              lineHeight: 1.35,
+              marginBottom: 8
+            }}>
+              For reliable screen-off alerts, allow notifications, lock screen notifications,
+              unrestricted battery use, and exact alarms if Android asks.
+            </div>
+
+            <div style={{
+              color: THEME.muted,
+              fontSize: 12,
+              fontWeight: 700,
+              lineHeight: 1.3,
+              marginBottom: alertStatus ? 8 : 10
+            }}>
+              Xiaomi/HyperOS may also require lock screen notifications and no battery restrictions.
+            </div>
+
+            {alertStatus?.native === true && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr auto',
+                gap: '4px 10px',
+                color: THEME.muted,
+                fontSize: 12,
+                fontWeight: 800,
+                marginBottom: 10
+              }}>
+                <span>Notifications</span>
+                <strong style={{ color: alertStatus.display === 'granted' ? THEME.primary : THEME.red }}>
+                  {alertStatus.display}
+                </strong>
+                <span>Exact alarms</span>
+                <strong style={{ color: alertStatus.exactAlarm === 'granted' ? THEME.primary : THEME.muted }}>
+                  {alertStatus.exactAlarm}
+                </strong>
+              </div>
+            )}
+
+            {alertStatus?.native === false && (
+              <div style={{
+                padding: 8,
                 borderRadius: 8,
-                cursor: 'pointer'
-              }}
-            >
-              {t.cancel}
-            </button>
+                border: `1px solid ${THEME.border}`,
+                color: THEME.muted,
+                fontSize: 12,
+                fontWeight: 800,
+                lineHeight: 1.3,
+                marginBottom: 10
+              }}>
+                Open the installed Android app to check device alert settings.
+              </div>
+            )}
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 8
+            }}>
+              <button
+                onClick={handleCheckAlerts}
+                style={{
+                  width: '100%',
+                  padding: 10,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  border: `1px solid ${THEME.primary}`,
+                  background: THEME.card,
+                  color: THEME.text,
+                  cursor: 'pointer'
+                }}
+              >
+                {t.check || 'Check'}
+              </button>
+
+              <button
+                onClick={() => setShowOptions(false)}
+                style={{
+                  width: '100%',
+                  padding: 10,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  background: 'transparent',
+                  color: THEME.text,
+                  border: `1px solid ${THEME.border}`,
+                  borderRadius: 8,
+                  cursor: 'pointer'
+                }}
+              >
+                {t.close || 'Close'}
+              </button>
+            </div>
           </div>
         </SettingsModal>
       )}
