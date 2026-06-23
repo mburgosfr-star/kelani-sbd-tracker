@@ -1069,87 +1069,165 @@ function generatePrepItems(lift, preparationMode = 'basicFirst') {
 }
 
 function generateWarmups(firstWorkWeight, lift = '') {
-  function roundDown10(w) {
-    return Math.floor(w / 10) * 10;
+  const targetWeight = Number(firstWorkWeight) || 0;
+  const normalizedLift = String(lift || '');
+
+  if (targetWeight < 30) return [];
+
+  function roundTo10(weight) {
+    return Math.round((Number(weight) || 0) / 10) * 10;
   }
 
-  function uniqueIncreasing(items, targetWeight) {
+  function roundDown10(weight) {
+    return Math.floor((Number(weight) || 0) / 10) * 10;
+  }
+
+  function primerWeight(target) {
+    let primer = roundTo10(target * 0.92);
+
+    if (primer >= target || target - primer < 10 || primer / target > 0.93) {
+      primer = roundDown10(target - 10);
+    }
+
+    return Math.max(0, primer);
+  }
+
+  function repsForWarmup(weight, target) {
+    const ratio = target > 0 ? weight / target : 0;
+
+    if (normalizedLift === 'Deadlift') {
+      if (ratio <= 0.50) return 5;
+      if (ratio <= 0.75) return 3;
+      if (ratio <= 0.85) return 2;
+      return 1;
+    }
+
+    if (ratio <= 0.55) return 5;
+    if (ratio <= 0.75) return 3;
+    if (ratio <= 0.85) return 2;
+    return 1;
+  }
+
+  function uniqueIncreasing(weights, target) {
     const result = [];
 
-    items.forEach(item => {
-      const weight = Number(item.weight) || 0;
-      if (weight <= 0 || weight >= Number(targetWeight)) return;
-      if (result.some(existing => Number(existing.weight) === weight)) return;
-      if (result.length > 0 && weight <= Number(result[result.length - 1].weight)) return;
-      result.push({ ...item, weight });
+    weights.forEach(weight => {
+      const roundedWeight = roundTo10(weight);
+
+      if (roundedWeight <= 0) return;
+      if (roundedWeight >= target) return;
+      if (target - roundedWeight < 10) return;
+      if (result.includes(roundedWeight)) return;
+      if (result.length > 0 && roundedWeight <= result[result.length - 1]) return;
+
+      result.push(roundedWeight);
     });
 
     return result;
   }
 
-  function hasDescendingJumps(items, targetWeight) {
-    if (items.length <= 1) return true;
+  function hasNonIncreasingJumps(weights, target) {
+    if (!weights.length) return true;
 
+    let previous = null;
     let previousJump = Infinity;
 
-    for (let i = 1; i < items.length; i += 1) {
-      const jump = Number(items[i].weight) - Number(items[i - 1].weight);
+    for (const weight of weights) {
+      if (previous === null) {
+        previous = weight;
+        continue;
+      }
+
+      const jump = weight - previous;
       if (jump > previousJump) return false;
+
       previousJump = jump;
+      previous = weight;
     }
 
-    const finalJump = Number(targetWeight) - Number(items[items.length - 1].weight);
+    const finalJump = target - weights[weights.length - 1];
     return finalJump <= previousJump;
   }
 
-  function toWarmupItems(items, targetWeight) {
-    const candidates = uniqueIncreasing(items, targetWeight);
+  function cleanRamp(weights, target) {
+    const ramp = uniqueIncreasing(weights, target);
 
-    while (candidates.length > 1 && !hasDescendingJumps(candidates, targetWeight)) {
+    while (ramp.length > 1 && !hasNonIncreasingJumps(ramp, target)) {
       let removed = false;
 
-      for (let i = candidates.length - 1; i >= 1; i -= 1) {
-        const test = candidates.filter((_, index) => index !== i);
-        if (hasDescendingJumps(test, targetWeight)) {
-          candidates.splice(i, 1);
+      for (let i = ramp.length - 2; i >= 1; i -= 1) {
+        const candidate = ramp.filter((_, index) => index !== i);
+        if (hasNonIncreasingJumps(candidate, target)) {
+          ramp.splice(i, 1);
           removed = true;
           break;
         }
       }
 
-      if (!removed) break;
+      if (!removed) ramp.splice(1, 1);
     }
 
-    return candidates.map(w => ({
-      weight: w.weight,
-      reps: w.reps,
-      isWarmup: true,
-      done: false,
-    }));
+    return ramp;
   }
 
-  const weight = Number(firstWorkWeight) || 0;
+  function squatBenchRamp(target) {
+    const primer = primerWeight(target);
 
-  if (weight < 30) return [];
-
-  if (lift === 'Deadlift') {
-    if (weight <= 80) {
-      return toWarmupItems([{ weight: 70, reps: 3 }], weight);
+    if (target <= 60) {
+      return [20, roundDown10(target - 10)];
     }
 
-    return toWarmupItems([
-      { weight: 70, reps: 5 },
-      { weight: roundDown10(weight * 0.68), reps: 2 },
-      { weight: roundDown10(weight * 0.88), reps: 1 },
-    ], weight);
+    if (target <= 110) {
+      return [20, roundTo10(target * 0.72), primer];
+    }
+
+    if (target <= 160) {
+      return [20, 70, roundTo10(target * 0.75), primer];
+    }
+
+    const weights = [20, 70, 120];
+
+    let next = 170;
+    while (next < primer - 10) {
+      weights.push(next);
+      next += 50;
+    }
+
+    weights.push(roundTo10(target * 0.75), primer);
+    return weights;
   }
 
-  return toWarmupItems([
-    { weight: 20, reps: 5 },
-    { weight: roundDown10(weight * 0.58), reps: 3 },
-    { weight: roundDown10(weight * 0.82), reps: 1 },
-  ], weight);
+  function deadliftRamp(target) {
+    const primer = primerWeight(target);
+
+    if (target <= 90) {
+      return [roundDown10(target * 0.65)];
+    }
+
+    const weights = [70];
+
+    let next = 120;
+    while (next < primer - 10) {
+      weights.push(next);
+      next += 50;
+    }
+
+    weights.push(roundTo10(target * 0.73), primer);
+    return weights;
+  }
+
+  const rawWeights = normalizedLift === 'Deadlift'
+    ? deadliftRamp(targetWeight)
+    : squatBenchRamp(targetWeight);
+
+  return cleanRamp(rawWeights, targetWeight).map(weight => ({
+    weight,
+    reps: repsForWarmup(weight, targetWeight),
+    isWarmup: true,
+    done: false,
+  }));
 }
+
 
 
 
@@ -2185,11 +2263,11 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
 function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   if (!warmups.length) return null;
 
-  const columnCount = warmups.length <= 2
-    ? 2
-    : warmups.length === 3
-      ? 3
-      : 4;
+  const columnCount = warmups.length === 1
+    ? 1
+    : warmups.length === 2 || warmups.length === 4
+      ? 2
+      : 3;
 
   return (
     <div style={{
