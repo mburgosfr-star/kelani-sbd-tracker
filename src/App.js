@@ -10317,7 +10317,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 
   const primaryResult = results[0];
 
-  setCompletedSummary({
+  const nextCompletedSummary = {
     type: workout.type === 'meet' ? 'meet' : 'multiTraining',
     results,
     lift: primaryResult?.lift,
@@ -10331,7 +10331,10 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     isE1RMPR: !!primaryResult?.isE1RMPR,
     topSet: primaryResult?.topSet || null,
     bodyWeight: latestBodyWeight,
-  });
+  };
+
+  finishedWorkout.completedSummary = nextCompletedSummary;
+  setCompletedSummary(nextCompletedSummary);
 
     const withoutCurrentMeet = history.filter(
     h => h.workoutNumber !== workout.number
@@ -10432,7 +10435,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 
       const primaryResult = results.find(result => result.trackStrength !== false);
 
-      setCompletedSummary({
+      const nextCompletedSummary = {
         type: 'multiTraining',
         results,
         lift: primaryResult?.lift,
@@ -10446,7 +10449,10 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         isE1RMPR: !!primaryResult?.isE1RMPR,
         topSet: primaryResult?.topSet || null,
         bodyWeight: latestBodyWeight,
-      });
+      };
+
+      finishedWorkout.completedSummary = nextCompletedSummary;
+      setCompletedSummary(nextCompletedSummary);
 
       const withoutCurrentWorkout = history.filter(
         h => !(h.cycle === currentCycle && h.workoutNumber === workout.number)
@@ -10473,6 +10479,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 
   
     if (workout.type === 'training' && LIFT_ORDER.includes(workout.lift) && !shouldTrackWorkoutStrength(workout.lift, benchPressVariant)) {
+  finishedWorkout.completedSummary = null;
   setCompletedSummary(null);
 
   setHistory(prev => {
@@ -10531,7 +10538,21 @@ const isE1RMPR = e1RMToday > previousBestE1RM;
 const best1RM = Math.max(previousBest1RM, oneRMToday);
 const bestE1RM = Math.max(previousBestE1RM, e1RMToday);
 
-setCompletedSummary({
+const nextCompletedSummary = {
+  type: 'training',
+  results: [{
+    lift: workout.lift,
+    trackStrength: true,
+    oneRMToday,
+    e1RMToday,
+    previousBest1RM,
+    previousBestE1RM,
+    best1RM,
+    bestE1RM,
+    is1RMPR,
+    isE1RMPR,
+    topSet,
+  }],
   lift: workout.lift,
   oneRMToday,
   e1RMToday,
@@ -10543,7 +10564,10 @@ setCompletedSummary({
   isE1RMPR,
   topSet,
   bodyWeight: latestBodyWeight,
-});
+};
+
+finishedWorkout.completedSummary = nextCompletedSummary;
+setCompletedSummary(nextCompletedSummary);
 
   setPrs(prev => {
   const current = prev[workout.lift] || 0;
@@ -10756,6 +10780,118 @@ const bestE1RMs = {
 
 const total1RM = best1RMs.Squat + best1RMs.Bench + best1RMs.Deadlift;
 const totalE1RM = bestE1RMs.Squat + bestE1RMs.Bench + bestE1RMs.Deadlift;
+function buildCompletedSummaryForRender(workout) {
+  if (!workout) return null;
+
+  const workoutNumber = Number(workout.number);
+  const currentEntries = (history || []).filter(entry =>
+    Number(entry.cycle) === Number(currentCycle) &&
+    Number(entry.workoutNumber) === workoutNumber
+  );
+
+  function resultForLift(lift, sets = [], liftBlock = null) {
+    const entry = currentEntries.find(item => item.lift === lift);
+    const trackStrength = liftBlock
+      ? shouldTrackLiftBlockStrength(liftBlock, benchPressVariant)
+      : shouldTrackWorkoutStrength(lift, benchPressVariant);
+
+    const successfulSets = trackStrength
+      ? (sets || []).filter(set => set.done && !set.failed && !set.skipped)
+      : [];
+
+    const topSet = successfulSets.length
+      ? successfulSets.reduce(
+          (best, set) =>
+            epley(Number(set.weight) || 0, Number(set.reps) || 0) >
+            epley(Number(best.weight) || 0, Number(best.reps) || 0)
+              ? set
+              : best,
+          successfulSets[0]
+        )
+      : null;
+
+    const oneRMToday = entry
+      ? Number(entry.topWeight) || 0
+      : successfulSets.length
+        ? Math.max(...successfulSets.map(set => Number(set.weight) || 0))
+        : 0;
+
+    const e1RMToday = entry
+      ? Number(entry.e1rm) || 0
+      : successfulSets.length
+        ? Math.max(...successfulSets.map(set => epley(Number(set.weight) || 0, Number(set.reps) || 0)))
+        : 0;
+
+    const previousLiftHistory = (history || []).filter(item =>
+      item.lift === lift &&
+      !(Number(item.cycle) === Number(currentCycle) && Number(item.workoutNumber) === workoutNumber)
+    );
+
+    const previousBest1RM = Math.max(
+      0,
+      ...previousLiftHistory.map(item => Number(item.topWeight) || 0)
+    );
+
+    const previousBestE1RM = Math.max(
+      0,
+      ...previousLiftHistory.map(item => Number(item.e1rm) || 0)
+    );
+
+    return {
+      lift,
+      trackStrength,
+      oneRMToday,
+      e1RMToday,
+      previousBest1RM,
+      previousBestE1RM,
+      best1RM: Math.max(previousBest1RM, oneRMToday),
+      bestE1RM: Math.max(previousBestE1RM, e1RMToday),
+      is1RMPR: oneRMToday > previousBest1RM && oneRMToday > 0,
+      isE1RMPR: e1RMToday > previousBestE1RM && e1RMToday > 0,
+      topSet,
+    };
+  }
+
+  const results = (workout.lifts || []).length > 0
+    ? (workout.lifts || []).map(liftBlock =>
+        resultForLift(liftBlock.lift, liftBlock.sets || [], liftBlock)
+      )
+    : workout.lift
+      ? [resultForLift(workout.lift, workout.sets || [], null)]
+      : [];
+
+  const primaryResult = results.find(result => result.trackStrength !== false);
+
+  if (!primaryResult) {
+    return {
+      type: workout.type || 'training',
+      results,
+      bodyWeight: latestBodyWeight,
+    };
+  }
+
+  return {
+    type: workout.type === 'meet' ? 'meet' : ((workout.lifts || []).length > 0 ? 'multiTraining' : 'training'),
+    results,
+    lift: primaryResult.lift,
+    oneRMToday: primaryResult.oneRMToday || 0,
+    e1RMToday: primaryResult.e1RMToday || 0,
+    previousBest1RM: primaryResult.previousBest1RM || 0,
+    previousBestE1RM: primaryResult.previousBestE1RM || 0,
+    best1RM: primaryResult.best1RM || 0,
+    bestE1RM: primaryResult.bestE1RM || 0,
+    is1RMPR: !!primaryResult.is1RMPR,
+    isE1RMPR: !!primaryResult.isE1RMPR,
+    topSet: primaryResult.topSet || null,
+    bodyWeight: latestBodyWeight,
+  };
+}
+
+const completedSummaryCandidate = completedWorkout?.completedSummary || completedSummary;
+const completedSummaryForRender =
+  (completedSummaryCandidate?.results || []).length > 0
+    ? completedSummaryCandidate
+    : buildCompletedSummaryForRender(completedWorkout) || completedSummaryCandidate;
 
 const latestBodyDataEntry = [...bodyWeights].slice(-1)[0];
 const latestBodyWeightEntry = [...bodyWeights].filter(entry => entry.bodyWeight).slice(-1)[0];
@@ -11513,7 +11649,7 @@ const latestBodyDataRows = [
             {t.cycleNewE1RMs}
           </div>
 
-          {(completedSummary?.results || []).map(result => (
+          {(completedSummaryForRender?.results || []).map(result => (
             <div
               key={result.lift}
               style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}
@@ -11783,7 +11919,7 @@ const latestBodyDataRows = [
           </div>
         )}
         <div style={{
-          display: !(completedSummary?.results || []).some(result => result.trackStrength !== false) ? 'none' : undefined,
+          display: !(completedSummaryForRender?.results || []).some(result => result.trackStrength !== false) ? 'none' : undefined,
           background: 'transparent',
           border: 'none',
           color: THEME.text,
@@ -11797,13 +11933,13 @@ const latestBodyDataRows = [
               Squat: THEME.red,
               Bench: THEME.primary,
               Deadlift: THEME.yellow,
-            }[(completedSummary?.results || []).find(result => result.trackStrength !== false)?.lift || completedWorkout?.lift] || THEME.primary),
+            }[(completedSummaryForRender?.results || []).find(result => result.trackStrength !== false)?.lift || completedWorkout?.lift] || THEME.primary),
             fontSize: 16,
             fontWeight: 900,
             marginBottom: 10,
             textAlign: 'center'
           }}>
-            {liftLabel((completedSummary?.results || []).find(result => result.trackStrength !== false)?.lift || completedWorkout?.lift, t)} · 1RM / e1RM
+            {liftLabel((completedSummaryForRender?.results || []).find(result => result.trackStrength !== false)?.lift || completedWorkout?.lift, t)} · 1RM / e1RM
           </div>
 
           {(() => {
@@ -11816,7 +11952,7 @@ const latestBodyDataRows = [
               </div>
             );
 
-            const primaryResult = (completedSummary?.results || []).find(result => result.trackStrength !== false);
+            const primaryResult = (completedSummaryForRender?.results || []).find(result => result.trackStrength !== false);
             if (!primaryResult) return null;
 
             const sets = (completedWorkout?.sets || []).filter(s => s.done && !s.failed && !s.skipped);
