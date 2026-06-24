@@ -2710,10 +2710,27 @@ function getCompletedWorkoutSuggestions(workout, t, benchPressVariant = 'standar
 
     if (workout.type !== 'training') return;
 
+    const attemptSets = completedSets.filter(({ set }) =>
+      isAttemptSet(set) && (set.failed || set.skipped || set.effort)
+    );
+
+    if (attemptSets.length > 0) {
+      attemptSets.forEach(({ set, index }) => {
+        if (set.failed || set.skipped) {
+          const message = getCompletedFailedSetFeedbackMessage(set, t);
+          if (message) suggestions.push(`${setSubject(liftName, set, index)}: ${message}`);
+          return;
+        }
+
+        pushTrainingSetSuggestion(setSubject(liftName, set, index), set.effort, true);
+      });
+      return;
+    }
+
     completedSets
       .filter(({ set }) =>
         (set.failed || set.skipped) &&
-        (isAttemptSet(set) || isTopSetLabel(set.labelKey))
+        isTopSetLabel(set.labelKey)
       )
       .forEach(({ set, index }) => {
         const message = getCompletedFailedSetFeedbackMessage(set, t);
@@ -2721,14 +2738,6 @@ function getCompletedWorkoutSuggestions(workout, t, benchPressVariant = 'standar
       });
 
     const effortSets = completedSets.filter(({ set }) => set.effort);
-    const attemptSets = effortSets.filter(({ set }) => isAttemptSet(set));
-
-    if (attemptSets.length > 0) {
-      attemptSets.forEach(({ set, index }) => {
-        pushTrainingSetSuggestion(setSubject(liftName, set, index), set.effort, true);
-      });
-      return;
-    }
 
     const priority =
       effortSets.find(({ set }) => set.effort === 'max') ||
@@ -2746,20 +2755,7 @@ function getCompletedWorkoutSuggestions(workout, t, benchPressVariant = 'standar
   });
 
   if (workout.type === 'meet') {
-    lifts.forEach(liftBlock => {
-    const liftName = workoutLiftBlockLabel(liftBlock, t, benchPressVariant);
-
-    (liftBlock.sets || [])
-      .filter(set => set.failed || set.skipped)
-      .forEach((set, index) => {
-        const message = getFailedSetFeedbackMessage(set, t);
-        if (!message) return;
-
-        suggestions.push(`${setSubject(liftName, set, index)}: ${message}`);
-      });
-  });
-
-  if (workout.workoutEffort === 'easy') {
+    if (workout.workoutEffort === 'easy') {
       suggestions.push(t.meetWorkoutEffortEasy || 'The whole meet felt easy. Your attempt selection may have been too conservative for today.');
     }
 
@@ -2947,7 +2943,7 @@ function WorkoutActionRow({
         {actions}
       </div>
 
-      {feedback && (
+      {false && feedback && (
         <div style={{ gridColumn: '1 / -1' }}>
           {feedback}
         </div>
@@ -5623,7 +5619,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
                 return (
                 <React.Fragment key={`attempt-${si}`}>
-                  {showMeetSetNotice && (
+                  {false && showMeetSetNotice && (
                     <div style={{
                       margin: 0,
                       padding: '8px 10px',
@@ -5690,7 +5686,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                       t={t}
                     />
                   )}
-                  {set.done && !set.failed && !set.skipped && set.effort && isAttemptSetLabel(set.labelKey) && (
+                  {false && set.done && !set.failed && !set.skipped && set.effort && isAttemptSetLabel(set.labelKey) && (
                     <AttemptEffortFeedback set={set} t={t} />
                   )}
                 </React.Fragment>
@@ -5943,7 +5939,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
           return (
             <React.Fragment key={i}>
-              {showSetNotice && (
+              {false && showSetNotice && (
                 <div style={{
                   margin: 0,
                   padding: '10px 14px',
@@ -6007,7 +6003,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                   benchPressVariant={effectiveBenchPressVariant}
                 />
               )}
-              {set.done && !set.failed && !set.skipped && set.effort && isAttemptSetLabel(set.labelKey) && (
+              {false && set.done && !set.failed && !set.skipped && set.effort && isAttemptSetLabel(set.labelKey) && (
                 <AttemptEffortFeedback set={set} t={t} />
               )}
             </React.Fragment>
