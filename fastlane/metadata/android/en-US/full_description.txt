@@ -1,6 +1,6 @@
-Kelani SBD Tracker is a free, offline-first powerlifting tracker for structured Squat, Bench Press and Deadlift training.
+Kelani SBD Tracker is a calm, offline-first powerlifting tracker for structured Squat, Bench Press and Deadlift training.
 
-It is built for lifters who want a focused training tool without accounts, ads, subscriptions, tracking or cloud lock-in. Your training data stays on your device unless you choose to export it.
+It helps you plan, track and complete SBD workouts without accounts, ads, subscriptions, analytics or cloud lock-in. Your training data stays on your device unless you choose to export it.
 
 Features:
 
