@@ -4,9 +4,9 @@
 
 [![IzzyOnDroid](https://img.shields.io/endpoint?url=https://apt.izzysoft.de/fdroid/api/v1/shield/com.kel.powerlifting&label=IzzyOnDroid)](https://apt.izzysoft.de/packages/com.kel.powerlifting)
 
-**Kelani SBD Tracker** is a free, open-source, offline-first powerlifting app for structured Squat, Bench Press and Deadlift training.
+**Kelani SBD Tracker** is a calm, offline-first powerlifting app for structured Squat, Bench Press and Deadlift training.
 
-It is built for lifters who want a focused training tool without accounts, ads, subscriptions, tracking or cloud lock-in. Your training data stays on your device unless you choose to export it.
+It helps you plan, track and complete SBD workouts without accounts, ads, subscriptions, analytics or cloud lock-in. Your training data stays on your device unless you choose to export it.
 
 Website: https://kelani-site.mburgosfr.workers.dev/  
 YouTube: https://www.youtube.com/@KelaniFocus  
@@ -16,16 +16,16 @@ Support Kelani: https://kelani-site.mburgosfr.workers.dev/#support
 
 Most training apps are either too generic, too social, too expensive, or too dependent on cloud accounts.
 
-Kelani is intentionally different:
+Kelani is intentionally smaller and calmer. It focuses on the training flow itself: clear SBD workouts, practical progression, useful feedback, and local control of your data.
 
-- **Free** — no subscription, paywall or locked training features
-- **Open source** — the code is public
+- **Focused on SBD** — built around Squat, Bench Press and Deadlift
 - **Offline-first** — your training data stays on your device
 - **No account required**
 - **No ads**
 - **No analytics or tracking**
-- **Built specifically around Squat, Bench Press and Deadlift**
-- **Made for practical long-term progress, not social media engagement**
+- **No subscription or locked training features**
+- **Open source** — the code is public
+- **Built for practical long-term progress, not social media engagement**
 
 ## Features
 
