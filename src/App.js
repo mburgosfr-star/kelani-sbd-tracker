@@ -3821,7 +3821,7 @@ function SupportSection({ t }) {
   const links = [
     {
       label: t.supportKelani || 'Support Kelani',
-      url: 'https://kelani-site.mburgosfr.workers.dev/#support',
+      url: 'https://mburgosfr-star.github.io/kelani-site/#support',
     },
     {
       label: t.sendFeedbackShort || t.sendFeedback,

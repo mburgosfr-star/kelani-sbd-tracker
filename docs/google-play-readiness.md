@@ -5,7 +5,7 @@ Last updated: 2026-06-02
 App: Kelani SBD Tracker  
 Package name: com.kel.powerlifting  
 Current release prep branch: v1.0-prep  
-Privacy policy URL: https://kelani-site.mburgosfr.workers.dev/#privacy
+Privacy policy URL: https://mburgosfr-star.github.io/kelani-site/#privacy
 
 ## Store listing
 

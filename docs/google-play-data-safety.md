@@ -4,7 +4,7 @@ Last updated: 2026-06-02
 
 App: Kelani SBD Tracker  
 Package name: com.kel.powerlifting  
-Privacy policy URL: https://kelani-site.mburgosfr.workers.dev/#privacy
+Privacy policy URL: https://mburgosfr-star.github.io/kelani-site/#privacy
 
 ## App privacy model
 
@@ -66,7 +66,7 @@ Reason: The app has no account creation, login or registration.
 
 Use:
 
-https://kelani-site.mburgosfr.workers.dev/#privacy
+https://mburgosfr-star.github.io/kelani-site/#privacy
 
 The privacy policy states that the app works offline, uses no accounts, ads, analytics or tracking, and stores training data locally unless the user chooses to export or share it.
 

@@ -8,9 +8,9 @@
 
 It helps you plan, track and complete SBD workouts without accounts, ads, subscriptions, analytics or cloud lock-in. Your training data stays on your device unless you choose to export it.
 
-Website: https://kelani-site.mburgosfr.workers.dev/  
+Website: https://mburgosfr-star.github.io/kelani-site/  
 YouTube: https://www.youtube.com/@KelaniFocus  
-Support Kelani: https://kelani-site.mburgosfr.workers.dev/#support
+Support Kelani: https://mburgosfr-star.github.io/kelani-site/#support
 
 ## Why Kelani?
 
@@ -81,7 +81,7 @@ Kelani is free, offline-first and open source. There are no ads, subscriptions o
 
 If the app helps your training, you can support the project here:
 
-https://kelani-site.mburgosfr.workers.dev/#support
+https://mburgosfr-star.github.io/kelani-site/#support
 
 Support helps keep Kelani maintained, tested on real devices, improved over time, and independent.
 
@@ -119,5 +119,5 @@ cd android
 Maintained by Kel.
 
 - GitHub: https://github.com/mburgosfr-star
-- Website: https://kelani-site.mburgosfr.workers.dev/
+- Website: https://mburgosfr-star.github.io/kelani-site/
 - YouTube: https://www.youtube.com/@KelaniFocus
