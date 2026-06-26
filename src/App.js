@@ -3187,32 +3187,6 @@ function SettingsListRow({ label, description, value, valueColor = THEME.text, a
   );
 }
 
-function SettingsActionButton({ children, onClick, variant = 'primary', style = {}, disabled = false }) {
-  const isPrimary = variant === 'primary';
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        width: '100%',
-        padding: 9,
-        fontSize: 15,
-        fontWeight: 800,
-        background: isPrimary ? THEME.card : THEME.bg,
-        color: disabled ? THEME.muted : THEME.text,
-        border: `1px solid ${isPrimary ? THEME.primary : THEME.border}`,
-        borderRadius: 8,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        ...style
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
 function SettingsModal({ title, onClose, children }) {
   return (
     <div style={{
@@ -3254,7 +3228,35 @@ function modalInputStyle() {
     borderRadius: 4,
     background: THEME.bg,
     color: THEME.text,
-    border: `1px solid ${THEME.border}`,
+    border: `1px solid ${THEME.primary}`,
+    boxSizing: 'border-box'
+  };
+}
+
+function modalActionRowStyle() {
+  return {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: 8,
+    marginTop: 14
+  };
+}
+
+function modalActionButtonStyle(variant = 'secondary') {
+  const isDanger = variant === 'danger';
+  const isPrimary = variant === 'primary';
+
+  return {
+    width: '100%',
+    minHeight: 42,
+    padding: '10px 12px',
+    fontSize: 14,
+    fontWeight: 800,
+    background: isDanger ? THEME.red : isPrimary ? THEME.card : 'transparent',
+    color: THEME.text,
+    border: `1px solid ${isDanger ? THEME.red : THEME.primary}`,
+    borderRadius: 8,
+    cursor: 'pointer',
     boxSizing: 'border-box'
   };
 }
@@ -3283,185 +3285,8 @@ function Toast({ message }) {
 }
 
 
-const MEET_PREP_ITEMS = [
-    ['id', 'meetPrepId'],
-    ['registration', 'meetPrepRegistration'],
-    ['bodyweight', 'meetPrepBodyweight'],
-    ['clothing', 'meetPrepClothing'],
-    ['shoes', 'meetPrepShoes'],
-    ['socks', 'meetPrepSocks'],
-    ['equipment', 'meetPrepEquipment'],
-    ['food', 'meetPrepFood'],
-    ['attempts', 'meetPrepAttempts'],
-    ['rackHeights', 'meetPrepRackHeights'],
-    ['pen', 'meetPrepPen'],
-    ['phone', 'meetPrepPhone'],
-    ['travel', 'meetPrepTravel'],
-];
-
-function MeetPrepChecklistSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, t }) {
-  const [showMeetPrepChecklist, setShowMeetPrepChecklist] = useState(false);
-  const [showMeetPrepResetConfirm, setShowMeetPrepResetConfirm] = useState(false);
-
-
-  const toggleMeetPrepItem = key => {
-    setMeetPrepChecklist(prev => ({
-      ...(prev || {}),
-      [key]: !prev?.[key],
-    }));
-  };
-
-  const checkedMeetPrepItems = MEET_PREP_ITEMS.filter(([key]) => !!meetPrepChecklist?.[key]).length;
-  const allMeetPrepItemsChecked = checkedMeetPrepItems === MEET_PREP_ITEMS.length && MEET_PREP_ITEMS.length > 0;
-  const hasCheckedMeetPrepItems = checkedMeetPrepItems > 0;
-
-  return (
-    <>
-      <SettingsListRow
-        label={t.meetPrepChecklist}
-        actionLabel={`${checkedMeetPrepItems} / ${MEET_PREP_ITEMS.length}${allMeetPrepItemsChecked ? ` · ✓ ${t.meetPrepReady}` : ''}`}
-        onAction={() => setShowMeetPrepChecklist(true)}
-      />
-
-      {showMeetPrepChecklist && (
-        <SettingsModal
-          title={t.meetPrepChecklist}
-          onClose={() => {
-            setShowMeetPrepChecklist(false);
-            setShowMeetPrepResetConfirm(false);
-          }}
-        >
-          <p style={{
-            margin: '0 0 8px',
-            color: THEME.muted,
-            fontSize: 13,
-            lineHeight: 1.4,
-            textAlign: 'center'
-          }}>
-            {t.meetPrepChecklistHint}
-          </p>
-
-          <div style={{
-            margin: '0 0 14px',
-            color: allMeetPrepItemsChecked ? THEME.primary : THEME.text,
-            fontSize: 14,
-            fontWeight: 800,
-            textAlign: 'center'
-          }}>
-            {checkedMeetPrepItems} / {MEET_PREP_ITEMS.length}{allMeetPrepItemsChecked ? ` · ✓ ${t.meetPrepReady}` : ''}
-          </div>
-
-          <div style={{ display: 'grid', gap: 8 }}>
-            {MEET_PREP_ITEMS.map(([key, labelKey]) => {
-              const checked = !!meetPrepChecklist?.[key];
-
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => toggleMeetPrepItem(key)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    width: '100%',
-                    padding: 10,
-                    borderRadius: 8,
-                    border: `1px solid ${checked ? THEME.primary : THEME.border}`,
-                    background: THEME.bg,
-                    color: THEME.text,
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
-                >
-                  <span style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: 6,
-                    border: `1px solid ${checked ? THEME.primary : THEME.border}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: THEME.primary,
-                    fontWeight: 900,
-                    flexShrink: 0
-                  }}>
-                    {checked ? '✓' : ''}
-                  </span>
-
-                  <span style={{
-                    fontSize: 14,
-                    fontWeight: checked ? 700 : 500,
-                    textDecoration: 'none'
-                  }}>
-                    {t[labelKey]}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          {hasCheckedMeetPrepItems && (
-            <div style={{
-              marginTop: 14,
-              paddingTop: 12,
-              borderTop: `1px solid ${THEME.border}`
-            }}>
-              {showMeetPrepResetConfirm ? (
-                <div>
-                  <p style={{
-                    margin: '0 0 10px',
-                    color: THEME.muted,
-                    fontSize: 13,
-                    lineHeight: 1.4,
-                    textAlign: 'center'
-                  }}>
-                    {t.meetPrepResetConfirmText}
-                  </p>
-
-                  <SettingsActionButton
-                    onClick={() => {
-                      setMeetPrepChecklist({});
-                      setShowMeetPrepResetConfirm(false);
-                    }}
-                  >
-                    {t.meetPrepResetConfirm}
-                  </SettingsActionButton>
-
-                  <SettingsActionButton
-                    variant="secondary"
-                    onClick={() => setShowMeetPrepResetConfirm(false)}
-                    style={{ marginTop: 8, fontWeight: 700 }}
-                  >
-                    {t.cancel}
-                  </SettingsActionButton>
-                </div>
-              ) : (
-                <SettingsActionButton
-                  variant="secondary"
-                  onClick={() => setShowMeetPrepResetConfirm(true)}
-                >
-                  {t.meetPrepReset}
-                </SettingsActionButton>
-              )}
-            </div>
-          )}
-
-          {!showMeetPrepResetConfirm && (
-            <SettingsActionButton
-              variant="secondary"
-              onClick={() => {
-                setShowMeetPrepChecklist(false);
-                setShowMeetPrepResetConfirm(false);
-              }}
-              style={{ marginTop: 14 }}
-            >
-              {t.done}
-            </SettingsActionButton>
-          )}
-        </SettingsModal>
-      )}
-    </>
-  );
+function MeetPrepChecklistSection() {
+  return null;
 }
 
 function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, t }) {
@@ -3777,7 +3602,7 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
                 fontWeight: 700,
                 background: 'transparent',
                 color: THEME.text,
-                border: `1px solid ${THEME.border}`,
+                border: `1px solid ${THEME.primary}`,
                 borderRadius: 8,
                 cursor: 'pointer'
               }}
@@ -3821,11 +3646,7 @@ function SupportSection({ t }) {
   const links = [
     {
       label: t.supportKelani || 'Support Kelani',
-      url: 'https://mburgosfr-star.github.io/kelani-site/#support',
-    },
-    {
-      label: t.sendFeedbackShort || t.sendFeedback,
-      url: 'https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=feedback.md',
+      url: 'https://github.com/sponsors/mburgosfr-star',
     },
     {
       label: t.reportIssueShort || t.reportBug,
@@ -3933,13 +3754,15 @@ function ProfileSection({ userProfile, onSave, weightUnit, setWeightUnit, t }) {
             </select>
           </div>
 
-          <button onClick={handleSave} style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
-            {t.save}
-          </button>
+          <div style={modalActionRowStyle()}>
+            <button onClick={() => setIsEditing(false)} style={modalActionButtonStyle('secondary')}>
+              {t.cancel}
+            </button>
 
-          <button onClick={() => setIsEditing(false)} style={{ width: '100%', marginTop: 8, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
-            {t.cancel}
-          </button>
+            <button onClick={handleSave} style={modalActionButtonStyle('primary')}>
+              {t.save}
+            </button>
+          </div>
         </SettingsModal>
       )}
     </>
@@ -4066,7 +3889,7 @@ function MaxesSection({ best1RMs = {}, bestE1RMs = {}, prs = {}, onSaveMaxes, t,
                 fontWeight: 800,
                 background: 'transparent',
                 color: THEME.text,
-                border: `1px solid ${THEME.border}`,
+                border: `1px solid ${THEME.primary}`,
                 borderRadius: 8,
                 cursor: 'pointer',
               }}>
@@ -4075,7 +3898,7 @@ function MaxesSection({ best1RMs = {}, bestE1RMs = {}, prs = {}, onSaveMaxes, t,
             </div>
           ))}
 
-          <button onClick={() => setIsOverviewOpen(false)} style={{ width: '100%', marginTop: 14, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
+          <button onClick={() => setIsOverviewOpen(false)} style={{ width: '100%', marginTop: 14, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
             {t.done}
           </button>
         </SettingsModal>
@@ -4083,24 +3906,26 @@ function MaxesSection({ best1RMs = {}, bestE1RMs = {}, prs = {}, onSaveMaxes, t,
 
       {selectedLift && (
         <SettingsModal title={`${liftLabel(selectedLift, t)} · ${t.maxes}`} onClose={closeLift}>
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.oneRM}</label>
-            <input type="number" min="0" step={weightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"} value={oneRMInput} onChange={e => setOneRMInput(e.target.value)} style={modalInputStyle()} />
+          <div style={{ display: 'grid', gap: 10, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 38%) minmax(0, 1fr)', gap: 10, alignItems: 'center' }}>
+              <label style={{ fontWeight: 800, fontSize: 14 }}>{t.oneRM}</label>
+              <input type="number" min="0" step={weightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"} value={oneRMInput} onChange={e => setOneRMInput(e.target.value)} style={modalInputStyle()} />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 38%) minmax(0, 1fr)', gap: 10, alignItems: 'center' }}>
+              <label style={{ fontWeight: 800, fontSize: 14 }}>{t.e1RM}</label>
+              <input type="number" min="0" step={weightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"} value={e1RMInput} onChange={e => setE1RMInput(e.target.value)} style={modalInputStyle()} />
+            </div>
           </div>
 
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.e1RM}</label>
-            <input type="number" min="0" step={weightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"} value={e1RMInput} onChange={e => setE1RMInput(e.target.value)} style={modalInputStyle()} />
-          </div>
-
-          <div style={{ background: THEME.bg, border: `1px solid ${THEME.border}`, borderRadius: 16, padding: 12, marginBottom: 14 }}>
             <div style={{ fontWeight: 900, color: THEME.text, marginBottom: 10 }}>
               {t.estimateE1RM}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: 13 }}>{t.submaxWeight}</label>
+            <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 38%) minmax(0, 1fr)', gap: 10, alignItems: 'center' }}>
+                <label style={{ fontWeight: 800, fontSize: 13 }}>{t.submaxWeight}</label>
                 <input
                   type="number"
                   min="0"
@@ -4111,8 +3936,8 @@ function MaxesSection({ best1RMs = {}, bestE1RMs = {}, prs = {}, onSaveMaxes, t,
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: 13 }}>{t.submaxReps}</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 38%) minmax(0, 1fr)', gap: 10, alignItems: 'center' }}>
+                <label style={{ fontWeight: 800, fontSize: 13 }}>{t.submaxReps}</label>
                 <input
                   type="number"
                   min="1"
@@ -4124,18 +3949,20 @@ function MaxesSection({ best1RMs = {}, bestE1RMs = {}, prs = {}, onSaveMaxes, t,
               </div>
             </div>
 
-            <button onClick={handleCalculateE1RM} style={{ width: '100%', padding: 10, fontSize: 14, fontWeight: 800, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
+            <button onClick={handleCalculateE1RM} style={{ width: '100%', padding: 10, fontSize: 14, fontWeight: 800, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
               {t.calculateE1RM}
             </button>
           </div>
 
-          <button onClick={handleSaveLift} style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
-            {t.save}
-          </button>
+          <div style={modalActionRowStyle()}>
+            <button onClick={closeLift} style={modalActionButtonStyle('secondary')}>
+              {t.cancel}
+            </button>
 
-          <button onClick={closeLift} style={{ width: '100%', marginTop: 8, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
-            {t.cancel}
-          </button>
+            <button onClick={handleSaveLift} style={modalActionButtonStyle('primary')}>
+              {t.save}
+            </button>
+          </div>
         </SettingsModal>
       )}
     </>
@@ -4252,8 +4079,20 @@ function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) 
           onClose={() => setIsEditing(false)}
         >
           {fields.map(field => (
-            <div key={field.key} style={{ marginBottom: 14 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{field.label}</label>
+            <div
+              key={field.key}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(130px, 42%) minmax(0, 1fr)',
+                gap: 10,
+                alignItems: 'center',
+                marginBottom: 10
+              }}
+            >
+              <label style={{ fontWeight: 800, fontSize: 14, lineHeight: 1.25 }}>
+                {field.label}
+              </label>
+
               <div style={{ position: 'relative' }}>
                 <input
                   type="number"
@@ -4282,13 +4121,15 @@ function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) 
             </div>
           ))}
 
-          <button onClick={handleSave} style={{ width: '100%', padding: 12, fontSize: 15, fontWeight: 700, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
-            {t.save}
-          </button>
+          <div style={modalActionRowStyle()}>
+            <button onClick={() => setIsEditing(false)} style={modalActionButtonStyle('secondary')}>
+              {t.cancel}
+            </button>
 
-          <button onClick={() => setIsEditing(false)} style={{ width: '100%', marginTop: 8, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
-            {t.cancel}
-          </button>
+            <button onClick={handleSave} style={modalActionButtonStyle('primary')}>
+              {t.save}
+            </button>
+          </div>
         </SettingsModal>
       )}
     </>
@@ -4457,7 +4298,7 @@ function LanguageSection({ language, setLanguage, t }) {
                 fontWeight: 700,
                 background: language === l ? THEME.primary : THEME.card,
                 color: '#ffffff',
-                border: `1px solid ${language === l ? THEME.primary : THEME.border}`,
+                border: `1px solid ${THEME.primary}`,
                 borderRadius: 8,
                 cursor: 'pointer',
                 marginBottom: 6
@@ -4467,7 +4308,21 @@ function LanguageSection({ language, setLanguage, t }) {
             </button>
           ))}
 
-          <button onClick={() => setIsEditing(false)} style={{ width: '100%', padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.border}`, borderRadius: 8, cursor: 'pointer' }}>
+          <button
+            onClick={() => setIsEditing(false)}
+            style={{
+              width: '100%',
+              padding: 12,
+              fontSize: 15,
+              fontWeight: 700,
+              background: 'transparent',
+              color: THEME.text,
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 8,
+              cursor: 'pointer',
+              marginBottom: 0
+            }}
+          >
             {t.cancel}
           </button>
         </SettingsModal>
@@ -5038,7 +4893,7 @@ function ExerciseGuideModal({ lift, t, onClose }) {
     }}>
       <div style={{
         background: THEME.card,
-        border: `1px solid ${THEME.border}`,
+        border: `1px solid ${THEME.primary}`,
         borderRadius: 14,
         padding: 18,
         maxWidth: 420,
@@ -6662,10 +6517,7 @@ const meetTotals = {
               lineHeight: 1.2,
               background: THEME.card,
               color: activescreen === tab.key ? THEME.primary : THEME.text,
-              border: `1px solid ${THEME.border}`,
-              borderTop: activescreen === tab.key
-                ? `2px solid ${THEME.primary}`
-                : `2px solid ${THEME.border}`,
+              border: `1px solid ${activescreen === tab.key ? THEME.primary : THEME.border}`,
               borderRadius: 8,
               cursor: 'pointer',
               fontWeight: activescreen === tab.key ? 800 : 700,
@@ -6973,7 +6825,7 @@ const meetTotals = {
             fontWeight: 800,
             background: 'transparent',
             color: THEME.text,
-            border: `1px solid ${THEME.border}`,
+            border: `1px solid ${THEME.primary}`,
             borderRadius: 8,
             cursor: 'pointer'
           }}
@@ -6996,7 +6848,7 @@ const meetTotals = {
     }}>
       <div style={{
         background: THEME.card,
-        border: `1px solid ${THEME.border}`,
+        border: `1px solid ${THEME.primary}`,
         borderRadius: 12,
         padding: 18,
         maxWidth: 420,
@@ -7041,7 +6893,7 @@ const meetTotals = {
             fontWeight: 700,
             background: 'transparent',
             color: THEME.text,
-            border: `1px solid ${THEME.border}`,
+            border: `1px solid ${THEME.primary}`,
             borderRadius: 8,
             cursor: 'pointer'
           }}
@@ -7165,7 +7017,7 @@ function ProgramProfileSection({
           fontWeight: 800,
           textAlign: 'left',
           borderRadius: 8,
-          border: `1px solid ${active ? THEME.primary : THEME.border}`,
+          border: `1px solid ${THEME.primary}`,
           background: active ? THEME.primary : THEME.card,
           color: active ? THEME.bg : THEME.text,
           cursor: 'pointer'
@@ -7436,7 +7288,7 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
                 fontWeight: 700,
                 background: 'transparent',
                 color: THEME.text,
-                border: `1px solid ${THEME.border}`,
+                border: `1px solid ${THEME.primary}`,
                 borderRadius: 8,
                 cursor: 'pointer'
               }}
@@ -11703,7 +11555,7 @@ const latestBodyDataRows = [
             fontWeight: 600,
             background: 'transparent',
             color: '#ffffff',
-            border: `1px solid ${THEME.border}`,
+            border: `1px solid ${THEME.primary}`,
             borderRadius: 8,
             cursor: 'pointer',
             marginBottom: 10
@@ -11729,7 +11581,7 @@ const latestBodyDataRows = [
             marginBottom: 0,
             background: 'transparent',
             color: '#ffffff',
-            border: `1px solid ${THEME.border}`,
+            border: `1px solid ${THEME.primary}`,
             borderRadius: 8,
             cursor: 'pointer'
           }}
@@ -12076,7 +11928,7 @@ const latestBodyDataRows = [
             marginBottom: 0,
             background: 'transparent',
             color: '#ffffff',
-            border: `1px solid ${THEME.border}`,
+            border: `1px solid ${THEME.primary}`,
             borderRadius: 8,
             cursor: 'pointer'
           }}
@@ -12109,7 +11961,7 @@ const latestBodyDataRows = [
   }}>
     <div style={{
       background: THEME.card,
-      border: `1px solid ${THEME.border}`,
+      border: `1px solid ${THEME.primary}`,
       borderRadius: 12,
       padding: 20,
       maxWidth: 380,
@@ -12171,7 +12023,7 @@ const latestBodyDataRows = [
           fontWeight: 700,
           background: 'transparent',
           color: THEME.text,
-          border: `1px solid ${THEME.border}`,
+          border: `1px solid ${THEME.primary}`,
           borderRadius: 8,
           cursor: 'pointer'
         }}
@@ -12195,7 +12047,7 @@ const latestBodyDataRows = [
   }}>
     <div style={{
       background: THEME.card,
-      border: `1px solid ${THEME.border}`,
+      border: `1px solid ${THEME.primary}`,
       borderRadius: 12,
       padding: 20,
       maxWidth: 380,
@@ -12220,7 +12072,7 @@ const latestBodyDataRows = [
             fontWeight: 700,
             background: 'transparent',
             color: THEME.text,
-            border: `1px solid ${THEME.border}`,
+            border: `1px solid ${THEME.primary}`,
             borderRadius: 8,
             cursor: 'pointer'
           }}
