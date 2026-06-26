@@ -3646,7 +3646,7 @@ function SupportSection({ t }) {
   const links = [
     {
       label: t.supportKelani || 'Support Kelani',
-      url: 'https://github.com/sponsors/mburgosfr-star',
+      url: 'https://mburgosfr-star.github.io/kelani-site/#support',
     },
     {
       label: t.reportIssueShort || t.reportBug,
