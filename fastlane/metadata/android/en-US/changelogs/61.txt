@@ -1,0 +1,6 @@
+v1.2.13
+
+- Replaced YouTube exercise guide embeds with bundled local Squat, Bench Press and Deadlift videos.
+- Exercise guide videos now work offline and start automatically in the app.
+- Removed current YouTube references from the app metadata and README.
+- Polished Settings modal consistency and compacted Settings forms.

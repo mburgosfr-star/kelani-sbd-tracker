@@ -1,6 +1,6 @@
 {
   "name": "kel-powerlifting",
-  "version": "1.2.12",
+  "version": "1.2.13",
   "private": true,
   "dependencies": {
     "@capacitor/android": "^8.3.1",
@@ -22,7 +22,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "REACT_APP_VERSION=$npm_package_version react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "android:release-apk": "node scripts/build-release-apk.js",
