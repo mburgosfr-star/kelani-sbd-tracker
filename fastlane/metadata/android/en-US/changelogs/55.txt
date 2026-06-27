@@ -6,4 +6,4 @@ v1.2.6
 - Updated Deadlift Alternative to avoid duplicate accessory/replacement exercises.
 - Preserved workout progress when changing accessory settings during an active workout.
 - Improved workout circle sizing and replacement workout labels.
-- Documented the video/YouTube structure for future exercise guide videos.
+- Documented the structure for future exercise guide videos.

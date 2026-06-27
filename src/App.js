@@ -4779,7 +4779,7 @@ function getExerciseGuide(lift, t) {
   const guides = {
     Squat: {
       title: t.squat,
-      videoUrl: 'https://youtu.be/U4xwuDWMpm8',
+      videoSrc: `${process.env.PUBLIC_URL || ''}/videos/squat.mp4`,
       steps: [
         t.squatGuideStep1 || 'Set the bar on your upper back and grip it firmly.',
         t.squatGuideStep2 || 'Step out, set your feet, breathe in and brace.',
@@ -4793,7 +4793,7 @@ function getExerciseGuide(lift, t) {
     },
     Bench: {
       title: t.bench,
-      videoUrl: 'https://youtu.be/3iIzDJnSL1M',
+      videoSrc: `${process.env.PUBLIC_URL || ''}/videos/bench.mp4`,
       steps: [
         t.benchGuideStep1 || 'Set your feet and pull your shoulder blades back and down.',
         t.benchGuideStep2 || 'Grip the bar evenly and unrack with control.',
@@ -4807,7 +4807,7 @@ function getExerciseGuide(lift, t) {
     },
     Deadlift: {
       title: t.deadlift,
-      videoUrl: 'https://youtu.be/F0kTL28Tpb8',
+      videoSrc: `${process.env.PUBLIC_URL || ''}/videos/deadlift.mp4`,
       steps: [
         t.deadliftGuideStep1 || 'Stand with the bar over the middle of your foot.',
         t.deadliftGuideStep2 || 'Grip the bar, brace, and build tension before pulling.',
@@ -4837,48 +4837,9 @@ function isExerciseGuideAvailableForLiftBlock(liftBlock, benchPressVariant = 'st
   return true;
 }
 
-function getYouTubeVideoId(url = '') {
-  const value = String(url || '').trim();
-  if (!value) return '';
-
-  const patterns = [
-    /youtu\.be\/([A-Za-z0-9_-]{6,})/,
-    /youtube\.com\/watch\?v=([A-Za-z0-9_-]{6,})/,
-    /youtube\.com\/shorts\/([A-Za-z0-9_-]{6,})/,
-    /youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/,
-  ];
-
-  for (const pattern of patterns) {
-    const match = value.match(pattern);
-    if (match?.[1]) return match[1];
-  }
-
-  return '';
-}
-
-function buildYouTubeEmbedUrl(url = '') {
-  const videoId = getYouTubeVideoId(url);
-  if (!videoId) return '';
-
-  const params = new URLSearchParams({
-    autoplay: '1',
-    mute: '1',
-    loop: '1',
-    playlist: videoId,
-    playsinline: '1',
-    controls: '0',
-    modestbranding: '1',
-    rel: '0',
-  });
-
-  return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
-}
-
 function ExerciseGuideModal({ lift, t, onClose }) {
   const guide = getExerciseGuide(lift, t);
   if (!guide) return null;
-
-  const embedUrl = buildYouTubeEmbedUrl(guide.videoUrl);
 
   return (
     <div style={{
@@ -4910,7 +4871,7 @@ function ExerciseGuideModal({ lift, t, onClose }) {
           {guide.title}
         </h3>
 
-        {guide.videoUrl && embedUrl ? (
+        {guide.videoSrc ? (
           <div style={{
             position: 'relative',
             width: '100%',
@@ -4918,47 +4879,32 @@ function ExerciseGuideModal({ lift, t, onClose }) {
             marginBottom: 14,
             borderRadius: 10,
             overflow: 'hidden',
-            border: `1px solid ${THEME.border}`,
+            border: `1px solid ${THEME.primary}`,
             background: '#000'
           }}>
-            <iframe
-              title={`${guide.title} video`}
-              src={embedUrl}
-              allow="autoplay; encrypted-media; picture-in-picture"
-              allowFullScreen
+            <video
+              src={guide.videoSrc}
+              controls
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
               style={{
-                position: 'absolute',
-                inset: 0,
+                display: 'block',
                 width: '100%',
                 height: '100%',
-                border: 0
+                objectFit: 'cover',
+                background: '#000'
               }}
             />
           </div>
-        ) : guide.videoUrl ? (
-          <button
-            type="button"
-            onClick={() => window.open(guide.videoUrl, '_blank', 'noopener,noreferrer')}
-            style={{
-              width: '100%',
-              padding: 11,
-              marginBottom: 14,
-              borderRadius: 8,
-              border: `1px solid ${THEME.primary}`,
-              background: THEME.card,
-              color: '#ffffff',
-              fontWeight: 900,
-              cursor: 'pointer'
-            }}
-          >
-            {t.watchVideo || 'Watch video'}
-          </button>
         ) : (
           <div style={{
             padding: 11,
             marginBottom: 14,
             borderRadius: 8,
-            border: `1px solid ${THEME.border}`,
+            border: `1px solid ${THEME.primary}`,
             color: THEME.muted,
             textAlign: 'center',
             fontSize: 13,
@@ -4997,7 +4943,7 @@ function ExerciseGuideModal({ lift, t, onClose }) {
             width: '100%',
             padding: 11,
             borderRadius: 8,
-            border: `1px solid ${THEME.border}`,
+            border: `1px solid ${THEME.primary}`,
             background: 'transparent',
             color: THEME.text,
             fontWeight: 800,

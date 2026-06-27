@@ -9,7 +9,6 @@
 It helps you plan, track and complete SBD workouts without accounts, ads, subscriptions, analytics or cloud lock-in. Your training data stays on your device unless you choose to export it.
 
 Website: https://mburgosfr-star.github.io/kelani-site/  
-YouTube: https://www.youtube.com/@KelaniFocus  
 Support Kelani: https://mburgosfr-star.github.io/kelani-site/#support
 
 ## Why Kelani?
@@ -120,4 +119,3 @@ Maintained by Kel.
 
 - GitHub: https://github.com/mburgosfr-star
 - Website: https://mburgosfr-star.github.io/kelani-site/
-- YouTube: https://www.youtube.com/@KelaniFocus
