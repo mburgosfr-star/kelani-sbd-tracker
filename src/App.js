@@ -309,12 +309,92 @@ function getRecommendedRestTimeSeconds({ workouts = [], placement = null, fallba
   return fallbackSeconds;
 }
 
-function calculatePrsFromHistory(history) {
+function getHistoryMaxCandidates(entry) {
+  if (!entry || !LIFT_ORDER.includes(entry.lift)) {
+    return { oneRM: 0, e1rm: 0 };
+  }
+
+  const oneRMCandidates = [
+    Number(entry.topWeight) || 0,
+    Number(entry.oneRMToday) || 0,
+    Number(entry.best1RM) || 0,
+    Number(entry.previousBest1RM) || 0,
+  ];
+
+  const e1RMCandidates = [
+    Number(entry.e1rm) || 0,
+    Number(entry.e1RMToday) || 0,
+    Number(entry.bestE1RM) || 0,
+    Number(entry.previousBestE1RM) || 0,
+  ];
+
+  const summary = entry.workoutSnapshot?.completedSummary;
+  const summaryResults = Array.isArray(summary?.results)
+    ? summary.results
+    : summary?.lift
+      ? [summary]
+      : [];
+
+  summaryResults
+    .filter(result => result?.lift === entry.lift)
+    .forEach(result => {
+      oneRMCandidates.push(
+        Number(result.oneRMToday) || 0,
+        Number(result.best1RM) || 0,
+        Number(result.previousBest1RM) || 0
+      );
+      e1RMCandidates.push(
+        Number(result.e1RMToday) || 0,
+        Number(result.bestE1RM) || 0,
+        Number(result.previousBestE1RM) || 0
+      );
+    });
+
   return {
-    Squat: Math.max(0, ...history.filter(h => h.lift === 'Squat').map(h => Number(h.e1rm) || 0)),
-    Bench: Math.max(0, ...history.filter(h => h.lift === 'Bench').map(h => Number(h.e1rm) || 0)),
-    Deadlift: Math.max(0, ...history.filter(h => h.lift === 'Deadlift').map(h => Number(h.e1rm) || 0)),
+    oneRM: Math.max(0, ...oneRMCandidates),
+    e1rm: Math.max(0, ...e1RMCandidates),
   };
+}
+
+function calculateBestMaxesFromHistory(history = []) {
+  const best = LIFT_ORDER.reduce((acc, lift) => ({
+    ...acc,
+    [lift]: { oneRM: 0, e1rm: 0 },
+  }), {});
+
+  (history || []).forEach(entry => {
+    if (!entry || !LIFT_ORDER.includes(entry.lift)) return;
+
+    const candidates = getHistoryMaxCandidates(entry);
+
+    best[entry.lift] = {
+      oneRM: Math.max(best[entry.lift].oneRM, candidates.oneRM),
+      e1rm: Math.max(best[entry.lift].e1rm, candidates.e1rm),
+    };
+  });
+
+  return best;
+}
+
+function calculatePrsFromHistory(history = []) {
+  const best = calculateBestMaxesFromHistory(history);
+
+  return {
+    Squat: best.Squat.e1rm || 0,
+    Bench: best.Bench.e1rm || 0,
+    Deadlift: best.Deadlift.e1rm || 0,
+  };
+}
+
+function mergeHigherPrs(current = {}, candidate = {}) {
+  return LIFT_ORDER.reduce((next, lift) => {
+    next[lift] = Math.max(
+      Number(current?.[lift]) || 0,
+      Number(candidate?.[lift]) || 0
+    );
+
+    return next;
+  }, { ...(current || {}) });
 }
 
 function getEntryCycle(entry) {
@@ -612,6 +692,7 @@ function hydrateWorkoutsWithHistory(workouts, history, cycle) {
 function getWorkoutTypeKey(workout) {
   if (!workout) return null;
   if (workout.type === 'meet') return 'meetDay';
+  if (workout.type === 'rest') return 'restAndRecovery';
   if (workout.label === 'Pre-meet') return 'preMeet';
 
   const label = String(workout.label || '').toLowerCase();
@@ -634,7 +715,7 @@ function normalizeBenchPressVariant(variant) {
   if (variant === 'standingLandminePress') return 'standingLandminePress';
   if (variant === 'shoulderPress') return 'shoulderPress';
   if (variant === 'machineAlternative') return 'machineAlternative';
-  if (variant === 'goodMorning') return 'goodMorning';
+  if (variant === 'goodMorning') return 'machineAlternative';
   return 'standard';
 }
 
@@ -673,7 +754,7 @@ const PROGRAM_PROFILES = {
     preparationMode: 'shoulderThoracic',
     accessoryMode: 'off',
     squatVariant: 'standard',
-    benchPressVariant: 'goodMorning',
+    benchPressVariant: 'machineAlternative',
     deadliftVariant: 'hipThrust',
     includeCooldown: true,
     cooldownMode: 'upperBackFriendly',
@@ -682,7 +763,7 @@ const PROGRAM_PROFILES = {
     preparationMode: 'shoulderThoracic',
     accessoryMode: 'lowerBodyFriendly',
     squatVariant: 'standard',
-    benchPressVariant: 'goodMorning',
+    benchPressVariant: 'machineAlternative',
     deadliftVariant: 'hipThrust',
     includeCooldown: true,
     cooldownMode: 'upperBackFriendly',
@@ -1071,6 +1152,7 @@ function generatePrepItems(lift, preparationMode = 'basicFirst') {
 function generateWarmups(firstWorkWeight, lift = '') {
   const targetWeight = Number(firstWorkWeight) || 0;
   const normalizedLift = String(lift || '');
+  const MAX_WARMUP_JUMP_KG = 50;
 
   if (targetWeight < 30) return [];
 
@@ -1096,20 +1178,20 @@ function generateWarmups(firstWorkWeight, lift = '') {
     const ratio = target > 0 ? weight / target : 0;
 
     if (normalizedLift === 'Deadlift') {
-      if (ratio <= 0.50) return 5;
+      if (ratio <= 0.55) return 5;
       if (ratio <= 0.75) return 3;
-      if (ratio <= 0.85) return 2;
+      if (ratio <= 0.88) return 2;
       return 1;
     }
 
     if (ratio <= 0.55) return 5;
     if (ratio <= 0.75) return 3;
-    if (ratio <= 0.85) return 2;
+    if (ratio <= 0.88) return 2;
     return 1;
   }
 
-  function uniqueIncreasing(weights, target) {
-    const result = [];
+  function cleanRamp(weights, target) {
+    const ramp = [];
 
     weights.forEach(weight => {
       const roundedWeight = roundTo10(weight);
@@ -1117,57 +1199,44 @@ function generateWarmups(firstWorkWeight, lift = '') {
       if (roundedWeight <= 0) return;
       if (roundedWeight >= target) return;
       if (target - roundedWeight < 10) return;
-      if (result.includes(roundedWeight)) return;
-      if (result.length > 0 && roundedWeight <= result[result.length - 1]) return;
+      if (ramp.includes(roundedWeight)) return;
 
-      result.push(roundedWeight);
+      ramp.push(roundedWeight);
     });
 
-    return result;
-  }
+    ramp.sort((a, b) => a - b);
 
-  function hasNonIncreasingJumps(weights, target) {
-    if (!weights.length) return true;
+    const bridgedRamp = [];
 
-    let previous = null;
-    let previousJump = Infinity;
+    ramp.forEach(weight => {
+      let previous = bridgedRamp[bridgedRamp.length - 1];
 
-    for (const weight of weights) {
-      if (previous === null) {
-        previous = weight;
-        continue;
+      while (
+        previous &&
+        weight - previous > MAX_WARMUP_JUMP_KG &&
+        previous + MAX_WARMUP_JUMP_KG < target - 10
+      ) {
+        previous += MAX_WARMUP_JUMP_KG;
+        bridgedRamp.push(previous);
       }
 
-      const jump = weight - previous;
-      if (jump > previousJump) return false;
-
-      previousJump = jump;
-      previous = weight;
-    }
-
-    const finalJump = target - weights[weights.length - 1];
-    return finalJump <= previousJump;
-  }
-
-  function cleanRamp(weights, target) {
-    const ramp = uniqueIncreasing(weights, target);
-
-    while (ramp.length > 1 && !hasNonIncreasingJumps(ramp, target)) {
-      let removed = false;
-
-      for (let i = ramp.length - 2; i >= 1; i -= 1) {
-        const candidate = ramp.filter((_, index) => index !== i);
-        if (hasNonIncreasingJumps(candidate, target)) {
-          ramp.splice(i, 1);
-          removed = true;
-          break;
-        }
+      if (!bridgedRamp.includes(weight)) {
+        bridgedRamp.push(weight);
       }
+    });
 
-      if (!removed) ramp.splice(1, 1);
+    let previous = bridgedRamp[bridgedRamp.length - 1];
+
+    while (
+      previous &&
+      target - previous > MAX_WARMUP_JUMP_KG &&
+      previous + MAX_WARMUP_JUMP_KG < target - 10
+    ) {
+      previous += MAX_WARMUP_JUMP_KG;
+      bridgedRamp.push(previous);
     }
 
-    return ramp;
+    return bridgedRamp;
   }
 
   function squatBenchRamp(target) {
@@ -1177,20 +1246,20 @@ function generateWarmups(firstWorkWeight, lift = '') {
       return [20, roundDown10(target - 10)];
     }
 
-    if (target <= 110) {
+    if (target <= 90) {
       return [20, roundTo10(target * 0.72), primer];
     }
 
-    if (target <= 160) {
-      return [20, 70, roundTo10(target * 0.75), primer];
+    if (target <= 110) {
+      return [20, 70, primer];
     }
 
-    const weights = [20, 70, 120];
+    const weights = [20, 70];
 
-    let next = 170;
+    let next = 120;
     while (next < primer - 10) {
       weights.push(next);
-      next += 50;
+      next += MAX_WARMUP_JUMP_KG;
     }
 
     weights.push(roundTo10(target * 0.75), primer);
@@ -1209,10 +1278,10 @@ function generateWarmups(firstWorkWeight, lift = '') {
     let next = 120;
     while (next < primer - 10) {
       weights.push(next);
-      next += 50;
+      next += MAX_WARMUP_JUMP_KG;
     }
 
-    weights.push(roundTo10(target * 0.73), primer);
+    weights.push(primer);
     return weights;
   }
 
@@ -1751,33 +1820,33 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
   const normalizedSquatVariant = normalizeSquatVariant(squatVariant);
 
   const program = [
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 3, reps: 5, pct: 0.675, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 4, reps: 6, pct: 0.650, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.775, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.700, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 3, pct: 0.800, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.700, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 3, pct: 0.700, labelKey: 'topTriple' }, { sets: 3, reps: 4, pct: 0.625, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 5, pct: 0.625, labelKey: 'workSets' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.650, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.800, labelKey: 'topDouble' }, { sets: 3, reps: 4, pct: 0.725, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 2, pct: 0.850, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.775, labelKey: 'topDouble' }, { sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 4, pct: 0.650, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 3, reps: 5, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 3, pct: 0.700, labelKey: 'topTriple' }, { sets: 3, reps: 4, pct: 0.625, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 4, reps: 5, pct: 0.650, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.775, labelKey: 'topTriple' }, { sets: 3, reps: 5, pct: 0.675, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 3, pct: 0.800, labelKey: 'topTriple' }, { sets: 4, reps: 4, pct: 0.675, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 3, pct: 0.725, labelKey: 'topTriple' }, { sets: 2, reps: 4, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 2, reps: 5, pct: 0.600, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 5, pct: 0.650, labelKey: 'workSets' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 3, reps: 4, pct: 0.725, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.625, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.775, labelKey: 'topDouble' }, { sets: 2, reps: 4, pct: 0.700, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.725, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.840, labelKey: 'topDouble' }, { sets: 3, reps: 3, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 3, pct: 0.750, labelKey: 'workSets' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.800, labelKey: 'topDouble' }, { sets: 2, reps: 3, pct: 0.725, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 2, reps: 4, pct: 0.625, labelKey: 'backoff' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 4, reps: 4, pct: 0.675, labelKey: 'workSets' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.750, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.775, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.800, labelKey: 'topSingle' }, { sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 4, pct: 0.625, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.700, labelKey: 'workSets' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'topSingle' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'topSingle' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'topSingle' }, { sets: 3, reps: 5, pct: 0.750, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.800, labelKey: 'topSingle' }, { sets: 2, reps: 4, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.600, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.750, labelKey: 'topSingle' }, { sets: 2, reps: 4, pct: 0.600, labelKey: 'backoff' }] }] },
-    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.800, labelKey: 'topSingle' }, { sets: 2, reps: 4, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 2, reps: 4, pct: 0.600, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' }, { sets: 2, reps: 3, pct: 0.750, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 2, reps: 4, pct: 0.650, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.825, labelKey: 'topSingle' }, { sets: 2, reps: 3, pct: 0.725, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' }, { sets: 3, reps: 3, pct: 0.750, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 2, reps: 3, pct: 0.725, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 3, reps: 3, pct: 0.725, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.800, labelKey: 'topSingle' }, { sets: 2, reps: 3, pct: 0.675, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 2, reps: 3, pct: 0.600, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 3, reps: 3, pct: 0.700, labelKey: 'workSets' }] }] },
+    { type: 'training', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'topSingle' }, { sets: 1, reps: 2, pct: 0.700, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'topSingle' }, { sets: 2, reps: 2, pct: 0.725, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 1, reps: 2, pct: 0.650, labelKey: 'backoff' }] }] },
+    { type: 'training', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Squat', blocks: [{ sets: 2, reps: 3, pct: 0.550, labelKey: 'workSets' }] }, { lift: 'Bench', blocks: [{ sets: 2, reps: 3, pct: 0.550, labelKey: 'workSets' }] }] },
+    { type: 'training', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Deadlift', blocks: [{ sets: 2, reps: 2, pct: 0.500, labelKey: 'workSets' }] }] },
+    { type: 'rest', labelKey: 'restAndRecovery', workoutEffort: 'easy', lifts: [], sets: [], warmups: [], accessories: [], cooldownItems: [] },
   ];
 
   const workouts = [];
@@ -1871,7 +1940,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
       prepItems: liftBlocks[0]?.prepItems || [],
       warmups: liftBlocks[0]?.warmups || [],
       sets: liftBlocks[0]?.sets || [],
-      accessories: generateAccessoriesForLift(primaryLift, accessoryMode, accessoryPRs, oneRMs),
+      accessories: day.disableAccessories ? [] : generateAccessoriesForLift(primaryLift, accessoryMode, accessoryPRs, oneRMs),
       cooldownItems: generateCooldownItems(normalizedCooldownMode),
     });
   });
@@ -5114,20 +5183,20 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
   if (workout.type === 'rest') {
     return (
       <div style={{ maxWidth: 500, margin: '60px auto', padding: 24, fontFamily: 'sans-serif', textAlign: 'center' }}>
-     <h1 style={{ 
-        textAlign: 'center', 
-        marginTop: 80, 
-        marginBottom: 24 
-      }}>
-        {t.appName}
-      </h1>        
-      <div style={{ background: THEME.card, padding: 40, borderRadius: 8 }}>
-          <div style={{ fontSize: 48 }}>🎉</div>
-          <h2>{t.deload}</h2>
+        <h1 style={{
+          textAlign: 'center',
+          marginTop: 80,
+          marginBottom: 24
+        }}>
+          {t.appName}
+        </h1>
+        <div style={{ background: THEME.card, padding: 40, borderRadius: 8 }}>
+          <div style={{ fontSize: 48 }}>✓</div>
+          <h2>{t.restAndRecovery || t.deload}</h2>
           <p style={{ color: THEME.muted }}>{t.restReadyNextCycle}</p>
         </div>
-        <button onClick={onStartNewCycle} style={{ marginTop: 16, width: '100%', padding: 10, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
-          {t.startNewCycle}
+        <button onClick={() => onComplete('easy')} style={{ marginTop: 16, width: '100%', padding: 10, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+          {t.completeWorkout}
         </button>
       </div>
     );
@@ -5949,29 +6018,53 @@ const sortedHistory = [...history]
   .filter(entry => entry && entry.lift)
   .sort((a, b) => getAbsoluteWorkoutIndex(a) - getAbsoluteWorkoutIndex(b));
 
+const runningBestPerLift = {
+  Squat: { oneRM: 0, e1rm: 0 },
+  Bench: { oneRM: 0, e1rm: 0 },
+  Deadlift: { oneRM: 0, e1rm: 0 },
+};
+
 sortedHistory.forEach(entry => {
-  const label = getWorkoutLabel(entry);
+  if (!entry.lift || !LIFT_ORDER.includes(entry.lift) || entry.completionOnly) return;
 
-  if (entry.lift && LIFT_ORDER.includes(entry.lift)) {
-    if (!liftData[entry.lift]) liftData[entry.lift] = [];
+  const candidates = getHistoryMaxCandidates(entry);
 
-    bestStats[entry.lift].oneRM = Math.max(
-  bestStats[entry.lift].oneRM,
-  entry.topWeight || 0
-);
+  if (candidates.oneRM <= 0 && candidates.e1rm <= 0) return;
 
-    bestStats[entry.lift].e1rm = Math.max(bestStats[entry.lift].e1rm, entry.e1rm || 0);
+  runningBestPerLift[entry.lift] = {
+    oneRM: Math.max(runningBestPerLift[entry.lift].oneRM, candidates.oneRM),
+    e1rm: Math.max(runningBestPerLift[entry.lift].e1rm, candidates.e1rm),
+  };
 
-    if (getEntryWorkoutNumber(entry) > 0 || entry.seedMax || entry.manualMax) {
-      liftData[entry.lift].push({
-        label,
-        absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
-        oneRM: chartWeightFromKg(bestStats[entry.lift].oneRM),
-        e1rm: chartWeightFromKg(bestStats[entry.lift].e1rm),
-      });
-    }
+  bestStats[entry.lift] = { ...runningBestPerLift[entry.lift] };
+
+  if (!liftData[entry.lift]) liftData[entry.lift] = [];
+
+  if (getEntryWorkoutNumber(entry) > 0 || entry.seedMax || entry.manualMax) {
+    liftData[entry.lift].push({
+      label: getWorkoutLabel(entry),
+      absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
+      oneRM: chartWeightFromKg(runningBestPerLift[entry.lift].oneRM),
+      e1rm: chartWeightFromKg(runningBestPerLift[entry.lift].e1rm),
+    });
   }
 
+  if ((getEntryWorkoutNumber(entry) > 0 || entry.seedMax || entry.manualMax) && runningBestPerLift.Squat.oneRM && runningBestPerLift.Bench.oneRM && runningBestPerLift.Deadlift.oneRM) {
+    totalData.push({
+      label: getWorkoutLabel(entry),
+      workoutNumber: getEntryWorkoutNumber(entry),
+      absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
+      date: entry.date,
+      oneRM:
+        runningBestPerLift.Squat.oneRM +
+        runningBestPerLift.Bench.oneRM +
+        runningBestPerLift.Deadlift.oneRM,
+      e1rm:
+        runningBestPerLift.Squat.e1rm +
+        runningBestPerLift.Bench.e1rm +
+        runningBestPerLift.Deadlift.e1rm,
+    });
+  }
 });
 
 LIFT_ORDER.forEach(lift => {
@@ -5982,66 +6075,7 @@ LIFT_ORDER.forEach(lift => {
     oneRM: currentOneRM,
     e1rm: currentE1RM,
   };
-
-  const latestPoint = liftData[lift]?.[liftData[lift].length - 1];
-  if (latestPoint) {
-    latestPoint.oneRM = chartWeightFromKg(currentOneRM);
-    latestPoint.e1rm = chartWeightFromKg(currentE1RM);
-  }
 });
-
-const bestPerLift = {};
-
-sortedHistory.forEach(entry => {
-  if (!entry.lift || !LIFT_ORDER.includes(entry.lift)) return;
-
-  if (!bestPerLift[entry.lift]) {
-    bestPerLift[entry.lift] = { oneRM: 0, e1rm: 0 };
-  }
-
-  bestPerLift[entry.lift].oneRM = Math.max(
-    bestPerLift[entry.lift].oneRM,
-    entry.topWeight || 0
-  );
-
-  bestPerLift[entry.lift].e1rm = Math.max(
-    bestPerLift[entry.lift].e1rm,
-    entry.e1rm || 0
-  );
-
-  if ((getEntryWorkoutNumber(entry) > 0 || entry.seedMax || entry.manualMax) && bestPerLift.Squat && bestPerLift.Bench && bestPerLift.Deadlift) {
-    totalData.push({
-      label: getWorkoutLabel(entry),
-      workoutNumber: getEntryWorkoutNumber(entry),
-      absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
-      date: entry.date,
-      oneRM:
-        bestPerLift.Squat.oneRM +
-        bestPerLift.Bench.oneRM +
-        bestPerLift.Deadlift.oneRM,
-      e1rm:
-        bestPerLift.Squat.e1rm +
-        bestPerLift.Bench.e1rm +
-        bestPerLift.Deadlift.e1rm,
-    });
-  }
-});
-
-const currentTotalOneRM =
-  (Number(best1RMs?.Squat) || 0) +
-  (Number(best1RMs?.Bench) || 0) +
-  (Number(best1RMs?.Deadlift) || 0);
-
-const currentTotalE1RM =
-  (Number(bestE1RMs?.Squat) || 0) +
-  (Number(bestE1RMs?.Bench) || 0) +
-  (Number(bestE1RMs?.Deadlift) || 0);
-
-if (totalData.length && currentTotalOneRM && currentTotalE1RM) {
-  const latestTotalPoint = totalData[totalData.length - 1];
-  latestTotalPoint.oneRM = currentTotalOneRM;
-  latestTotalPoint.e1rm = currentTotalE1RM;
-}
 
 const bodyMetricData = {
   bodyFat: [],
@@ -6891,7 +6925,7 @@ function ProgramProfileSection({
   const currentFocus =
     normalizedProfile === 'kelaniSbdLower' ||
     normalizedProfile === 'kelaniSbdLowerPlus' ||
-    normalizeBenchPressVariant(benchPressVariant) === 'goodMorning' ||
+    normalizeBenchPressVariant(benchPressVariant) === 'machineAlternative' ||
     normalizeDeadliftVariant(deadliftVariant) === 'hipThrust'
       ? 'lower'
       : 'sbd';
@@ -6934,7 +6968,7 @@ function ProgramProfileSection({
       accessoryMode: normalizeAccessoryMode(nextDraft.accessoryMode),
       cooldownMode: normalizeCooldownMode(nextDraft.cooldownMode),
       squatVariant: 'standard',
-      benchPressVariant: focus === 'lower' ? 'goodMorning' : 'standard',
+      benchPressVariant: focus === 'lower' ? 'machineAlternative' : 'standard',
       deadliftVariant: focus === 'lower' ? 'hipThrust' : 'standard',
     };
 
@@ -7261,7 +7295,8 @@ function getLiftThemeColor(lift) {
 function WorkoutTitle({ workout, t, benchPressVariant = 'standard' }) {
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
 
-  if (!workout || workout.type === 'rest') return t.deload;
+  if (!workout) return t.deload;
+  if (workout.type === 'rest') return t.restAndRecovery || t.deload;
   if (workout.type === 'meet') return t.sbdMeetDay || t.meetDay;
 
   const liftBlocks = (workout.lifts || []).length > 0
@@ -8581,7 +8616,7 @@ function App() {
       .filter(Number.isFinite)
   ));
   const currentIndex = Math.max(completedWorkoutCount, currentWorkoutIndex);
-  const PROGRAM_VERSION = 'cube-27-v5';
+  const PROGRAM_VERSION = 'cube-27-v6';
 
   function updateMeetPlannerAttempts(next) {
     setMeetPlannerAttempts(prev => {
@@ -8671,6 +8706,7 @@ function App() {
       }
 
       const savedHistory = data.history || [];
+      const restoredPrs = mergeHigherPrs(savedPrs, calculatePrsFromHistory(savedHistory));
       const savedCycle = data.currentCycle || 1;
       const hasSavedProgramProfile = Boolean(data.programProfile);
       const savedProgramProfile = hasSavedProgramProfile
@@ -8701,7 +8737,7 @@ function App() {
       const savedCooldownMode = normalizeCooldownMode(
         data.cooldownMode ?? profileSettings.cooldownMode ?? profileSettings.includeCooldown
       );
-      const generatedWorkouts = generateProgram(squat, bench, deadlift, savedAccessoryMode, data.accessoryPRs || {}, savedPreparationMode, savedDeadliftVariant, savedBenchPressVariant, savedSquatVariant, savedCooldownMode);
+      const generatedWorkouts = generateProgram(restoredPrs.Squat, restoredPrs.Bench, restoredPrs.Deadlift, savedAccessoryMode, data.accessoryPRs || {}, savedPreparationMode, savedDeadliftVariant, savedBenchPressVariant, savedSquatVariant, savedCooldownMode);
       const savedInProgress = data.inProgress || null;
       const savedMeetPlannerAttempts = data.meetPlannerAttempts || {};
       const savedMeetPrepChecklist = data.meetPrepChecklist || {};
@@ -8729,10 +8765,10 @@ function App() {
       setWorkouts(applyMeetPlannerAttemptsToWorkouts(
         cleanedWorkouts,
         savedMeetPlannerAttempts,
-        savedPrs
+        restoredPrs
       ));
       setHistory(savedHistory);
-      setPrs(savedPrs);
+      setPrs(restoredPrs);
       setAccessoryPRs(data.accessoryPRs || {});
       setCurrentCycle(savedCycle);
       setBodyWeights(normalizeBodyWeights(data));
@@ -8996,48 +9032,50 @@ function handleSaveMaxes(lift, values) {
 
   if (!nextOneRM || !nextE1RM) return;
 
-  const updatedPrs = {
-    ...prs,
-    [lift]: nextE1RM,
-  };
+  const previousBest1RM = Math.max(
+    0,
+    ...history
+      .filter(entry => entry?.lift === lift)
+      .map(entry => getHistoryMaxCandidates(entry).oneRM || 0)
+  );
+
+  const previousBestE1RM = Math.max(
+    Number(prs?.[lift]) || 0,
+    ...history
+      .filter(entry => entry?.lift === lift)
+      .map(entry => getHistoryMaxCandidates(entry).e1rm || 0)
+  );
+
+  const storedOneRM = Math.max(previousBest1RM, nextOneRM);
+  const storedE1RM = Math.max(previousBestE1RM, nextE1RM);
+  const updatedPrs = mergeHigherPrs(prs, { [lift]: storedE1RM });
 
   setPrs(updatedPrs);
   setWorkouts(generateProgram(updatedPrs.Squat, updatedPrs.Bench, updatedPrs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode));
   setMeetPlannerAttempts({});
 
   setHistory(prev => {
-    let updatedSeed = false;
     const today = new Date().toLocaleDateString('nl-NL');
+    const manualWorkoutNumber = Math.max(0, currentIndex);
 
-    const updatedHistory = prev.map(entry => {
-      if (entry?.workoutNumber === 0 && entry?.lift === lift) {
-        updatedSeed = true;
-        return {
-          ...entry,
-          topWeight: nextOneRM,
-          topReps: 1,
-          e1rm: nextE1RM,
-          manualMax: true,
-        };
-      }
-
-      return entry;
-    });
-
-    if (!updatedSeed) {
-      updatedHistory.unshift({
-        workoutNumber: 0,
-        cycle: 1,
+    return [
+      ...prev.filter(entry => !(
+        entry?.manualMax &&
+        entry?.lift === lift &&
+        Number(entry?.cycle) === Number(currentCycle) &&
+        Number(entry?.workoutNumber) === Number(manualWorkoutNumber)
+      )),
+      {
+        workoutNumber: manualWorkoutNumber,
+        cycle: currentCycle,
         lift,
-        topWeight: nextOneRM,
+        topWeight: storedOneRM,
         topReps: 1,
-        e1rm: nextE1RM,
+        e1rm: storedE1RM,
         date: today,
         manualMax: true,
-      });
-    }
-
-    return updatedHistory;
+      },
+    ];
   });
 }
 
@@ -9986,6 +10024,47 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     finishedWorkout.completed = true;
     finishedWorkout.completedAt = new Date().toISOString();
 
+    if (workout.type === 'rest') {
+      finishedWorkout.completedSummary = {
+        type: 'rest',
+        bodyWeight: latestBodyWeight,
+      };
+      setCompletedSummary(finishedWorkout.completedSummary);
+
+      setHistory(prev => [
+        ...prev.filter(entry => !(
+          Number(entry.cycle) === Number(currentCycle) &&
+          Number(entry.workoutNumber) === Number(workout.number) &&
+          entry.restDay
+        )),
+        {
+          workoutNumber: workout.number,
+          cycle: currentCycle,
+          restDay: true,
+          completionOnly: true,
+          date: new Date().toLocaleDateString('nl-NL'),
+          workoutEffort: finishedWorkout.workoutEffort || 'easy',
+          workoutSnapshot: finishedWorkout,
+        },
+      ]);
+
+      setWorkouts(prev =>
+        prev.map((w, wi) => wi === selectedIndex ? finishedWorkout : w)
+      );
+
+      setCompletedWorkout(finishedWorkout);
+      setCompletedWorkoutIndex(selectedIndex);
+
+      const nextWorkoutIndex = Math.min(selectedIndex + 1, workouts.length - 1);
+      if (selectedIndex === currentIndex) {
+        setCurrentWorkoutIndex(nextWorkoutIndex);
+      }
+      setSelectedIndex(nextWorkoutIndex);
+      setScreen('completed');
+
+      return;
+    }
+
     if (workout.type === 'training' && (finishedWorkout.lifts || []).length > 0) {
       const primaryLiftBlock = finishedWorkout.lifts[0];
 
@@ -10027,12 +10106,12 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 
     const previousBestE1RM = Math.max(
       Number(prs[liftBlock.lift]) || 0,
-      ...previousLiftHistory.map(h => Number(h.e1rm) || 0)
+      ...previousLiftHistory.map(h => getHistoryMaxCandidates(h).e1rm || 0)
     );
 
     const previousBest1RM = Math.max(
       0,
-      ...previousLiftHistory.map(h => Number(h.topWeight) || 0)
+      ...previousLiftHistory.map(h => getHistoryMaxCandidates(h).oneRM || 0)
     );
 
     return {
@@ -10071,7 +10150,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   setCompletedSummary(nextCompletedSummary);
 
     const withoutCurrentMeet = history.filter(
-    h => h.workoutNumber !== workout.number
+    h => !(Number(h.cycle) === Number(currentCycle) && Number(h.workoutNumber) === Number(workout.number))
   );
 
   const newEntries = results.map(result => ({
@@ -10089,7 +10168,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   const nextHistory = [...withoutCurrentMeet, ...newEntries];
 
   setHistory(nextHistory);
-  setPrs(calculatePrsFromHistory(nextHistory));
+  setPrs(prev => mergeHigherPrs(prev, calculatePrsFromHistory(nextHistory)));
 
   setWorkouts(prev =>
     prev.map((w, wi) => wi === selectedIndex ? finishedWorkout : w)
@@ -10144,12 +10223,12 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 
         const previousBestE1RM = Math.max(
           Number(prs[liftBlock.lift]) || 0,
-          ...previousLiftHistory.map(h => Number(h.e1rm) || 0)
+          ...previousLiftHistory.map(h => getHistoryMaxCandidates(h).e1rm || 0)
         );
 
         const previousBest1RM = Math.max(
           0,
-          ...previousLiftHistory.map(h => Number(h.topWeight) || 0)
+          ...previousLiftHistory.map(h => getHistoryMaxCandidates(h).oneRM || 0)
         );
 
         return {
@@ -10208,7 +10287,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       const nextHistory = [...withoutCurrentWorkout, ...newEntries];
 
       setHistory(nextHistory);
-      setPrs(calculatePrsFromHistory(nextHistory));
+      setPrs(prev => mergeHigherPrs(prev, calculatePrsFromHistory(nextHistory)));
     }
 
   
@@ -10263,7 +10342,7 @@ const previousBest1RM = Math.max(
   0,
   ...history
     .filter(h => h.lift === workout.lift)
-    .map(h => Number(h.topWeight) || 0)
+    .map(h => getHistoryMaxCandidates(h).oneRM || 0)
 );
 
 const is1RMPR = oneRMToday > previousBest1RM;
@@ -10310,7 +10389,7 @@ setCompletedSummary(nextCompletedSummary);
 
     setHistory(prev => {
   const existingIndex = prev.findIndex(
-    h => h.workoutNumber === workout.number && h.lift === workout.lift
+    h => Number(h.cycle) === Number(currentCycle) && Number(h.workoutNumber) === Number(workout.number) && h.lift === workout.lift
   );
 
   const newEntry = {
@@ -10485,31 +10564,18 @@ function changeScreen(nextScreen) {
   window.scrollTo({ top: 0, behavior: 'auto' });
 }
 
-function latestManualMax(lift) {
-  return [...history]
-    .reverse()
-    .find(entry => entry?.lift === lift && entry?.manualMax);
-}
+const bestMaxesFromHistory = calculateBestMaxesFromHistory(history);
 
 const best1RMs = {
-  Squat: latestManualMax('Squat')?.topWeight || Math.max(
-    0,
-    ...history.filter(h => h.lift === 'Squat').map(h => h.topWeight || 0)
-  ),
-  Bench: latestManualMax('Bench')?.topWeight || Math.max(
-    0,
-    ...history.filter(h => h.lift === 'Bench').map(h => h.topWeight || 0)
-  ),
-  Deadlift: latestManualMax('Deadlift')?.topWeight || Math.max(
-    0,
-    ...history.filter(h => h.lift === 'Deadlift').map(h => h.topWeight || 0)
-  ),
+  Squat: bestMaxesFromHistory.Squat.oneRM || 0,
+  Bench: bestMaxesFromHistory.Bench.oneRM || 0,
+  Deadlift: bestMaxesFromHistory.Deadlift.oneRM || 0,
 };
 
 const bestE1RMs = {
-  Squat: latestManualMax('Squat')?.e1rm || Math.max(prs.Squat || 0, ...history.filter(h => h.lift === 'Squat').map(h => h.e1rm || 0)),
-  Bench: latestManualMax('Bench')?.e1rm || Math.max(prs.Bench || 0, ...history.filter(h => h.lift === 'Bench').map(h => h.e1rm || 0)),
-  Deadlift: latestManualMax('Deadlift')?.e1rm || Math.max(prs.Deadlift || 0, ...history.filter(h => h.lift === 'Deadlift').map(h => h.e1rm || 0)),
+  Squat: Math.max(Number(prs.Squat) || 0, bestMaxesFromHistory.Squat.e1rm || 0),
+  Bench: Math.max(Number(prs.Bench) || 0, bestMaxesFromHistory.Bench.e1rm || 0),
+  Deadlift: Math.max(Number(prs.Deadlift) || 0, bestMaxesFromHistory.Deadlift.e1rm || 0),
 };
 
 const total1RM = best1RMs.Squat + best1RMs.Bench + best1RMs.Deadlift;
@@ -10563,12 +10629,12 @@ function buildCompletedSummaryForRender(workout) {
 
     const previousBest1RM = Math.max(
       0,
-      ...previousLiftHistory.map(item => Number(item.topWeight) || 0)
+      ...previousLiftHistory.map(item => getHistoryMaxCandidates(item).oneRM || 0)
     );
 
     const previousBestE1RM = Math.max(
-      0,
-      ...previousLiftHistory.map(item => Number(item.e1rm) || 0)
+      Number(prs?.[lift]) || 0,
+      ...previousLiftHistory.map(item => getHistoryMaxCandidates(item).e1rm || 0)
     );
 
     return {
