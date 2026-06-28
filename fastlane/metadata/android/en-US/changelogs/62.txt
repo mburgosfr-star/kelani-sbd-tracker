@@ -1,0 +1,4 @@
+Fix RM persistence so maxes are never lowered by a bad workout or meet day.
+Restore Stats progression with best-so-far 1RM, e1RM, total, and strength trends.
+Improve warm-up generation with safer jumps between sets.
+Improve the general meet-prep program structure, taper, and rest-day flow.
