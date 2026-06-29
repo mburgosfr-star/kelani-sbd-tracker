@@ -113,7 +113,7 @@ try {
 }
 
 if (!tagExists) {
-  run('git', ['tag', tag]);
+  run('git', ['-c', 'tag.gpgSign=false', 'tag', '-a', tag, '-m', `Release ${tag}`]);
 }
 
 run('git', ['push']);

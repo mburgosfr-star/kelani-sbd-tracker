@@ -21,6 +21,7 @@ const env = {
   PATH: `${path.join(javaHome, 'bin')}:${process.env.PATH}`,
   GRADLE_USER_HOME: gradleHome,
   REACT_APP_VERSION: pkg.version,
+  GENERATE_SOURCEMAP: 'false',
 };
 
 function run(command, args, options = {}) {

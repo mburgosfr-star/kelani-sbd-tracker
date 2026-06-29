@@ -14,6 +14,7 @@ const env = {
   JAVA_HOME: javaHome,
   PATH: `${path.join(javaHome, 'bin')}:${process.env.PATH}`,
   REACT_APP_VERSION: pkg.version,
+  GENERATE_SOURCEMAP: 'false',
 };
 
 function run(command, options = {}) {
