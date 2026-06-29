@@ -314,6 +314,13 @@ function getHistoryMaxCandidates(entry) {
     return { oneRM: 0, e1rm: 0 };
   }
 
+  if (entry.manualMax) {
+    const manualOneRM = Number(entry.topWeight) || Number(entry.oneRMToday) || 0;
+    const manualE1RM = Number(entry.e1rm) || Number(entry.e1RMToday) || manualOneRM;
+
+    return { oneRM: manualOneRM, e1rm: manualE1RM };
+  }
+
   const oneRMCandidates = [
     Number(entry.topWeight) || 0,
     Number(entry.oneRMToday) || 0,
@@ -367,10 +374,15 @@ function calculateBestMaxesFromHistory(history = []) {
 
     const candidates = getHistoryMaxCandidates(entry);
 
-    best[entry.lift] = {
-      oneRM: Math.max(best[entry.lift].oneRM, candidates.oneRM),
-      e1rm: Math.max(best[entry.lift].e1rm, candidates.e1rm),
-    };
+    best[entry.lift] = entry.manualMax
+      ? {
+          oneRM: candidates.oneRM,
+          e1rm: candidates.e1rm,
+        }
+      : {
+          oneRM: Math.max(best[entry.lift].oneRM, candidates.oneRM),
+          e1rm: Math.max(best[entry.lift].e1rm, candidates.e1rm),
+        };
   });
 
   return best;
@@ -749,6 +761,15 @@ const PROGRAM_PROFILES = {
     deadliftVariant: 'standard',
     includeCooldown: true,
     cooldownMode: 'upperBackFriendly',
+  },
+  kelaniSbdUltra: {
+    preparationMode: 'off',
+    accessoryMode: 'off',
+    squatVariant: 'standard',
+    benchPressVariant: 'standard',
+    deadliftVariant: 'standard',
+    includeCooldown: false,
+    cooldownMode: 'off',
   },
   kelaniSbdLower: {
     preparationMode: 'shoulderThoracic',
@@ -1802,7 +1823,7 @@ function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedWork
 }
 
 
-function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly') {
+function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly', programOverride = null) {
   function round25(w) {
     return Math.round(w / 2.5) * 2.5;
   }
@@ -1819,7 +1840,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
   const normalizedBenchPressVariant = normalizeBenchPressVariant(benchPressVariant);
   const normalizedSquatVariant = normalizeSquatVariant(squatVariant);
 
-  const program = [
+  const program = programOverride || [
     // Build block 1: technique and base volume without testing.
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 2, reps: 5, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'workSets' }] }] },
     { type: 'training', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 3, pct: 0.700, labelKey: 'topTriple' }, { sets: 2, reps: 4, pct: 0.625, labelKey: 'backoff' }] }] },
@@ -1891,14 +1912,25 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
                   : [];
 
     if (!isSquatBeltAlternative && !isSquatHomeAlternative && !isDeadliftAlternative && !isDeadliftHomeAlternative && !isBenchMachineAlternative && !isBenchHomeAlternative && !isBenchGoodMorningAlternative) {
-      liftConfig.blocks.forEach(block => {
+      liftConfig.blocks.forEach((block, blockIndex) => {
+        const hasPriorTopBlock = liftConfig.blocks
+          .slice(0, blockIndex)
+          .some(previousBlock =>
+            isTopSetLabel(previousBlock.labelKey) ||
+            previousBlock.labelKey === 'opener'
+          );
+
+        let labelKey = block.labelKey || null;
+
+        if (labelKey === 'backoff' && (!hasPriorTopBlock || liftConfig.isSecondaryLight)) {
+          labelKey = 'workSets';
+        }
+
         for (let i = 0; i < block.sets; i++) {
           const weight = round25(oneRMs[liftConfig.lift] * block.pct);
 
           sets.push({
-            labelKey: liftConfig.isSecondaryLight && block.labelKey === 'backoff'
-              ? null
-              : block.labelKey || null,
+            labelKey,
             label: block.label || null,
             reps: block.reps,
             pct: block.pct,
@@ -2013,6 +2045,70 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
 });
 
   return workouts;
+}
+
+
+function generateUltraProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly') {
+  const ultraProgram = [
+    // Ultra block 1: high-frequency base, all lifts practiced often.
+    { type: 'training', label: 'Ultra Primary SBD', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.725, labelKey: 'topTriple' }, { sets: 2, reps: 5, pct: 0.625, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'workSets' }] }, { lift: 'Deadlift', blocks: [{ sets: 2, reps: 3, pct: 0.600, labelKey: 'workSets' }] }] },
+    { type: 'training', label: 'Ultra Primary Bench', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 3, pct: 0.750, labelKey: 'topTriple' }, { sets: 3, reps: 5, pct: 0.650, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'workSets' }] }] },
+    { type: 'training', label: 'Ultra Primary Squat', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.775, labelKey: 'topTriple' }, { sets: 2, reps: 5, pct: 0.675, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 4, reps: 4, pct: 0.650, labelKey: 'workSets' }] }] },
+    { type: 'training', label: 'Ultra Primary Deadlift', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 3, pct: 0.700, labelKey: 'topTriple' }, { sets: 2, reps: 4, pct: 0.625, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'workSets' }] }] },
+    { type: 'rest', labelKey: 'restAndRecovery', workoutEffort: 'easy', lifts: [], sets: [], warmups: [], accessories: [], cooldownItems: [] },
+
+    { type: 'training', label: 'Ultra Squat Volume', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 4, reps: 4, pct: 0.675, labelKey: 'workSets' }] }, { lift: 'Bench', blocks: [{ sets: 4, reps: 4, pct: 0.625, labelKey: 'workSets' }] }] },
+    { type: 'training', label: 'Ultra Bench + Deadlift Skill', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 3, pct: 0.800, labelKey: 'topTriple' }, { sets: 3, reps: 4, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Deadlift', blocks: [{ sets: 2, reps: 3, pct: 0.600, labelKey: 'workSets' }] }] },
+    { type: 'training', label: 'Ultra Light SBD', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 3, reps: 3, pct: 0.650, labelKey: 'workSets' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 3, pct: 0.650, labelKey: 'workSets' }] }, { lift: 'Deadlift', blocks: [{ sets: 2, reps: 2, pct: 0.600, labelKey: 'workSets' }] }] },
+    { type: 'rest', labelKey: 'restAndRecovery', workoutEffort: 'easy', lifts: [], sets: [], warmups: [], accessories: [], cooldownItems: [] },
+
+    // Ultra block 2: strength build with all three lifts kept specific.
+    { type: 'training', label: 'Ultra Squat Strength', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 2, reps: 4, pct: 0.725, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 4, pct: 0.675, labelKey: 'workSets' }] }] },
+    { type: 'training', label: 'Ultra Bench Strength', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 2, pct: 0.825, labelKey: 'topDouble' }, { sets: 3, reps: 4, pct: 0.725, labelKey: 'backoff' }] }, { lift: 'Deadlift', blocks: [{ sets: 2, reps: 3, pct: 0.625, labelKey: 'workSets' }] }] },
+    { type: 'training', label: 'Ultra Deadlift Strength', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.775, labelKey: 'topDouble' }, { sets: 2, reps: 3, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 3, reps: 4, pct: 0.625, labelKey: 'workSets' }] }] },
+    { type: 'rest', labelKey: 'restAndRecovery', workoutEffort: 'easy', lifts: [], sets: [], warmups: [], accessories: [], cooldownItems: [] },
+
+    { type: 'training', label: 'Ultra Heavy Squat Practice', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.850, labelKey: 'topDouble' }, { sets: 2, reps: 3, pct: 0.750, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 3, pct: 0.700, labelKey: 'workSets' }] }] },
+    { type: 'training', label: 'Ultra Heavy Bench Practice', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 2, pct: 0.850, labelKey: 'topDouble' }, { sets: 3, reps: 3, pct: 0.750, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 2, reps: 3, pct: 0.650, labelKey: 'workSets' }] }] },
+    { type: 'training', label: 'Ultra Deadlift + Bench Volume', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.800, labelKey: 'topDouble' }, { sets: 1, reps: 3, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 4, reps: 3, pct: 0.700, labelKey: 'workSets' }] }] },
+    { type: 'rest', labelKey: 'restAndRecovery', workoutEffort: 'easy', lifts: [], sets: [], warmups: [], accessories: [], cooldownItems: [] },
+
+    // Ultra block 3: meet-specific singles without max testing.
+    { type: 'training', label: 'Ultra Squat Single', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 1, reps: 3, pct: 0.725, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 3, pct: 0.700, labelKey: 'workSets' }] }] },
+    { type: 'training', label: 'Ultra Bench Single', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }, { sets: 2, reps: 3, pct: 0.750, labelKey: 'backoff' }] }, { lift: 'Deadlift', blocks: [{ sets: 2, reps: 2, pct: 0.650, labelKey: 'workSets' }] }] },
+    { type: 'training', label: 'Ultra Deadlift Single', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.825, labelKey: 'topSingle' }, { sets: 1, reps: 2, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 2, reps: 3, pct: 0.625, labelKey: 'workSets' }] }] },
+    { type: 'training', label: 'Ultra SBD Confidence', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' }] }, { lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.825, labelKey: 'topSingle' }] }, { lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.750, labelKey: 'topSingle' }] }] },
+
+    // Peak and taper: openers, then freshness.
+    { type: 'training', label: 'Ultra Squat Opener', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 2, pct: 0.600, labelKey: 'backoff' }] }] },
+    { type: 'training', label: 'Ultra Bench Opener', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 2, pct: 0.650, labelKey: 'backoff' }] }] },
+    { type: 'rest', labelKey: 'restAndRecovery', workoutEffort: 'easy', lifts: [], sets: [], warmups: [], accessories: [], cooldownItems: [] },
+    { type: 'training', label: 'Ultra Deadlift Opener-ish', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }] }] },
+    { type: 'training', label: 'Ultra Light Squat + Bench', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Squat', blocks: [{ sets: 2, reps: 3, pct: 0.500, labelKey: 'workSets' }] }, { lift: 'Bench', blocks: [{ sets: 2, reps: 3, pct: 0.500, labelKey: 'workSets' }] }] },
+    { type: 'rest', labelKey: 'restAndRecovery', workoutEffort: 'easy', lifts: [], sets: [], warmups: [], accessories: [], cooldownItems: [] },
+  ];
+
+  return generateProgram(
+    s,
+    b,
+    d,
+    accessoryMode,
+    accessoryPRs,
+    preparationMode,
+    deadliftVariant,
+    benchPressVariant,
+    squatVariant,
+    cooldownMode,
+    ultraProgram
+  );
+}
+
+function generateProgramForProfile(programProfile, s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly') {
+  if (normalizeProgramProfile(programProfile) === 'kelaniSbdUltra') {
+    return generateUltraProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode);
+  }
+
+  return generateProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode);
 }
 
 
@@ -6056,10 +6152,15 @@ sortedHistory.forEach(entry => {
 
   if (candidates.oneRM <= 0 && candidates.e1rm <= 0) return;
 
-  runningBestPerLift[entry.lift] = {
-    oneRM: Math.max(runningBestPerLift[entry.lift].oneRM, candidates.oneRM),
-    e1rm: Math.max(runningBestPerLift[entry.lift].e1rm, candidates.e1rm),
-  };
+  runningBestPerLift[entry.lift] = entry.manualMax
+    ? {
+        oneRM: candidates.oneRM,
+        e1rm: candidates.e1rm,
+      }
+    : {
+        oneRM: Math.max(runningBestPerLift[entry.lift].oneRM, candidates.oneRM),
+        e1rm: Math.max(runningBestPerLift[entry.lift].e1rm, candidates.e1rm),
+      };
 
   bestStats[entry.lift] = { ...runningBestPerLift[entry.lift] };
 
@@ -6948,12 +7049,14 @@ function ProgramProfileSection({
 
   const normalizedProfile = normalizeProgramProfile(programProfile);
   const currentFocus =
-    normalizedProfile === 'kelaniSbdLower' ||
-    normalizedProfile === 'kelaniSbdLowerPlus' ||
-    normalizeBenchPressVariant(benchPressVariant) === 'machineAlternative' ||
-    normalizeDeadliftVariant(deadliftVariant) === 'hipThrust'
-      ? 'lower'
-      : 'sbd';
+    normalizedProfile === 'kelaniSbdUltra'
+      ? 'ultra'
+      : normalizedProfile === 'kelaniSbdLower' ||
+        normalizedProfile === 'kelaniSbdLowerPlus' ||
+        normalizeBenchPressVariant(benchPressVariant) === 'machineAlternative' ||
+        normalizeDeadliftVariant(deadliftVariant) === 'hipThrust'
+          ? 'lower'
+          : 'sbd';
 
   function openWizard() {
     setDraft({
@@ -6988,7 +7091,7 @@ function ProgramProfileSection({
     const focus = nextDraft.focus || 'sbd';
 
     const settings = {
-      programProfile: focus === 'lower' ? 'kelaniSbdLower' : 'kelaniSbd',
+      programProfile: focus === 'ultra' ? 'kelaniSbdUltra' : focus === 'lower' ? 'kelaniSbdLower' : 'kelaniSbd',
       preparationMode: normalizePreparationMode(nextDraft.preparationMode),
       accessoryMode: normalizeAccessoryMode(nextDraft.accessoryMode),
       cooldownMode: normalizeCooldownMode(nextDraft.cooldownMode),
@@ -7061,6 +7164,11 @@ function ProgramProfileSection({
           value: 'lower',
           title: t.programFocusLower || 'Kelani Lower',
           text: t.programFocusLowerText || 'Squat, Chest Press and Hip Thrust. No upper-body main lifts.',
+        },
+        {
+          value: 'ultra',
+          title: t.programFocusSbdUltra || t.programProfileKelaniSbdUltra || 'Kelani SBD Ultra',
+          text: t.programFocusSbdUltraText || t.programProfileKelaniSbdUltraText || 'High-frequency SBD meet prep with more Squat, Bench Press and Deadlift exposure.',
         },
       ],
     },
@@ -8641,7 +8749,7 @@ function App() {
       .filter(Number.isFinite)
   ));
   const currentIndex = Math.max(completedWorkoutCount, currentWorkoutIndex);
-  const PROGRAM_VERSION = 'kelani-sbd-program-v7';
+  const PROGRAM_VERSION = 'kelani-program-profiles-v5';
 
   function updateMeetPlannerAttempts(next) {
     setMeetPlannerAttempts(prev => {
@@ -8762,7 +8870,7 @@ function App() {
       const savedCooldownMode = normalizeCooldownMode(
         data.cooldownMode ?? profileSettings.cooldownMode ?? profileSettings.includeCooldown
       );
-      const generatedWorkouts = generateProgram(restoredPrs.Squat, restoredPrs.Bench, restoredPrs.Deadlift, savedAccessoryMode, data.accessoryPRs || {}, savedPreparationMode, savedDeadliftVariant, savedBenchPressVariant, savedSquatVariant, savedCooldownMode);
+      const generatedWorkouts = generateProgramForProfile(savedProgramProfile, restoredPrs.Squat, restoredPrs.Bench, restoredPrs.Deadlift, savedAccessoryMode, data.accessoryPRs || {}, savedPreparationMode, savedDeadliftVariant, savedBenchPressVariant, savedSquatVariant, savedCooldownMode);
       const savedInProgress = data.inProgress || null;
       const savedMeetPlannerAttempts = data.meetPlannerAttempts || {};
       const savedMeetPrepChecklist = data.meetPrepChecklist || {};
@@ -8878,7 +8986,8 @@ function App() {
   useEffect(() => {
     if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
 
-    const generatedWorkouts = generateProgram(
+    const generatedWorkouts = generateProgramForProfile(
+      programProfile,
       prs.Squat,
       prs.Bench,
       prs.Deadlift,
@@ -8957,7 +9066,7 @@ function App() {
     setDeadliftVariant(defaultDeadliftVariant);
     setCooldownMode(defaultCooldownMode);
 
-    setWorkouts(generateProgram(s, b, d, defaultAccessoryMode, {}, defaultPreparationMode, defaultDeadliftVariant, defaultBenchPressVariant, defaultSquatVariant, defaultCooldownMode));
+    setWorkouts(generateProgramForProfile(defaultProgramProfile, s, b, d, defaultAccessoryMode, {}, defaultPreparationMode, defaultDeadliftVariant, defaultBenchPressVariant, defaultSquatVariant, defaultCooldownMode));
     setCurrentWorkoutIndex(0);
     setSelectedIndex(0);
     setCurrentCycle(1);
@@ -9057,26 +9166,15 @@ function handleSaveMaxes(lift, values) {
 
   if (!nextOneRM || !nextE1RM) return;
 
-  const previousBest1RM = Math.max(
-    0,
-    ...history
-      .filter(entry => entry?.lift === lift)
-      .map(entry => getHistoryMaxCandidates(entry).oneRM || 0)
-  );
-
-  const previousBestE1RM = Math.max(
-    Number(prs?.[lift]) || 0,
-    ...history
-      .filter(entry => entry?.lift === lift)
-      .map(entry => getHistoryMaxCandidates(entry).e1rm || 0)
-  );
-
-  const storedOneRM = Math.max(previousBest1RM, nextOneRM);
-  const storedE1RM = Math.max(previousBestE1RM, nextE1RM);
-  const updatedPrs = mergeHigherPrs(prs, { [lift]: storedE1RM });
+  const storedOneRM = nextOneRM;
+  const storedE1RM = nextE1RM;
+  const updatedPrs = {
+    ...prs,
+    [lift]: storedE1RM,
+  };
 
   setPrs(updatedPrs);
-  setWorkouts(generateProgram(updatedPrs.Squat, updatedPrs.Bench, updatedPrs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode));
+  setWorkouts(generateProgramForProfile(programProfile, updatedPrs.Squat, updatedPrs.Bench, updatedPrs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode));
   setMeetPlannerAttempts({});
 
   setHistory(prev => {
@@ -9111,7 +9209,7 @@ function handleStartNewCycle() {
   }
 
   const nextCycle = currentCycle + 1;
-  const newWorkouts = generateProgram(prs.Squat, prs.Bench, prs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode);
+  const newWorkouts = generateProgramForProfile(programProfile, prs.Squat, prs.Bench, prs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode);
 
   setCurrentCycle(nextCycle);
   setMeetPlannerAttempts({});
