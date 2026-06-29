@@ -815,10 +815,77 @@ function getProgramProfileTitle(profile, t = {}) {
     normalizedProfile === 'kelaniSbdLower' ||
     normalizedProfile === 'kelaniSbdLowerPlus'
   ) {
-    return t.programProfileKelaniSbdLower || 'Kelani Lower';
+    return t.programProfileKelaniSbdLower || 'Kelani Adapt';
   }
 
   return t.programProfileKelaniSbd || 'Kelani SBD';
+}
+function getProgramProfileDescription(profile, t = {}) {
+  const normalizedProfile = normalizeProgramProfile(profile);
+
+  if (normalizedProfile === 'kelaniSbdUltra') {
+    return t.programProfileKelaniSbdUltraText || 'Goal: stronger meet-day readiness. Frequency: high · Volume: high · Intensity: controlled.';
+  }
+
+  if (
+    normalizedProfile === 'kelaniSbdLower' ||
+    normalizedProfile === 'kelaniSbdLowerPlus'
+  ) {
+    return t.programProfileKelaniSbdLowerText || 'Goal: adapted training with Squat, Chest Press and Hip Thrust. Frequency: moderate · Volume: moderate · Intensity: controlled.';
+  }
+
+  return t.programProfileKelaniSbdText || 'Goal: balanced meet prep. Frequency: moderate · Volume: moderate · Intensity: controlled high.';
+}
+
+
+function summarizeProgramWorkouts(workouts = []) {
+  const byLift = LIFT_ORDER.reduce((acc, lift) => ({
+    ...acc,
+    [lift]: {
+      exposures: 0,
+      reps: 0,
+      pctRepSum: 0,
+      avgIntensity: 0,
+    },
+  }), {});
+
+  let trainingDays = 0;
+  let restDays = 0;
+
+  (workouts || []).forEach(workout => {
+    if (!workout || workout.type === 'meet') return;
+
+    if (workout.type === 'rest') {
+      restDays += 1;
+      return;
+    }
+
+    trainingDays += 1;
+
+    (workout.lifts || []).forEach(liftBlock => {
+      const lift = liftBlock?.lift;
+
+      if (!LIFT_ORDER.includes(lift)) return;
+
+      byLift[lift].exposures += 1;
+
+      (liftBlock.sets || []).forEach(set => {
+        const reps = Number(set?.reps) || 0;
+        const pct = Number(set?.originalPct ?? set?.pct) || 0;
+
+        byLift[lift].reps += reps;
+        byLift[lift].pctRepSum += pct * reps;
+      });
+    });
+  });
+
+  LIFT_ORDER.forEach(lift => {
+    byLift[lift].avgIntensity = byLift[lift].reps
+      ? Math.round((byLift[lift].pctRepSum / byLift[lift].reps) * 100)
+      : 0;
+  });
+
+  return { trainingDays, restDays, byLift };
 }
 
 function detectProgramProfile({ preparationMode, accessoryMode, squatVariant, benchPressVariant, deadliftVariant }) {
@@ -7179,7 +7246,7 @@ function ProgramProfileSection({
         },
         {
           value: 'lower',
-          title: t.programFocusLower || 'Kelani Lower',
+          title: t.programFocusLower || 'Kelani Adapt',
           text: t.programFocusLowerText || 'Squat, Chest Press and Hip Thrust. No upper-body main lifts.',
         },
         {
@@ -7668,7 +7735,9 @@ function applyCompletedHistorySnapshotsToWorkouts(workouts = [], history = [], c
 function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedWorkoutNumbers = [], currentCycle, onSelect, onBack, onStats, onStartNewCycle, programProfile, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, weightUnit = WEIGHT_UNITS.KG }) {
   const currentWorkoutRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
+  const [showProgramInfo, setShowProgramInfo] = useState(false);
   const completedWorkoutNumberSet = new Set(completedWorkoutNumbers.map(Number));
+  const programSummary = summarizeProgramWorkouts(workouts);
 
   const visibleStart = Math.max(0, currentIndex - 3);
   const visibleEnd = Math.min(workouts.length, currentIndex + 4);
@@ -7725,9 +7794,149 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
     <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
       <AppHeader
         t={t}
-        title={getProgramProfileTitle(programProfile, t)}
+        title={
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            flexWrap: 'wrap'
+          }}>
+            <span>{getProgramProfileTitle(programProfile, t)}</span>
+            <button
+              type="button"
+              aria-label={t.programTrainingFactors || 'Training factors'}
+              onClick={(event) => {
+                event.stopPropagation();
+                setShowProgramInfo(true);
+              }}
+              style={{
+                width: 14,
+                height: 14,
+                minWidth: 14,
+                padding: 0,
+                borderRadius: 999,
+                border: `1px solid ${THEME.primary}`,
+                background: 'transparent',
+                color: THEME.primary,
+                fontSize: 9,
+                fontWeight: 900,
+                lineHeight: '12px',
+                cursor: 'pointer',
+                transform: 'translateY(-6px)'
+              }}
+            >
+              i
+            </button>
+          </span>
+        }
         subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${Math.min(currentIndex + 1, workouts.length)} / ${workouts.length}`}
       />
+
+      {showProgramInfo && (
+        <SettingsModal
+          title={getProgramProfileTitle(programProfile, t)}
+          onClose={() => setShowProgramInfo(false)}
+        >
+          <div style={{
+            color: THEME.muted,
+            fontSize: 13,
+            fontWeight: 800,
+            lineHeight: 1.45,
+            marginBottom: 12,
+            textAlign: 'center'
+          }}>
+            {getProgramProfileDescription(programProfile, t)}
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1.15fr repeat(3, 1fr)',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 10,
+            overflow: 'hidden',
+            fontSize: 12,
+            fontWeight: 800,
+            lineHeight: 1.25,
+            background: THEME.card
+          }}>
+            <div style={{ padding: 8, color: THEME.primary, borderBottom: `1px solid ${THEME.border}` }}>
+              {t.programTrainingFactors || 'Training factors'}
+            </div>
+            {LIFT_ORDER.map(lift => (
+              <div
+                key={`program-info-head-${lift}`}
+                style={{
+                  padding: 8,
+                  color: getLiftThemeColor(lift),
+                  textAlign: 'center',
+                  borderBottom: `1px solid ${THEME.border}`,
+                  borderLeft: `1px solid ${THEME.border}`
+                }}
+              >
+                {lift}
+              </div>
+            ))}
+
+            <div style={{ padding: 8, color: THEME.muted }}>
+              {t.programFrequency || 'Frequency'}
+            </div>
+            {LIFT_ORDER.map(lift => (
+              <div key={`program-info-frequency-${lift}`} style={{ padding: 8, textAlign: 'center', borderLeft: `1px solid ${THEME.border}` }}>
+                {programSummary.byLift[lift].exposures}×
+              </div>
+            ))}
+
+            <div style={{ padding: 8, color: THEME.muted, borderTop: `1px solid ${THEME.border}` }}>
+              {t.programVolume || 'Volume'}
+            </div>
+            {LIFT_ORDER.map(lift => (
+              <div key={`program-info-volume-${lift}`} style={{ padding: 8, textAlign: 'center', borderTop: `1px solid ${THEME.border}`, borderLeft: `1px solid ${THEME.border}` }}>
+                {programSummary.byLift[lift].reps}
+              </div>
+            ))}
+
+            <div style={{ padding: 8, color: THEME.muted, borderTop: `1px solid ${THEME.border}` }}>
+              {t.programIntensity || 'Intensity'}
+            </div>
+            {LIFT_ORDER.map(lift => (
+              <div key={`program-info-intensity-${lift}`} style={{ padding: 8, textAlign: 'center', borderTop: `1px solid ${THEME.border}`, borderLeft: `1px solid ${THEME.border}` }}>
+                {programSummary.byLift[lift].avgIntensity}%
+              </div>
+            ))}
+          </div>
+
+          <div style={{
+            marginTop: 10,
+            color: THEME.muted,
+            fontSize: 12,
+            fontWeight: 800,
+            lineHeight: 1.35,
+            textAlign: 'center'
+          }}>
+            {programSummary.trainingDays} {t.programTrainingDays || 'training days'} · {programSummary.restDays} {t.programRestDays || 'rest days'}
+          </div>
+
+          <div style={{
+            marginTop: 6,
+            color: THEME.muted,
+            fontSize: 11,
+            fontWeight: 700,
+            lineHeight: 1.35,
+            textAlign: 'center'
+          }}>
+            {t.programIntensityNote || 'Intensity is the average planned percentage of max, weighted by reps.'}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowProgramInfo(false)}
+            style={programActionButtonStyle(THEME.primary, '12px 0 0')}
+          >
+            {t.back || 'Back'}
+          </button>
+        </SettingsModal>
+      )}
 
       {renderWorkoutListToggleButton('top')}
 
