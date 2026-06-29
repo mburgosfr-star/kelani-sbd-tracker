@@ -1,0 +1,5 @@
+Add Kelani SBD Ultra as a higher-frequency meet-prep program.
+Rename the adapted program option to Kelani Adapt.
+Show the active program name and program training factors.
+Improve manual max corrections so Settings can adjust maxes up or down.
+Improve Android release build reproducibility for IzzyOnDroid.
