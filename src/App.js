@@ -804,6 +804,23 @@ function settingsForProgramProfile(profile) {
   return PROGRAM_PROFILES[normalizeProgramProfile(profile)] || PROGRAM_PROFILES.kelaniSbd;
 }
 
+function getProgramProfileTitle(profile, t = {}) {
+  const normalizedProfile = normalizeProgramProfile(profile);
+
+  if (normalizedProfile === 'kelaniSbdUltra') {
+    return t.programProfileKelaniSbdUltra || 'Kelani SBD Ultra';
+  }
+
+  if (
+    normalizedProfile === 'kelaniSbdLower' ||
+    normalizedProfile === 'kelaniSbdLowerPlus'
+  ) {
+    return t.programProfileKelaniSbdLower || 'Kelani Lower';
+  }
+
+  return t.programProfileKelaniSbd || 'Kelani SBD';
+}
+
 function detectProgramProfile({ preparationMode, accessoryMode, squatVariant, benchPressVariant, deadliftVariant }) {
   const normalizedSettings = {
     preparationMode: normalizePreparationMode(preparationMode),
@@ -7708,7 +7725,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
     <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
       <AppHeader
         t={t}
-        title={t.program}
+        title={getProgramProfileTitle(programProfile, t)}
         subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${Math.min(currentIndex + 1, workouts.length)} / ${workouts.length}`}
       />
 
