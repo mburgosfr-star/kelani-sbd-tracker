@@ -809,6 +809,11 @@ const TRAINING_MODELS = {
   SMART: 'smart',
 };
 
+const SMART_DAY_TYPES = {
+  TRAINING: 'training',
+  RECOVERY: 'recovery',
+};
+
 function normalizeTrainingModel(model) {
   return model === TRAINING_MODELS.SMART
     ? TRAINING_MODELS.SMART
@@ -2386,12 +2391,12 @@ function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
     index: nextIndex,
     dayType,
     readiness,
-    reason: dayType === 'recovery'
+    reason: dayType === SMART_DAY_TYPES.RECOVERY
       ? Number(readiness.recentFatigueScore) >= 2
         ? 'fatigue-recovery'
         : 'training-streak-recovery'
       : 'training-fallback',
-    overrideType: dayType === 'recovery' ? 'rest' : null,
+    overrideType: dayType === SMART_DAY_TYPES.RECOVERY ? 'rest' : null,
   };
 }
 
