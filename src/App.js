@@ -838,6 +838,31 @@ const SMART_GENERATED_FLAGS = {
   TRAINING: 'smartGeneratedTraining',
 };
 
+function summarizeSmartDecision(decision = null) {
+  if (!decision) return null;
+
+  return {
+    dayType: decision.dayType || null,
+    reason: decision.reason || null,
+    overrideType: decision.overrideType || null,
+    readiness: decision.readiness
+      ? {
+        completedCount: decision.readiness.completedCount || 0,
+        activeBlockCompletedCount: decision.readiness.activeBlockCompletedCount || 0,
+        lastWorkoutNumber: decision.readiness.lastWorkoutNumber || 0,
+        lastWorkoutEffort: decision.readiness.lastWorkoutEffort || null,
+        lastWasRestDay: Boolean(decision.readiness.lastWasRestDay),
+        recentHardCount: decision.readiness.recentHardCount || 0,
+        recentEasyCount: decision.readiness.recentEasyCount || 0,
+        recentFailedOrSkippedSetCount: decision.readiness.recentFailedOrSkippedSetCount || 0,
+        effortFatigueScore: decision.readiness.effortFatigueScore || 0,
+        failedSetFatigueScore: decision.readiness.failedSetFatigueScore || 0,
+        recentFatigueScore: decision.readiness.recentFatigueScore || 0,
+      }
+      : null,
+  };
+}
+
 function normalizeTrainingModel(model) {
   return model === TRAINING_MODELS.SMART
     ? TRAINING_MODELS.SMART
