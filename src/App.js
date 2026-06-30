@@ -2535,6 +2535,30 @@ function reduceSmartDeloadSet(set = {}) {
 
   if (Number.isFinite(weight) && weight > 0) {
     nextSet.weight = Math.round((weight * SMART_DELOAD.LOAD_FACTOR) / 2.5) * 2.5;
+    nextSet.originalWeight = nextSet.weight;
+  }
+
+  if (Number.isFinite(pct) && pct > 0) {
+    nextSet.pct = Math.max(
+      SMART_DELOAD.MIN_PCT,
+      Math.round(pct * SMART_DELOAD.LOAD_FACTOR * 1000) / 1000
+    );
+    nextSet.originalPct = nextSet.pct;
+  }
+
+  nextSet.failedWeight = null;
+  nextSet.adjustedWeight = null;
+  nextSet.adjustedFromFailedSet = false;
+  nextSet.adjustedFromOriginal = false;
+
+  return nextSet;
+}) {
+  const nextSet = { ...set };
+  const weight = Number(nextSet.weight);
+  const pct = Number(nextSet.pct);
+
+  if (Number.isFinite(weight) && weight > 0) {
+    nextSet.weight = Math.round((weight * SMART_DELOAD.LOAD_FACTOR) / 2.5) * 2.5;
   }
 
   if (Number.isFinite(pct) && pct > 0) {
