@@ -2418,8 +2418,10 @@ function selectSmartTrainingCandidate({
   readiness = {},
 } = {}) {
   const fallbackTrainingPool = generatedWorkouts.slice(visibleThroughIndex);
+  const previousTrainingPool = generatedWorkouts.slice(0, visibleThroughIndex + 1).reverse();
   const defaultTrainingCandidate =
     fallbackTrainingPool.find(candidate => candidate?.type === 'training') ||
+    previousTrainingPool.find(candidate => candidate?.type === 'training') ||
     generatedWorkouts[visibleThroughIndex];
 
   if (readiness.lastWasRestDay) {
