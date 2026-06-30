@@ -809,6 +809,17 @@ const TRAINING_MODELS = {
   SMART: 'smart',
 };
 
+function normalizeTrainingModel(model) {
+  return model === TRAINING_MODELS.SMART
+    ? TRAINING_MODELS.SMART
+    : TRAINING_MODELS.CLASSIC;
+}
+
+function isSmartTrainingModel(model) {
+  return normalizeTrainingModel(model) === TRAINING_MODELS.SMART;
+}
+
+
 const SMART_DAY_TYPES = {
   TRAINING: 'training',
   RECOVERY: 'recovery',
@@ -816,9 +827,10 @@ const SMART_DAY_TYPES = {
 };
 
 const SMART_DECISION_REASONS = {
-  FATIGUE_RECOVERY: SMART_DECISION_REASONS.FATIGUE_RECOVERY,
-  TRAINING_STREAK_RECOVERY: SMART_DECISION_REASONS.TRAINING_STREAK_RECOVERY,
-  TRAINING_FALLBACK: SMART_DECISION_REASONS.TRAINING_FALLBACK,
+  FATIGUE_RECOVERY: 'fatigue-recovery',
+  TRAINING_STREAK_RECOVERY: 'training-streak-recovery',
+  TRAINING_FALLBACK: 'training-fallback',
+  FAILED_SET_DELOAD: 'failed-set-deload',
 };
 
 const SMART_OVERRIDES = {
@@ -844,41 +856,6 @@ const SMART_GENERATED_FLAGS = {
   RECOVERY: 'smartGeneratedRecovery',
   TRAINING: 'smartGeneratedTraining',
 };
-
-function summarizeSmartDecision(decision = null) {
-  if (!decision) return null;
-
-  return {
-    dayType: decision.dayType || null,
-    reason: decision.reason || null,
-    overrideType: decision.overrideType || null,
-    readiness: decision.readiness
-      ? {
-        completedCount: decision.readiness.completedCount || 0,
-        activeBlockCompletedCount: decision.readiness.activeBlockCompletedCount || 0,
-        lastWorkoutNumber: decision.readiness.lastWorkoutNumber || 0,
-        lastWorkoutEffort: decision.readiness.lastWorkoutEffort || null,
-        lastWasRestDay: Boolean(decision.readiness.lastWasRestDay),
-        recentHardCount: decision.readiness.recentHardCount || 0,
-        recentEasyCount: decision.readiness.recentEasyCount || 0,
-        recentFailedOrSkippedSetCount: decision.readiness.recentFailedOrSkippedSetCount || 0,
-        effortFatigueScore: decision.readiness.effortFatigueScore || 0,
-        failedSetFatigueScore: decision.readiness.failedSetFatigueScore || 0,
-        recentFatigueScore: decision.readiness.recentFatigueScore || 0,
-      }
-      : null,
-  };
-}
-
-function normalizeTrainingModel(model) {
-  return model === TRAINING_MODELS.SMART
-    ? TRAINING_MODELS.SMART
-    : TRAINING_MODELS.CLASSIC;
-}
-
-function isSmartTrainingModel(model) {
-  return normalizeTrainingModel(model) === TRAINING_MODELS.SMART;
-}
 
 function getProgramProfileTitle(profile, t = {}) {
   const normalizedProfile = normalizeProgramProfile(profile);
@@ -2456,23 +2433,6 @@ function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
   };
 }
 
-function buildSmartRecoveryWorkout(sourceWorkout = {}) {
-  return {
-    ...resetSmartWorkoutProgress(sourceWorkout),
-    type: 'rest',
-    labelKey: 'restAndRecovery',
-    workoutEffort: 'easy',
-    lift: null,
-    lifts: [],
-    sets: [],
-    warmups: [],
-    accessories: [],
-    cooldownItems: [],
-    prepItems: [],
-    smartGeneratedRecovery: true,
-  };
-}
-
 function resetSmartSetProgress(set = {}) {
   return {
     ...set,
@@ -2502,7 +2462,18 @@ function resetSmartWorkoutProgress(workout = {}) {
     completedAt: null,
     completedDate: null,
     completedSummary: null,
+    smartSelectable: false,
     workoutEffort: null,
+    smartDecision: null,
+    smartDecisionSummary: null,
+    smartDayType: null,
+    smartOverride: null,
+    smartVisible: false,
+    smartCurrentIndex: null,
+    smartCurrentCycle: null,
+    smartSourceWorkoutNumber: null,
+    [SMART_GENERATED_FLAGS.RECOVERY]: false,
+    [SMART_GENERATED_FLAGS.TRAINING]: false,
     prepItems: (workout.prepItems || []).map(resetSmartChecklistProgress),
     warmups: (workout.warmups || []).map(resetSmartChecklistProgress),
     sets: (workout.sets || []).map(resetSmartSetProgress),
@@ -2520,7 +2491,42 @@ function resetSmartWorkoutProgress(workout = {}) {
   };
 }
 
-function buildSmartTrainingWorkout(sourceWorkout = {}
+function buildSmartRecoveryWorkout(sourceWorkout = {}) {
+  return {
+    ...resetSmartWorkoutProgress(sourceWorkout),
+    type: 'rest',
+    labelKey: 'restAndRecovery',
+    workoutEffort: 'easy',
+    lift: null,
+    lifts: [],
+    sets: [],
+    warmups: [],
+    accessories: [],
+    cooldownItems: [],
+    prepItems: [],
+    [SMART_GENERATED_FLAGS.RECOVERY]: true,
+  };
+}
+
+function buildSmartTrainingWorkout(sourceWorkout = {}, trainingCandidate = null, options = {}) {
+  if (!trainingCandidate || trainingCandidate?.type !== 'training') {
+    return sourceWorkout;
+  }
+
+  if (
+    sourceWorkout?.type === 'training' &&
+    !options.forceReplacement
+  ) {
+    return resetSmartWorkoutProgress(sourceWorkout);
+  }
+
+  return {
+    ...resetSmartWorkoutProgress(trainingCandidate),
+    number: sourceWorkout.number,
+    smartSourceWorkoutNumber: trainingCandidate.number,
+    [SMART_GENERATED_FLAGS.TRAINING]: true,
+  };
+}
 
 function reduceSmartDeloadSet(set = {}) {
   const nextSet = { ...set };
@@ -2555,25 +2561,6 @@ function buildSmartDeloadWorkout(sourceWorkout = {}, trainingCandidate = null) {
       ...liftBlock,
       sets: (liftBlock.sets || []).map(reduceSmartDeloadSet),
     })),
-  };
-}
-, trainingCandidate = null, options = {}) {
-  if (!trainingCandidate || trainingCandidate?.type !== 'training') {
-    return sourceWorkout;
-  }
-
-  if (
-    sourceWorkout?.type === 'training' &&
-    !options.forceReplacement
-  ) {
-    return resetSmartWorkoutProgress(sourceWorkout);
-  }
-
-  return {
-    ...resetSmartWorkoutProgress(trainingCandidate),
-    number: sourceWorkout.number,
-    smartSourceWorkoutNumber: trainingCandidate.number,
-    smartGeneratedTraining: true,
   };
 }
 
