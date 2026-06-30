@@ -820,6 +820,12 @@ const SMART_DECISION_REASONS = {
   TRAINING_FALLBACK: SMART_DECISION_REASONS.TRAINING_FALLBACK,
 };
 
+const SMART_OVERRIDES = {
+  RECOVERY: 'recovery',
+  TRAINING_FALLBACK: 'training-fallback',
+  POST_RECOVERY_LIGHT_TRAINING: 'post-recovery-light-training',
+};
+
 function normalizeTrainingModel(model) {
   return model === TRAINING_MODELS.SMART
     ? TRAINING_MODELS.SMART
