@@ -2234,6 +2234,14 @@ function buildSmartTrainingContext({
   };
 }
 
+function countFailedOrSkippedSetsFromSnapshot(snapshot = {}) {
+  const directSets = snapshot?.sets || [];
+  const liftSets = (snapshot?.lifts || []).flatMap(liftBlock => liftBlock?.sets || []);
+  const allSets = [...directSets, ...liftSets];
+
+  return allSets.filter(set => set?.failed || set?.skipped).length;
+}
+
 function buildSmartReadinessSignals(context = {}) {
   const completedEntries = (context.history || [])
     .filter(entry => Number(entry?.workoutNumber) > 0)
@@ -2254,12 +2262,20 @@ function buildSmartReadinessSignals(context = {}) {
     ['easy', 'normal'].includes(entry?.workoutEffort)
   ).length;
 
-  const recentFatigueScore = recentEntries.reduce((score, entry) => {
+  const recentFailedOrSkippedSetCount = recentEntries.reduce(
+    (total, entry) => total + countFailedOrSkippedSetsFromSnapshot(entry?.workoutSnapshot),
+    0
+  );
+
+  const effortFatigueScore = recentEntries.reduce((score, entry) => {
     if (entry?.workoutEffort === 'easy') return score - 1;
     if (entry?.workoutEffort === 'hard') return score + 1;
     if (['veryHard', 'max'].includes(entry?.workoutEffort)) return score + 2;
     return score;
   }, 0);
+
+  const recentFatigueScore =
+    effortFatigueScore + Math.min(recentFailedOrSkippedSetCount, 2);
 
   return {
     completedCount: completedEntries.length,
@@ -2269,6 +2285,8 @@ function buildSmartReadinessSignals(context = {}) {
     lastWasRestDay: Boolean(lastEntry?.restDay),
     recentHardCount,
     recentEasyCount,
+    recentFailedOrSkippedSetCount,
+    effortFatigueScore,
     recentFatigueScore,
   };
 }
