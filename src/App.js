@@ -2234,6 +2234,21 @@ function buildSmartTrainingContext({
   };
 }
 
+function getSmartEffortScore(effort) {
+  if (effort === 'easy') return -1;
+  if (effort === 'hard') return 1;
+  if (['veryHard', 'max'].includes(effort)) return 2;
+  return 0;
+}
+
+function isSmartHardEffort(effort) {
+  return getSmartEffortScore(effort) > 0;
+}
+
+function isSmartEasyOrNormalEffort(effort) {
+  return effort === 'easy' || effort === 'normal';
+}
+
 function countFailedOrSkippedSetsFromSnapshot(snapshot = {}) {
   const directSets = snapshot?.sets || [];
   const liftSets = (snapshot?.lifts || []).flatMap(liftBlock => liftBlock?.sets || []);
@@ -2284,11 +2299,11 @@ function buildSmartReadinessSignals(context = {}) {
   const recentDays = activeBlockDays.slice(-3);
 
   const recentHardCount = recentDays.filter(day =>
-    ['hard', 'veryHard', 'max'].includes(day.workoutEffort)
+    isSmartHardEffort(day.workoutEffort)
   ).length;
 
   const recentEasyCount = recentDays.filter(day =>
-    ['easy', 'normal'].includes(day.workoutEffort)
+    isSmartEasyOrNormalEffort(day.workoutEffort)
   ).length;
 
   const recentFailedOrSkippedSetCount = recentDays.reduce(
@@ -2296,12 +2311,10 @@ function buildSmartReadinessSignals(context = {}) {
     0
   );
 
-  const effortFatigueScore = recentDays.reduce((score, day) => {
-    if (day.workoutEffort === 'easy') return score - 1;
-    if (day.workoutEffort === 'hard') return score + 1;
-    if (['veryHard', 'max'].includes(day.workoutEffort)) return score + 2;
-    return score;
-  }, 0);
+  const effortFatigueScore = recentDays.reduce(
+    (score, day) => score + getSmartEffortScore(day.workoutEffort),
+    0
+  );
 
   const failedSetFatigueScore = Math.min(recentFailedOrSkippedSetCount, 2);
   const recentFatigueScore =
