@@ -2234,6 +2234,14 @@ function buildSmartTrainingContext({
   };
 }
 
+function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
+  const maxIndex = Math.max(generatedWorkouts.length - 1, 0);
+  return Math.min(
+    Math.max(Number(context?.currentIndex) || 0, 0),
+    maxIndex
+  );
+}
+
 function generateSmartWorkouts({
   programProfile,
   squat,
@@ -2277,8 +2285,9 @@ function generateSmartWorkouts({
     }));
   }
 
+  const nextWorkoutIndex = decideSmartNextWorkoutIndex(smartContext, generatedWorkouts);
   const visibleThroughIndex = Math.min(
-    Math.max(smartContext.currentIndex, 0),
+    Math.max(nextWorkoutIndex, 0),
     Math.max(generatedWorkouts.length - 1, 0)
   );
 
