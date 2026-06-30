@@ -2268,10 +2268,13 @@ function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
     maxIndex
   );
 
+  const shouldRecover = readiness.recentHardCount >= 2;
+
   return {
     index: nextIndex,
     readiness,
-    reason: 'current-index-fallback',
+    reason: shouldRecover ? 'fatigue-recovery' : 'current-index-fallback',
+    overrideType: shouldRecover ? 'rest' : null,
   };
 }
 
@@ -2324,13 +2327,33 @@ function generateSmartWorkouts({
     Math.max(generatedWorkouts.length - 1, 0)
   );
 
-  return generatedWorkouts.map((workout, index) => ({
-    ...workout,
-    smartVisible: index <= visibleThroughIndex,
-    smartCurrentIndex: smartContext.currentIndex,
-    smartCurrentCycle: smartContext.currentCycle,
-    smartDecision: index === visibleThroughIndex ? smartDecision : null,
-  }));
+  return generatedWorkouts.map((workout, index) => {
+    const isDecisionWorkout = index === visibleThroughIndex;
+    const shouldOverrideAsRest = isDecisionWorkout && smartDecision.overrideType === 'rest';
+
+    return {
+      ...(shouldOverrideAsRest
+        ? {
+          ...workout,
+          type: 'rest',
+          labelKey: 'restAndRecovery',
+          workoutEffort: 'easy',
+          lift: null,
+          lifts: [],
+          sets: [],
+          warmups: [],
+          accessories: [],
+          cooldownItems: [],
+          prepItems: [],
+        }
+        : workout),
+      smartVisible: index <= visibleThroughIndex,
+      smartCurrentIndex: smartContext.currentIndex,
+      smartCurrentCycle: smartContext.currentCycle,
+      smartDecision: isDecisionWorkout ? smartDecision : null,
+      smartOverride: shouldOverrideAsRest ? 'rest' : null,
+    };
+  });
 }
 
 function generateWorkoutsForTrainingModel(model, args = {}) {
