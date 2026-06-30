@@ -2382,6 +2382,23 @@ function buildSmartRecoveryWorkout(sourceWorkout = {}) {
   };
 }
 
+function buildSmartTrainingWorkout(sourceWorkout = {}, trainingCandidate = null) {
+  if (!trainingCandidate || trainingCandidate?.type !== 'training') {
+    return sourceWorkout;
+  }
+
+  if (sourceWorkout?.type === 'training') {
+    return sourceWorkout;
+  }
+
+  return {
+    ...trainingCandidate,
+    number: sourceWorkout.number,
+    smartSourceWorkoutNumber: trainingCandidate.number,
+    smartGeneratedTraining: true,
+  };
+}
+
 function generateSmartWorkouts({
   programProfile,
   squat,
@@ -2459,11 +2476,7 @@ function generateSmartWorkouts({
     const smartWorkout = shouldBuildRecoveryDay
       ? buildSmartRecoveryWorkout(workout)
       : shouldUseFallbackTraining
-        ? {
-            ...fallbackTrainingCandidate,
-            number: workout.number,
-            smartSourceWorkoutNumber: fallbackTrainingCandidate.number,
-          }
+        ? buildSmartTrainingWorkout(workout, fallbackTrainingCandidate)
         : workout;
 
     return {
