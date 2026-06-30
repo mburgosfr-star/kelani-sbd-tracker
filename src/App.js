@@ -2365,6 +2365,23 @@ function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
   };
 }
 
+function buildSmartRecoveryWorkout(sourceWorkout = {}) {
+  return {
+    ...sourceWorkout,
+    type: 'rest',
+    labelKey: 'restAndRecovery',
+    workoutEffort: 'easy',
+    lift: null,
+    lifts: [],
+    sets: [],
+    warmups: [],
+    accessories: [],
+    cooldownItems: [],
+    prepItems: [],
+    smartGeneratedRecovery: true,
+  };
+}
+
 function generateSmartWorkouts({
   programProfile,
   squat,
@@ -2440,19 +2457,7 @@ function generateSmartWorkouts({
       fallbackTrainingCandidate?.type === 'training';
 
     const smartWorkout = shouldBuildRecoveryDay
-      ? {
-          ...workout,
-          type: 'rest',
-          labelKey: 'restAndRecovery',
-          workoutEffort: 'easy',
-          lift: null,
-          lifts: [],
-          sets: [],
-          warmups: [],
-          accessories: [],
-          cooldownItems: [],
-          prepItems: [],
-        }
+      ? buildSmartRecoveryWorkout(workout)
       : shouldUseFallbackTraining
         ? {
             ...fallbackTrainingCandidate,
