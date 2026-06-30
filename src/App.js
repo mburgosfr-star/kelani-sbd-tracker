@@ -2313,11 +2313,17 @@ function buildSmartReadinessSignals(context = {}) {
 }
 
 function decideSmartNextDayType(readiness = {}) {
-  const shouldRecover =
-    Number(readiness.recentFatigueScore) >= 2 &&
-    !readiness.lastWasRestDay;
+  if (readiness.lastWasRestDay) return 'training';
 
-  return shouldRecover ? 'recovery' : 'training';
+  if (Number(readiness.recentFatigueScore) >= 2) {
+    return 'recovery';
+  }
+
+  if (Number(readiness.activeBlockCompletedCount) >= 3) {
+    return 'recovery';
+  }
+
+  return 'training';
 }
 
 function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
@@ -2335,7 +2341,11 @@ function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
     index: nextIndex,
     dayType,
     readiness,
-    reason: dayType === 'recovery' ? 'fatigue-recovery' : 'training-fallback',
+    reason: dayType === 'recovery'
+      ? Number(readiness.recentFatigueScore) >= 2
+        ? 'fatigue-recovery'
+        : 'training-streak-recovery'
+      : 'training-fallback',
     overrideType: dayType === 'recovery' ? 'rest' : null,
   };
 }
