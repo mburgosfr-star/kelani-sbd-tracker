@@ -2210,6 +2210,68 @@ function generateProgramForProfile(programProfile, s, b, d, accessoryMode = 'off
   return generateProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode);
 }
 
+function generateSmartWorkouts({
+  programProfile,
+  squat,
+  bench,
+  deadlift,
+  accessoryMode = 'off',
+  accessoryPRs = {},
+  preparationMode = 'basicFirst',
+  deadliftVariant = 'standard',
+  benchPressVariant = 'standard',
+  squatVariant = 'standard',
+  cooldownMode = 'upperBackFriendly',
+}) {
+  return generateProgramForProfile(
+    programProfile,
+    squat,
+    bench,
+    deadlift,
+    accessoryMode,
+    accessoryPRs,
+    preparationMode,
+    deadliftVariant,
+    benchPressVariant,
+    squatVariant,
+    cooldownMode
+  );
+}
+
+function generateWorkoutsForTrainingModel(model, args = {}) {
+  const workoutArgs = {
+    programProfile: normalizeProgramProfile(args.programProfile),
+    squat: args.squat,
+    bench: args.bench,
+    deadlift: args.deadlift,
+    accessoryMode: args.accessoryMode ?? 'off',
+    accessoryPRs: args.accessoryPRs || {},
+    preparationMode: args.preparationMode ?? 'basicFirst',
+    deadliftVariant: args.deadliftVariant ?? 'standard',
+    benchPressVariant: args.benchPressVariant ?? 'standard',
+    squatVariant: args.squatVariant ?? 'standard',
+    cooldownMode: args.cooldownMode ?? 'upperBackFriendly',
+  };
+
+  if (isSmartTrainingModel(model)) {
+    return generateSmartWorkouts(workoutArgs);
+  }
+
+  return generateProgramForProfile(
+    workoutArgs.programProfile,
+    workoutArgs.squat,
+    workoutArgs.bench,
+    workoutArgs.deadlift,
+    workoutArgs.accessoryMode,
+    workoutArgs.accessoryPRs,
+    workoutArgs.preparationMode,
+    workoutArgs.deadliftVariant,
+    workoutArgs.benchPressVariant,
+    workoutArgs.squatVariant,
+    workoutArgs.cooldownMode
+  );
+}
+
 
 function RestTimer({ seconds, endTime, onDismiss, t }) {
   const [remaining, setRemaining] = useState(() => Math.max(0, Math.ceil(((endTime || Date.now() + seconds * 1000) - Date.now()) / 1000)));
@@ -9306,7 +9368,19 @@ function App() {
       const savedCooldownMode = normalizeCooldownMode(
         data.cooldownMode ?? profileSettings.cooldownMode ?? profileSettings.includeCooldown
       );
-      const generatedWorkouts = generateProgramForProfile(savedProgramProfile, restoredPrs.Squat, restoredPrs.Bench, restoredPrs.Deadlift, savedAccessoryMode, data.accessoryPRs || {}, savedPreparationMode, savedDeadliftVariant, savedBenchPressVariant, savedSquatVariant, savedCooldownMode);
+      const generatedWorkouts = generateWorkoutsForTrainingModel(savedTrainingModel, {
+        programProfile: savedProgramProfile,
+        squat: restoredPrs.Squat,
+        bench: restoredPrs.Bench,
+        deadlift: restoredPrs.Deadlift,
+        accessoryMode: savedAccessoryMode,
+        accessoryPRs: data.accessoryPRs || {},
+        preparationMode: savedPreparationMode,
+        deadliftVariant: savedDeadliftVariant,
+        benchPressVariant: savedBenchPressVariant,
+        squatVariant: savedSquatVariant,
+        cooldownMode: savedCooldownMode,
+      });
       const savedInProgress = data.inProgress || null;
       const savedMeetPlannerAttempts = data.meetPlannerAttempts || {};
       const savedMeetPrepChecklist = data.meetPrepChecklist || {};
@@ -9425,26 +9499,26 @@ function App() {
   useEffect(() => {
     if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
 
-    const generatedWorkouts = generateProgramForProfile(
+    const generatedWorkouts = generateWorkoutsForTrainingModel(trainingModel, {
       programProfile,
-      prs.Squat,
-      prs.Bench,
-      prs.Deadlift,
+      squat: prs.Squat,
+      bench: prs.Bench,
+      deadlift: prs.Deadlift,
       accessoryMode,
       accessoryPRs,
       preparationMode,
       deadliftVariant,
       benchPressVariant,
       squatVariant,
-      cooldownMode
-    );
+      cooldownMode,
+    });
 
     setWorkouts(prev => removeDeprecatedPrepItemsFromWorkouts(applyAccessoryPlanToWorkouts(
       prev,
       generatedWorkouts,
       getCompletedWorkoutNumbers(history, currentCycle)
     )));
-  }, [hasLoadedData, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
+  }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
 
   useEffect(() => {
     if (screen !== 'completed' || !completedWorkout) return;
@@ -9508,7 +9582,19 @@ function App() {
     setDeadliftVariant(defaultDeadliftVariant);
     setCooldownMode(defaultCooldownMode);
 
-    setWorkouts(generateProgramForProfile(defaultProgramProfile, s, b, d, defaultAccessoryMode, {}, defaultPreparationMode, defaultDeadliftVariant, defaultBenchPressVariant, defaultSquatVariant, defaultCooldownMode));
+    setWorkouts(generateWorkoutsForTrainingModel(defaultTrainingModel, {
+      programProfile: defaultProgramProfile,
+      squat: s,
+      bench: b,
+      deadlift: d,
+      accessoryMode: defaultAccessoryMode,
+      accessoryPRs: {},
+      preparationMode: defaultPreparationMode,
+      deadliftVariant: defaultDeadliftVariant,
+      benchPressVariant: defaultBenchPressVariant,
+      squatVariant: defaultSquatVariant,
+      cooldownMode: defaultCooldownMode,
+    }));
     setCurrentWorkoutIndex(0);
     setSelectedIndex(0);
     setCurrentCycle(1);
@@ -9628,7 +9714,19 @@ function handleSaveMaxes(lift, values) {
   };
 
   setPrs(updatedPrs);
-  setWorkouts(generateProgramForProfile(programProfile, updatedPrs.Squat, updatedPrs.Bench, updatedPrs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode));
+  setWorkouts(generateWorkoutsForTrainingModel(trainingModel, {
+    programProfile,
+    squat: updatedPrs.Squat,
+    bench: updatedPrs.Bench,
+    deadlift: updatedPrs.Deadlift,
+    accessoryMode,
+    accessoryPRs,
+    preparationMode,
+    deadliftVariant,
+    benchPressVariant,
+    squatVariant,
+    cooldownMode,
+  }));
   setMeetPlannerAttempts({});
 
   setHistory(prev => {
@@ -9663,7 +9761,19 @@ function handleStartNewCycle() {
   }
 
   const nextCycle = currentCycle + 1;
-  const newWorkouts = generateProgramForProfile(programProfile, prs.Squat, prs.Bench, prs.Deadlift, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode);
+  const newWorkouts = generateWorkoutsForTrainingModel(trainingModel, {
+    programProfile,
+    squat: prs.Squat,
+    bench: prs.Bench,
+    deadlift: prs.Deadlift,
+    accessoryMode,
+    accessoryPRs,
+    preparationMode,
+    deadliftVariant,
+    benchPressVariant,
+    squatVariant,
+    cooldownMode,
+  });
 
   setCurrentCycle(nextCycle);
   setMeetPlannerAttempts({});
