@@ -2281,9 +2281,9 @@ function isSmartEasyOrNormalEffort(effort) {
 }
 
 function countFailedOrSkippedSetsFromSnapshot(snapshot = {}) {
-  const directSets = snapshot?.sets || [];
   const liftSets = (snapshot?.lifts || []).flatMap(liftBlock => liftBlock?.sets || []);
-  const allSets = [...directSets, ...liftSets];
+  const directSets = snapshot?.sets || [];
+  const allSets = liftSets.length > 0 ? liftSets : directSets;
 
   return allSets.filter(set => set?.failed || set?.skipped).length;
 }
