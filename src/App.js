@@ -835,6 +835,11 @@ const SMART_THRESHOLDS = {
   FAILED_SET_DELOAD_COUNT: 2,
 };
 
+const SMART_DELOAD = {
+  LOAD_FACTOR: 0.9,
+  MIN_PCT: 0.5,
+};
+
 const SMART_GENERATED_FLAGS = {
   RECOVERY: 'smartGeneratedRecovery',
   TRAINING: 'smartGeneratedTraining',
@@ -2515,7 +2520,44 @@ function resetSmartWorkoutProgress(workout = {}) {
   };
 }
 
-function buildSmartTrainingWorkout(sourceWorkout = {}, trainingCandidate = null, options = {}) {
+function buildSmartTrainingWorkout(sourceWorkout = {}
+
+function reduceSmartDeloadSet(set = {}) {
+  const nextSet = { ...set };
+  const weight = Number(nextSet.weight);
+  const pct = Number(nextSet.pct);
+
+  if (Number.isFinite(weight) && weight > 0) {
+    nextSet.weight = Math.round((weight * SMART_DELOAD.LOAD_FACTOR) / 2.5) * 2.5;
+  }
+
+  if (Number.isFinite(pct) && pct > 0) {
+    nextSet.pct = Math.max(
+      SMART_DELOAD.MIN_PCT,
+      Math.round(pct * SMART_DELOAD.LOAD_FACTOR * 1000) / 1000
+    );
+  }
+
+  return nextSet;
+}
+
+function buildSmartDeloadWorkout(sourceWorkout = {}, trainingCandidate = null) {
+  const trainingWorkout = buildSmartTrainingWorkout(sourceWorkout, trainingCandidate, {
+    forceReplacement: true,
+  });
+
+  return {
+    ...trainingWorkout,
+    smartDayType: SMART_DAY_TYPES.DELOAD,
+    smartGeneratedDeload: true,
+    sets: (trainingWorkout.sets || []).map(reduceSmartDeloadSet),
+    lifts: (trainingWorkout.lifts || []).map(liftBlock => ({
+      ...liftBlock,
+      sets: (liftBlock.sets || []).map(reduceSmartDeloadSet),
+    })),
+  };
+}
+, trainingCandidate = null, options = {}) {
   if (!trainingCandidate || trainingCandidate?.type !== 'training') {
     return sourceWorkout;
   }
