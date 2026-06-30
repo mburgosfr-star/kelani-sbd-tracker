@@ -2472,6 +2472,7 @@ function resetSmartWorkoutProgress(workout = {}) {
     smartCurrentIndex: null,
     smartCurrentCycle: null,
     smartSourceWorkoutNumber: null,
+    smartGeneratedDeload: false,
     [SMART_GENERATED_FLAGS.RECOVERY]: false,
     [SMART_GENERATED_FLAGS.TRAINING]: false,
     prepItems: (workout.prepItems || []).map(resetSmartChecklistProgress),
@@ -2552,23 +2553,6 @@ function reduceSmartDeloadSet(set = {}) {
   nextSet.adjustedFromOriginal = false;
 
   return nextSet;
-}) {
-  const nextSet = { ...set };
-  const weight = Number(nextSet.weight);
-  const pct = Number(nextSet.pct);
-
-  if (Number.isFinite(weight) && weight > 0) {
-    nextSet.weight = Math.round((weight * SMART_DELOAD.LOAD_FACTOR) / 2.5) * 2.5;
-  }
-
-  if (Number.isFinite(pct) && pct > 0) {
-    nextSet.pct = Math.max(
-      SMART_DELOAD.MIN_PCT,
-      Math.round(pct * SMART_DELOAD.LOAD_FACTOR * 1000) / 1000
-    );
-  }
-
-  return nextSet;
 }
 
 function buildSmartDeloadWorkout(sourceWorkout = {}, trainingCandidate = null) {
@@ -2578,6 +2562,8 @@ function buildSmartDeloadWorkout(sourceWorkout = {}, trainingCandidate = null) {
 
   return {
     ...trainingWorkout,
+    labelKey: 'deload',
+    label: null,
     smartDayType: SMART_DAY_TYPES.DELOAD,
     smartGeneratedDeload: true,
     sets: (trainingWorkout.sets || []).map(reduceSmartDeloadSet),
