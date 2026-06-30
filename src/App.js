@@ -2210,6 +2210,30 @@ function generateProgramForProfile(programProfile, s, b, d, accessoryMode = 'off
   return generateProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode);
 }
 
+function buildSmartTrainingContext({
+  history = [],
+  currentIndex = 0,
+  currentCycle = 1,
+} = {}) {
+  const normalizedCycle = Number(currentCycle) || 1;
+  const normalizedCurrentIndex = Math.max(0, Number(currentIndex) || 0);
+  const cycleHistory = (history || []).filter(entry =>
+    Number(entry?.cycle) === normalizedCycle
+  );
+  const completedWorkoutNumbers = [...new Set(
+    cycleHistory
+      .map(entry => Number(entry?.workoutNumber))
+      .filter(number => Number.isFinite(number) && number > 0)
+  )].sort((a, b) => a - b);
+
+  return {
+    history: cycleHistory,
+    currentIndex: normalizedCurrentIndex,
+    currentCycle: normalizedCycle,
+    completedWorkoutNumbers,
+  };
+}
+
 function generateSmartWorkouts({
   programProfile,
   squat,
@@ -2222,8 +2246,17 @@ function generateSmartWorkouts({
   benchPressVariant = 'standard',
   squatVariant = 'standard',
   cooldownMode = 'upperBackFriendly',
+  history = [],
+  currentIndex = 0,
+  currentCycle = 1,
 }) {
-  return generateProgramForProfile(
+  const smartContext = buildSmartTrainingContext({
+    history,
+    currentIndex,
+    currentCycle,
+  });
+
+  const generatedWorkouts = generateProgramForProfile(
     programProfile,
     squat,
     bench,
@@ -2236,6 +2269,12 @@ function generateSmartWorkouts({
     squatVariant,
     cooldownMode
   );
+
+  if (!Number.isFinite(smartContext.currentIndex)) {
+    return generatedWorkouts;
+  }
+
+  return generatedWorkouts;
 }
 
 function generateWorkoutsForTrainingModel(model, args = {}) {
@@ -2251,6 +2290,9 @@ function generateWorkoutsForTrainingModel(model, args = {}) {
     benchPressVariant: args.benchPressVariant ?? 'standard',
     squatVariant: args.squatVariant ?? 'standard',
     cooldownMode: args.cooldownMode ?? 'upperBackFriendly',
+    history: args.history || [],
+    currentIndex: args.currentIndex ?? 0,
+    currentCycle: args.currentCycle ?? 1,
   };
 
   if (isSmartTrainingModel(model)) {
@@ -9380,6 +9422,9 @@ function App() {
         benchPressVariant: savedBenchPressVariant,
         squatVariant: savedSquatVariant,
         cooldownMode: savedCooldownMode,
+        history: savedHistory,
+        currentIndex: data.inProgress?.currentIndex ?? 0,
+        currentCycle: savedCycle,
       });
       const savedInProgress = data.inProgress || null;
       const savedMeetPlannerAttempts = data.meetPlannerAttempts || {};
@@ -9511,6 +9556,9 @@ function App() {
       benchPressVariant,
       squatVariant,
       cooldownMode,
+      history,
+      currentIndex,
+      currentCycle,
     });
 
     setWorkouts(prev => removeDeprecatedPrepItemsFromWorkouts(applyAccessoryPlanToWorkouts(
@@ -9518,7 +9566,7 @@ function App() {
       generatedWorkouts,
       getCompletedWorkoutNumbers(history, currentCycle)
     )));
-  }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentCycle]);
+  }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentIndex, currentCycle]);
 
   useEffect(() => {
     if (screen !== 'completed' || !completedWorkout) return;
@@ -9594,6 +9642,9 @@ function App() {
       benchPressVariant: defaultBenchPressVariant,
       squatVariant: defaultSquatVariant,
       cooldownMode: defaultCooldownMode,
+      history: [],
+      currentIndex: 0,
+      currentCycle: 1,
     }));
     setCurrentWorkoutIndex(0);
     setSelectedIndex(0);
@@ -9726,6 +9777,9 @@ function handleSaveMaxes(lift, values) {
     benchPressVariant,
     squatVariant,
     cooldownMode,
+    history,
+    currentIndex,
+    currentCycle,
   }));
   setMeetPlannerAttempts({});
 
@@ -9773,6 +9827,9 @@ function handleStartNewCycle() {
     benchPressVariant,
     squatVariant,
     cooldownMode,
+    history,
+    currentIndex: 0,
+    currentCycle: nextCycle,
   });
 
   setCurrentCycle(nextCycle);
