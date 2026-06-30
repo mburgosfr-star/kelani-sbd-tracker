@@ -826,6 +826,13 @@ const SMART_OVERRIDES = {
   POST_RECOVERY_LIGHT_TRAINING: 'post-recovery-light-training',
 };
 
+const SMART_THRESHOLDS = {
+  RECENT_DAYS: 3,
+  FATIGUE_RECOVERY_SCORE: 2,
+  TRAINING_STREAK_RECOVERY_DAYS: 3,
+  FAILED_SET_FATIGUE_CAP: 2,
+};
+
 function normalizeTrainingModel(model) {
   return model === TRAINING_MODELS.SMART
     ? TRAINING_MODELS.SMART
