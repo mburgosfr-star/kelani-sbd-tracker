@@ -4266,7 +4266,7 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingImport.data));
     setNotice(t.importDataSuccess);
     setPendingImport(null);
-    window.location.reload();
+    window.window.location.reload();
   };
 
   const importSummary = pendingImport?.summary;
@@ -11888,7 +11888,7 @@ if (typeof window !== 'undefined') {
     }
 
     localStorage.setItem(key, JSON.stringify(data));
-    location.reload();
+    window.location.reload();
   };
 }
 
