@@ -2303,8 +2303,9 @@ function buildSmartReadinessSignals(context = {}) {
     return score;
   }, 0);
 
+  const failedSetFatigueScore = Math.min(recentFailedOrSkippedSetCount, 2);
   const recentFatigueScore =
-    effortFatigueScore + Math.min(recentFailedOrSkippedSetCount, 2);
+    Math.max(effortFatigueScore, 0) + failedSetFatigueScore;
 
   return {
     completedCount: workoutDays.length,
@@ -2316,6 +2317,7 @@ function buildSmartReadinessSignals(context = {}) {
     recentEasyCount,
     recentFailedOrSkippedSetCount,
     effortFatigueScore,
+    failedSetFatigueScore,
     recentFatigueScore,
   };
 }
