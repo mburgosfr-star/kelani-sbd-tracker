@@ -2312,6 +2312,21 @@ function buildSmartReadinessSignals(context = {}) {
   };
 }
 
+function isHeavySmartTrainingCandidate(workout = {}) {
+  const label = String(workout.labelKey || workout.label || '').toLowerCase();
+  const type = String(workout.type || '').toLowerCase();
+
+  if (type === 'meet') return true;
+
+  return (
+    label.includes('heavy') ||
+    label.includes('peak') ||
+    label.includes('opener') ||
+    label.includes('attempt') ||
+    label.includes('max')
+  );
+}
+
 function decideSmartNextDayType(readiness = {}) {
   if (readiness.lastWasRestDay) return 'training';
 
@@ -2399,11 +2414,21 @@ function generateSmartWorkouts({
     Math.max(generatedWorkouts.length - 1, 0)
   );
 
-  const fallbackTrainingCandidate =
-    generatedWorkouts
-      .slice(visibleThroughIndex)
-      .find(candidate => candidate?.type === 'training') ||
+  const fallbackTrainingPool = generatedWorkouts.slice(visibleThroughIndex);
+  const defaultTrainingCandidate =
+    fallbackTrainingPool.find(candidate => candidate?.type === 'training') ||
     generatedWorkouts[visibleThroughIndex];
+
+  const lighterTrainingCandidateAfterRecovery = smartDecision.readiness?.lastWasRestDay
+    ? fallbackTrainingPool.find(candidate =>
+      candidate?.type === 'training' &&
+      !isHeavySmartTrainingCandidate(candidate)
+    )
+    : null;
+
+  const fallbackTrainingCandidate =
+    lighterTrainingCandidateAfterRecovery ||
+    defaultTrainingCandidate;
 
   return generatedWorkouts.map((workout, index) => {
     const isDecisionWorkout = index === visibleThroughIndex;
@@ -2443,7 +2468,11 @@ function generateSmartWorkouts({
       smartCurrentCycle: smartContext.currentCycle,
       smartDecision: isDecisionWorkout ? smartDecision : null,
       smartDayType: isDecisionWorkout ? smartDecision.dayType : null,
-      smartOverride: shouldBuildRecoveryDay ? 'recovery' : shouldUseFallbackTraining ? 'training-fallback' : null,
+      smartOverride: shouldBuildRecoveryDay
+        ? 'recovery'
+        : shouldUseFallbackTraining
+          ? (lighterTrainingCandidateAfterRecovery ? 'post-recovery-light-training' : 'training-fallback')
+          : null,
     };
   });
 }
