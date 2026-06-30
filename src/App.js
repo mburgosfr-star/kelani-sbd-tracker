@@ -2247,30 +2247,51 @@ function buildSmartReadinessSignals(context = {}) {
     .filter(entry => Number(entry?.workoutNumber) > 0)
     .sort((a, b) => Number(a.workoutNumber) - Number(b.workoutNumber));
 
-  const lastEntry = completedEntries[completedEntries.length - 1] || null;
-  const lastRestIndex = completedEntries.findLastIndex(entry => entry?.restDay);
-  const activeBlockEntries = lastRestIndex >= 0
-    ? completedEntries.slice(lastRestIndex + 1)
-    : completedEntries;
-  const recentEntries = activeBlockEntries.slice(-3);
+  const workoutDays = [...completedEntries.reduce((map, entry) => {
+    const workoutNumber = Number(entry?.workoutNumber);
+    if (!Number.isFinite(workoutNumber) || workoutNumber <= 0) return map;
 
-  const recentHardCount = recentEntries.filter(entry =>
-    ['hard', 'veryHard', 'max'].includes(entry?.workoutEffort)
+    const current = map.get(workoutNumber) || {
+      workoutNumber,
+      entries: [],
+      workoutEffort: null,
+      restDay: false,
+      failedOrSkippedSetCount: 0,
+    };
+
+    current.entries.push(entry);
+    current.workoutEffort = current.workoutEffort || entry?.workoutEffort || null;
+    current.restDay = current.restDay || Boolean(entry?.restDay);
+    current.failedOrSkippedSetCount += countFailedOrSkippedSetsFromSnapshot(entry?.workoutSnapshot);
+
+    map.set(workoutNumber, current);
+    return map;
+  }, new Map()).values()].sort((a, b) => a.workoutNumber - b.workoutNumber);
+
+  const lastDay = workoutDays[workoutDays.length - 1] || null;
+  const lastRestIndex = workoutDays.findLastIndex(day => day.restDay);
+  const activeBlockDays = lastRestIndex >= 0
+    ? workoutDays.slice(lastRestIndex + 1)
+    : workoutDays;
+  const recentDays = activeBlockDays.slice(-3);
+
+  const recentHardCount = recentDays.filter(day =>
+    ['hard', 'veryHard', 'max'].includes(day.workoutEffort)
   ).length;
 
-  const recentEasyCount = recentEntries.filter(entry =>
-    ['easy', 'normal'].includes(entry?.workoutEffort)
+  const recentEasyCount = recentDays.filter(day =>
+    ['easy', 'normal'].includes(day.workoutEffort)
   ).length;
 
-  const recentFailedOrSkippedSetCount = recentEntries.reduce(
-    (total, entry) => total + countFailedOrSkippedSetsFromSnapshot(entry?.workoutSnapshot),
+  const recentFailedOrSkippedSetCount = recentDays.reduce(
+    (total, day) => total + day.failedOrSkippedSetCount,
     0
   );
 
-  const effortFatigueScore = recentEntries.reduce((score, entry) => {
-    if (entry?.workoutEffort === 'easy') return score - 1;
-    if (entry?.workoutEffort === 'hard') return score + 1;
-    if (['veryHard', 'max'].includes(entry?.workoutEffort)) return score + 2;
+  const effortFatigueScore = recentDays.reduce((score, day) => {
+    if (day.workoutEffort === 'easy') return score - 1;
+    if (day.workoutEffort === 'hard') return score + 1;
+    if (['veryHard', 'max'].includes(day.workoutEffort)) return score + 2;
     return score;
   }, 0);
 
@@ -2278,11 +2299,11 @@ function buildSmartReadinessSignals(context = {}) {
     effortFatigueScore + Math.min(recentFailedOrSkippedSetCount, 2);
 
   return {
-    completedCount: completedEntries.length,
-    activeBlockCompletedCount: activeBlockEntries.length,
-    lastWorkoutNumber: Number(lastEntry?.workoutNumber) || 0,
-    lastWorkoutEffort: lastEntry?.workoutEffort || null,
-    lastWasRestDay: Boolean(lastEntry?.restDay),
+    completedCount: workoutDays.length,
+    activeBlockCompletedCount: activeBlockDays.length,
+    lastWorkoutNumber: Number(lastDay?.workoutNumber) || 0,
+    lastWorkoutEffort: lastDay?.workoutEffort || null,
+    lastWasRestDay: Boolean(lastDay?.restDay),
     recentHardCount,
     recentEasyCount,
     recentFailedOrSkippedSetCount,
