@@ -11787,6 +11787,54 @@ if (showLaunchSplash) {
   );
 }
 
+if (typeof window !== 'undefined') {
+  window.__kelaniSmartDebug = () => {
+    const key = 'kel-powerlifting-user-data-v1';
+    const data = JSON.parse(localStorage.getItem(key) || '{}');
+    const workouts = data.inProgress?.workouts || [];
+
+    return {
+      trainingModel: data.trainingModel || localStorage.getItem('trainingModel'),
+      currentCycle: data.currentCycle,
+      currentIndex: data.inProgress?.currentIndex,
+      selectedIndex: data.inProgress?.selectedIndex,
+      visibleWorkouts: workouts
+        .filter(workout => workout.smartVisible !== false)
+        .map(workout => ({
+          number: workout.number,
+          type: workout.type,
+          smartDayType: workout.smartDayType,
+          smartOverride: workout.smartOverride,
+          smartGeneratedDeload: workout.smartGeneratedDeload,
+          smartGeneratedRecovery: workout.smartGeneratedRecovery,
+          smartGeneratedTraining: workout.smartGeneratedTraining,
+          smartDecisionSummary: workout.smartDecisionSummary,
+          lifts: (workout.lifts || []).map(lift => ({
+            lift: lift.lift,
+            setCount: (lift.sets || []).length,
+            sets: (lift.sets || []).map(set => ({
+              reps: set.reps,
+              weight: set.weight,
+              pct: set.pct,
+              failed: set.failed,
+              skipped: set.skipped,
+              done: set.done,
+            })),
+          })),
+        })),
+      history: (data.history || []).map(entry => ({
+        workoutNumber: entry.workoutNumber,
+        cycle: entry.cycle,
+        lift: entry.lift,
+        restDay: entry.restDay,
+        smartDayType: entry.smartDayType,
+        workoutEffort: entry.workoutEffort,
+        failedOrSkippedSetCount: entry.failedOrSkippedSetCount,
+      })),
+    };
+  };
+}
+
 if (screen === null) {
   return (
     <div style={{
