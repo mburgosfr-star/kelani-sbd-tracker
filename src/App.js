@@ -2244,7 +2244,12 @@ function countFailedOrSkippedSetsFromSnapshot(snapshot = {}) {
 
 function buildSmartReadinessSignals(context = {}) {
   const completedEntries = (context.history || [])
-    .filter(entry => Number(entry?.workoutNumber) > 0)
+    .filter(entry =>
+      Number(entry?.workoutNumber) > 0 &&
+      !entry?.manualMax &&
+      !entry?.seedMax &&
+      (entry?.workoutSnapshot || entry?.restDay)
+    )
     .sort((a, b) => Number(a.workoutNumber) - Number(b.workoutNumber));
 
   const workoutDays = [...completedEntries.reduce((map, entry) => {
