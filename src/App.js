@@ -2291,6 +2291,14 @@ function buildSmartReadinessSignals(context = {}) {
   };
 }
 
+function decideSmartNextDayType(readiness = {}) {
+  const shouldRecover =
+    Number(readiness.recentFatigueScore) >= 2 &&
+    !readiness.lastWasRestDay;
+
+  return shouldRecover ? 'recovery' : 'training';
+}
+
 function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
   const readiness = buildSmartReadinessSignals(context);
   const maxIndex = Math.max(generatedWorkouts.length - 1, 0);
@@ -2300,14 +2308,14 @@ function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
     maxIndex
   );
 
-  const shouldRecover = readiness.recentFatigueScore >= 2 && !readiness.lastWasRestDay;
+  const dayType = decideSmartNextDayType(readiness);
 
   return {
     index: nextIndex,
+    dayType,
     readiness,
-    reason: shouldRecover ? 'fatigue-recovery' : 'current-index-fallback',
-    overrideType: shouldRecover ? 'rest' : null,
-    createdAt: new Date().toISOString(),
+    reason: dayType === 'recovery' ? 'fatigue-recovery' : 'training-fallback',
+    overrideType: dayType === 'recovery' ? 'rest' : null,
   };
 }
 
@@ -2360,16 +2368,23 @@ function generateSmartWorkouts({
     Math.max(generatedWorkouts.length - 1, 0)
   );
 
+  const fallbackTrainingCandidate =
+    generatedWorkouts
+      .slice(visibleThroughIndex)
+      .find(candidate => candidate?.type === 'training') ||
+    generatedWorkouts[visibleThroughIndex];
+
   return generatedWorkouts.map((workout, index) => {
     const isDecisionWorkout = index === visibleThroughIndex;
-    const shouldOverrideAsRest =
+    const shouldBuildRecoveryDay = isDecisionWorkout && smartDecision.dayType === 'recovery';
+    const shouldUseFallbackTraining =
       isDecisionWorkout &&
-      smartDecision.overrideType === 'rest' &&
-      workout.type === 'training';
+      smartDecision.dayType === 'training' &&
+      workout.type !== 'training' &&
+      fallbackTrainingCandidate?.type === 'training';
 
-    return {
-      ...(shouldOverrideAsRest
-        ? {
+    const smartWorkout = shouldBuildRecoveryDay
+      ? {
           ...workout,
           type: 'rest',
           labelKey: 'restAndRecovery',
@@ -2382,12 +2397,22 @@ function generateSmartWorkouts({
           cooldownItems: [],
           prepItems: [],
         }
-        : workout),
+      : shouldUseFallbackTraining
+        ? {
+            ...fallbackTrainingCandidate,
+            number: workout.number,
+            smartSourceWorkoutNumber: fallbackTrainingCandidate.number,
+          }
+        : workout;
+
+    return {
+      ...smartWorkout,
       smartVisible: index <= visibleThroughIndex,
       smartCurrentIndex: smartContext.currentIndex,
       smartCurrentCycle: smartContext.currentCycle,
       smartDecision: isDecisionWorkout ? smartDecision : null,
-      smartOverride: shouldOverrideAsRest ? 'rest' : null,
+      smartDayType: isDecisionWorkout ? smartDecision.dayType : null,
+      smartOverride: shouldBuildRecoveryDay ? 'recovery' : shouldUseFallbackTraining ? 'training-fallback' : null,
     };
   });
 }
