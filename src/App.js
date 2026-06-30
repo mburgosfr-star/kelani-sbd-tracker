@@ -2529,14 +2529,7 @@ function buildSmartTrainingWorkout(sourceWorkout = {}, trainingCandidate = null,
   };
 }
 
-function reduceSmartDeloadSet(set = {}
-
-function limitSmartDeloadSets(sets = []) {
-  return (sets || [])
-    .slice(0, 2)
-    .map(reduceSmartDeloadSet);
-}
-) {
+function reduceSmartDeloadSet(set = {}) {
   const nextSet = { ...set };
   const weight = Number(nextSet.weight);
   const pct = Number(nextSet.pct);
@@ -2562,6 +2555,12 @@ function limitSmartDeloadSets(sets = []) {
   return nextSet;
 }
 
+function limitSmartDeloadSets(sets = []) {
+  return (sets || [])
+    .slice(0, 2)
+    .map(reduceSmartDeloadSet);
+}
+
 function buildSmartDeloadWorkout(sourceWorkout = {}, trainingCandidate = null) {
   const trainingWorkout = buildSmartTrainingWorkout(sourceWorkout, trainingCandidate, {
     forceReplacement: true,
@@ -2573,10 +2572,10 @@ function buildSmartDeloadWorkout(sourceWorkout = {}, trainingCandidate = null) {
     label: null,
     smartDayType: SMART_DAY_TYPES.DELOAD,
     smartGeneratedDeload: true,
-    sets: (trainingWorkout.sets || []).map(reduceSmartDeloadSet),
+    sets: limitSmartDeloadSets(trainingWorkout.sets || []),
     lifts: (trainingWorkout.lifts || []).map(liftBlock => ({
       ...liftBlock,
-      sets: (liftBlock.sets || []).map(reduceSmartDeloadSet),
+      sets: limitSmartDeloadSets(liftBlock.sets || []),
     })),
   };
 }
