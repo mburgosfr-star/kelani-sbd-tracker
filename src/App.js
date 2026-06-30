@@ -2682,6 +2682,7 @@ function generateSmartWorkouts({
     return generatedWorkouts.map(workout => ({
       ...workout,
       smartVisible: true,
+      smartSelectable: true,
     }));
   }
 
@@ -2700,15 +2701,20 @@ function generateSmartWorkouts({
 
   return generatedWorkouts.map((workout, index) => {
     const isDecisionWorkout = index === visibleThroughIndex;
-    const shouldBuildRecoveryDay = isDecisionWorkout && smartDecision.dayType === 'recovery';
+    const shouldBuildRecoveryDay =
+      isDecisionWorkout &&
+      smartDecision.dayType === SMART_DAY_TYPES.RECOVERY;
+    const shouldBuildDeloadDay =
+      isDecisionWorkout &&
+      smartDecision.dayType === SMART_DAY_TYPES.DELOAD;
     const shouldUseFallbackTraining =
       isDecisionWorkout &&
-      smartDecision.dayType === 'training' &&
+      smartDecision.dayType === SMART_DAY_TYPES.TRAINING &&
       fallbackTrainingCandidate?.type === 'training' &&
       (
         workout.type !== 'training' ||
         (
-          smartDecision.readiness?.lastWasRestDay &&
+          smartDecision.readiness?.lastWasRecoveryIntervention &&
           isHeavySmartTrainingCandidate(workout) &&
           fallbackTrainingCandidate.number !== workout.number
         )
@@ -2716,24 +2722,59 @@ function generateSmartWorkouts({
 
     const smartWorkout = shouldBuildRecoveryDay
       ? buildSmartRecoveryWorkout(workout)
-      : shouldUseFallbackTraining
-        ? buildSmartTrainingWorkout(workout, fallbackTrainingCandidate, {
-          forceReplacement: true,
-        })
-        : workout;
+      : shouldBuildDeloadDay
+        ? buildSmartDeloadWorkout(workout, fallbackTrainingCandidate)
+        : shouldUseFallbackTraining
+          ? buildSmartTrainingWorkout(workout, fallbackTrainingCandidate, {
+            forceReplacement: true,
+          })
+          : workout;
+
+    const smartDecisionSummary = isDecisionWorkout
+      ? {
+        dayType: smartDecision.dayType,
+        reason: smartDecision.reason,
+        overrideType: smartDecision.overrideType,
+        readiness: smartDecision.readiness
+          ? {
+            completedCount: smartDecision.readiness.completedCount || 0,
+            activeBlockCompletedCount: smartDecision.readiness.activeBlockCompletedCount || 0,
+            lastWorkoutNumber: smartDecision.readiness.lastWorkoutNumber || 0,
+            lastWorkoutEffort: smartDecision.readiness.lastWorkoutEffort || null,
+            lastSmartDayType: smartDecision.readiness.lastSmartDayType || null,
+            lastWasRestDay: Boolean(smartDecision.readiness.lastWasRestDay),
+            lastWasRecoveryIntervention: Boolean(smartDecision.readiness.lastWasRecoveryIntervention),
+            recentHardCount: smartDecision.readiness.recentHardCount || 0,
+            recentEasyCount: smartDecision.readiness.recentEasyCount || 0,
+            recentFailedOrSkippedSetCount: smartDecision.readiness.recentFailedOrSkippedSetCount || 0,
+            effortFatigueScore: smartDecision.readiness.effortFatigueScore || 0,
+            failedSetFatigueScore: smartDecision.readiness.failedSetFatigueScore || 0,
+            recentFatigueScore: smartDecision.readiness.recentFatigueScore || 0,
+          }
+          : null,
+      }
+      : null;
 
     return {
       ...smartWorkout,
       smartVisible: index <= visibleThroughIndex,
+      smartSelectable: index <= visibleThroughIndex,
       smartCurrentIndex: smartContext.currentIndex,
       smartCurrentCycle: smartContext.currentCycle,
-      smartDecision: isDecisionWorkout ? smartDecision : null,
+      smartDecision: null,
+      smartDecisionSummary,
       smartDayType: isDecisionWorkout ? smartDecision.dayType : null,
-      smartOverride: shouldBuildRecoveryDay
-        ? 'recovery'
-        : shouldUseFallbackTraining
-          ? (smartDecision.readiness?.lastWasRestDay ? 'post-recovery-light-training' : SMART_DECISION_REASONS.TRAINING_FALLBACK)
-          : null,
+      smartOverride: shouldBuildDeloadDay
+        ? SMART_OVERRIDES.DELOAD
+        : shouldBuildRecoveryDay
+          ? SMART_OVERRIDES.RECOVERY
+          : shouldUseFallbackTraining
+            ? (
+              smartDecision.readiness?.lastWasRecoveryIntervention
+                ? SMART_OVERRIDES.POST_RECOVERY_LIGHT_TRAINING
+                : SMART_OVERRIDES.TRAINING_FALLBACK
+            )
+            : null,
     };
   });
 }
