@@ -2365,7 +2365,7 @@ function generateSmartWorkouts({
     const shouldOverrideAsRest =
       isDecisionWorkout &&
       smartDecision.overrideType === 'rest' &&
-      workout.type !== 'rest';
+      workout.type === 'training';
 
     return {
       ...(shouldOverrideAsRest
