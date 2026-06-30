@@ -2262,7 +2262,10 @@ function buildSmartReadinessSignals(context = {}) {
     current.entries.push(entry);
     current.workoutEffort = current.workoutEffort || entry?.workoutEffort || null;
     current.restDay = current.restDay || Boolean(entry?.restDay);
-    current.failedOrSkippedSetCount += countFailedOrSkippedSetsFromSnapshot(entry?.workoutSnapshot);
+    current.failedOrSkippedSetCount = Math.max(
+      current.failedOrSkippedSetCount,
+      countFailedOrSkippedSetsFromSnapshot(entry?.workoutSnapshot)
+    );
 
     map.set(workoutNumber, current);
     return map;
