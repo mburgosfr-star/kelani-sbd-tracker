@@ -2254,6 +2254,13 @@ function buildSmartReadinessSignals(context = {}) {
     ['easy', 'normal'].includes(entry?.workoutEffort)
   ).length;
 
+  const recentFatigueScore = recentEntries.reduce((score, entry) => {
+    if (entry?.workoutEffort === 'easy') return score - 1;
+    if (entry?.workoutEffort === 'hard') return score + 1;
+    if (['veryHard', 'max'].includes(entry?.workoutEffort)) return score + 2;
+    return score;
+  }, 0);
+
   return {
     completedCount: completedEntries.length,
     activeBlockCompletedCount: activeBlockEntries.length,
@@ -2262,6 +2269,7 @@ function buildSmartReadinessSignals(context = {}) {
     lastWasRestDay: Boolean(lastEntry?.restDay),
     recentHardCount,
     recentEasyCount,
+    recentFatigueScore,
   };
 }
 
@@ -2274,7 +2282,7 @@ function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
     maxIndex
   );
 
-  const shouldRecover = readiness.recentHardCount >= 2 && !readiness.lastWasRestDay;
+  const shouldRecover = readiness.recentFatigueScore >= 2 && !readiness.lastWasRestDay;
 
   return {
     index: nextIndex,
