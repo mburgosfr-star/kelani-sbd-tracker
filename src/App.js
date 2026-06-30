@@ -2226,11 +2226,18 @@ function buildSmartTrainingContext({
       .filter(number => Number.isFinite(number) && number > 0)
   )].sort((a, b) => a - b);
 
+  const usedSmartSourceWorkoutNumbers = [...new Set(
+    cycleHistory
+      .map(entry => Number(entry?.workoutSnapshot?.smartSourceWorkoutNumber))
+      .filter(number => Number.isFinite(number) && number > 0)
+  )];
+
   return {
     history: cycleHistory,
     currentIndex: normalizedCurrentIndex,
     currentCycle: normalizedCycle,
     completedWorkoutNumbers,
+    usedSmartSourceWorkoutNumbers,
   };
 }
 
@@ -2476,17 +2483,25 @@ function selectSmartTrainingCandidate({
   generatedWorkouts = [],
   visibleThroughIndex = 0,
   readiness = {},
+  usedSmartSourceWorkoutNumbers = [],
 } = {}) {
+  const usedSourceSet = new Set((usedSmartSourceWorkoutNumbers || []).map(Number));
+  const isUnusedTraining = candidate =>
+    candidate?.type === 'training' &&
+    !usedSourceSet.has(Number(candidate?.number));
+
   const fallbackTrainingPool = generatedWorkouts.slice(visibleThroughIndex);
   const previousTrainingPool = generatedWorkouts.slice(0, visibleThroughIndex + 1).reverse();
   const defaultTrainingCandidate =
+    fallbackTrainingPool.find(isUnusedTraining) ||
+    previousTrainingPool.find(isUnusedTraining) ||
     fallbackTrainingPool.find(candidate => candidate?.type === 'training') ||
     previousTrainingPool.find(candidate => candidate?.type === 'training') ||
     generatedWorkouts[visibleThroughIndex];
 
   if (readiness.lastWasRestDay) {
     return fallbackTrainingPool.find(candidate =>
-      candidate?.type === 'training' &&
+      isUnusedTraining(candidate) &&
       !isHeavySmartTrainingCandidate(candidate)
     ) || defaultTrainingCandidate;
   }
@@ -2547,6 +2562,7 @@ function generateSmartWorkouts({
     generatedWorkouts,
     visibleThroughIndex,
     readiness: smartDecision.readiness,
+    usedSmartSourceWorkoutNumbers: smartContext.usedSmartSourceWorkoutNumbers,
   });
 
   return generatedWorkouts.map((workout, index) => {
