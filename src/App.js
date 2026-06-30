@@ -2399,6 +2399,26 @@ function buildSmartTrainingWorkout(sourceWorkout = {}, trainingCandidate = null)
   };
 }
 
+function selectSmartTrainingCandidate({
+  generatedWorkouts = [],
+  visibleThroughIndex = 0,
+  readiness = {},
+} = {}) {
+  const fallbackTrainingPool = generatedWorkouts.slice(visibleThroughIndex);
+  const defaultTrainingCandidate =
+    fallbackTrainingPool.find(candidate => candidate?.type === 'training') ||
+    generatedWorkouts[visibleThroughIndex];
+
+  if (readiness.lastWasRestDay) {
+    return fallbackTrainingPool.find(candidate =>
+      candidate?.type === 'training' &&
+      !isHeavySmartTrainingCandidate(candidate)
+    ) || defaultTrainingCandidate;
+  }
+
+  return defaultTrainingCandidate;
+}
+
 function generateSmartWorkouts({
   programProfile,
   squat,
@@ -2448,21 +2468,11 @@ function generateSmartWorkouts({
     Math.max(generatedWorkouts.length - 1, 0)
   );
 
-  const fallbackTrainingPool = generatedWorkouts.slice(visibleThroughIndex);
-  const defaultTrainingCandidate =
-    fallbackTrainingPool.find(candidate => candidate?.type === 'training') ||
-    generatedWorkouts[visibleThroughIndex];
-
-  const lighterTrainingCandidateAfterRecovery = smartDecision.readiness?.lastWasRestDay
-    ? fallbackTrainingPool.find(candidate =>
-      candidate?.type === 'training' &&
-      !isHeavySmartTrainingCandidate(candidate)
-    )
-    : null;
-
-  const fallbackTrainingCandidate =
-    lighterTrainingCandidateAfterRecovery ||
-    defaultTrainingCandidate;
+  const fallbackTrainingCandidate = selectSmartTrainingCandidate({
+    generatedWorkouts,
+    visibleThroughIndex,
+    readiness: smartDecision.readiness,
+  });
 
   return generatedWorkouts.map((workout, index) => {
     const isDecisionWorkout = index === visibleThroughIndex;
@@ -2489,7 +2499,7 @@ function generateSmartWorkouts({
       smartOverride: shouldBuildRecoveryDay
         ? 'recovery'
         : shouldUseFallbackTraining
-          ? (lighterTrainingCandidateAfterRecovery ? 'post-recovery-light-training' : 'training-fallback')
+          ? (smartDecision.readiness?.lastWasRestDay ? 'post-recovery-light-training' : 'training-fallback')
           : null,
     };
   });
