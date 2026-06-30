@@ -814,6 +814,12 @@ const SMART_DAY_TYPES = {
   RECOVERY: 'recovery',
 };
 
+const SMART_DECISION_REASONS = {
+  FATIGUE_RECOVERY: SMART_DECISION_REASONS.FATIGUE_RECOVERY,
+  TRAINING_STREAK_RECOVERY: SMART_DECISION_REASONS.TRAINING_STREAK_RECOVERY,
+  TRAINING_FALLBACK: SMART_DECISION_REASONS.TRAINING_FALLBACK,
+};
+
 function normalizeTrainingModel(model) {
   return model === TRAINING_MODELS.SMART
     ? TRAINING_MODELS.SMART
@@ -2393,9 +2399,9 @@ function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
     readiness,
     reason: dayType === SMART_DAY_TYPES.RECOVERY
       ? Number(readiness.recentFatigueScore) >= 2
-        ? 'fatigue-recovery'
-        : 'training-streak-recovery'
-      : 'training-fallback',
+        ? SMART_DECISION_REASONS.FATIGUE_RECOVERY
+        : SMART_DECISION_REASONS.TRAINING_STREAK_RECOVERY
+      : SMART_DECISION_REASONS.TRAINING_FALLBACK,
     overrideType: dayType === SMART_DAY_TYPES.RECOVERY ? 'rest' : null,
   };
 }
@@ -2604,7 +2610,7 @@ function generateSmartWorkouts({
       smartOverride: shouldBuildRecoveryDay
         ? 'recovery'
         : shouldUseFallbackTraining
-          ? (smartDecision.readiness?.lastWasRestDay ? 'post-recovery-light-training' : 'training-fallback')
+          ? (smartDecision.readiness?.lastWasRestDay ? 'post-recovery-light-training' : SMART_DECISION_REASONS.TRAINING_FALLBACK)
           : null,
     };
   });
