@@ -2377,7 +2377,7 @@ function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
 
 function buildSmartRecoveryWorkout(sourceWorkout = {}) {
   return {
-    ...sourceWorkout,
+    ...resetSmartWorkoutProgress(sourceWorkout),
     type: 'rest',
     labelKey: 'restAndRecovery',
     workoutEffort: 'easy',
