@@ -2240,7 +2240,11 @@ function buildSmartReadinessSignals(context = {}) {
     .sort((a, b) => Number(a.workoutNumber) - Number(b.workoutNumber));
 
   const lastEntry = completedEntries[completedEntries.length - 1] || null;
-  const recentEntries = completedEntries.slice(-3);
+  const lastRestIndex = completedEntries.findLastIndex(entry => entry?.restDay);
+  const activeBlockEntries = lastRestIndex >= 0
+    ? completedEntries.slice(lastRestIndex + 1)
+    : completedEntries;
+  const recentEntries = activeBlockEntries.slice(-3);
 
   const recentHardCount = recentEntries.filter(entry =>
     ['hard', 'veryHard', 'max'].includes(entry?.workoutEffort)
@@ -2252,6 +2256,7 @@ function buildSmartReadinessSignals(context = {}) {
 
   return {
     completedCount: completedEntries.length,
+    activeBlockCompletedCount: activeBlockEntries.length,
     lastWorkoutNumber: Number(lastEntry?.workoutNumber) || 0,
     lastWorkoutEffort: lastEntry?.workoutEffort || null,
     lastWasRestDay: Boolean(lastEntry?.restDay),
