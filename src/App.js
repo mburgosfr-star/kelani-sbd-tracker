@@ -11176,6 +11176,9 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         {
           workoutNumber: workout.number,
           cycle: currentCycle,
+          smartDayType: isSmartTrainingModel(trainingModel)
+            ? (finishedWorkout.type === 'rest' ? SMART_DAY_TYPES.RECOVERY : SMART_DAY_TYPES.TRAINING)
+            : null,
           restDay: true,
           completionOnly: true,
           date: new Date().toLocaleDateString('nl-NL'),
@@ -11299,6 +11302,9 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   const newEntries = results.map(result => ({
     workoutNumber: workout.number,
     cycle: currentCycle,
+    smartDayType: isSmartTrainingModel(trainingModel)
+      ? (finishedWorkout.type === 'rest' ? SMART_DAY_TYPES.RECOVERY : SMART_DAY_TYPES.TRAINING)
+      : null,
     lift: result.lift,
     topWeight: result.oneRMToday,
     topReps: 1,
@@ -11418,6 +11424,9 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         completionOnly: result.trackStrength === false,
         workoutNumber: workout.number,
         cycle: currentCycle,
+        smartDayType: isSmartTrainingModel(trainingModel)
+          ? (finishedWorkout.type === 'rest' ? SMART_DAY_TYPES.RECOVERY : SMART_DAY_TYPES.TRAINING)
+          : null,
         lift: result.lift,
         topWeight: result.trackStrength === false ? 0 : result.oneRMToday,
         topReps: result.trackStrength === false ? 0 : (result.topSet?.reps || 0),
@@ -11448,6 +11457,9 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       {
         workoutNumber: workout.number,
         cycle: currentCycle,
+        smartDayType: isSmartTrainingModel(trainingModel)
+          ? (finishedWorkout.type === 'rest' ? SMART_DAY_TYPES.RECOVERY : SMART_DAY_TYPES.TRAINING)
+          : null,
         lift: workout.lift,
         topWeight: 0,
         topReps: 0,
@@ -11538,6 +11550,9 @@ setCompletedSummary(nextCompletedSummary);
   const newEntry = {
     workoutNumber: workout.number,
     cycle: currentCycle,
+    smartDayType: isSmartTrainingModel(trainingModel)
+      ? (finishedWorkout.type === 'rest' ? SMART_DAY_TYPES.RECOVERY : SMART_DAY_TYPES.TRAINING)
+      : null,
     lift: workout.lift,
     topWeight: oneRMToday,
     topReps: sets.find(s => Number(s.weight) === oneRMToday)?.reps || topSet.reps,
