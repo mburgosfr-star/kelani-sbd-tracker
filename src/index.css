@@ -13,10 +13,7 @@ body {
 }
 
 html, body, #root {
-  height: 100%;
-  margin: 0;
-  background: #1a1410; /* zelfde als THEME.bg */
-  overscroll-behavior: none;
+  background: #000000;
 }
 
 code {

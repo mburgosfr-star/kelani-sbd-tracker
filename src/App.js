@@ -804,6 +804,21 @@ function settingsForProgramProfile(profile) {
   return PROGRAM_PROFILES[normalizeProgramProfile(profile)] || PROGRAM_PROFILES.kelaniSbd;
 }
 
+const TRAINING_MODELS = {
+  CLASSIC: 'classic',
+  SMART: 'smart',
+};
+
+function normalizeTrainingModel(model) {
+  return model === TRAINING_MODELS.SMART
+    ? TRAINING_MODELS.SMART
+    : TRAINING_MODELS.CLASSIC;
+}
+
+function isSmartTrainingModel(model) {
+  return normalizeTrainingModel(model) === TRAINING_MODELS.SMART;
+}
+
 function getProgramProfileTitle(profile, t = {}) {
   const normalizedProfile = normalizeProgramProfile(profile);
 
@@ -4536,6 +4551,21 @@ function RestTimeSection({ t }) {
 
 
 
+function selectionModalButtonStyle(active) {
+  return {
+    width: '100%',
+    padding: 12,
+    fontSize: 15,
+    fontWeight: 700,
+    background: active ? THEME.primary : THEME.card,
+    color: '#ffffff',
+    border: `1px solid ${THEME.primary}`,
+    borderRadius: 8,
+    cursor: 'pointer',
+    marginBottom: 6
+  };
+}
+
 function LanguageSection({ language, setLanguage, t }) {
   const [isEditing, setIsEditing] = useState(false);
 
@@ -4560,45 +4590,57 @@ function LanguageSection({ language, setLanguage, t }) {
         >
           {['ca', 'en', 'nl'].map(l => (
             <button
+              type="button"
               key={l}
               onClick={() => {
                 setLanguage(l);
                 setIsEditing(false);
               }}
-              style={{
-                width: '100%',
-                padding: 12,
-                fontSize: 15,
-                fontWeight: 700,
-                background: language === l ? THEME.primary : THEME.card,
-                color: '#ffffff',
-                border: `1px solid ${THEME.primary}`,
-                borderRadius: 8,
-                cursor: 'pointer',
-                marginBottom: 6
-              }}
+              style={selectionModalButtonStyle(language === l)}
             >
               {languageNames[l]}
             </button>
           ))}
+        </SettingsModal>
+      )}
+    </>
+  );
+}
 
-          <button
-            onClick={() => setIsEditing(false)}
-            style={{
-              width: '100%',
-              padding: 12,
-              fontSize: 15,
-              fontWeight: 700,
-              background: 'transparent',
-              color: THEME.text,
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 8,
-              cursor: 'pointer',
-              marginBottom: 0
-            }}
-          >
-            {t.cancel}
-          </button>
+function getTrainingModelShortLabel(model) {
+  return isSmartTrainingModel(model) ? 'Smart' : 'Classic';
+}
+
+function ModelSection({ trainingModel, setTrainingModel, t }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const currentModel = normalizeTrainingModel(trainingModel);
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.trainingModelLabel || 'Model'}
+        actionLabel={getTrainingModelShortLabel(currentModel)}
+        onAction={() => setIsEditing(true)}
+      />
+
+      {isEditing && (
+        <SettingsModal
+          title={t.trainingModelLabel || 'Model'}
+          onClose={() => setIsEditing(false)}
+        >
+          {[TRAINING_MODELS.CLASSIC, TRAINING_MODELS.SMART].map(model => (
+            <button
+              type="button"
+              key={model}
+              onClick={() => {
+                setTrainingModel(normalizeTrainingModel(model));
+                setIsEditing(false);
+              }}
+              style={selectionModalButtonStyle(currentModel === model)}
+            >
+              {getTrainingModelShortLabel(model)}
+            </button>
+          ))}
         </SettingsModal>
       )}
     </>
@@ -5275,10 +5317,10 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
     return (
       <div style={{
         marginBottom: 10,
-        padding: '8px 10px',
-        border: `1px solid ${THEME.border}`,
-        borderRadius: 8,
-        background: THEME.card,
+        padding: '8px 0',
+        border: 'none',
+        borderRadius: 0,
+        background: 'transparent',
         color: THEME.muted,
         fontSize: 12,
         fontWeight: 800,
@@ -5348,7 +5390,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
                 style={{
                   padding: '8px 10px',
                   borderRadius: 6,
-                  border: `1px solid ${THEME.border}`,
+                  border: `1px solid ${THEME.primary}`,
                   background: 'transparent',
                   color: THEME.text,
                   fontSize: 15,
@@ -5387,22 +5429,89 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
 
   if (workout.type === 'rest') {
     return (
-      <div style={{ maxWidth: 500, margin: '60px auto', padding: 24, fontFamily: 'sans-serif', textAlign: 'center' }}>
-        <h1 style={{
-          textAlign: 'center',
-          marginTop: 80,
-          marginBottom: 24
+      <div style={{
+        maxWidth: 500,
+        margin: '0 auto',
+        padding: '10px 14px 16px',
+        fontFamily: 'sans-serif'
+      }}>
+        <AppHeader
+          t={t}
+          title={t.restAndRecovery || t.deload}
+          subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${Math.min(Number(workout.number) || 1, totalWorkouts)} / ${totalWorkouts}`}
+        />
+
+        {renderActivateWorkoutCard()}
+
+        <div style={{
+          padding: '8px 0 10px',
+          marginBottom: 10,
+          background: 'transparent',
+          border: 'none',
+          color: THEME.text,
+          textAlign: 'center'
         }}>
-          {t.appName}
-        </h1>
-        <div style={{ background: THEME.card, padding: 40, borderRadius: 8 }}>
-          <div style={{ fontSize: 48 }}>✓</div>
-          <h2>{t.restAndRecovery || t.deload}</h2>
-          <p style={{ color: THEME.muted }}>{t.restReadyNextWorkout || 'Rest and recover. No lifting today; complete this rest day when you are ready to continue.'}</p>
+          <div style={{
+            fontSize: 42,
+            lineHeight: 1,
+            marginBottom: 14
+          }}>
+            ✓
+          </div>
+
+          <h2 style={{
+            margin: '0 0 8px',
+            color: THEME.text,
+            fontSize: 22,
+            fontWeight: 900
+          }}>
+            {t.restAndRecovery || t.deload}
+            {!isReadOnly && (
+              <span style={{
+                fontSize: 11,
+                background: THEME.primary,
+                color: '#ffffff',
+                padding: '1px 6px',
+                borderRadius: 3,
+                marginLeft: 8,
+                verticalAlign: 'middle'
+              }}>
+                {t.now}
+              </span>
+            )}
+          </h2>
+
+          <p style={{
+            margin: '0 auto',
+            maxWidth: 360,
+            color: THEME.muted,
+            fontSize: 14,
+            fontWeight: 700,
+            lineHeight: 1.4
+          }}>
+            {t.restReadyNextWorkout || 'Rest and recover. No lifting today; complete this rest day when you are ready to continue.'}
+          </p>
         </div>
-        <button onClick={() => onComplete('easy')} style={{ marginTop: 16, width: '100%', padding: 10, fontSize: 16, background: THEME.card, color: '#ffffff', border: `1px solid ${THEME.primary}`, borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
-          {t.completeRestDay || 'Complete rest day'}
-        </button>
+
+        {!isReadOnly && (
+          <button
+            type="button"
+            onClick={() => onComplete('easy')}
+            style={{
+              width: '100%',
+              padding: 10,
+              fontSize: 16,
+              background: THEME.card,
+              color: '#ffffff',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontWeight: 600
+            }}
+          >
+            {t.completeRestDay || 'Complete rest day'}
+          </button>
+        )}
       </div>
     );
   }
@@ -7732,22 +7841,31 @@ function applyCompletedHistorySnapshotsToWorkouts(workouts = [], history = [], c
   return changed ? nextWorkouts : workouts;
 }
 
-function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedWorkoutNumbers = [], currentCycle, onSelect, onBack, onStats, onStartNewCycle, programProfile, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, weightUnit = WEIGHT_UNITS.KG }) {
+function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedWorkoutNumbers = [], currentCycle, onSelect, onBack, onStats, onStartNewCycle, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, weightUnit = WEIGHT_UNITS.KG }) {
   const currentWorkoutRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
   const [showProgramInfo, setShowProgramInfo] = useState(false);
+  const smartModel = isSmartTrainingModel(trainingModel);
   const completedWorkoutNumberSet = new Set(completedWorkoutNumbers.map(Number));
   const programSummary = summarizeProgramWorkouts(workouts);
 
-  const visibleStart = Math.max(0, currentIndex - 3);
-  const visibleEnd = Math.min(workouts.length, currentIndex + 4);
+  const allowedWorkoutEntries = smartModel
+    ? workouts
+      .slice(0, Math.min(currentIndex + 1, workouts.length))
+      .map((workout, idx) => ({ workout, idx }))
+    : workouts.map((workout, idx) => ({ workout, idx }));
+  const visibleCurrentIndex = Math.min(
+    Math.max(currentIndex, 0),
+    Math.max(allowedWorkoutEntries.length - 1, 0)
+  );
+  const visibleStart = Math.max(0, visibleCurrentIndex - 3);
+  const visibleEnd = Math.min(allowedWorkoutEntries.length, visibleCurrentIndex + 4);
   const visibleWorkoutEntries = showAllWorkouts
-    ? workouts.map((workout, idx) => ({ workout, idx }))
-    : workouts.slice(visibleStart, visibleEnd).map((workout, offset) => ({
-      workout,
-      idx: visibleStart + offset,
-    }));
-  const hasHiddenWorkouts = workouts.length > (visibleEnd - visibleStart);
+    ? allowedWorkoutEntries
+    : allowedWorkoutEntries.slice(visibleStart, visibleEnd);
+  const hasHiddenWorkouts = allowedWorkoutEntries.length > (visibleEnd - visibleStart);
+  const headerWorkoutTotal = smartModel ? allowedWorkoutEntries.length : workouts.length;
+  const headerWorkoutProgress = Math.min(currentIndex + 1, headerWorkoutTotal);
 
   function formatCompletedAt(value, fallbackDate = null) {
     if (!value && fallbackDate) return fallbackDate;
@@ -7795,45 +7913,49 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
       <AppHeader
         t={t}
         title={
-          <span style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            flexWrap: 'wrap'
-          }}>
-            <span>{getProgramProfileTitle(programProfile, t)}</span>
-            <button
-              type="button"
-              aria-label={t.programTrainingFactors || 'Training factors'}
-              onClick={(event) => {
-                event.stopPropagation();
-                setShowProgramInfo(true);
-              }}
-              style={{
-                width: 14,
-                height: 14,
-                minWidth: 14,
-                padding: 0,
-                borderRadius: 999,
-                border: `1px solid ${THEME.primary}`,
-                background: 'transparent',
-                color: THEME.primary,
-                fontSize: 9,
-                fontWeight: 900,
-                lineHeight: '12px',
-                cursor: 'pointer',
-                transform: 'translateY(-6px)'
-              }}
-            >
-              i
-            </button>
-          </span>
+          smartModel
+            ? (t.trainingModelSmart || 'Kelani SBD Smart')
+            : (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                flexWrap: 'wrap'
+              }}>
+                <span>{getProgramProfileTitle(programProfile, t)}</span>
+                <button
+                  type="button"
+                  aria-label={t.programTrainingFactors || 'Training factors'}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setShowProgramInfo(true);
+                  }}
+                  style={{
+                    width: 14,
+                    height: 14,
+                    minWidth: 14,
+                    padding: 0,
+                    borderRadius: 999,
+                    border: `1px solid ${THEME.primary}`,
+                    background: 'transparent',
+                    color: THEME.primary,
+                    fontSize: 9,
+                    fontWeight: 900,
+                    lineHeight: '12px',
+                    cursor: 'pointer',
+                    transform: 'translateY(-6px)'
+                  }}
+                >
+                  i
+                </button>
+              </span>
+            )
         }
-        subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${Math.min(currentIndex + 1, workouts.length)} / ${workouts.length}`}
+        subtitle={`${t.cycle} ${currentCycle} · ${t.workoutProgress} ${headerWorkoutProgress} / ${headerWorkoutTotal}`}
       />
 
-      {showProgramInfo && (
+      {!smartModel && showProgramInfo && (
         <SettingsModal
           title={getProgramProfileTitle(programProfile, t)}
           onClose={() => setShowProgramInfo(false)}
@@ -7944,9 +8066,13 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
         const isCurrent = idx === currentIndex;
         const isDone = completedWorkoutNumberSet.has(Number(workout.number)) || Boolean(workout.completed);
         const completedAtLabel = isDone ? formatCompletedAt(workout.completedAt, workout.completedDate || workout.date) : null;
-        const focusColor = workout.type === 'meet' ? THEME.meet : getLiftThemeColor(workout.lift);
+        const focusColor = workout.type === 'meet'
+          ? THEME.meet
+          : workout.type === 'rest'
+            ? THEME.primary
+            : getLiftThemeColor(workout.lift);
         const titleColor = workout.type === 'meet' ? THEME.meet : THEME.text;
-        const headerBg = isCurrent ? focusColor : workout.type === 'rest' ? THEME.brown : THEME.border;
+        const headerBg = isCurrent ? focusColor : THEME.border;
         const planLines = getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant);
         const typeLabel = getWorkoutTypeLabel(workout, t);
         const showTypeLabel = false;
@@ -8057,23 +8183,27 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
 
       {renderWorkoutListToggleButton('bottom')}
 
-      <StartNewCycleSection
-        onStartNewCycle={onStartNewCycle}
-        t={t}
-      />
+      {!smartModel && (
+        <>
+          <StartNewCycleSection
+            onStartNewCycle={onStartNewCycle}
+            t={t}
+          />
 
-      <ProgramProfileSection
-        programProfile={programProfile}
-        preparationMode={preparationMode}
-        accessoryMode={accessoryMode}
-        cooldownMode={cooldownMode}
-        squatVariant={squatVariant}
-        benchPressVariant={benchPressVariant}
-        deadliftVariant={deadliftVariant}
-        onChangeProgramProfile={onChangeProgramProfile}
-        onApplyProgramSettings={onApplyProgramSettings}
-        t={t}
-      />
+          <ProgramProfileSection
+            programProfile={programProfile}
+            preparationMode={preparationMode}
+            accessoryMode={accessoryMode}
+            cooldownMode={cooldownMode}
+            squatVariant={squatVariant}
+            benchPressVariant={benchPressVariant}
+            deadliftVariant={deadliftVariant}
+            onChangeProgramProfile={onChangeProgramProfile}
+            onApplyProgramSettings={onApplyProgramSettings}
+            t={t}
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -8082,6 +8212,9 @@ function Onboarding({ onStart, t }) {
   const [onboardingStep, setOnboardingStep] = useState(1);
   const [onboardingError, setOnboardingError] = useState('');
   const [onboardingWeightUnit, setOnboardingWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
+  const [onboardingTrainingModel, setOnboardingTrainingModel] = useState(() =>
+    normalizeTrainingModel(localStorage.getItem('trainingModel'))
+  );
   const [squat, setSquat] = useState('');
   const [bench, setBench] = useState('');
   const [deadlift, setDeadlift] = useState('');
@@ -8193,13 +8326,13 @@ function Onboarding({ onStart, t }) {
   }
 
   function goToNextOnboardingStep() {
-    if (onboardingStep === 2 && !hasRequiredTrainingDetails()) {
+    if (onboardingStep === 3 && !hasRequiredTrainingDetails()) {
       setOnboardingError(t.fillRequiredFields);
       return;
     }
 
     setOnboardingError('');
-    setOnboardingStep(step => Math.min(4, step + 1));
+    setOnboardingStep(step => Math.min(5, step + 1));
   }
 
   function handleStart() {
@@ -8216,7 +8349,12 @@ function Onboarding({ onStart, t }) {
     }
 
     setOnboardingError('');
-    onStart(s, b, d, { birthDate: normalizedBirthDate, sex, weightUnit: selectedWeightUnit }, buildInitialBodyData());
+    onStart(s, b, d, {
+      birthDate: normalizedBirthDate,
+      sex,
+      weightUnit: selectedWeightUnit,
+      trainingModel: normalizeTrainingModel(onboardingTrainingModel),
+    }, buildInitialBodyData());
   }
 
   const bodyFields = [
@@ -8230,17 +8368,23 @@ function Onboarding({ onStart, t }) {
 
   return (
     <div style={{
-      maxWidth: 500,
-      margin: '0 auto',
-      padding: 24,
-      paddingTop: 24,
-      boxSizing: 'border-box',
       minHeight: '100dvh',
-      fontFamily: 'sans-serif',
-      background: THEME.bg,
+      background: '#000000',
       color: THEME.text,
       overflowX: 'hidden'
     }}>
+      <div style={{
+        maxWidth: 500,
+        margin: '0 auto',
+        padding: 24,
+        paddingTop: 24,
+        boxSizing: 'border-box',
+        minHeight: '100dvh',
+        fontFamily: 'sans-serif',
+        background: '#000000',
+        color: THEME.text,
+        overflowX: 'hidden'
+      }}>
       <div style={{ textAlign: 'center', marginBottom: 14 }}>
         <img
           src="/kelani-banner.png"
@@ -8268,8 +8412,10 @@ function Onboarding({ onStart, t }) {
         {onboardingStep !== 1 && (
           <h2 style={{ marginTop: 0, marginBottom: 8, color: THEME.text, textAlign: 'center' }}>
             {onboardingStep === 2
-              ? t.onboardingTrainingTitle
+              ? t.onboardingModelTitle || 'Choose training model'
               : onboardingStep === 3
+              ? t.onboardingTrainingTitle
+              : onboardingStep === 4
               ? t.onboardingProfileTitle
               : t.onboardingBodyTitle}
           </h2>
@@ -8285,8 +8431,10 @@ function Onboarding({ onStart, t }) {
             textAlign: 'center'
           }}>
             {onboardingStep === 2
-              ? t.onboardingMaxHelp
+              ? t.onboardingModelHelp || 'Choose Classic for fixed programs or Smart for one-workout-at-a-time coaching.'
               : onboardingStep === 3
+              ? t.onboardingMaxHelp
+              : onboardingStep === 4
               ? t.onboardingProfileHelp
               : t.onboardingBodyHelp}
           </p>
@@ -8382,6 +8530,56 @@ function Onboarding({ onStart, t }) {
         )}
 
         {onboardingStep === 2 && (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {[
+              {
+                value: TRAINING_MODELS.CLASSIC,
+                title: t.trainingModelClassic || 'Kelani SBD Classic',
+                text: t.trainingModelClassicText || 'Choose a fixed program and follow the plan.',
+              },
+              {
+                value: TRAINING_MODELS.SMART,
+                title: t.trainingModelSmart || 'Kelani SBD Smart',
+                text: t.trainingModelSmartText || 'The app chooses one next workout at a time from your history.',
+              },
+            ].map(option => {
+              const active = normalizeTrainingModel(onboardingTrainingModel) === option.value;
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setOnboardingTrainingModel(option.value)}
+                  style={{
+                    width: '100%',
+                    padding: 12,
+                    fontSize: 15,
+                    fontWeight: 800,
+                    textAlign: 'left',
+                    borderRadius: 8,
+                    border: `1px solid ${THEME.primary}`,
+                    background: active ? THEME.primary : THEME.bg,
+                    color: active ? THEME.bg : THEME.text,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ fontWeight: 900 }}>{option.title}</div>
+                  <div style={{
+                    marginTop: 4,
+                    color: active ? THEME.bg : THEME.muted,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    lineHeight: 1.35
+                  }}>
+                    {option.text}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {onboardingStep === 3 && (
           <>
         <div style={{ marginBottom: 16 }}>
           <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
@@ -8396,7 +8594,7 @@ function Onboarding({ onStart, t }) {
               padding: 10,
               fontSize: 16,
               borderRadius: 4,
-              border: `1px solid ${THEME.border}`,
+              border: `1px solid ${THEME.primary}`,
               boxSizing: 'border-box',
               background: THEME.bg,
               color: THEME.text
@@ -8426,7 +8624,7 @@ function Onboarding({ onStart, t }) {
               padding: 10,
               borderRadius: 10,
               border: `1px solid ${liftColor}`,
-              background: `${liftColor}14`
+              background: THEME.bg
             }}
           >
             <label style={{ display: 'block', marginBottom: 10, fontWeight: 800, color: liftColor }}>
@@ -8482,9 +8680,9 @@ function Onboarding({ onStart, t }) {
                     padding: 10,
                     fontSize: 15,
                     borderRadius: 4,
-                    border: `1px solid ${THEME.border}`,
+                    border: `1px solid ${liftColor}`,
                     boxSizing: 'border-box',
-                    background: THEME.card,
+                    background: THEME.bg,
                     color: THEME.text
                   }}
                 />
@@ -8501,9 +8699,9 @@ function Onboarding({ onStart, t }) {
                     padding: 10,
                     fontSize: 15,
                     borderRadius: 4,
-                    border: `1px solid ${THEME.border}`,
+                    border: `1px solid ${liftColor}`,
                     boxSizing: 'border-box',
-                    background: THEME.card,
+                    background: THEME.bg,
                     color: THEME.text
                   }}
                 />
@@ -8533,7 +8731,7 @@ function Onboarding({ onStart, t }) {
           </>
         )}
 
-        {onboardingStep === 3 && (
+        {onboardingStep === 4 && (
           <>
         <div style={{ marginBottom: 16 }}>
           <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
@@ -8555,7 +8753,7 @@ function Onboarding({ onStart, t }) {
               width: '100%',
               height: 42,
               borderRadius: 4,
-              border: `1px solid ${THEME.border}`,
+              border: `1px solid ${THEME.primary}`,
               boxSizing: 'border-box',
               background: THEME.bg,
               cursor: 'pointer'
@@ -8611,7 +8809,7 @@ function Onboarding({ onStart, t }) {
               padding: 10,
               fontSize: 16,
               borderRadius: 4,
-              border: `1px solid ${THEME.border}`,
+              border: `1px solid ${THEME.primary}`,
               boxSizing: 'border-box',
               background: THEME.bg,
               color: THEME.text
@@ -8626,7 +8824,7 @@ function Onboarding({ onStart, t }) {
           </>
         )}
 
-        {onboardingStep === 4 && (
+        {onboardingStep === 5 && (
           <>
         {bodyFields.map(field => (
           <div key={field.key} style={{ marginBottom: 16 }}>
@@ -8644,7 +8842,7 @@ function Onboarding({ onStart, t }) {
                   padding: field.unit ? '10px 48px 10px 10px' : 10,
                   fontSize: 16,
                   borderRadius: 4,
-                  border: `1px solid ${THEME.border}`,
+                  border: `1px solid ${THEME.primary}`,
                   boxSizing: 'border-box',
                   background: THEME.bg,
                   color: THEME.text
@@ -8685,7 +8883,7 @@ function Onboarding({ onStart, t }) {
                 fontSize: 16,
                 background: 'transparent',
                 color: THEME.text,
-                border: `1px solid ${THEME.border}`,
+                border: `1px solid ${THEME.primary}`,
                 borderRadius: 4,
                 cursor: 'pointer',
                 fontWeight: 700
@@ -8697,7 +8895,7 @@ function Onboarding({ onStart, t }) {
 
           <button
             type="button"
-            onClick={onboardingStep < 4 ? goToNextOnboardingStep : handleStart}
+            onClick={onboardingStep < 5 ? goToNextOnboardingStep : handleStart}
             style={{
               width: '100%',
               padding: 14,
@@ -8710,9 +8908,10 @@ function Onboarding({ onStart, t }) {
               fontWeight: 700
             }}
           >
-            {onboardingStep === 1 ? t.onboardingStartSetup : onboardingStep < 4 ? t.onboardingNext : t.startProgram}
+            {onboardingStep === 1 ? t.onboardingStartSetup : onboardingStep < 5 ? t.onboardingNext : t.startProgram}
           </button>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -8800,7 +8999,7 @@ function BottomNav({ screen, onChange, t }) {
       right: 0,
       display: 'flex',
       zIndex: 100,
-      background: THEME.card,
+      background: THEME.bg,
       borderTop: `1px solid ${THEME.border}`,
     }}>
       {items.map(item => (
@@ -8862,6 +9061,9 @@ function App() {
   const [programProfile, setProgramProfile] = useState(() =>
     normalizeProgramProfile(localStorage.getItem('programProfile'))
   );
+  const [trainingModel, setTrainingModel] = useState(() =>
+    normalizeTrainingModel(localStorage.getItem('trainingModel'))
+  );
   const [accessoryMode, setAccessoryMode] = useState('off');
   const [preparationMode, setPreparationMode] = useState('basicFirst');
   const [cooldownMode, setCooldownMode] = useState(() =>
@@ -8917,6 +9119,11 @@ function App() {
     if (!hasLoadedData) return;
     localStorage.setItem('programProfile', normalizeProgramProfile(programProfile));
   }, [hasLoadedData, programProfile]);
+
+  useEffect(() => {
+    if (!hasLoadedData) return;
+    localStorage.setItem('trainingModel', normalizeTrainingModel(trainingModel));
+  }, [hasLoadedData, trainingModel]);
 
   useEffect(() => {
     if (!hasLoadedData) return;
@@ -9067,6 +9274,9 @@ function App() {
       const savedHistory = data.history || [];
       const restoredPrs = mergeHigherPrs(savedPrs, calculatePrsFromHistory(savedHistory));
       const savedCycle = data.currentCycle || 1;
+      const savedTrainingModel = normalizeTrainingModel(
+        data.trainingModel || localStorage.getItem('trainingModel')
+      );
       const hasSavedProgramProfile = Boolean(data.programProfile);
       const savedProgramProfile = hasSavedProgramProfile
         ? normalizeProgramProfile(data.programProfile)
@@ -9135,6 +9345,7 @@ function App() {
       setMeetPlannerAttempts(savedMeetPlannerAttempts);
       setMeetPrepChecklist(savedMeetPrepChecklist);
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
+      setTrainingModel(savedTrainingModel);
       setProgramProfile(savedProgramProfile);
       setAccessoryMode(savedAccessoryMode);
       setPreparationMode(savedPreparationMode);
@@ -9163,10 +9374,11 @@ function App() {
       );
 
       setCurrentWorkoutIndex(restoredCurrentIndex);
-      setSelectedIndex(Math.max(
-        restoredCurrentIndex,
-        restorableSelectedIndex ?? restoredCurrentIndex
-      ));
+      setSelectedIndex(
+        isSmartTrainingModel(savedTrainingModel)
+          ? restoredCurrentIndex
+          : Math.max(restoredCurrentIndex, restorableSelectedIndex ?? restoredCurrentIndex)
+      );
 
       setShowNewCycle(false);
       setScreen('dashboard');
@@ -9192,6 +9404,7 @@ function App() {
       meetPlannerAttempts,
       meetPrepChecklist,
       restTimeSeconds,
+      trainingModel,
       programProfile,
       accessoryMode,
       preparationMode,
@@ -9207,7 +9420,7 @@ function App() {
         workouts,
       },
     }));
-  }, [hasLoadedData, history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts]);
+  }, [hasLoadedData, history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts]);
 
   useEffect(() => {
     if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
@@ -9267,6 +9480,7 @@ function App() {
     localStorage.removeItem('app_version');
 
     const selectedWeightUnit = normalizeWeightUnit(profile.weightUnit || weightUnit);
+    const defaultTrainingModel = normalizeTrainingModel(profile.trainingModel || TRAINING_MODELS.CLASSIC);
     const defaultProgramProfile = 'kelaniSbd';
     const defaultSettings = settingsForProgramProfile(defaultProgramProfile);
     const defaultAccessoryMode = defaultSettings.accessoryMode;
@@ -9278,12 +9492,14 @@ function App() {
 
     setWeightUnit(selectedWeightUnit);
     localStorage.setItem('weightUnit', selectedWeightUnit);
+    localStorage.setItem('trainingModel', defaultTrainingModel);
     localStorage.setItem('programProfile', defaultProgramProfile);
     localStorage.setItem('squatVariant', defaultSquatVariant);
     localStorage.setItem('benchPressVariant', defaultBenchPressVariant);
     localStorage.setItem('deadliftVariant', defaultDeadliftVariant);
     localStorage.setItem('cooldownMode', defaultCooldownMode);
 
+    setTrainingModel(defaultTrainingModel);
     setProgramProfile(defaultProgramProfile);
     setAccessoryMode(defaultAccessoryMode);
     setPreparationMode(defaultPreparationMode);
@@ -9348,12 +9564,23 @@ function App() {
     setScreen('dashboard');
   }
 
+function changeTrainingModel(nextModel) {
+  const normalizedModel = normalizeTrainingModel(nextModel);
+  setTrainingModel(normalizedModel);
+
+  if (isSmartTrainingModel(normalizedModel)) {
+    const safeIndex = Math.max(0, Math.min(currentIndex, Math.max(workouts.length - 1, 0)));
+    setSelectedIndex(safeIndex);
+  }
+}
+
 function handleResetApp() {
   setShowResetConfirm(false);
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem('kel-powerlifting');
   localStorage.removeItem('app_version');
   localStorage.removeItem('bodyweight_prompt_date');
+  localStorage.removeItem('trainingModel');
 
   localStorage.setItem('squatVariant', 'standard');
   localStorage.setItem('benchPressVariant', 'standard');
@@ -9375,6 +9602,7 @@ function handleResetApp() {
   setCompletedSummary(null);
   setCurrentCycle(1);
   setBodyWeights([]);
+  setTrainingModel(TRAINING_MODELS.CLASSIC);
   setAccessoryMode('off');
   setPreparationMode('off');
   setSquatVariant('standard');
@@ -10864,6 +11092,7 @@ if (screen !== 'onboarding' && !workouts.length) {
 }
 
 function activateSelectedWorkout() {
+  if (isSmartTrainingModel(trainingModel)) return;
   if (selectedIndex <= currentIndex) return;
 
   setCurrentWorkoutIndex(selectedIndex);
@@ -11515,6 +11744,7 @@ const latestBodyDataRows = [
           onStats={() => setScreen('stats')}
           onStartNewCycle={handleStartNewCycle}
           programProfile={programProfile}
+          trainingModel={trainingModel}
           preparationMode={preparationMode}
           accessoryMode={accessoryMode}
           cooldownMode={cooldownMode}
@@ -11587,6 +11817,12 @@ const latestBodyDataRows = [
     <RestTimeSection
       restTimeSeconds={restTimeSeconds}
       setRestTimeSeconds={setRestTimeSeconds}
+      t={t}
+    />
+
+    <ModelSection
+      trainingModel={trainingModel}
+      setTrainingModel={changeTrainingModel}
       t={t}
     />
 
