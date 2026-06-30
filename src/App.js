@@ -11224,6 +11224,8 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       ? finishedWorkout.smartDecisionSummary || null
       : null;
 
+    const completedFailedOrSkippedSetCount = countFailedOrSkippedSetsFromSnapshot(finishedWorkout);
+
     if (workout.type === 'rest') {
       const restWorkoutEffort = finishedWorkout.workoutEffort || 'easy';
 
@@ -11492,6 +11494,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         cycle: currentCycle,
         smartDayType: completedSmartDayType,
         smartDecisionSummary: completedSmartDecisionSummary,
+        failedOrSkippedSetCount: completedFailedOrSkippedSetCount,
         lift: result.lift,
         topWeight: result.trackStrength === false ? 0 : result.oneRMToday,
         topReps: result.trackStrength === false ? 0 : (result.topSet?.reps || 0),
@@ -11524,6 +11527,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         cycle: currentCycle,
         smartDayType: completedSmartDayType,
         smartDecisionSummary: completedSmartDecisionSummary,
+        failedOrSkippedSetCount: completedFailedOrSkippedSetCount,
         lift: workout.lift,
         topWeight: 0,
         topReps: 0,
