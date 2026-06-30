@@ -2276,6 +2276,7 @@ function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
     readiness,
     reason: shouldRecover ? 'fatigue-recovery' : 'current-index-fallback',
     overrideType: shouldRecover ? 'rest' : null,
+    createdAt: new Date().toISOString(),
   };
 }
 
@@ -2330,7 +2331,10 @@ function generateSmartWorkouts({
 
   return generatedWorkouts.map((workout, index) => {
     const isDecisionWorkout = index === visibleThroughIndex;
-    const shouldOverrideAsRest = isDecisionWorkout && smartDecision.overrideType === 'rest';
+    const shouldOverrideAsRest =
+      isDecisionWorkout &&
+      smartDecision.overrideType === 'rest' &&
+      workout.type !== 'rest';
 
     return {
       ...(shouldOverrideAsRest
