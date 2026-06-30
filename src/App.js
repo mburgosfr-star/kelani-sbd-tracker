@@ -2321,15 +2321,24 @@ function buildSmartReadinessSignals(context = {}) {
       entries: [],
       workoutEffort: null,
       restDay: false,
+      smartDayType: null,
       failedOrSkippedSetCount: 0,
     };
 
+    const entryFailedCount =
+      Number(entry?.failedOrSkippedSetCount) ||
+      countFailedOrSkippedSetsFromSnapshot(entry?.workoutSnapshot);
+
     current.entries.push(entry);
     current.workoutEffort = current.workoutEffort || entry?.workoutEffort || null;
-    current.restDay = current.restDay || Boolean(entry?.restDay);
+    current.smartDayType = current.smartDayType || entry?.smartDayType || null;
+    current.restDay =
+      current.restDay ||
+      Boolean(entry?.restDay) ||
+      entry?.smartDayType === SMART_DAY_TYPES.RECOVERY;
     current.failedOrSkippedSetCount = Math.max(
       current.failedOrSkippedSetCount,
-      countFailedOrSkippedSetsFromSnapshot(entry?.workoutSnapshot)
+      entryFailedCount
     );
 
     map.set(workoutNumber, current);
@@ -2337,11 +2346,15 @@ function buildSmartReadinessSignals(context = {}) {
   }, new Map()).values()].sort((a, b) => a.workoutNumber - b.workoutNumber);
 
   const lastDay = workoutDays[workoutDays.length - 1] || null;
-  const lastRestIndex = workoutDays.findLastIndex(day => day.restDay);
-  const activeBlockDays = lastRestIndex >= 0
-    ? workoutDays.slice(lastRestIndex + 1)
+  const lastRecoveryInterventionIndex = workoutDays.findLastIndex(day =>
+    day.restDay ||
+    day.smartDayType === SMART_DAY_TYPES.RECOVERY ||
+    day.smartDayType === SMART_DAY_TYPES.DELOAD
+  );
+  const activeBlockDays = lastRecoveryInterventionIndex >= 0
+    ? workoutDays.slice(lastRecoveryInterventionIndex + 1)
     : workoutDays;
-  const recentDays = activeBlockDays.slice(-3);
+  const recentDays = activeBlockDays.slice(-SMART_THRESHOLDS.RECENT_DAYS);
 
   const recentHardCount = recentDays.filter(day =>
     isSmartHardEffort(day.workoutEffort)
@@ -2361,7 +2374,11 @@ function buildSmartReadinessSignals(context = {}) {
     0
   );
 
-  const failedSetFatigueScore = Math.min(recentFailedOrSkippedSetCount, 2);
+  const failedSetFatigueScore = Math.min(
+    recentFailedOrSkippedSetCount,
+    SMART_THRESHOLDS.FAILED_SET_FATIGUE_CAP
+  );
+
   const recentFatigueScore =
     Math.max(effortFatigueScore, 0) + failedSetFatigueScore;
 
@@ -2370,7 +2387,13 @@ function buildSmartReadinessSignals(context = {}) {
     activeBlockCompletedCount: activeBlockDays.length,
     lastWorkoutNumber: Number(lastDay?.workoutNumber) || 0,
     lastWorkoutEffort: lastDay?.workoutEffort || null,
-    lastWasRestDay: Boolean(lastDay?.restDay),
+    lastSmartDayType: lastDay?.smartDayType || null,
+    lastWasRestDay: Boolean(lastDay?.restDay || lastDay?.smartDayType === SMART_DAY_TYPES.RECOVERY),
+    lastWasRecoveryIntervention: Boolean(
+      lastDay?.restDay ||
+      lastDay?.smartDayType === SMART_DAY_TYPES.RECOVERY ||
+      lastDay?.smartDayType === SMART_DAY_TYPES.DELOAD
+    ),
     recentHardCount,
     recentEasyCount,
     recentFailedOrSkippedSetCount,
@@ -2381,6 +2404,8 @@ function buildSmartReadinessSignals(context = {}) {
 }
 
 function isHeavySmartTrainingCandidate(workout = {}) {
+  if (workout.smartDayType === SMART_DAY_TYPES.DELOAD) return false;
+
   const label = String(workout.labelKey || workout.label || '').toLowerCase();
   const type = String(workout.type || '').toLowerCase();
 
@@ -2396,17 +2421,21 @@ function isHeavySmartTrainingCandidate(workout = {}) {
 }
 
 function decideSmartNextDayType(readiness = {}) {
-  if (readiness.lastWasRestDay) return 'training';
+  if (readiness.lastWasRecoveryIntervention) return SMART_DAY_TYPES.TRAINING;
 
-  if (Number(readiness.recentFatigueScore) >= 2) {
-    return 'recovery';
+  if (Number(readiness.recentFailedOrSkippedSetCount) >= SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT) {
+    return SMART_DAY_TYPES.DELOAD;
   }
 
-  if (Number(readiness.activeBlockCompletedCount) >= 3) {
-    return 'recovery';
+  if (Number(readiness.recentFatigueScore) >= SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE) {
+    return SMART_DAY_TYPES.RECOVERY;
   }
 
-  return 'training';
+  if (Number(readiness.activeBlockCompletedCount) >= SMART_THRESHOLDS.TRAINING_STREAK_RECOVERY_DAYS) {
+    return SMART_DAY_TYPES.RECOVERY;
+  }
+
+  return SMART_DAY_TYPES.TRAINING;
 }
 
 function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
@@ -2419,16 +2448,19 @@ function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
   );
 
   const dayType = decideSmartNextDayType(readiness);
+  const reason = dayType === SMART_DAY_TYPES.DELOAD
+    ? SMART_DECISION_REASONS.FAILED_SET_DELOAD
+    : dayType === SMART_DAY_TYPES.RECOVERY
+      ? Number(readiness.recentFatigueScore) >= SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE
+        ? SMART_DECISION_REASONS.FATIGUE_RECOVERY
+        : SMART_DECISION_REASONS.TRAINING_STREAK_RECOVERY
+      : SMART_DECISION_REASONS.TRAINING_FALLBACK;
 
   return {
     index: nextIndex,
     dayType,
     readiness,
-    reason: dayType === SMART_DAY_TYPES.RECOVERY
-      ? Number(readiness.recentFatigueScore) >= 2
-        ? SMART_DECISION_REASONS.FATIGUE_RECOVERY
-        : SMART_DECISION_REASONS.TRAINING_STREAK_RECOVERY
-      : SMART_DECISION_REASONS.TRAINING_FALLBACK,
+    reason,
     overrideType: dayType === SMART_DAY_TYPES.RECOVERY ? 'rest' : null,
   };
 }
@@ -5806,6 +5838,34 @@ function ExerciseGuideModal({ lift, t, onClose }) {
   );
 }
 
+function getSmartDayTypeDisplayLabel(dayType, t = {}) {
+  if (dayType === SMART_DAY_TYPES.DELOAD) return t.deload || 'Deload';
+  if (dayType === SMART_DAY_TYPES.RECOVERY) return t.restAndRecovery || 'Recovery';
+  if (dayType === SMART_DAY_TYPES.TRAINING) return t.training || 'Training';
+  return null;
+}
+
+function SmartDayTypeInline({ workout, t }) {
+  const label = getSmartDayTypeDisplayLabel(workout?.smartDayType, t);
+
+  if (!label) return null;
+
+  return (
+    <div style={{
+      margin: '0 0 10px',
+      padding: 0,
+      background: 'transparent',
+      border: 'none',
+      color: THEME.muted,
+      fontSize: 12,
+      fontWeight: 800,
+      textAlign: 'center'
+    }}>
+      Smart: <span style={{ color: THEME.primary }}>{label}</span>
+    </div>
+  );
+}
+
 function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onMeetSetEffortChange, onWeightChange, onSetEffortChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer }) {
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
@@ -5975,6 +6035,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
         />
 
         {renderActivateWorkoutCard()}
+        <SmartDayTypeInline workout={workout} t={t} />
 
         <div style={{
           padding: '8px 0 10px',
@@ -6098,6 +6159,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
         />
 
         {renderActivateWorkoutCard()}
+        <SmartDayTypeInline workout={workout} t={t} />
 
 {isMeetDay && (
 <div style={{
@@ -6542,6 +6604,7 @@ function CurrentWorkout({ workout, currentCycle, totalWorkouts, onTogglePrepItem
       </div>
 
       {renderActivateWorkoutCard()}
+        <SmartDayTypeInline workout={workout} t={t} />
 
       {(workout.prepItems || []).length > 0 && (
         <div style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: (workout.warmups || []).length > 0 ? 0 : 10 }}>
