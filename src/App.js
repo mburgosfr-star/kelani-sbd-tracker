@@ -2529,7 +2529,14 @@ function buildSmartTrainingWorkout(sourceWorkout = {}, trainingCandidate = null,
   };
 }
 
-function reduceSmartDeloadSet(set = {}) {
+function reduceSmartDeloadSet(set = {}
+
+function limitSmartDeloadSets(sets = []) {
+  return (sets || [])
+    .slice(0, 2)
+    .map(reduceSmartDeloadSet);
+}
+) {
   const nextSet = { ...set };
   const weight = Number(nextSet.weight);
   const pct = Number(nextSet.pct);
