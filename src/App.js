@@ -2234,12 +2234,45 @@ function buildSmartTrainingContext({
   };
 }
 
+function buildSmartReadinessSignals(context = {}) {
+  const completedEntries = (context.history || [])
+    .filter(entry => Number(entry?.workoutNumber) > 0)
+    .sort((a, b) => Number(a.workoutNumber) - Number(b.workoutNumber));
+
+  const lastEntry = completedEntries[completedEntries.length - 1] || null;
+  const recentEntries = completedEntries.slice(-3);
+
+  const recentHardCount = recentEntries.filter(entry =>
+    ['hard', 'veryHard', 'max'].includes(entry?.workoutEffort)
+  ).length;
+
+  const recentEasyCount = recentEntries.filter(entry =>
+    ['easy', 'normal'].includes(entry?.workoutEffort)
+  ).length;
+
+  return {
+    completedCount: completedEntries.length,
+    lastWorkoutNumber: Number(lastEntry?.workoutNumber) || 0,
+    lastWorkoutEffort: lastEntry?.workoutEffort || null,
+    recentHardCount,
+    recentEasyCount,
+  };
+}
+
 function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
+  const readiness = buildSmartReadinessSignals(context);
   const maxIndex = Math.max(generatedWorkouts.length - 1, 0);
-  return Math.min(
+
+  const nextIndex = Math.min(
     Math.max(Number(context?.currentIndex) || 0, 0),
     maxIndex
   );
+
+  return {
+    index: nextIndex,
+    readiness,
+    reason: 'current-index-fallback',
+  };
 }
 
 function generateSmartWorkouts({
@@ -2285,9 +2318,9 @@ function generateSmartWorkouts({
     }));
   }
 
-  const nextWorkoutIndex = decideSmartNextWorkoutIndex(smartContext, generatedWorkouts);
+  const smartDecision = decideSmartNextWorkoutIndex(smartContext, generatedWorkouts);
   const visibleThroughIndex = Math.min(
-    Math.max(nextWorkoutIndex, 0),
+    Math.max(smartDecision.index, 0),
     Math.max(generatedWorkouts.length - 1, 0)
   );
 
@@ -2296,6 +2329,7 @@ function generateSmartWorkouts({
     smartVisible: index <= visibleThroughIndex,
     smartCurrentIndex: smartContext.currentIndex,
     smartCurrentCycle: smartContext.currentCycle,
+    smartDecision: index === visibleThroughIndex ? smartDecision : null,
   }));
 }
 
