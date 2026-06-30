@@ -9959,6 +9959,13 @@ function App() {
   }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentIndex, currentCycle]);
 
   useEffect(() => {
+    if (!hasLoadedData || !isSmartTrainingModel(trainingModel)) return;
+    if (selectedIndex <= currentIndex) return;
+
+    setSelectedIndex(currentIndex);
+  }, [hasLoadedData, trainingModel, selectedIndex, currentIndex]);
+
+  useEffect(() => {
     if (screen !== 'completed' || !completedWorkout) return;
 
     const timeoutId = setTimeout(() => {
