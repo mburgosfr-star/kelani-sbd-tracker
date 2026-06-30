@@ -2254,6 +2254,7 @@ function buildSmartReadinessSignals(context = {}) {
     completedCount: completedEntries.length,
     lastWorkoutNumber: Number(lastEntry?.workoutNumber) || 0,
     lastWorkoutEffort: lastEntry?.workoutEffort || null,
+    lastWasRestDay: Boolean(lastEntry?.restDay),
     recentHardCount,
     recentEasyCount,
   };
@@ -2268,7 +2269,7 @@ function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
     maxIndex
   );
 
-  const shouldRecover = readiness.recentHardCount >= 2;
+  const shouldRecover = readiness.recentHardCount >= 2 && !readiness.lastWasRestDay;
 
   return {
     index: nextIndex,
@@ -10856,6 +10857,8 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     finishedWorkout.completedAt = new Date().toISOString();
 
     if (workout.type === 'rest') {
+      const restWorkoutEffort = finishedWorkout.workoutEffort || 'easy';
+
       finishedWorkout.completedSummary = {
         type: 'rest',
         bodyWeight: latestBodyWeight,
@@ -10874,8 +10877,11 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
           restDay: true,
           completionOnly: true,
           date: new Date().toLocaleDateString('nl-NL'),
-          workoutEffort: finishedWorkout.workoutEffort || 'easy',
-          workoutSnapshot: finishedWorkout,
+          workoutEffort: restWorkoutEffort,
+          workoutSnapshot: {
+            ...finishedWorkout,
+            workoutEffort: restWorkoutEffort,
+          },
         },
       ]);
 
@@ -10883,7 +10889,11 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         prev.map((w, wi) => wi === selectedIndex ? finishedWorkout : w)
       );
 
-      setCompletedWorkout(finishedWorkout);
+      setCompletedWorkout({
+        ...finishedWorkout,
+        workoutEffort: null,
+        hideWorkoutEffort: true,
+      });
       setCompletedWorkoutIndex(selectedIndex);
 
       const nextWorkoutIndex = Math.min(selectedIndex + 1, workouts.length - 1);
@@ -11412,6 +11422,10 @@ const bestE1RMs = {
 
 const total1RM = best1RMs.Squat + best1RMs.Bench + best1RMs.Deadlift;
 const totalE1RM = bestE1RMs.Squat + bestE1RMs.Bench + bestE1RMs.Deadlift;
+const latestBodyDataEntry = [...bodyWeights].slice(-1)[0];
+const latestBodyWeightEntry = [...bodyWeights].filter(entry => entry.bodyWeight).slice(-1)[0];
+const latestBodyWeight = latestBodyWeightEntry?.bodyWeight || null;
+
 function buildCompletedSummaryForRender(workout) {
   if (!workout) return null;
 
@@ -11524,10 +11538,6 @@ const completedSummaryForRender =
   (completedSummaryCandidate?.results || []).length > 0
     ? completedSummaryCandidate
     : buildCompletedSummaryForRender(completedWorkout) || completedSummaryCandidate;
-
-const latestBodyDataEntry = [...bodyWeights].slice(-1)[0];
-const latestBodyWeightEntry = [...bodyWeights].filter(entry => entry.bodyWeight).slice(-1)[0];
-const latestBodyWeight = latestBodyWeightEntry?.bodyWeight || null;
 
 const strengthRatio = latestBodyWeight
   ? Math.round((total1RM / latestBodyWeight) * 100) / 100
