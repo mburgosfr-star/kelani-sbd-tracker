@@ -11158,6 +11158,14 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     finishedWorkout.completed = true;
     finishedWorkout.completedAt = new Date().toISOString();
 
+    const completedSmartDayType = isSmartTrainingModel(trainingModel)
+      ? finishedWorkout.smartDayType || (
+        finishedWorkout.type === 'rest'
+          ? SMART_DAY_TYPES.RECOVERY
+          : SMART_DAY_TYPES.TRAINING
+      )
+      : null;
+
     if (workout.type === 'rest') {
       const restWorkoutEffort = finishedWorkout.workoutEffort || 'easy';
 
@@ -11424,9 +11432,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         completionOnly: result.trackStrength === false,
         workoutNumber: workout.number,
         cycle: currentCycle,
-        smartDayType: isSmartTrainingModel(trainingModel)
-          ? (finishedWorkout.type === 'rest' ? SMART_DAY_TYPES.RECOVERY : SMART_DAY_TYPES.TRAINING)
-          : null,
+        smartDayType: completedSmartDayType,
         lift: result.lift,
         topWeight: result.trackStrength === false ? 0 : result.oneRMToday,
         topReps: result.trackStrength === false ? 0 : (result.topSet?.reps || 0),
@@ -11457,9 +11463,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       {
         workoutNumber: workout.number,
         cycle: currentCycle,
-        smartDayType: isSmartTrainingModel(trainingModel)
-          ? (finishedWorkout.type === 'rest' ? SMART_DAY_TYPES.RECOVERY : SMART_DAY_TYPES.TRAINING)
-          : null,
+        smartDayType: completedSmartDayType,
         lift: workout.lift,
         topWeight: 0,
         topReps: 0,
