@@ -833,6 +833,11 @@ const SMART_THRESHOLDS = {
   FAILED_SET_FATIGUE_CAP: 2,
 };
 
+const SMART_GENERATED_FLAGS = {
+  RECOVERY: 'smartGeneratedRecovery',
+  TRAINING: 'smartGeneratedTraining',
+};
+
 function normalizeTrainingModel(model) {
   return model === TRAINING_MODELS.SMART
     ? TRAINING_MODELS.SMART
