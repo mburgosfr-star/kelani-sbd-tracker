@@ -2392,6 +2392,53 @@ function buildSmartRecoveryWorkout(sourceWorkout = {}) {
   };
 }
 
+function resetSmartSetProgress(set = {}) {
+  return {
+    ...set,
+    done: false,
+    failed: false,
+    skipped: false,
+    effort: null,
+    failedAttempts: 0,
+    failedWeight: null,
+    adjustedWeight: null,
+    adjustedFromFailedSet: false,
+    adjustedFromOriginal: false,
+  };
+}
+
+function resetSmartChecklistProgress(item = {}) {
+  return {
+    ...item,
+    done: false,
+  };
+}
+
+function resetSmartWorkoutProgress(workout = {}) {
+  return {
+    ...workout,
+    completed: false,
+    completedAt: null,
+    completedDate: null,
+    completedSummary: null,
+    workoutEffort: null,
+    prepItems: (workout.prepItems || []).map(resetSmartChecklistProgress),
+    warmups: (workout.warmups || []).map(resetSmartChecklistProgress),
+    sets: (workout.sets || []).map(resetSmartSetProgress),
+    cooldownItems: (workout.cooldownItems || []).map(resetSmartChecklistProgress),
+    lifts: (workout.lifts || []).map(liftBlock => ({
+      ...liftBlock,
+      prepItems: (liftBlock.prepItems || []).map(resetSmartChecklistProgress),
+      warmups: (liftBlock.warmups || []).map(resetSmartChecklistProgress),
+      sets: (liftBlock.sets || []).map(resetSmartSetProgress),
+    })),
+    accessories: (workout.accessories || []).map(accessory => ({
+      ...accessory,
+      done: (accessory.done || []).map(() => false),
+    })),
+  };
+}
+
 function buildSmartTrainingWorkout(sourceWorkout = {}, trainingCandidate = null, options = {}) {
   if (!trainingCandidate || trainingCandidate?.type !== 'training') {
     return sourceWorkout;
@@ -2401,11 +2448,11 @@ function buildSmartTrainingWorkout(sourceWorkout = {}, trainingCandidate = null,
     sourceWorkout?.type === 'training' &&
     !options.forceReplacement
   ) {
-    return sourceWorkout;
+    return resetSmartWorkoutProgress(sourceWorkout);
   }
 
   return {
-    ...trainingCandidate,
+    ...resetSmartWorkoutProgress(trainingCandidate),
     number: sourceWorkout.number,
     smartSourceWorkoutNumber: trainingCandidate.number,
     smartGeneratedTraining: true,
