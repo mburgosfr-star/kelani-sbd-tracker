@@ -2390,12 +2390,15 @@ function buildSmartRecoveryWorkout(sourceWorkout = {}) {
   };
 }
 
-function buildSmartTrainingWorkout(sourceWorkout = {}, trainingCandidate = null) {
+function buildSmartTrainingWorkout(sourceWorkout = {}, trainingCandidate = null, options = {}) {
   if (!trainingCandidate || trainingCandidate?.type !== 'training') {
     return sourceWorkout;
   }
 
-  if (sourceWorkout?.type === 'training') {
+  if (
+    sourceWorkout?.type === 'training' &&
+    !options.forceReplacement
+  ) {
     return sourceWorkout;
   }
 
@@ -2488,13 +2491,22 @@ function generateSmartWorkouts({
     const shouldUseFallbackTraining =
       isDecisionWorkout &&
       smartDecision.dayType === 'training' &&
-      workout.type !== 'training' &&
-      fallbackTrainingCandidate?.type === 'training';
+      fallbackTrainingCandidate?.type === 'training' &&
+      (
+        workout.type !== 'training' ||
+        (
+          smartDecision.readiness?.lastWasRestDay &&
+          isHeavySmartTrainingCandidate(workout) &&
+          fallbackTrainingCandidate.number !== workout.number
+        )
+      );
 
     const smartWorkout = shouldBuildRecoveryDay
       ? buildSmartRecoveryWorkout(workout)
       : shouldUseFallbackTraining
-        ? buildSmartTrainingWorkout(workout, fallbackTrainingCandidate)
+        ? buildSmartTrainingWorkout(workout, fallbackTrainingCandidate, {
+          forceReplacement: true,
+        })
         : workout;
 
     return {
