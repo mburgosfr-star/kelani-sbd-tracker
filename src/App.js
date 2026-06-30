@@ -2271,10 +2271,23 @@ function generateSmartWorkouts({
   );
 
   if (!Number.isFinite(smartContext.currentIndex)) {
-    return generatedWorkouts;
+    return generatedWorkouts.map(workout => ({
+      ...workout,
+      smartVisible: true,
+    }));
   }
 
-  return generatedWorkouts;
+  const visibleThroughIndex = Math.min(
+    Math.max(smartContext.currentIndex, 0),
+    Math.max(generatedWorkouts.length - 1, 0)
+  );
+
+  return generatedWorkouts.map((workout, index) => ({
+    ...workout,
+    smartVisible: index <= visibleThroughIndex,
+    smartCurrentIndex: smartContext.currentIndex,
+    smartCurrentCycle: smartContext.currentCycle,
+  }));
 }
 
 function generateWorkoutsForTrainingModel(model, args = {}) {
@@ -7953,10 +7966,18 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
   const completedWorkoutNumberSet = new Set(completedWorkoutNumbers.map(Number));
   const programSummary = summarizeProgramWorkouts(workouts);
 
+  const hasSmartVisibilityMetadata = smartModel && workouts.some(workout =>
+    Object.prototype.hasOwnProperty.call(workout || {}, 'smartVisible')
+  );
+
   const allowedWorkoutEntries = smartModel
     ? workouts
-      .slice(0, Math.min(currentIndex + 1, workouts.length))
       .map((workout, idx) => ({ workout, idx }))
+      .filter(({ workout, idx }) =>
+        hasSmartVisibilityMetadata
+          ? workout.smartVisible !== false
+          : idx <= currentIndex
+      )
     : workouts.map((workout, idx) => ({ workout, idx }));
   const visibleCurrentIndex = Math.min(
     Math.max(currentIndex, 0),
