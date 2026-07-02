@@ -13789,6 +13789,7 @@ const __kelaniSmartResetToW1 = () => {
 };
 
 const __kelaniSmartQA = (options = {}) => {
+  const mode = options.mode || 'default';
   const helperNames = [
     '__kelaniSmartDebug',
     '__kelaniSmartPreviewNextDay',
@@ -13814,10 +13815,16 @@ const __kelaniSmartQA = (options = {}) => {
   const selectedIndex = inProgress.selectedIndex ?? currentIndex;
   const currentWorkout = workouts[currentIndex] || null;
   const selectedWorkout = workouts[selectedIndex] || null;
+  const visibleWorkouts = workouts.filter(workout => workout.smartVisible !== false);
+  const resolvedTrainingModel = data.trainingModel || localStorage.getItem('trainingModel') || null;
 
   const regression = typeof __kelaniSmartPreviewRegression === 'function'
     ? __kelaniSmartPreviewRegression()
     : { pass: false, failed: ['preview-regression-helper-missing'] };
+
+  const previewGood = typeof __kelaniSmartPreviewNextDay === 'function'
+    ? __kelaniSmartPreviewNextDay({ effort: 'good', failedByLift: {} })
+    : { ok: false, reason: 'preview-helper-missing' };
 
   const expected = options.expected || {};
   const expectedFailures = [];
@@ -13855,12 +13862,50 @@ const __kelaniSmartQA = (options = {}) => {
       enumerableSmartKeys: Object.keys(window).filter(keyName => keyName.startsWith('__kelaniSmart')),
     };
 
+  const smartModel = typeof isSmartTrainingModel === 'function'
+    ? isSmartTrainingModel(resolvedTrainingModel)
+    : String(resolvedTrainingModel || '').toLowerCase().includes('smart');
+
+  const peak = regression?.peak || {};
+  const regressionResults = regression?.results || [];
+  const regressionNames = regressionResults.map(result => result.name);
+  const requiredRegressionScenarios = [
+    'hard-no-fail',
+    'too-much-squat-fail',
+    'good-squat-one-fail',
+    'good-squat-two-fail',
+    'good-bench-two-fail',
+    'good-deadlift-two-fail',
+  ];
+
+  const v1Checks = {
+    smartModel,
+    hasWorkouts: workouts.length > 0,
+    hasVisibleWorkout: visibleWorkouts.length > 0,
+    currentWorkoutFound: Boolean(currentWorkout),
+    currentWorkoutHasType: Boolean(currentWorkout?.type),
+    currentWorkoutHasSmartDayType: Boolean(currentWorkout?.smartDayType),
+    previewGoodWorks: Boolean(previewGood?.ok && previewGood?.next),
+    regressionScenarioCoverage: requiredRegressionScenarios.every(name => regressionNames.includes(name)),
+    regressionPeakCoverage: Boolean(
+      peak?.pass &&
+      peak?.early?.smartDayType &&
+      peak?.later?.smartDayType &&
+      peak?.later?.usesPeakPreference === true
+    ),
+    nonEnumerableDebugHelpers: Boolean(
+      helperExposure.pass &&
+      (helperExposure.enumerableSmartKeys || []).length === 0
+    ),
+  };
+
   const checks = {
     storageParse: !data.__parseError,
     currentWorkoutFound: Boolean(currentWorkout),
     regression: Boolean(regression?.pass && (regression.failed || []).length === 0),
     helperExposure: Boolean(helperExposure.pass),
     expectedState: expectedFailures.length === 0,
+    ...(mode === 'v1' ? v1Checks : {}),
   };
 
   const failed = [
@@ -13874,9 +13919,10 @@ const __kelaniSmartQA = (options = {}) => {
   return {
     pass: failed.length === 0,
     failed,
+    mode,
     checks,
     state: {
-      trainingModel: data.trainingModel || localStorage.getItem('trainingModel') || null,
+      trainingModel: resolvedTrainingModel,
       currentCycle: data.currentCycle || null,
       currentIndex,
       selectedIndex,
@@ -13896,15 +13942,32 @@ const __kelaniSmartQA = (options = {}) => {
         smartDayType: selectedWorkout.smartDayType,
         lift: selectedWorkout.lift || null,
       } : null,
-      visibleCount: workouts.filter(workout => workout.smartVisible !== false).length,
+      visibleCount: visibleWorkouts.length,
+      workoutCount: workouts.length,
       historyCount: (data.history || []).length,
     },
     regression: {
       pass: Boolean(regression?.pass),
       failed: regression?.failed || [],
       peak: regression?.peak || null,
-      resultCount: (regression?.results || []).length,
+      resultCount: regressionResults.length,
+      scenarioNames: regressionNames,
     },
+    previewGood: {
+      ok: Boolean(previewGood?.ok),
+      reason: previewGood?.reason || previewGood?.next?.reason || null,
+      next: previewGood?.next ? {
+        number: previewGood.next.number,
+        type: previewGood.next.type,
+        smartDayType: previewGood.next.smartDayType,
+        reason: previewGood.next.reason,
+      } : null,
+    },
+    v1: mode === 'v1' ? {
+      pass: Object.values(v1Checks).every(Boolean),
+      checks: v1Checks,
+      requiredRegressionScenarios,
+    } : null,
     helperExposure,
   };
 };
