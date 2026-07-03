@@ -2532,6 +2532,10 @@ function buildSmartReadinessSignals(context = {}) {
     String(day.workoutEffort || '').trim().toLowerCase() === 'good'
   ).length;
 
+  const recentMaxCount = recentDays.filter(day =>
+    String(day.workoutEffort || '').trim().toLowerCase() === 'max'
+  ).length;
+
   const recentFailedOrSkippedSetCount = recentDays.reduce(
     (total, day) => total + day.failedOrSkippedSetCount,
     0
@@ -2602,6 +2606,7 @@ function buildSmartReadinessSignals(context = {}) {
     recentHardCount,
     recentEasyCount,
     recentGoodCount,
+    recentMaxCount,
     recentFailedOrSkippedSetCount,
     recentFailedOrSkippedSetCountsByLift,
     effortFatigueScore,
@@ -3088,6 +3093,7 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
   const recentEasyCount = Number(readiness.recentEasyCount) || 0;
   const recentGoodCount = Number(readiness.recentGoodCount) || 0;
   const recentHardCount = Number(readiness.recentHardCount) || 0;
+  const recentMaxCount = Number(readiness.recentMaxCount) || 0;
   const recentFatigueScore = Number(readiness.recentFatigueScore) || 0;
   const recentFailedOrSkippedSetCount = Number(readiness.recentFailedOrSkippedSetCount) || 0;
   const topSet = getSmartTopSetForProgression(liftBlock?.sets || []);
@@ -3099,26 +3105,39 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
     topReps: null,
     isSingle: false,
     cleanHardBuild: false,
+    cleanMaxBuild: false,
   };
 
   const hasCleanHardEvidence =
     recentHardCount >= 1 ||
     String(readiness.lastWorkoutEffort || '').trim().toLowerCase() === 'hard';
 
+  const hasCleanMaxEvidence =
+    recentMaxCount >= 1 ||
+    String(readiness.lastWorkoutEffort || '').trim().toLowerCase() === 'max';
+
   const completedCount = Number(readiness.completedCount) || 0;
   const hardProgressionCadence = completedCount % 2 === 0;
+  const maxProgressionCadence = completedCount % 6 === 0;
+
+  const cleanMaxBuild =
+    hasCleanMaxEvidence &&
+    maxProgressionCadence &&
+    recentFailedOrSkippedSetCount === 0 &&
+    recentFatigueScore === 0;
 
   const cleanHardBuild =
+    !cleanMaxBuild &&
     hasCleanHardEvidence &&
     hardProgressionCadence &&
     recentFailedOrSkippedSetCount === 0 &&
     recentFatigueScore === 0;
 
   if (!lift || !liftReadiness || liftReadiness.ready === true || !topSet) return empty;
-  if (recentEasyCount < 2 && recentGoodCount < 2 && !cleanHardBuild) return empty;
+  if (recentEasyCount < 2 && recentGoodCount < 2 && !cleanHardBuild && !cleanMaxBuild) return empty;
   if (recentFailedOrSkippedSetCount > 0) return empty;
-  if (recentFatigueScore > 0 && !cleanHardBuild) return empty;
-  if (hasUnrecoveredSmartHardEffort(readiness) && !cleanHardBuild) return empty;
+  if (recentFatigueScore > 0 && !cleanHardBuild && !cleanMaxBuild) return empty;
+  if (hasUnrecoveredSmartHardEffort(readiness) && !cleanHardBuild && !cleanMaxBuild) return empty;
 
   const topWeight = Number(topSet.weight) || 0;
   const topReps = Math.max(Number(topSet.reps) || 1, 1);
@@ -3140,7 +3159,9 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
       ? (lift === 'Bench' ? 1.25 : 2.5)
       : cleanHardBuild
         ? (lift === 'Bench' ? 0.4 : 0.8)
-        : (lift === 'Bench' ? 2.5 : 5);
+        : cleanMaxBuild
+          ? (lift === 'Bench' ? 0.2 : 0.4)
+          : (lift === 'Bench' ? 2.5 : 5);
 
   const nextTargetE1RM = currentBestE1RM > 0
     ? Math.min(
@@ -3165,6 +3186,7 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
       topReps,
       isSingle,
       cleanHardBuild,
+      cleanMaxBuild,
     };
   }
 
@@ -3174,7 +3196,9 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
       ? (lift === 'Bench' ? 1.025 : 1.03)
       : cleanHardBuild
         ? (lift === 'Bench' ? 1.006 : 1.01)
-        : (lift === 'Bench' ? 1.05 : 1.06);
+        : cleanMaxBuild
+          ? (lift === 'Bench' ? 1.003 : 1.005)
+          : (lift === 'Bench' ? 1.05 : 1.06);
 
   return {
     loadFactor: Math.max(1, Math.min(maxBumpFactor, desiredFactor)),
@@ -3183,6 +3207,7 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
     topReps,
     isSingle,
     cleanHardBuild,
+    cleanMaxBuild,
   };
 }
 
@@ -3199,10 +3224,11 @@ function getSmartLiftTrainingAutoregulation(readiness = {}, liftBlock = {}) {
   const easySuccessProgressionPlan = getSmartEasySuccessProgressionPlan(readiness, liftBlock);
   const easySuccessProgressionFactor = easySuccessProgressionPlan.loadFactor;
   const cleanHardBuild = easySuccessProgressionPlan.cleanHardBuild === true;
+  const cleanMaxBuild = easySuccessProgressionPlan.cleanMaxBuild === true;
 
   const loadFactor = hasRecentFailedSets && hasHardLiftOverlap
     ? 0.9
-    : hasHardLiftOverlap && !cleanHardBuild
+    : hasHardLiftOverlap && !cleanHardBuild && !cleanMaxBuild
       ? 0.95
       : easySuccessProgressionFactor;
 
@@ -3215,6 +3241,7 @@ function getSmartLiftTrainingAutoregulation(readiness = {}, liftBlock = {}) {
     hasHardLiftOverlap,
     easySuccessProgression: loadFactor > 1,
     cleanHardProgression: cleanHardBuild,
+    cleanMaxProgression: cleanMaxBuild,
     easySuccessTargetTopWeight: loadFactor > 1 ? easySuccessProgressionPlan.targetTopWeight : null,
     easySuccessTargetTopE1RM: loadFactor > 1 ? easySuccessProgressionPlan.targetTopE1RM : null,
     loadFactor,
