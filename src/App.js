@@ -2304,10 +2304,12 @@ function isSmartHardEffort(effort) {
   return getSmartEffortScore(effort) > 0;
 }
 
-function isSmartEasyOrNormalEffort(effort) {
-  return effort === 'easy' || effort === 'good' || effort === 'normal';
+function hasUnrecoveredSmartHardEffort(readiness = {}) {
+  return (
+    isSmartHardEffort(readiness.lastWorkoutEffort) &&
+    !readiness.lastWasRecoveryIntervention
+  );
 }
-
 function countFailedOrSkippedSetsFromSnapshot(snapshot = {}) {
   const liftSets = (snapshot?.lifts || []).flatMap(liftBlock => liftBlock?.sets || []);
   const directSets = snapshot?.sets || [];
@@ -2523,7 +2525,11 @@ function buildSmartReadinessSignals(context = {}) {
   ).length;
 
   const recentEasyCount = recentDays.filter(day =>
-    isSmartEasyOrNormalEffort(day.workoutEffort)
+    String(day.workoutEffort || '').trim().toLowerCase() === 'easy'
+  ).length;
+
+  const recentGoodCount = recentDays.filter(day =>
+    String(day.workoutEffort || '').trim().toLowerCase() === 'good'
   ).length;
 
   const recentFailedOrSkippedSetCount = recentDays.reduce(
@@ -2595,6 +2601,7 @@ function buildSmartReadinessSignals(context = {}) {
     postMeetRecoveryTargetReached,
     recentHardCount,
     recentEasyCount,
+    recentGoodCount,
     recentFailedOrSkippedSetCount,
     recentFailedOrSkippedSetCountsByLift,
     effortFatigueScore,
@@ -2755,7 +2762,7 @@ function getSmartMeetdayBlockers(readiness = {}) {
   const isClean = (
     Number(readiness.recentFatigueScore) === 0 &&
     Number(readiness.recentFailedOrSkippedSetCount) === 0 &&
-    !isSmartHardEffort(readiness.lastWorkoutEffort)
+    !hasUnrecoveredSmartHardEffort(readiness)
   );
 
   if (
@@ -2786,7 +2793,7 @@ function getSmartMeetdayBlockers(readiness = {}) {
     blockers.push('meet-plan-not-ready');
   }
 
-  if (isSmartHardEffort(readiness.lastWorkoutEffort)) {
+  if (hasUnrecoveredSmartHardEffort(readiness)) {
     blockers.push('last-workout-hard');
   }
 
@@ -2805,7 +2812,7 @@ function isSmartMeetdayReady(readiness = {}) {
   const isClean = (
     Number(readiness.recentFatigueScore) === 0 &&
     Number(readiness.recentFailedOrSkippedSetCount) === 0 &&
-    !isSmartHardEffort(readiness.lastWorkoutEffort)
+    !hasUnrecoveredSmartHardEffort(readiness)
   );
 
   if (
@@ -2844,6 +2851,22 @@ function shouldAccelerateSmartEasyReadiness(readiness = {}) {
   );
 }
 
+function shouldScheduleSmartGoodMeetTaper(readiness = {}) {
+  const recentEasyCount = Number(readiness.recentEasyCount) || 0;
+  const recentGoodCount = Number(readiness.recentGoodCount) || 0;
+  const fatigueScore = Number(readiness.recentFatigueScore) || 0;
+  const failedCount = Number(readiness.recentFailedOrSkippedSetCount) || 0;
+
+  return (
+    isSmartMeetdayReady(readiness) &&
+    recentGoodCount >= 1 &&
+    recentEasyCount < LIFT_ORDER.length &&
+    fatigueScore === 0 &&
+    failedCount === 0 &&
+    !readiness.lastWasRecoveryIntervention
+  );
+}
+
 function decideSmartNextDayType(readiness = {}) {
   if (readiness.inPostMeetRecovery) return SMART_DAY_TYPES.RECOVERY;
   if (readiness.postMeetRecoveryTargetReached) return SMART_DAY_TYPES.TRAINING;
@@ -2853,6 +2876,10 @@ function decideSmartNextDayType(readiness = {}) {
   }
 
   if (Number(readiness.recentFatigueScore) >= SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE) {
+    return SMART_DAY_TYPES.RECOVERY;
+  }
+
+  if (shouldScheduleSmartGoodMeetTaper(readiness)) {
     return SMART_DAY_TYPES.RECOVERY;
   }
 
@@ -3059,6 +3086,8 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
   const lift = liftBlock?.lift || null;
   const liftReadiness = readiness.meetPlanReadiness?.[lift] || null;
   const recentEasyCount = Number(readiness.recentEasyCount) || 0;
+  const recentGoodCount = Number(readiness.recentGoodCount) || 0;
+  const recentHardCount = Number(readiness.recentHardCount) || 0;
   const recentFatigueScore = Number(readiness.recentFatigueScore) || 0;
   const recentFailedOrSkippedSetCount = Number(readiness.recentFailedOrSkippedSetCount) || 0;
   const topSet = getSmartTopSetForProgression(liftBlock?.sets || []);
@@ -3069,12 +3098,27 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
     targetTopE1RM: null,
     topReps: null,
     isSingle: false,
+    cleanHardBuild: false,
   };
 
+  const hasCleanHardEvidence =
+    recentHardCount >= 1 ||
+    String(readiness.lastWorkoutEffort || '').trim().toLowerCase() === 'hard';
+
+  const completedCount = Number(readiness.completedCount) || 0;
+  const hardProgressionCadence = completedCount % 2 === 0;
+
+  const cleanHardBuild =
+    hasCleanHardEvidence &&
+    hardProgressionCadence &&
+    recentFailedOrSkippedSetCount === 0 &&
+    recentFatigueScore === 0;
+
   if (!lift || !liftReadiness || liftReadiness.ready === true || !topSet) return empty;
-  if (recentEasyCount < 2) return empty;
-  if (recentFatigueScore > 0 || recentFailedOrSkippedSetCount > 0) return empty;
-  if (isSmartHardEffort(readiness.lastWorkoutEffort)) return empty;
+  if (recentEasyCount < 2 && recentGoodCount < 2 && !cleanHardBuild) return empty;
+  if (recentFailedOrSkippedSetCount > 0) return empty;
+  if (recentFatigueScore > 0 && !cleanHardBuild) return empty;
+  if (hasUnrecoveredSmartHardEffort(readiness) && !cleanHardBuild) return empty;
 
   const topWeight = Number(topSet.weight) || 0;
   const topReps = Math.max(Number(topSet.reps) || 1, 1);
@@ -3089,9 +3133,14 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
       : 0
   );
   const acceleratedEasyBuild = shouldAccelerateSmartEasyReadiness(readiness);
+  const cleanGoodBuild = !acceleratedEasyBuild && recentGoodCount >= 2;
   const e1rmStep = acceleratedEasyBuild
     ? (lift === 'Bench' ? 5 : 10)
-    : (lift === 'Bench' ? 2.5 : 5);
+    : cleanGoodBuild
+      ? (lift === 'Bench' ? 1.25 : 2.5)
+      : cleanHardBuild
+        ? (lift === 'Bench' ? 0.4 : 0.8)
+        : (lift === 'Bench' ? 2.5 : 5);
 
   const nextTargetE1RM = currentBestE1RM > 0
     ? Math.min(
@@ -3115,12 +3164,17 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
       targetTopE1RM: nextTargetE1RM || null,
       topReps,
       isSingle,
+      cleanHardBuild,
     };
   }
 
   const maxBumpFactor = acceleratedEasyBuild
     ? (lift === 'Bench' ? 1.12 : 1.16)
-    : (lift === 'Bench' ? 1.05 : 1.06);
+    : cleanGoodBuild
+      ? (lift === 'Bench' ? 1.025 : 1.03)
+      : cleanHardBuild
+        ? (lift === 'Bench' ? 1.006 : 1.01)
+        : (lift === 'Bench' ? 1.05 : 1.06);
 
   return {
     loadFactor: Math.max(1, Math.min(maxBumpFactor, desiredFactor)),
@@ -3128,6 +3182,7 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
     targetTopE1RM: nextTargetE1RM || null,
     topReps,
     isSingle,
+    cleanHardBuild,
   };
 }
 
@@ -3138,15 +3193,16 @@ function getSmartLiftTrainingAutoregulation(readiness = {}, liftBlock = {}) {
     : Number(readiness.recentFailedOrSkippedSetCount) || 0;
   const hasRecentFailedSets = recentFailedCount > 0;
   const hasHardLiftOverlap =
-    isSmartHardEffort(readiness.lastWorkoutEffort) &&
+    hasUnrecoveredSmartHardEffort(readiness) &&
     (readiness.lastWorkoutLifts || []).includes(liftBlock?.lift);
 
   const easySuccessProgressionPlan = getSmartEasySuccessProgressionPlan(readiness, liftBlock);
   const easySuccessProgressionFactor = easySuccessProgressionPlan.loadFactor;
+  const cleanHardBuild = easySuccessProgressionPlan.cleanHardBuild === true;
 
   const loadFactor = hasRecentFailedSets && hasHardLiftOverlap
     ? 0.9
-    : hasHardLiftOverlap
+    : hasHardLiftOverlap && !cleanHardBuild
       ? 0.95
       : easySuccessProgressionFactor;
 
@@ -3158,6 +3214,7 @@ function getSmartLiftTrainingAutoregulation(readiness = {}, liftBlock = {}) {
     hasRecentFailedSets,
     hasHardLiftOverlap,
     easySuccessProgression: loadFactor > 1,
+    cleanHardProgression: cleanHardBuild,
     easySuccessTargetTopWeight: loadFactor > 1 ? easySuccessProgressionPlan.targetTopWeight : null,
     easySuccessTargetTopE1RM: loadFactor > 1 ? easySuccessProgressionPlan.targetTopE1RM : null,
     loadFactor,
@@ -3445,7 +3502,7 @@ function shouldPreferSmartPeakCandidate(readiness = {}) {
     completedCount >= Math.max(6, LIFT_ORDER.length * 2) &&
     Number(readiness.recentFatigueScore) === 0 &&
     Number(readiness.recentFailedOrSkippedSetCount) === 0 &&
-    !isSmartHardEffort(readiness.lastWorkoutEffort)
+    !hasUnrecoveredSmartHardEffort(readiness)
   );
 }
 
@@ -3519,7 +3576,7 @@ function selectSmartTrainingCandidate({
         ? 8
         : 0;
     const overlapCount = countSharedWorkoutLifts(candidate, readiness.lastWorkoutLifts || []);
-    const overlapPenalty = overlapCount * (isSmartHardEffort(readiness.lastWorkoutEffort) ? 8 : 2);
+    const overlapPenalty = overlapCount * (hasUnrecoveredSmartHardEffort(readiness) ? 8 : 2);
     const failedLiftPenalty = candidateLifts.reduce(
       (total, lift) => total + ((Number(readiness.recentFailedOrSkippedSetCountsByLift?.[lift]) || 0) * 7),
       0
@@ -3614,7 +3671,7 @@ function selectSmartTrainingCandidate({
     ) || defaultTrainingCandidate;
   }
 
-  if (isSmartHardEffort(readiness.lastWorkoutEffort)) {
+  if (hasUnrecoveredSmartHardEffort(readiness)) {
     const lastWorkoutLifts = readiness.lastWorkoutLifts || [];
 
     return pickFromPools(candidate =>
@@ -13838,7 +13895,7 @@ const __kelaniSmartPreviewRegression = () => {
     peak.pass = Boolean(
       earlyPeakPreview?.ok &&
       laterPeakPreview?.ok &&
-      peak.early.smartDayType === SMART_DAY_TYPES.TRAINING &&
+      peak.early.smartDayType === SMART_DAY_TYPES.RECOVERY &&
       peak.early.usesPeakPreference === false &&
       peak.later.smartDayType === SMART_DAY_TYPES.TRAINING &&
       peak.later.usesPeakPreference === true &&
