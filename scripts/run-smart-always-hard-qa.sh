@@ -9,14 +9,17 @@ echo "Rule: lots of recovery is OK; deload is not expected; meet should land lat
 echo "No APK, no phone install, no tag, no release."
 echo
 
-npm run build
+if [[ "${KELANI_QA_BUILD:-0}" == "1" ]]; then
+  npm run build
+fi
 
-(npx serve -s build -l 4173 >/tmp/kelani-smart-hard-serve.log 2>&1 & echo $! >/tmp/kelani-smart-hard-serve.pid)
-sleep 2
+# Using existing web/dev server. Start it yourself before QA.
+# Expected default: http://127.0.0.1:4173
+sleep 1
 
+node ./scripts/kelani-smart-always-hard-qa-browser.js
 node /tmp/kelani-always-hard-cycle-sim.js > /tmp/kelani-smart-always-hard-qa.json
 
-kill "$(cat /tmp/kelani-smart-hard-serve.pid)" 2>/dev/null || true
 
 python3 - <<'PY'
 import json

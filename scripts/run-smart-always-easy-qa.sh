@@ -9,14 +9,16 @@ echo "Rule: always easy + no fails + no fatigue must accelerate toward meetday s
 echo "No APK, no phone install, no tag, no release."
 echo
 
-npm run build
+if [[ "${KELANI_QA_BUILD:-0}" == "1" ]]; then
+  npm run build
+fi
 
-(npx serve -s build -l 4173 >/tmp/kelani-smart-easy-serve.log 2>&1 & echo $! >/tmp/kelani-smart-easy-serve.pid)
-sleep 2
+# Using existing web/dev server. Start it yourself before QA.
+# Expected default: http://127.0.0.1:4173
+sleep 1
 
 node scripts/kelani-smart-always-easy-qa-browser.js > /tmp/kelani-smart-always-easy-qa.json
 
-kill "$(cat /tmp/kelani-smart-easy-serve.pid)" 2>/dev/null || true
 
 python3 - <<'PY'
 import json

@@ -887,6 +887,8 @@ const SMART_THRESHOLDS = {
   MEETDAY_MIN_ACTIVE_BLOCK_DAYS: 8,
   MEETDAY_CURRENT_CYCLE_READINESS_RATIO: 0.97,
   POST_MEET_RECOVERY_MAX_DAYS: 3,
+  POST_MEET_MIN_TRAINING_DAYS: 8,
+  POST_FAILED_MEET_MIN_TRAINING_DAYS: 12,
 };
 
 const SMART_DELOAD = {
@@ -2268,7 +2270,8 @@ function buildSmartTrainingContext({
 } = {}) {
   const normalizedCycle = Number(currentCycle) || 1;
   const normalizedCurrentIndex = Math.max(0, Number(currentIndex) || 0);
-  const cycleHistory = (history || []).filter(entry =>
+  const fullHistory = history || [];
+  const cycleHistory = fullHistory.filter(entry =>
     Number(entry?.cycle) === normalizedCycle
   );
   const completedWorkoutNumbers = [...new Set(
@@ -2284,7 +2287,7 @@ function buildSmartTrainingContext({
   )];
 
   return {
-    history: cycleHistory,
+    history: fullHistory,
     currentIndex: normalizedCurrentIndex,
     currentCycle: normalizedCycle,
     completedWorkoutNumbers,
@@ -2404,25 +2407,46 @@ function buildSmartReadinessSignals(context = {}) {
     currentCycle: targetCycle,
   });
 
+  const isMeetLikeHistoryEntry = entry =>
+    entry?.smartDayType === SMART_DAY_TYPES.MEET ||
+    entry?.type === 'meet' ||
+    entry?.workoutSnapshot?.smartDayType === SMART_DAY_TYPES.MEET ||
+    entry?.workoutSnapshot?.type === 'meet' ||
+    entry?.workoutSnapshot?.completedSummary?.type === 'meet';
+
   const completedEntries = (context.history || [])
-    .filter(entry =>
-      Number(getEntryCycle(entry)) === targetCycle &&
-      Number(entry?.workoutNumber) > 0 &&
-      !entry?.manualMax &&
-      !entry?.seedMax &&
-      (entry?.workoutSnapshot || entry?.restDay)
-    )
-    .sort((a, b) => Number(a.workoutNumber) - Number(b.workoutNumber));
+    .filter(entry => {
+      const entryCycle = Number(getEntryCycle(entry)) || targetCycle;
+      const isCurrentCycle = entryCycle === targetCycle;
+      const isPriorMeet = entryCycle < targetCycle && isMeetLikeHistoryEntry(entry);
+
+      return (
+        (isCurrentCycle || isPriorMeet) &&
+        Number(entry?.workoutNumber) > 0 &&
+        !entry?.manualMax &&
+        !entry?.seedMax &&
+        (entry?.workoutSnapshot || entry?.restDay)
+      );
+    })
+    .sort((a, b) =>
+      (Number(getEntryCycle(a)) || targetCycle) - (Number(getEntryCycle(b)) || targetCycle) ||
+      Number(a.workoutNumber) - Number(b.workoutNumber)
+    );
 
   const workoutDays = [...completedEntries.reduce((map, entry) => {
     const workoutNumber = Number(entry?.workoutNumber);
     if (!Number.isFinite(workoutNumber) || workoutNumber <= 0) return map;
 
-    const current = map.get(workoutNumber) || {
+    const workoutCycle = Number(getEntryCycle(entry)) || targetCycle;
+    const workoutKey = `${workoutCycle}:${workoutNumber}`;
+
+    const current = map.get(workoutKey) || {
+      cycle: workoutCycle,
       workoutNumber,
       entries: [],
       workoutEffort: null,
       restDay: false,
+      type: null,
       smartDayType: null,
       failedOrSkippedSetCount: 0,
       failedOrSkippedSetCountsByLift: LIFT_ORDER.reduce((counts, lift) => ({
@@ -2442,7 +2466,8 @@ function buildSmartReadinessSignals(context = {}) {
       ...getWorkoutLiftNames(entry?.workoutSnapshot || entry),
     ])];
     current.workoutEffort = current.workoutEffort || entry?.workoutEffort || null;
-    current.smartDayType = current.smartDayType || entry?.smartDayType || null;
+    current.type = current.type || entry?.type || entry?.workoutSnapshot?.type || entry?.workoutSnapshot?.completedSummary?.type || null;
+    current.smartDayType = current.smartDayType || entry?.smartDayType || entry?.workoutSnapshot?.smartDayType || null;
     current.restDay =
       current.restDay ||
       Boolean(entry?.restDay) ||
@@ -2475,18 +2500,101 @@ function buildSmartReadinessSignals(context = {}) {
       );
     }
 
-    map.set(workoutNumber, current);
+    map.set(workoutKey, current);
     return map;
-  }, new Map()).values()].sort((a, b) => a.workoutNumber - b.workoutNumber);
+  }, new Map()).values()].sort((a, b) =>
+    Number(a.cycle) - Number(b.cycle) ||
+    Number(a.workoutNumber) - Number(b.workoutNumber)
+  );
 
   const lastDay = workoutDays[workoutDays.length - 1] || null;
-  const lastMeetDayIndex = workoutDays.findLastIndex(day =>
-    day.smartDayType === SMART_DAY_TYPES.MEET
+
+  const historyEntriesForPostMeet = (context.history || [])
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) =>
+      Number(entry?.workoutNumber) > 0 &&
+      !entry?.manualMax &&
+      !entry?.seedMax &&
+      (entry?.workoutSnapshot || entry?.restDay)
+    );
+
+  const lastMeetHistoryIndex = historyEntriesForPostMeet.findLastIndex(({ entry }) =>
+    isMeetLikeHistoryEntry(entry)
   );
-  const lastMeetDay = lastMeetDayIndex >= 0 ? workoutDays[lastMeetDayIndex] : null;
-  const postMeetDays = lastMeetDayIndex >= 0
+
+  const lastMeetHistoryItem = lastMeetHistoryIndex >= 0
+    ? historyEntriesForPostMeet[lastMeetHistoryIndex]
+    : null;
+
+  const postMeetHistoryEntries = lastMeetHistoryIndex >= 0
+    ? historyEntriesForPostMeet.slice(lastMeetHistoryIndex + 1)
+    : [];
+
+  const lastMeetDayIndex = workoutDays.findLastIndex(day =>
+    day.smartDayType === SMART_DAY_TYPES.MEET ||
+    day.type === 'meet'
+  );
+
+  const lastMeetDayFromWorkoutDays = lastMeetDayIndex >= 0 ? workoutDays[lastMeetDayIndex] : null;
+
+  const lastMeetDay = lastMeetDayFromWorkoutDays || (lastMeetHistoryItem ? {
+    cycle: Number(getEntryCycle(lastMeetHistoryItem.entry)) || targetCycle,
+    workoutNumber: Number(lastMeetHistoryItem.entry?.workoutNumber) || 0,
+    entries: [lastMeetHistoryItem.entry],
+    workoutEffort: lastMeetHistoryItem.entry?.workoutEffort || lastMeetHistoryItem.entry?.workoutSnapshot?.workoutEffort || null,
+    restDay: false,
+    type: lastMeetHistoryItem.entry?.type || lastMeetHistoryItem.entry?.workoutSnapshot?.type || lastMeetHistoryItem.entry?.workoutSnapshot?.completedSummary?.type || 'meet',
+    smartDayType: lastMeetHistoryItem.entry?.smartDayType || lastMeetHistoryItem.entry?.workoutSnapshot?.smartDayType || SMART_DAY_TYPES.MEET,
+    failedOrSkippedSetCount:
+      Number(lastMeetHistoryItem.entry?.failedOrSkippedSetCount) ||
+      countFailedOrSkippedSetsFromSnapshot(lastMeetHistoryItem.entry?.workoutSnapshot),
+    failedOrSkippedSetCountsByLift: LIFT_ORDER.reduce((counts, lift) => ({
+      ...counts,
+      [lift]: countFailedOrSkippedSetsForLiftFromSnapshot(lastMeetHistoryItem.entry?.workoutSnapshot, lift),
+    }), {}),
+    lifts: getWorkoutLiftNames(lastMeetHistoryItem.entry?.workoutSnapshot || lastMeetHistoryItem.entry),
+  } : null);
+
+  const postMeetDaysFromWorkoutDays = lastMeetDayIndex >= 0
     ? workoutDays.slice(lastMeetDayIndex + 1)
     : [];
+
+  const postMeetDaysFromHistory = postMeetHistoryEntries.reduce((days, { entry }) => {
+    const workoutNumber = Number(entry?.workoutNumber);
+    if (!Number.isFinite(workoutNumber) || workoutNumber <= 0) return days;
+
+    const cycle = Number(getEntryCycle(entry)) || targetCycle;
+    const key = `${cycle}:${workoutNumber}:${entry?.restDay ? 'rest' : entry?.workoutSnapshot?.type || entry?.type || 'workout'}`;
+    const existing = days.get(key) || {
+      cycle,
+      workoutNumber,
+      restDay: false,
+      type: null,
+      smartDayType: null,
+      failedOrSkippedSetCount: 0,
+    };
+
+    existing.restDay =
+      existing.restDay ||
+      Boolean(entry?.restDay) ||
+      entry?.smartDayType === SMART_DAY_TYPES.RECOVERY ||
+      entry?.workoutSnapshot?.smartDayType === SMART_DAY_TYPES.RECOVERY ||
+      entry?.workoutSnapshot?.type === 'rest';
+
+    existing.type = existing.type || entry?.type || entry?.workoutSnapshot?.type || entry?.workoutSnapshot?.completedSummary?.type || null;
+    existing.smartDayType = existing.smartDayType || entry?.smartDayType || entry?.workoutSnapshot?.smartDayType || null;
+    existing.failedOrSkippedSetCount = Math.max(
+      Number(existing.failedOrSkippedSetCount) || 0,
+      Number(entry?.failedOrSkippedSetCount) || countFailedOrSkippedSetsFromSnapshot(entry?.workoutSnapshot)
+    );
+
+    days.set(key, existing);
+    return days;
+  }, new Map());
+
+  const postMeetDays = postMeetDaysFromWorkoutDays.length > 0
+    ? postMeetDaysFromWorkoutDays
+    : [...postMeetDaysFromHistory.values()];
   const postMeetRecoveryTarget = lastMeetDay
     ? getSmartPostMeetRecoveryTarget(lastMeetDay)
     : 0;
@@ -2496,13 +2604,42 @@ function buildSmartReadinessSignals(context = {}) {
   const postMeetRecoveryDaysCompleted = postMeetDays.filter(day =>
     day.restDay || day.smartDayType === SMART_DAY_TYPES.RECOVERY
   ).length;
+  const postMeetTrainingDaysCompleted = postMeetDays.filter(day =>
+    !day.restDay &&
+    day.smartDayType !== SMART_DAY_TYPES.RECOVERY &&
+    day.smartDayType !== SMART_DAY_TYPES.DELOAD &&
+    day.smartDayType !== SMART_DAY_TYPES.MEET &&
+    day.type !== 'meet'
+  ).length;
+
+  const postMeetAcuteRecoveryStillRelevant = Boolean(
+    lastMeetDay &&
+    postMeetTrainingDaysCompleted === 0
+  );
   const inPostMeetRecovery = Boolean(
     lastMeetDay &&
+    postMeetAcuteRecoveryStillRelevant &&
     postMeetRecoveryDaysCompleted < postMeetRecoveryTarget
   );
   const postMeetRecoveryTargetReached = Boolean(
+    !lastMeetDay ||
+    postMeetRecoveryDaysCompleted >= postMeetRecoveryTarget ||
+    !postMeetAcuteRecoveryStillRelevant
+  );
+  const lastMeetFailedOrSkippedSetCount = Number(lastMeetDay?.failedOrSkippedSetCount) || 0;
+  const lastMeetWasFailed = lastMeetFailedOrSkippedSetCount > 0;
+  const postMeetMinimumTrainingTarget = lastMeetDay
+    ? lastMeetWasFailed
+      ? SMART_THRESHOLDS.POST_FAILED_MEET_MIN_TRAINING_DAYS
+      : SMART_THRESHOLDS.POST_MEET_MIN_TRAINING_DAYS
+    : 0;
+  const postMeetMinimumTrainingTargetReached = Boolean(
+    !lastMeetDay ||
+    postMeetTrainingDaysCompleted >= postMeetMinimumTrainingTarget
+  );
+  const inPostMeetTrainingCooldown = Boolean(
     lastMeetDay &&
-    postMeetRecoveryDaysCompleted >= postMeetRecoveryTarget
+    !postMeetMinimumTrainingTargetReached
   );
 
   const lastRecoveryInterventionIndex = workoutDays.findLastIndex(day =>
@@ -2586,6 +2723,13 @@ function buildSmartReadinessSignals(context = {}) {
         lastDay?.smartDayType === SMART_DAY_TYPES.RECOVERY ||
         lastDay?.smartDayType === SMART_DAY_TYPES.DELOAD
       ),
+      lastMeetWorkoutNumber: Number(lastMeetDay?.workoutNumber) || 0,
+      lastMeetFailedOrSkippedSetCount,
+      lastMeetWasFailed,
+      postMeetTrainingDaysCompleted,
+      postMeetMinimumTrainingTarget,
+      postMeetMinimumTrainingTargetReached,
+      inPostMeetTrainingCooldown,
     }),
     lastWorkoutNumber: Number(lastDay?.workoutNumber) || 0,
     lastMeetWorkoutNumber: Number(lastMeetDay?.workoutNumber) || 0,
@@ -2612,6 +2756,31 @@ function buildSmartReadinessSignals(context = {}) {
     effortFatigueScore,
     failedSetFatigueScore,
     recentFatigueScore,
+    recentFailedMeetTrainingCooldown: Boolean(
+      (context.history || []).some(entry => {
+        const isMeetLike =
+          entry?.smartDayType === SMART_DAY_TYPES.MEET ||
+          entry?.type === 'meet' ||
+          entry?.workoutSnapshot?.smartDayType === SMART_DAY_TYPES.MEET ||
+          entry?.workoutSnapshot?.type === 'meet' ||
+          entry?.workoutSnapshot?.completedSummary?.type === 'meet';
+
+        const failedCount =
+          Number(entry?.failedOrSkippedSetCount) ||
+          countFailedOrSkippedSetsFromSnapshot(entry?.workoutSnapshot);
+
+        const effort = String(entry?.workoutEffort || entry?.workoutSnapshot?.workoutEffort || '').trim();
+
+        return isMeetLike && (failedCount > 0 || effort === 'tooMuch');
+      }) &&
+      workoutDays.filter(day =>
+        !day.restDay &&
+        day.smartDayType !== SMART_DAY_TYPES.RECOVERY &&
+        day.smartDayType !== SMART_DAY_TYPES.DELOAD &&
+        day.smartDayType !== SMART_DAY_TYPES.MEET &&
+        day.type !== 'meet'
+      ).length < SMART_THRESHOLDS.POST_FAILED_MEET_MIN_TRAINING_DAYS
+    ),
   };
 }
 
@@ -2759,6 +2928,13 @@ function buildSmartMeetPlanReadiness({
 }
 
 function getSmartMeetdayBlockers(readiness = {}) {
+
+  if (readiness?.inPostMeetTrainingCooldown) {
+    return [readiness.lastMeetWasFailed
+      ? 'post-failed-meet-training-cooldown'
+      : 'post-meet-training-cooldown'];
+  }
+
   const blockers = [];
   const meetPlanReadiness = readiness.meetPlanReadiness || {};
   const missingLifts = LIFT_ORDER.filter(lift =>
@@ -2810,6 +2986,15 @@ function getSmartMeetdayBlockers(readiness = {}) {
 }
 
 function isSmartMeetdayReady(readiness = {}) {
+
+  if (readiness?.inPostMeetTrainingCooldown) {
+    return false;
+  }
+
+  if (readiness?.recentFailedMeetTrainingCooldown) {
+    return false;
+  }
+
   const meetPlanReadiness = readiness.meetPlanReadiness || {};
   const hasSeenAllCompetitionLifts = LIFT_ORDER.every(lift =>
     meetPlanReadiness?.[lift]?.hasCurrentCycleEvidence
@@ -2874,7 +3059,14 @@ function shouldScheduleSmartGoodMeetTaper(readiness = {}) {
 
 function decideSmartNextDayType(readiness = {}) {
   if (readiness.inPostMeetRecovery) return SMART_DAY_TYPES.RECOVERY;
-  if (readiness.postMeetRecoveryTargetReached) return SMART_DAY_TYPES.TRAINING;
+
+  if (
+    readiness.lastMeetWorkoutNumber &&
+    readiness.postMeetRecoveryTargetReached &&
+    readiness.inPostMeetTrainingCooldown
+  ) {
+    return SMART_DAY_TYPES.TRAINING;
+  }
 
   if (Number(readiness.recentFailedOrSkippedSetCount) >= SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT) {
     return SMART_DAY_TYPES.DELOAD;
@@ -3130,8 +3322,7 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
     !cleanMaxBuild &&
     hasCleanHardEvidence &&
     hardProgressionCadence &&
-    recentFailedOrSkippedSetCount === 0 &&
-    recentFatigueScore === 0;
+    recentFailedOrSkippedSetCount === 0;
 
   if (!lift || !liftReadiness || liftReadiness.ready === true || !topSet) return empty;
   if (recentEasyCount < 2 && recentGoodCount < 2 && !cleanHardBuild && !cleanMaxBuild) return empty;
@@ -7115,11 +7306,10 @@ function getSmartMeetdayBlockerDisplayLabels(blockers = [], t = {}) {
 }
 
 function canMentionSmartMeetPlanReady(readiness = {}) {
-  const activeBlockCount = Number(readiness.activeBlockCompletedCount) || 0;
   const blockers = Array.isArray(readiness.meetdayBlockers) ? readiness.meetdayBlockers : [];
   return Boolean(readiness.meetPlanReady)
-    && activeBlockCount >= SMART_THRESHOLDS.MEETDAY_MIN_ACTIVE_BLOCK_DAYS
-    && !blockers.includes('active-block-too-short');
+    && isSmartMeetdayReady(readiness)
+    && blockers.length === 0;
 }
 
 function hasSmartFatigueEvidence(readiness = {}) {
