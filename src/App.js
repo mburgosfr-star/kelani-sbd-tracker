@@ -3300,23 +3300,27 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
     cleanMaxBuild: false,
   };
 
+  const normalizedLastHardWorkoutEffort = String(readiness.lastWorkoutEffort || '').trim().toLowerCase();
+
   const hasCleanHardEvidence =
     recentHardCount >= 1 ||
-    String(readiness.lastWorkoutEffort || '').trim().toLowerCase() === 'hard';
+    normalizedLastHardWorkoutEffort === 'hard';
+
+  const normalizedLastWorkoutEffort = String(readiness.lastWorkoutEffort || '').trim().toLowerCase();
 
   const hasCleanMaxEvidence =
     recentMaxCount >= 1 ||
-    String(readiness.lastWorkoutEffort || '').trim().toLowerCase() === 'max';
+    normalizedLastWorkoutEffort === 'max' ||
+    getSmartEffortScore(readiness.lastWorkoutEffort) >= 2;
 
   const completedCount = Number(readiness.completedCount) || 0;
   const hardProgressionCadence = completedCount % 2 === 0;
-  const maxProgressionCadence = completedCount % 6 === 0;
+  const maxProgressionCadence = completedCount % 18 === 2;
 
   const cleanMaxBuild =
     hasCleanMaxEvidence &&
     maxProgressionCadence &&
-    recentFailedOrSkippedSetCount === 0 &&
-    recentFatigueScore === 0;
+    recentFailedOrSkippedSetCount === 0;
 
   const cleanHardBuild =
     !cleanMaxBuild &&
@@ -3351,7 +3355,7 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
       : cleanHardBuild
         ? (lift === 'Bench' ? 0.4 : 0.8)
         : cleanMaxBuild
-          ? (lift === 'Bench' ? 0.2 : 0.4)
+          ? (lift === 'Bench' ? 0.1 : 0.2)
           : (lift === 'Bench' ? 2.5 : 5);
 
   const nextTargetE1RM = currentBestE1RM > 0
@@ -3365,7 +3369,9 @@ function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
     ? nextTargetE1RM / (1 + topReps / 30)
     : topWeight * 1.025;
 
-  const minimumBumpFactor = 1.025;
+  const minimumBumpFactor = cleanMaxBuild
+    ? 1.001
+    : 1.025;
   const isSingle = topReps <= 1;
   const desiredFactor = Math.max(minimumBumpFactor, targetTopWeight / topWeight);
 
