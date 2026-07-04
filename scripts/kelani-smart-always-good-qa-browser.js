@@ -1,6 +1,6 @@
 const CHROME = '/snap/bin/chromium';
 const PORT = 9223;
-const APP_URL = 'http://127.0.0.1:4173';
+const APP_URL = 'http://127.0.0.1:3000';
 
 const { spawn } = require('child_process');
 
@@ -22,7 +22,7 @@ async function openPage() {
   });
 
   const pages = await getJson('/json');
-  const page = pages.find(p => p.type === 'page' && p.url.includes('127.0.0.1:4173')) || pages[0];
+  const page = pages.find(p => p.type === 'page' && p.url.includes('127.0.0.1:3000')) || pages[0];
   if (!page?.webSocketDebuggerUrl) throw new Error('No debuggable page found');
   return page.webSocketDebuggerUrl;
 }
