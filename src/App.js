@@ -1451,9 +1451,25 @@ function generateWarmups(workPlan, lift = '') {
     }
   }
 
-  return warmupWeights
+  const prunedWarmupWeights = warmupWeights
     .filter((weight, index, weights) => weight > 0 && weights.indexOf(weight) === index)
     .sort((a, b) => a - b)
+    .filter((weight, index, weights) => {
+      if (index <= 1) return true;
+
+      const previousWeight = Number(weights[index - 1]) || 0;
+      const currentWeight = Number(weight) || 0;
+      const target = Number(targetWeight) || 0;
+
+      if (!previousWeight || !currentWeight || !target) return true;
+
+      const distanceFromPrevious = currentWeight - previousWeight;
+      const distanceToWork = target - currentWeight;
+
+      return distanceToWork < distanceFromPrevious;
+    });
+
+  return prunedWarmupWeights
     .map((weight, index, weights) => {
       const isFinalWarmup = index === weights.length - 1 && weight !== 20;
       return {
