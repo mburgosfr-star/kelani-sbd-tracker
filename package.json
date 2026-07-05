@@ -31,7 +31,8 @@
     "android:izzy-test": "node scripts/test-izzy-build.js",
     "android:install-apk": "node scripts/install-apk.js",
     "android:release-gate": "node scripts/guarded-release.js --check",
-    "android:guarded-release": "node scripts/guarded-release.js --release"
+    "android:guarded-release": "npm run android:apk-hygiene && node scripts/guarded-release.js --release",
+    "android:apk-hygiene": "node scripts/check-release-apk-hygiene.js"
   },
   "eslintConfig": {
     "extends": [
