@@ -210,6 +210,8 @@ const THEME = {
   
 };
 
+const APP_TOP_BAR_HEIGHT = 50;
+
 
 const WORKOUT_CIRCLE_SIZE = 44;
 const WORKOUT_CIRCLE_FONT_SIZE = 18;
@@ -10122,71 +10124,118 @@ function isCompletedWorkoutNewCycleBoundary(workout) {
   );
 }
 
-function AppHeader({ t, title, subtitle, meta, children, titleStyle = {} }) {
+function AppTopBar() {
+  const versionLabel = process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev';
+
   return (
-    <div style={{ textAlign: 'center', marginBottom: 8 }}>
-      <div style={{
+    <header
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: `calc(${APP_TOP_BAR_HEIGHT}px + env(safe-area-inset-top))`,
+        paddingTop: 'env(safe-area-inset-top)',
+        boxSizing: 'border-box',
+        zIndex: 1000,
+        background: THEME.bg,
+        borderBottom: 'none',
         display: 'flex',
-        justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 3
-      }}>
+        justifyContent: 'center',
+        paddingLeft: 16,
+        paddingRight: 16,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          lineHeight: 1,
+          transform: 'translateY(-1px)',
+        }}
+      >
         <img
-          src="/kelani-banner.png"
-          alt=""
-          aria-hidden="true"
+          src="/kelani-wordmark.png?v=topbar-tight-2"
+          alt="Kelani SBD Tracker"
           style={{
-            width: 'min(340px, 82vw)',
-            maxHeight: 98,
+            display: 'block',
+            height: 43,
+            width: 'auto',
             objectFit: 'contain',
-            background: 'transparent',
-            border: 'none',
-            boxShadow: 'none'
           }}
         />
-      </div>
 
-      <div style={{
-        color: THEME.muted,
-        fontSize: 11,
-        fontWeight: 800,
-        lineHeight: 1,
-        marginBottom: 7
-      }}>
-        {process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev'}
+        <div
+          style={{
+            color: THEME.muted,
+            fontSize: 8,
+            fontWeight: 800,
+            letterSpacing: 1.1,
+            lineHeight: 1,
+            textTransform: 'uppercase',
+            marginTop: -1,
+          }}
+        >
+          {versionLabel}
+        </div>
       </div>
+    </header>
+  );
+}
 
-      <h2 style={{
-        margin: 0,
-        fontSize: 30,
-        fontWeight: 900,
-        lineHeight: 1.15,
-        color: THEME.meet,
-        ...titleStyle
-      }}>
+
+function AppHeader({ title, subtitle, meta, children, titleStyle = {} }) {
+  return (
+    <div
+      style={{
+        textAlign: 'center',
+        marginBottom: 8,
+        paddingTop: `calc(${APP_TOP_BAR_HEIGHT}px + env(safe-area-inset-top) + 24px)`,
+      }}
+    >
+      <AppTopBar />
+
+      <h2
+        style={{
+          margin: 0,
+          color: THEME.primary,
+          fontSize: 30,
+          fontWeight: 900,
+          lineHeight: 1.1,
+          letterSpacing: -0.4,
+          ...titleStyle,
+        }}
+      >
         {title}
       </h2>
 
       {subtitle && (
-        <div style={{
-          color: THEME.muted,
-          fontSize: 15,
-          fontWeight: 700,
-          lineHeight: 1.35,
-          marginTop: 6
-        }}>
+        <div
+          style={{
+            color: THEME.text,
+            fontSize: 15,
+            fontWeight: 700,
+            lineHeight: 1.35,
+            marginTop: 8,
+          }}
+        >
           {subtitle}
         </div>
       )}
 
       {meta && (
-        <div style={{
-          color: THEME.muted,
-          fontSize: 15,
-          fontWeight: 700,
-          lineHeight: 1.35,
-          marginTop: 6
-        }}>
+        <div
+          style={{
+            color: THEME.muted,
+            fontSize: 13,
+            fontWeight: 800,
+            lineHeight: 1.35,
+            marginTop: 8,
+          }}
+        >
           {meta}
         </div>
       )}
@@ -10195,6 +10244,7 @@ function AppHeader({ t, title, subtitle, meta, children, titleStyle = {} }) {
     </div>
   );
 }
+
 
 function isCompletedHistoryEntry(entry) {
   if (!entry) return false;
@@ -11426,7 +11476,6 @@ function BottomNav({ screen, onChange, t }) {
       display: 'flex',
       zIndex: 100,
       background: THEME.bg,
-      borderTop: `1px solid ${THEME.border}`,
     }}>
       {items.map(item => (
         <button
