@@ -10,7 +10,8 @@ const pkg = require(path.join(root, 'package.json'));
 const version = pkg.version;
 const packageName = 'com.kel.powerlifting';
 
-const javaHome = '/usr/lib/jvm/java-21-openjdk-amd64';
+const fallbackJavaHome = '/usr/lib/jvm/java-21-openjdk-amd64';
+const javaHome = process.env.JAVA_HOME || fallbackJavaHome;
 const env = {
   ...process.env,
   JAVA_HOME: javaHome,

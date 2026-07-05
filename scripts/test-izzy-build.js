@@ -9,7 +9,8 @@ const root = path.resolve(__dirname, '..');
 const androidDir = path.join(root, 'android');
 const pkg = require(path.join(root, 'package.json'));
 
-const javaHome = '/usr/lib/jvm/java-21-openjdk-amd64';
+const fallbackJavaHome = '/usr/lib/jvm/java-21-openjdk-amd64';
+const javaHome = process.env.JAVA_HOME || fallbackJavaHome;
 const gradleHome = path.join(os.tmpdir(), 'kelani-izzy-gradle-home');
 
 fs.rmSync(gradleHome, { recursive: true, force: true });
