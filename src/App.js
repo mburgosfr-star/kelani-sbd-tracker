@@ -195,7 +195,7 @@ async function writeAutomaticBackup(data) {
 
 
 const THEME = {
-  bg: '#080808',
+  bg: '#000000',
   card: '#101010',
   border: '#3a1f1f',
   text: '#fff4e6',
@@ -210,7 +210,7 @@ const THEME = {
   
 };
 
-const APP_TOP_BAR_HEIGHT = 50;
+// // const APP_TOP_BAR_HEIGHT = 50; // unused // unused after local black statusbar patch
 
 
 const WORKOUT_CIRCLE_SIZE = 44;
@@ -6452,7 +6452,6 @@ function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) 
                     position: 'absolute',
                     right: 12,
                     top: '50%',
-                    transform: 'translateY(-50%)',
                     color: THEME.text,
                     fontSize: 15,
                     pointerEvents: 'none'
@@ -7600,7 +7599,7 @@ function SmartDayTypeInline({ workout, t }) {
   return (
     <>
       <div style={{
-        marginTop: -2,
+        marginTop: 0,
         marginBottom: 8,
         textAlign: 'center',
         color: THEME.primary,
@@ -8162,7 +8161,6 @@ function CurrentWorkout({
                           fontSize: 8,
                           fontWeight: 900,
                           lineHeight: 1,
-                          transform: 'translateY(-7px)',
                           marginLeft: 1,
                         }}>
                           i
@@ -10247,92 +10245,59 @@ function AppTopBar() {
   const versionLabel = process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev';
 
   return (
-    <header
+    <div
       style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: `calc(${APP_TOP_BAR_HEIGHT}px + env(safe-area-inset-top))`,
-        paddingTop: 'env(safe-area-inset-top)',
-        boxSizing: 'border-box',
-        zIndex: 30,
-        background: THEME.bg,
-        borderBottom: 'none',
+        width: '100%',
+        background: '#000000',
+        paddingTop: 0,
+        paddingBottom: 2,
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingLeft: 16,
-        paddingRight: 16,
+        overflow: 'visible'
       }}
     >
-      <div
+      <img
+        src="/kelani-wordmark.png?v=topbar-tight-2"
+        alt="Kelani SBD Tracker"
         style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          lineHeight: 1,
-          transform: 'translateY(-1px)',
-        }}
-      >
-        <img
-          src="/kelani-wordmark.png?v=topbar-tight-2"
-          alt="Kelani SBD Tracker"
-          style={{
-            display: 'block',
-            height: 43,
-            width: 'auto',
-            objectFit: 'contain',
-          }}
-        />
-
-        <div
-          style={{
-            color: THEME.muted,
-            fontSize: 8,
-            fontWeight: 800,
-            letterSpacing: 1.1,
-            lineHeight: 1,
-            textTransform: 'uppercase',
-            marginTop: -1,
-          }}
-        >
-          {versionLabel}
-        </div>
-      </div>
-      <div
-        aria-hidden="true"
-        data-role="kelaniTopbarScrollMask"
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: -34,
-          height: 34,
-          pointerEvents: 'none',
-          background: `linear-gradient(180deg, ${THEME.bg} 0%, ${THEME.bg} 38%, rgba(0, 0, 0, 0) 100%)`,
+          width: 82,
+          height: 'auto',
+          display: 'block'
         }}
       />
-    </header>
+      <div
+        style={{
+          marginTop: 2,
+          color: '#ffffff',
+          fontSize: 10,
+          fontWeight: 800,
+          lineHeight: 1
+        }}
+      >
+        {versionLabel}
+      </div>
+    </div>
   );
 }
-
 
 function AppHeader({ title, subtitle, meta, children, titleStyle = {} }) {
   return (
     <div
       style={{
         textAlign: 'center',
+        marginTop: 0,
         marginBottom: 8,
-        paddingTop: `calc(${APP_TOP_BAR_HEIGHT}px + env(safe-area-inset-top) + 36px)`,
+        paddingTop: 'var(--kelani-native-top-offset, 0px)',
+        background: '#000000'
       }}
     >
       <AppTopBar />
 
       <h2
         style={{
-          margin: 0,
+          margin: '4px 0 0',
           color: THEME.primary,
           fontSize: 30,
           fontWeight: 900,
@@ -10680,7 +10645,6 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
             ? THEME.primary
             : getLiftThemeColor(workout.lift);
         const titleColor = workout.type === 'meet' ? THEME.meet : THEME.text;
-        const headerBg = isCurrent ? focusColor : THEME.border;
         const planLines = getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant);
         const typeLabel = getWorkoutTypeLabel(workout, t);
         const showTypeLabel = false;
@@ -10709,7 +10673,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
               width: 38,
               height: 38,
               borderRadius: 8,
-              background: headerBg,
+              background: '#000000',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -11254,7 +11218,6 @@ function Onboarding({ onStart, t }) {
                 position: 'absolute',
                 right: 12,
                 top: '50%',
-                transform: 'translateY(-50%)',
                 color: THEME.text,
                 fontSize: 16,
                 pointerEvents: 'none'
@@ -11373,7 +11336,6 @@ function Onboarding({ onStart, t }) {
               position: 'absolute',
               right: 12,
               top: '50%',
-              transform: 'translateY(-50%)',
               color: THEME.text,
               fontSize: 16,
               pointerEvents: 'none'
@@ -11454,7 +11416,6 @@ function Onboarding({ onStart, t }) {
                   position: 'absolute',
                   right: 12,
                   top: '50%',
-                  transform: 'translateY(-50%)',
                   color: THEME.text,
                   fontSize: 16,
                   pointerEvents: 'none'

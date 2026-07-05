@@ -1,60 +1,33 @@
 package com.kel.powerlifting;
 
+import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
+import android.view.Window;
+import android.view.WindowInsetsController;
 
 import com.getcapacitor.BridgeActivity;
 
-import java.io.File;
-
 public class MainActivity extends BridgeActivity {
-  @Override
-  protected void onCreate(Bundle savedInstanceState) {
-    deleteWebViewServiceWorkerData();
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
 
-    super.onCreate(savedInstanceState);
+        Window window = getWindow();
+        window.setStatusBarColor(Color.BLACK);
+        window.setNavigationBarColor(Color.BLACK);
 
-    WebView webView = getBridge().getWebView();
-
-    if (webView != null) {
-      webView.clearCache(true);
-      webView.clearHistory();
-
-      WebSettings settings = webView.getSettings();
-      settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-      settings.setDomStorageEnabled(true);
-    }
-  }
-
-  private void deleteWebViewServiceWorkerData() {
-    File dataDir = getDataDir();
-
-    deleteDir(new File(dataDir, "app_webview/Default/Service Worker"));
-    deleteDir(new File(dataDir, "app_webview/Default/Cache"));
-    deleteDir(new File(dataDir, "app_webview/Default/Code Cache"));
-    deleteDir(new File(dataDir, "app_webview/Default/GPUCache"));
-    deleteDir(new File(dataDir, "app_webview/Default/Session Storage"));
-    deleteDir(new File(dataDir, "app_webview/Default/IndexedDB"));
-
-    deleteDir(new File(getCacheDir(), "WebView"));
-    deleteDir(new File(getCodeCacheDir(), "WebView"));
-  }
-
-  private boolean deleteDir(File dir) {
-    if (dir == null || !dir.exists()) return true;
-
-    File[] files = dir.listFiles();
-    if (files != null) {
-      for (File file : files) {
-        if (file.isDirectory()) {
-          deleteDir(file);
-        } else {
-          file.delete();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = window.getInsetsController();
+            if (controller != null) {
+                controller.setSystemBarsAppearance(
+                    0,
+                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                        | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                );
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            window.getDecorView().setSystemUiVisibility(0);
         }
-      }
     }
-
-    return dir.delete();
-  }
 }
