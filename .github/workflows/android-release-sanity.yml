@@ -52,6 +52,7 @@ jobs:
             echo "ERROR: build changed tracked files. Commit generated source updates before release."
             git status --short
             git diff --stat
+            git diff -- package-lock.json | sed -n '1,260p'
             exit 1
           fi
 
