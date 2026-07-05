@@ -196,7 +196,7 @@ if (checkOnly) {
 }
 
 if (!remoteTagHash) {
-  run('git', ['tag', tag, head], { stdio: 'inherit' });
+  run('git', ['tag', '-a', tag, head, '-m', `Kelani SBD Tracker ${tag}`], { stdio: 'inherit' });
   run('git', ['push', 'origin', tag], { stdio: 'inherit' });
   ok(`created and pushed tag ${tag}`);
 }
