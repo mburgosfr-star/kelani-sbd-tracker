@@ -1,3 +1,8 @@
+if (process.env.KELANI_RELEASE_GATE_PASSED !== '1') {
+  console.error('ERROR: Direct GitHub release creation is disabled. Use npm run android:guarded-release.');
+  process.exit(1);
+}
+
 const { execFileSync, execSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');

@@ -28,7 +28,9 @@
     "android:release-apk": "node scripts/build-release-apk.js",
     "github:release": "node scripts/create-github-release.js",
     "android:izzy-test": "node scripts/test-izzy-build.js",
-    "android:install-apk": "node scripts/install-apk.js"
+    "android:install-apk": "node scripts/install-apk.js",
+    "android:release-gate": "node scripts/guarded-release.js --check",
+    "android:guarded-release": "node scripts/guarded-release.js --release"
   },
   "eslintConfig": {
     "extends": [
