@@ -28,7 +28,7 @@ function run(command, options = {}) {
 
 run('npm run build');
 run('npx cap sync android');
-run('./gradlew :app:assembleRelease', { cwd: path.join(root, 'android') });
+run('./gradlew clean :app:assembleRelease', { cwd: path.join(root, 'android') });
 
 const source = path.join(root, 'android/app/build/outputs/apk/release/app-release.apk');
 const target = path.join(os.homedir(), 'Downloads', apkName);

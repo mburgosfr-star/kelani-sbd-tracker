@@ -41,6 +41,6 @@ function run(command, args, options = {}) {
 
 run('npm', ['run', 'build']);
 run('npx', ['cap', 'sync', 'android']);
-run('./gradlew', [':app:assembleRelease', '--no-daemon'], { cwd: androidDir });
+run('./gradlew', ['clean', ':app:assembleRelease', '--no-daemon'], { cwd: androidDir });
 
 console.log('\n✅ Izzy-style build test passed');
