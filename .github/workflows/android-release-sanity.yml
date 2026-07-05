@@ -1,0 +1,87 @@
+name: Android release sanity
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release-sanity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-sanity:
+    name: Build and inspect Android release APK
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Izzy-style clean Android build
+        run: npm run android:izzy-test
+
+      - name: Ensure generated tracked files are committed
+        run: |
+          if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+            echo "ERROR: build changed tracked files. Commit generated source updates before release."
+            git status --short
+            git diff --stat
+            exit 1
+          fi
+
+      - name: Locate release APK
+        id: apk
+        run: |
+          APK="$(find android/app/build/outputs/apk/release -type f \( -name "app-release.apk" -o -name "app-release-unsigned.apk" \) | sort | tail -n 1)"
+
+          if [[ -z "$APK" ]]; then
+            echo "ERROR: no release APK found"
+            find android/app/build/outputs/apk -type f -print || true
+            exit 1
+          fi
+
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+          echo "APK=$APK"
+          sha256sum "$APK"
+
+      - name: Check APK package metadata
+        run: npm run android:apk-metadata
+        env:
+          KELANI_APK_METADATA_FILES: ${{ steps.apk.outputs.apk }}
+
+      - name: Check APK asset hygiene
+        run: npm run android:apk-hygiene
+        env:
+          KELANI_APK_HYGIENE_FILES: ${{ steps.apk.outputs.apk }}
+
+      - name: Inspect Capacitor plugins
+        run: |
+          unzip -p "${{ steps.apk.outputs.apk }}" assets/capacitor.plugins.json | python3 -m json.tool
+          unzip -p "${{ steps.apk.outputs.apk }}" assets/capacitor.plugins.json | grep -F "@capacitor/local-notifications"
+          unzip -p "${{ steps.apk.outputs.apk }}" assets/capacitor.plugins.json | grep -F "@capacitor/status-bar"
