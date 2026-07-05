@@ -226,21 +226,13 @@ function toOptionalNumber(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-function calculateLeanMassEstimate(bodyWeight, bodyFat, boneMass = null) {
+function calculateLeanMassEstimate(bodyWeight, bodyFat) {
   if (!bodyWeight || !bodyFat) return null;
 
-  const fatMass = bodyWeight * (bodyFat / 100);
-  const leanMass = bodyWeight - fatMass - (boneMass || 0);
+  const leanMass = bodyWeight * (1 - (bodyFat / 100));
 
   return Math.round(leanMass * 10) / 10;
 }
-
-function calculateBmrEstimate(leanMass) {
-  if (!leanMass) return null;
-  return Math.round(500 + (22 * leanMass));
-}
-
-
 const COOLDOWN_MODES = ['off', 'upperBackFriendly'];
 
 function normalizeCooldownMode(value) {
@@ -503,8 +495,6 @@ function normalizeBodyWeights(data) {
       visceralFat: toOptionalNumber(entry.visceralFat),
       leanMass: toOptionalNumber(entry.leanMass),
       physiqueRating: toOptionalNumber(entry.physiqueRating),
-      boneMass: toOptionalNumber(entry.boneMass),
-      bmr: toOptionalNumber(entry.bmr),
     };
 
     const hasAnyBodyData = Object.values(bodyData).some(value => value !== null);
@@ -6302,7 +6292,6 @@ function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) 
     bodyWater: '',
     visceralFat: '',
     physiqueRating: '',
-    boneMass: '',
   });
 
   useEffect(() => {
@@ -6328,7 +6317,7 @@ function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) 
   }
 
   function isWeightMassField(field) {
-    return field === 'bodyWeight' || field === 'boneMass';
+    return field === 'bodyWeight';
   }
 
   function enteredValue(field) {
@@ -6358,9 +6347,7 @@ function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) 
   function handleSave() {
     const bodyWeight = finalValue('bodyWeight');
     const bodyFat = finalValue('bodyFat');
-    const boneMass = finalValue('boneMass');
-    const leanMass = calculateLeanMassEstimate(bodyWeight, bodyFat, boneMass) || previous.leanMass || null;
-    const bmr = calculateBmrEstimate(leanMass) || previous.bmr || null;
+    const leanMass = calculateLeanMassEstimate(bodyWeight, bodyFat) || previous.leanMass || null;
 
     const nextData = {
       bodyWeight,
@@ -6369,8 +6356,6 @@ function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) 
       visceralFat: finalValue('visceralFat'),
       leanMass,
       physiqueRating: finalValue('physiqueRating'),
-      boneMass,
-      bmr,
     };
 
     const hasAnyValue = Object.values(nextData).some(value => value !== null);
@@ -6387,7 +6372,6 @@ function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) 
     { key: 'bodyWater', label: t.bodyWaterPercent, unit: '%' },
     { key: 'visceralFat', label: t.visceralFatRating },
     { key: 'physiqueRating', label: t.physiqueRating },
-    { key: 'boneMass', label: t.boneMassKg, unit: normalizeWeightUnit(weightUnit) },
   ];
 
   return (
@@ -8787,8 +8771,6 @@ const bodyMetricData = {
   leanMass: [],
   visceralFat: [],
   physiqueRating: [],
-  boneMass: [],
-  bmr: [],
 };
 
 bodyWeights.forEach(entry => {
@@ -8812,8 +8794,6 @@ bodyWeights.forEach(entry => {
     'leanMass',
     'visceralFat',
     'physiqueRating',
-    'boneMass',
-    'bmr',
   ].forEach(key => {
     const value = Number(entry[key]);
 
@@ -8872,8 +8852,6 @@ function chartMetricLabel(key) {
   if (key === 'leanMass') return weightMetricTitle(t.leanMassKg);
   if (key === 'visceralFat') return `${t.visceralFatRating} rating`;
   if (key === 'physiqueRating') return t.physiqueRating;
-  if (key === 'boneMass') return weightMetricTitle(t.boneMassKg);
-  if (key === 'bmr') return `${t.bmrKcal} (kcal)`;
 
   return key;
 }
@@ -9135,12 +9113,11 @@ const meetTotals = {
   }
 
   const statsTabs = [
-    { key: 'lifts', label: t.lifts },
-    { key: 'totaal', label: t.total },
-    { key: 'lichaam', label: t.body },
-    { key: 'compositie', label: t.composition },
-    { key: 'scores', label: t.ratings },
-    { key: 'meet', label: t.meetPlannerShort },
+    { key: 'lifts', label: 'Lifts' },
+    { key: 'totaal', label: 'Strength' },
+    { key: 'lichaam', label: 'Comp.' },
+    { key: 'scores', label: 'Health' },
+    { key: 'meet', label: 'Meet' },
   ];
 
   function renderMetricChartCards(charts) {
@@ -9191,7 +9168,7 @@ const meetTotals = {
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+        gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
         gap: 6,
         marginBottom: 8
       }}>
@@ -9291,35 +9268,20 @@ const meetTotals = {
           color: THEME.primary,
         },
         {
-          key: 'bodyWater',
-          title: t.bodyWaterPercent,
-          data: bodyMetricData.bodyWater,
-          color: THEME.primary,
-        },
-      ])}
-
-      {activescreen === 'compositie' && renderMetricChartCards([
-        {
           key: 'leanMass',
           title: t.leanMassKg,
           data: bodyMetricData.leanMass,
           color: THEME.primary,
         },
-        {
-          key: 'boneMass',
-          title: t.boneMassKg,
-          data: bodyMetricData.boneMass,
-          color: THEME.primary,
-        },
-        {
-          key: 'bmr',
-          title: t.bmrKcal,
-          data: bodyMetricData.bmr,
-          color: THEME.primary,
-        },
       ])}
 
       {activescreen === 'scores' && renderMetricChartCards([
+        {
+          key: 'bodyWater',
+          title: t.bodyWaterPercent,
+          data: bodyMetricData.bodyWater,
+          color: THEME.primary,
+        },
         {
           key: 'visceralFat',
           title: t.visceralFatRating,
@@ -10137,7 +10099,7 @@ function AppTopBar() {
         height: `calc(${APP_TOP_BAR_HEIGHT}px + env(safe-area-inset-top))`,
         paddingTop: 'env(safe-area-inset-top)',
         boxSizing: 'border-box',
-        zIndex: 1000,
+        zIndex: 30,
         background: THEME.bg,
         borderBottom: 'none',
         display: 'flex',
@@ -10720,7 +10682,6 @@ function Onboarding({ onStart, t }) {
     bodyWater: '',
     visceralFat: '',
     physiqueRating: '',
-    boneMass: '',
   });
 
   function updateBodyField(field, value) {
@@ -10760,11 +10721,8 @@ function Onboarding({ onStart, t }) {
     const bodyWater = toOptionalNumber(bodyForm.bodyWater);
     const visceralFat = toOptionalNumber(bodyForm.visceralFat);
     const physiqueRating = toOptionalNumber(bodyForm.physiqueRating);
-    const boneMassInput = toOptionalNumber(bodyForm.boneMass);
     const bodyWeight = bodyWeightInput !== null ? displayWeightToKg(bodyWeightInput, selectedWeightUnit) : null;
-    const boneMass = boneMassInput !== null ? displayWeightToKg(boneMassInput, selectedWeightUnit) : null;
-    const leanMass = calculateLeanMassEstimate(bodyWeight, bodyFat, boneMass);
-    const bmr = calculateBmrEstimate(leanMass);
+    const leanMass = calculateLeanMassEstimate(bodyWeight, bodyFat);
 
     const bodyData = {
       bodyWeight,
@@ -10773,8 +10731,6 @@ function Onboarding({ onStart, t }) {
       visceralFat,
       leanMass,
       physiqueRating,
-      boneMass,
-      bmr,
     };
 
     return Object.values(bodyData).some(value => value !== null) ? bodyData : null;
@@ -10852,7 +10808,6 @@ function Onboarding({ onStart, t }) {
     { key: 'bodyWater', label: `${t.bodyWaterPercent} (${t.optional})`, unit: '%' },
     { key: 'visceralFat', label: `${t.visceralFatRating} (${t.optional})` },
     { key: 'physiqueRating', label: `${t.physiqueRating} (${t.optional})` },
-    { key: 'boneMass', label: `${t.boneMassKg} (${t.optional})`, unit: onboardingWeightUnit },
   ];
 
   return (
@@ -14723,8 +14678,6 @@ function saveBodyWeight(data) {
     visceralFat: data.visceralFat || null,
     leanMass: data.leanMass || null,
     physiqueRating: data.physiqueRating || null,
-    boneMass: data.boneMass || null,
-    bmr: data.bmr || null,
   };
 
   const hasAnyValue = Object.values(bodyData).some(value => value !== null);
@@ -15022,47 +14975,6 @@ function physiqueStatus(value) {
   return makeStatus(t[key], color, '');
 }
 
-function boneMassAverage(bodyWeight, sex) {
-  if (!bodyWeight || !['male', 'female'].includes(sex)) return null;
-
-  if (sex === 'female') {
-    if (bodyWeight < 50) return 1.95;
-    if (bodyWeight < 75) return 2.4;
-    return 2.95;
-  }
-
-  if (bodyWeight < 65) return 2.66;
-  if (bodyWeight < 95) return 3.29;
-  return 3.69;
-}
-
-function boneMassStatus(value) {
-  if (!value || !latestBodyDataEntry?.bodyWeight) return null;
-
-  const bodyWeight = latestBodyDataEntry.bodyWeight;
-  const average = ['male', 'female'].includes(userProfile?.sex)
-    ? boneMassAverage(bodyWeight, userProfile.sex)
-    : bodyWeight < 65
-      ? 2.6
-      : bodyWeight < 95
-        ? 3.1
-        : 3.5;
-
-  if (!average) return null;
-
-  const diff = Math.round((value - average) * 10) / 10;
-
-  if (Math.abs(diff) < 0.1) {
-    return makeStatus(t.bodyMetricAverage, THEME.primary, '');
-  }
-
-  if (diff > 0) {
-    return makeStatus(t.bodyMetricAboveAverage, THEME.yellow, '');
-  }
-
-  return makeStatus(t.bodyMetricBelowAverage, THEME.red, '');
-}
-
 const latestBodyDataRows = [
   {
     key: 'bodyWeight',
@@ -15107,17 +15019,6 @@ const latestBodyDataRows = [
     label: t.physiqueRating,
     value: bodyMetricValue(latestBodyDataEntry?.physiqueRating),
     status: physiqueStatus(latestBodyDataEntry?.physiqueRating),
-  },
-  {
-    key: 'boneMass',
-    label: t.boneMassKg,
-    value: latestBodyDataEntry?.boneMass ? formatWeightFromKg(latestBodyDataEntry.boneMass, weightUnit, { body: true }) : null,
-    status: boneMassStatus(latestBodyDataEntry?.boneMass),
-  },
-  {
-    key: 'bmr',
-    label: t.bmrKcal,
-    value: bodyMetricValue(latestBodyDataEntry?.bmr, 'kcal'),
   },
 ].filter(row => row.value);
 
