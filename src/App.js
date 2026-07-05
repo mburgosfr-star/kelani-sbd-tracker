@@ -4578,23 +4578,19 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
 function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   if (!warmups.length) return null;
 
-  const columnCount = warmups.length === 1
-    ? 1
-    : warmups.length === 2 || warmups.length === 4
-      ? 2
-      : 3;
+  const columnCount = warmups.length === 1 ? 1 : 2;
 
   return (
     <div style={{
       display: 'grid',
       gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
       justifyContent: 'center',
-      columnGap: 12,
+      columnGap: 14,
       rowGap: 0,
-      padding: '0 10px'
+      padding: '0 8px'
     }}>
       {warmups.map((warmup, index) => {
-        const label = `${t.warmup} ${index + 1}`;
+        const label = `WU ${index + 1}`;
         const isActive = index === activeIndex;
         const isDone = !!warmup.done;
 
@@ -4606,7 +4602,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
               width: '100%',
               minWidth: 0,
               boxSizing: 'border-box',
-              padding: `${WORKOUT_PREP_WARMUP_PADDING_Y}px 0`,
+              padding: '2px 0',
               background: 'transparent'
             }}>
               <WorkoutCircle
@@ -4622,7 +4618,8 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
                   color: THEME.text,
                   fontSize: WORKOUT_TEXT_FONT_SIZE,
                   fontWeight: 800,
-                  lineHeight: 1.15
+                  lineHeight: 1.15,
+                  whiteSpace: 'nowrap'
                 }}>
                   {label}
                 </div>
@@ -4632,7 +4629,8 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
                   fontSize: WORKOUT_TEXT_FONT_SIZE,
                   fontWeight: 700,
                   marginTop: 1,
-                  lineHeight: 1.15
+                  lineHeight: 1.15,
+                  whiteSpace: 'nowrap'
                 }}>
                   {warmup.reps} × {formatWorkoutWeightFromKg(warmup.weight, weightUnit, t, lift, benchPressVariant)}
                 </div>
@@ -4650,7 +4648,6 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
     </div>
   );
 }
-
 
 function generateCooldownItems(cooldownMode = 'upperBackFriendly') {
   if (normalizeCooldownMode(cooldownMode) === 'off') return [];
@@ -5280,11 +5277,19 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
   const effortLabel = getSetEffortLabel(set.effort, t);
   const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(set.weight));
+  const rowRef = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
     if (editing && inputRef.current) inputRef.current.focus();
   }, [editing]);
+
+  useEffect(() => {
+    if (isActive && rowRef.current && !rowRef.current.dataset.scrolled) {
+      rowRef.current.dataset.scrolled = 'true';
+      rowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [isActive]);
 
   function handleEditClick(e) {
     e.stopPropagation();
@@ -5334,7 +5339,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
   ) : null;
 
   const actions = isSetComplete || isReadOnly ? null : editing ? (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8 }}>
       <input
         ref={inputRef}
         type="text"
@@ -5357,7 +5362,13 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
       <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>{normalizeWeightUnit(weightUnit)}</span>
     </div>
   ) : (
-    <>
+    <div style={{
+      display: 'flex',
+      justifyContent: 'flex-start',
+      alignItems: 'center',
+      gap: 11,
+      marginTop: 8
+    }}>
       {!isWarmup && (
         <SetActionButton
           title={t.edit}
@@ -5393,18 +5404,22 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
           ✕
         </SetActionButton>
       )}
-    </>
+    </div>
   );
 
   return (
-    <WorkoutActionRow
-      rowRef={el => {
-        if (isActive && el && !el.dataset.scrolled) {
-          el.dataset.scrolled = 'true';
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
+    <div
+      ref={rowRef}
+      style={{
+        padding: '6px 8px',
+        marginBottom: 6,
       }}
-      left={(
+    >
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        minWidth: 0,
+      }}>
         <WorkoutCircle
           done={set.done}
           active={isActive}
@@ -5413,17 +5428,38 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
           onClick={onToggle}
           label={label}
         />
-      )}
-      title={label}
-      detail={detail}
-      meta={meta}
-      actions={actions}
-      onBodyClick={onToggle}
-      isReadOnly={isReadOnly}
-      active={isActive}
-      activeBorder={isActive && !isWarmup}
-      borderMode="group"
-    />
+
+        <div style={{
+          flex: 1,
+          minWidth: 0,
+          marginLeft: 10,
+          textAlign: 'left',
+          lineHeight: 1.2,
+        }}>
+          <div style={{
+            color: THEME.text,
+            fontSize: WORKOUT_TEXT_FONT_SIZE,
+            fontWeight: 800,
+            lineHeight: 1.2,
+          }}>
+            {label}
+          </div>
+
+          <div style={{
+            fontSize: WORKOUT_TEXT_FONT_SIZE,
+            fontWeight: 700,
+            lineHeight: 1.2,
+            marginTop: 2,
+          }}>
+            {detail}
+          </div>
+
+          {meta}
+        </div>
+      </div>
+
+      {actions}
+    </div>
   );
 }
 
@@ -6826,7 +6862,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   );
 
   const actions = isGroupComplete || isReadOnly ? null : editing ? (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginTop: 8 }}>
       <input
         type="number"
         step={normalizeWeightUnit(weightUnit) === WEIGHT_UNITS.LB ? "5" : "2.5"}
@@ -6852,7 +6888,13 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
       </span>
     </div>
   ) : (
-    <>
+    <div style={{
+      display: 'flex',
+      justifyContent: 'flex-start',
+      alignItems: 'center',
+      gap: 11,
+      marginTop: 8
+    }}>
       <SetActionButton
         title={t.edit}
         disabled={isReadOnly}
@@ -6885,12 +6927,12 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
       >
         ✕
       </SetActionButton>
-    </>
+    </div>
   );
 
   const feedback = failedEntry ? (
     <div style={{
-      marginTop: 2,
+      marginTop: 8,
       padding: '7px 9px',
       border: '1px solid #e74c3c',
       borderRadius: 8,
@@ -6908,36 +6950,45 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   ) : null;
 
   return (
-    <WorkoutActionRow
-      left={(
-        <div style={{
-          display: 'flex',
-          gap: 5,
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexWrap: 'nowrap',
-        }}>
-          {entries.map(({ set, index }) => (
-            <WorkoutCircle
-              key={index}
-              done={set.done}
-              active={index === activeIndex}
-              skipped={set.skipped}
-              disabled={isReadOnly}
-              onClick={() => onToggle(index)}
-              label={`${groupLabel} ${index + 1}`}
-            />
-          ))}
-        </div>
-      )}
-      title={groupLabel}
-      detail={detail}
-      actions={actions}
-      feedback={feedback}
-      timerNode={timerNode}
-      isReadOnly={isReadOnly}
-      borderMode="group"
-    />
+    <div style={{
+      padding: '8px 8px',
+      marginBottom: 8,
+    }}>
+      <div style={{
+        color: THEME.text,
+        fontSize: WORKOUT_TEXT_FONT_SIZE,
+        fontWeight: 800,
+        lineHeight: 1.25,
+        textAlign: 'left',
+        marginBottom: 8,
+      }}>
+        {groupLabel}: {detail}
+      </div>
+
+      <div style={{
+        display: 'flex',
+        justifyContent: 'flex-start',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 11,
+      }}>
+        {entries.map(({ set, index }) => (
+          <WorkoutCircle
+            key={index}
+            done={set.done}
+            active={index === activeIndex}
+            skipped={set.skipped}
+            disabled={isReadOnly}
+            onClick={() => onToggle(index)}
+            label={`${t.set} ${index + 1}`}
+          />
+        ))}
+      </div>
+
+      {actions}
+      {timerNode}
+      {feedback}
+    </div>
   );
 }
 
@@ -7512,109 +7563,215 @@ function getSmartTrainingSelectionDisplayText(workout, t = {}) {
   return t.smartTrainingSelectionLine || `Meet limiter: ${weakestLift}.`;
 }
 
-function getSmartAutoregulationDisplayText(workout, t = {}) {
-  if (!workout?.smartAutoregulatedTraining) return null;
-
-  const byLift = workout.smartTrainingAutoregulationByLift || {};
-  const adjustedEntries = Object.entries(byLift)
-    .filter(([, adjustment]) => adjustment?.hasAdjustment);
-
-  if (adjustedEntries.length > 0) {
-    const liftParts = adjustedEntries.map(([lift, adjustment]) => {
-      const parts = [];
-
-      if (Number(adjustment.loadFactor) !== 1) {
-        parts.push(`load ${Math.round(Number(adjustment.loadFactor) * 100)}%`);
-      }
-
-      if (Number(adjustment.maxMainSets) > 0) {
-        parts.push(`max ${adjustment.maxMainSets} sets`);
-      }
-
-      return `${lift} ${parts.join(', ')}`;
-    });
-
-    return t.smartAutoregulationLine || `Autoregulation: ${liftParts.join('; ')}.`;
-  }
-
-  const adjustedLifts = workout.smartTrainingAdjustedLifts || [];
-  const loadFactor = Number(workout.smartTrainingLoadFactor) || 1;
-  const volumeCap = Number(workout.smartTrainingVolumeCap) || 0;
-  const parts = [];
-
-  if (loadFactor !== 1) {
-    parts.push(`load ${Math.round(loadFactor * 100)}%`);
-  }
-
-  if (volumeCap > 0) {
-    parts.push(`max ${volumeCap} main sets`);
-  }
-
-  if (!parts.length) return null;
-
-  const liftText = adjustedLifts.length
-    ? ` (${adjustedLifts.join(' + ')})`
-    : '';
-
-  return t.smartAutoregulationLine || `Autoregulation: ${parts.join(', ')}${liftText}.`;
-}
-
 function SmartDayTypeInline({ workout, t }) {
+  const [showSmartInfo, setShowSmartInfo] = useState(false);
   const label = getSmartDayTypeDisplayLabel(workout?.smartDayType, t);
-  const reasonText = getSmartDecisionReasonDisplayText(workout?.smartDecisionSummary, t);
-  const trainingSelectionText = getSmartTrainingSelectionDisplayText(workout, t);
-  const autoregulationText = getSmartAutoregulationDisplayText(workout, t);
-
   if (!label) return null;
 
+  function formatSmartInfoText(value) {
+    if (!value) return null;
+
+    return String(value)
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/(^|[.!?]\s+)([a-z])/g, (_, prefix, letter) => `${prefix}${letter.toUpperCase()}`);
+  }
+
+  const reasonText = formatSmartInfoText(getSmartDecisionReasonDisplayText(workout?.smartDecisionSummary, t));
+  const selectionText = formatSmartInfoText(getSmartTrainingSelectionDisplayText(workout, t));
+
+  const limiterMatch = selectionText?.match(/^Meet limiter:\s*(.+)$/i);
+  const infoRows = [
+    {
+      label: t.smartDecision || 'Decision',
+      value: label,
+      emphasis: true,
+    },
+    reasonText ? {
+      label: t.smartReason || 'Reason',
+      value: reasonText,
+    } : null,
+    selectionText ? {
+      label: limiterMatch ? (t.smartMeetLimiter || 'Meet limiter') : (t.smartSelection || 'Selection'),
+      value: limiterMatch ? limiterMatch[1] : selectionText,
+    } : null,
+  ].filter(Boolean);
+
   return (
-    <div style={{
-      margin: '0 0 10px',
-      padding: 0,
-      background: 'transparent',
-      border: 'none',
-      color: THEME.muted,
-      fontSize: 12,
-      fontWeight: 800,
-      textAlign: 'center'
-    }}>
-      <div>
-        Smart: <span style={{ color: THEME.primary }}>{label}</span>
+    <>
+      <div style={{
+        marginTop: -2,
+        marginBottom: 8,
+        textAlign: 'center',
+        color: THEME.primary,
+        fontSize: 12,
+        fontWeight: 900,
+        lineHeight: 1.25,
+      }}>
+        <span>Smart: </span>
+        <button
+          type="button"
+          onClick={() => setShowSmartInfo(true)}
+          style={{
+            appearance: 'none',
+            border: 'none',
+            background: 'transparent',
+            color: THEME.primary,
+            padding: 0,
+            margin: 0,
+            font: 'inherit',
+            fontWeight: 900,
+            cursor: 'pointer',
+            textDecoration: 'none',
+          }}
+        >
+          {label}
+        </button>
+
+        <button
+          type="button"
+          aria-label="Smart workout info"
+          onClick={() => setShowSmartInfo(true)}
+          style={{
+            width: 11,
+            height: 11,
+            borderRadius: 999,
+            border: `1px solid ${THEME.primary}`,
+            background: 'transparent',
+            color: THEME.primary,
+            fontSize: 8,
+            fontWeight: 900,
+            lineHeight: 1,
+            padding: 0,
+            marginLeft: 4,
+            verticalAlign: 'text-top',
+            cursor: 'pointer',
+          }}
+        >
+          i
+        </button>
       </div>
-      {reasonText && (
-        <div style={{
-          marginTop: 2,
-          color: THEME.muted,
-          fontSize: 12,
-          fontWeight: 600,
-          textAlign: 'center'
-        }}>
-          {reasonText}
+
+      {showSmartInfo && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Smart workout info"
+          onClick={() => setShowSmartInfo(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2000,
+            background: 'rgba(0, 0, 0, 0.72)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 18,
+            boxSizing: 'border-box',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: 420,
+              background: THEME.card,
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 12,
+              padding: 16,
+              boxSizing: 'border-box',
+              boxShadow: '0 18px 50px rgba(0, 0, 0, 0.55)',
+            }}
+          >
+            <h2 style={{
+              margin: '0 0 12px',
+              color: THEME.primary,
+              fontSize: 20,
+              fontWeight: 900,
+              textAlign: 'center',
+              lineHeight: 1.15,
+            }}>
+              Smart workout
+            </h2>
+
+            {infoRows.length > 0 ? (
+              <div style={{
+                display: 'grid',
+                gap: 8,
+                marginBottom: 14,
+              }}>
+                {infoRows.map(row => (
+                  <div
+                    key={row.label}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '88px minmax(0, 1fr)',
+                      gap: 10,
+                      alignItems: 'start',
+                      padding: '8px 9px',
+                      borderRadius: 8,
+                      border: `1px solid ${THEME.border}`,
+                      background: row.emphasis ? `${THEME.primary}12` : 'rgba(255, 255, 255, 0.025)',
+                    }}
+                  >
+                    <div style={{
+                      color: THEME.muted,
+                      fontSize: 12,
+                      fontWeight: 900,
+                      lineHeight: 1.25,
+                      textAlign: 'left',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.4,
+                    }}>
+                      {row.label}
+                    </div>
+
+                    <div style={{
+                      color: row.emphasis ? THEME.primary : THEME.text,
+                      fontSize: 13,
+                      fontWeight: 850,
+                      lineHeight: 1.35,
+                      textAlign: 'left',
+                    }}>
+                      {row.value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{
+                margin: '0 0 14px',
+                color: THEME.muted,
+                fontSize: 14,
+                fontWeight: 800,
+                lineHeight: 1.35,
+                textAlign: 'center',
+              }}>
+                {t.smartInfoUnavailable || 'No extra Smart details for this workout.'}
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowSmartInfo(false)}
+              style={{
+                width: '100%',
+                padding: 11,
+                borderRadius: 8,
+                border: `1px solid ${THEME.primary}`,
+                background: 'transparent',
+                color: THEME.text,
+                fontSize: 15,
+                fontWeight: 900,
+                cursor: 'pointer',
+              }}
+            >
+              {t.close || 'Close'}
+            </button>
+          </div>
         </div>
       )}
-      {trainingSelectionText && (
-        <div style={{
-          marginTop: 2,
-          color: THEME.muted,
-          fontSize: 12,
-          fontWeight: 600,
-          textAlign: 'center'
-        }}>
-          {trainingSelectionText}
-        </div>
-      )}
-      {autoregulationText && (
-        <div style={{
-          marginTop: 2,
-          color: THEME.muted,
-          fontSize: 12,
-          fontWeight: 600,
-          textAlign: 'center'
-        }}>
-          {autoregulationText}
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -9114,7 +9271,7 @@ const meetTotals = {
 
   const statsTabs = [
     { key: 'lifts', label: 'Lifts' },
-    { key: 'totaal', label: 'Strength' },
+    { key: 'totaal', label: 'Total' },
     { key: 'lichaam', label: 'Comp.' },
     { key: 'scores', label: 'Health' },
     { key: 'meet', label: 'Meet' },
