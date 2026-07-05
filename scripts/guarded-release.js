@@ -63,7 +63,6 @@ function assertNoForbiddenPublicNotes(text) {
 function releaseNotes(version) {
   const candidates = [
     path.join(root, `release-notes-v${version}.md`),
-    path.join(root, 'RELEASE.md'),
   ];
 
   const existing = candidates.find(file => fs.existsSync(file));
