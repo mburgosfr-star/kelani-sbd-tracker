@@ -10182,6 +10182,19 @@ function AppTopBar() {
           {versionLabel}
         </div>
       </div>
+      <div
+        aria-hidden="true"
+        data-role="kelaniTopbarScrollMask"
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: -34,
+          height: 34,
+          pointerEvents: 'none',
+          background: `linear-gradient(180deg, ${THEME.bg} 0%, ${THEME.bg} 38%, rgba(0, 0, 0, 0) 100%)`,
+        }}
+      />
     </header>
   );
 }
@@ -10193,7 +10206,7 @@ function AppHeader({ title, subtitle, meta, children, titleStyle = {} }) {
       style={{
         textAlign: 'center',
         marginBottom: 8,
-        paddingTop: `calc(${APP_TOP_BAR_HEIGHT}px + env(safe-area-inset-top) + 24px)`,
+        paddingTop: `calc(${APP_TOP_BAR_HEIGHT}px + env(safe-area-inset-top) + 36px)`,
       }}
     >
       <AppTopBar />
