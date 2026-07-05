@@ -41,7 +41,7 @@ jobs:
           cache: gradle
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Run Izzy-style clean Android build
         run: npm run android:izzy-test
