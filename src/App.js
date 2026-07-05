@@ -10101,6 +10101,27 @@ function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPres
   });
 }
 
+function isCompletedWorkoutNewCycleBoundary(workout) {
+  if (!workout) return false;
+
+  const smartDayTypes = typeof SMART_DAY_TYPES !== 'undefined' ? SMART_DAY_TYPES : {};
+  const smartDecisionReasons = typeof SMART_DECISION_REASONS !== 'undefined' ? SMART_DECISION_REASONS : {};
+
+  const meetDayType = smartDayTypes.MEET || 'meet';
+  const recoveryDayType = smartDayTypes.RECOVERY || 'recovery';
+  const postMeetRecoveryReason = smartDecisionReasons.POST_MEET_RECOVERY || 'postMeetRecovery';
+
+  if (workout.type === 'meet' || workout.smartDayType === meetDayType) {
+    return true;
+  }
+
+  return Boolean(
+    workout.type === 'rest' &&
+    workout.smartDayType === recoveryDayType &&
+    workout.smartDecisionSummary?.reason === postMeetRecoveryReason
+  );
+}
+
 function AppHeader({ t, title, subtitle, meta, children, titleStyle = {} }) {
   return (
     <div style={{ textAlign: 'center', marginBottom: 8 }}>
@@ -14801,6 +14822,19 @@ const completedSummaryForRender =
   (completedSummaryCandidate?.results || []).length > 0
     ? completedSummaryCandidate
     : buildCompletedSummaryForRender(completedWorkout) || completedSummaryCandidate;
+  const completedWorkoutCanStartNewCycle = Boolean(
+    showNewCycle &&
+    isCompletedWorkoutNewCycleBoundary(completedWorkout)
+  );
+
+  const completedWorkoutIsMeetCycleEnd = Boolean(
+    completedWorkoutCanStartNewCycle &&
+    (
+      completedWorkout?.type === 'meet' ||
+      completedWorkout?.smartDayType === (typeof SMART_DAY_TYPES !== 'undefined' ? SMART_DAY_TYPES.MEET : 'meet')
+    )
+  );
+
 
 const strengthRatio = latestBodyWeight
   ? Math.round((total1RM / latestBodyWeight) * 100) / 100
@@ -15399,7 +15433,7 @@ const latestBodyDataRows = [
     fontFamily: 'sans-serif',
     overflowX: 'hidden'
   }}>
-    {completedWorkout?.type === 'meet' && showNewCycle ? (
+    {completedWorkoutIsMeetCycleEnd ? (
       <div style={{
         background: 'transparent',
         border: 'none',
@@ -15683,16 +15717,14 @@ const latestBodyDataRows = [
         <div style={{ fontSize: 40, marginBottom: 10 }}>🎉</div>
 
         <h2 style={{ margin: '0 0 8px', color: THEME.brown || '#a67c52' }}>
-          {showNewCycle
-            ? (t.cycleCompleted || 'Cycle complete')
+          {completedWorkoutCanStartNewCycle ? (t.cycleCompleted || 'Cycle complete')
             : completedWorkout?.type === 'rest'
               ? 'Rest day complete'
               : t.workoutCompleted}
         </h2>
 
         <p style={{ color: THEME.muted, margin: '0 0 12px' }}>
-          {showNewCycle
-            ? (t.workoutAndCycleSaved || 'Cycle saved. Start the next cycle when ready.')
+          {completedWorkoutCanStartNewCycle ? (t.workoutAndCycleSaved || 'Cycle saved. Start the next cycle when ready.')
             : completedWorkout?.type === 'rest'
               ? 'Rest day saved. You can continue to the next workout.'
               : t.goodJobSaved}
@@ -15996,7 +16028,7 @@ const latestBodyDataRows = [
         )}
         {/* FORCE_MULTI_LIFT_COMPLETED_SETS_END */}
 
-        {showNewCycle && (
+        {completedWorkoutCanStartNewCycle && (
           <button
             onClick={handleStartNewCycle}
             style={{
@@ -16023,7 +16055,7 @@ const latestBodyDataRows = [
             padding: 14,
             fontSize: 16,
             fontWeight: 600,
-            background: showNewCycle ? 'transparent' : THEME.primary,
+            background: completedWorkoutCanStartNewCycle ? 'transparent' : THEME.primary,
             color: '#ffffff',
             border: `1px solid ${THEME.primary}`,
             borderRadius: 8,
