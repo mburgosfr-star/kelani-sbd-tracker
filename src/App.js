@@ -4441,19 +4441,19 @@ function formatPrepPrescription(item, t) {
   return item.perSide ? `${item.prescription} / ${t.side}` : item.prescription;
 }
 
-function WorkoutCircle({ done = false, active = false, skipped = false, disabled = false, onClick, label }) {
+function WorkoutCircle({ done = false, active = false, skipped = false, disabled = false, onClick, label, accentColor = THEME.primary }) {
   const isActiveOpen = active && !done && !skipped;
   const isOpen = !done && !skipped;
 
   const borderColor = skipped
     ? '#e74c3c'
-    : THEME.primary;
+    : accentColor;
 
   const background = skipped
     ? '#e74c3c'
     : done
-      ? THEME.primary
-      : 'rgba(255, 138, 61, 0.08)';
+      ? accentColor
+      : `${accentColor}14`;
 
   const color = skipped || done ? THEME.bg : THEME.text;
 
@@ -4603,6 +4603,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
               minWidth: 0,
               boxSizing: 'border-box',
               padding: '2px 0',
+              marginTop: index >= columnCount ? 3 : 0,
               background: 'transparent'
             }}>
               <WorkoutCircle
@@ -4611,6 +4612,7 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
                 disabled={isReadOnly}
                 onClick={() => onToggle(index)}
                 label={label}
+                accentColor={getLiftThemeColor(lift)}
               />
 
               <div style={{ flex: 1, minWidth: 0, marginLeft: 10, textAlign: 'left', lineHeight: 1.15 }}>
@@ -5427,6 +5429,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
           disabled={isReadOnly}
           onClick={onToggle}
           label={label}
+          accentColor={getLiftThemeColor(lift)}
         />
 
         <div style={{
@@ -5717,6 +5720,14 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
         downloadJson(filename, json);
       }
 
+      localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
+        ok: true,
+        exportedAt,
+        source: 'manual',
+        filename,
+        summary: buildBackupSummary(data),
+      }));
+
       setNotice(t.exportDataSuccess);
     } catch (e) {
       setNotice(t.exportDataError);
@@ -5847,6 +5858,7 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
         value={autoBackupDate || t.noAutomaticBackupYet}
         valueColor={autoBackupStatus?.ok ? THEME.primary : THEME.red}
         compact={true}
+        noBorder={true}
       />
 
       <input
@@ -5864,7 +5876,6 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
           fontSize: 13,
           fontWeight: 700,
           textAlign: 'center',
-          borderBottom: `1px solid ${THEME.border}`
         }}>
           {notice}
         </div>
@@ -5924,7 +5935,7 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
             ))}
           </div>
 
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 4 }}>
             <button
               onClick={confirmImport}
               style={{
@@ -5995,7 +6006,7 @@ function SupportSection({ t }) {
   const links = [
     {
       label: t.supportKelani || 'Support Kelani',
-      url: 'https://mburgosfr-star.github.io/kelani-site/#support',
+      url: 'https://github.com/sponsors/mburgosfr-star',
     },
     {
       label: t.reportIssueShort || t.reportBug,
@@ -6014,7 +6025,7 @@ function SupportSection({ t }) {
   return (
     <SettingsListRow
       label={t.support}
-      description={t.supportDescription}
+        noBorder={true}
       actionContent={(
         <div style={{
           display: 'grid',
@@ -6506,7 +6517,7 @@ function RestTimeSection({ t }) {
             fontSize: 13,
             fontWeight: 700,
             lineHeight: 1.35,
-            marginBottom: 8
+            marginBottom: 4
           }}>
             Rest times are chosen automatically by set type. For reliable screen-off alerts, allow notifications, lock screen notifications, unrestricted battery use, and exact alarms if Android asks.
           </div>
@@ -6959,7 +6970,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
         fontWeight: 800,
         lineHeight: 1.25,
         textAlign: 'left',
-        marginBottom: 8,
+        marginBottom: 0,
       }}>
         {groupLabel}: {detail}
       </div>
@@ -6970,6 +6981,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
         alignItems: 'center',
         flexWrap: 'wrap',
         gap: 11,
+        marginTop: 6,
       }}>
         {entries.map(({ set, index }) => (
           <WorkoutCircle
@@ -6980,6 +6992,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
             disabled={isReadOnly}
             onClick={() => onToggle(index)}
             label={`${t.set} ${index + 1}`}
+            accentColor={getLiftThemeColor(lift)}
           />
         ))}
       </div>
@@ -7356,6 +7369,8 @@ function getSmartMeetdayBlockerDisplayLabels(blockers = [], t = {}) {
     'meet-plan-not-ready': t.smartBlockerMeetPlanNotReady || 'meet plan',
     'last-workout-hard': t.smartBlockerLastWorkoutHard || 'last workout hard',
     'after-recovery-intervention': t.smartBlockerAfterRecovery || 'after recovery',
+    'post-meet-training-cooldown': t.smartBlockerPostMeetCooldown || 'post-meet rebuild',
+    'post-failed-meet-training-cooldown': t.smartBlockerPostFailedMeetCooldown || 'post-failed meet rebuild',
   };
 
   return (blockers || [])
@@ -7481,7 +7496,7 @@ function getSmartDecisionReasonDisplayText(summary, t = {}) {
       return t.smartReasonTrainingFallback || `New cycle. Build readiness toward meet plan → training day.`;
     }
 
-    if (readiness.lastWasRecoveryIntervention || readiness.postMeetRecoveryTargetReached) {
+    if (readiness.lastWasRecoveryIntervention) {
       if (canMentionSmartMeetPlanReady(readiness)) {
         return t.smartReasonTrainingFallback || `Meet plan ready, but fresh after recovery → training day.`;
       }
@@ -7599,10 +7614,10 @@ function SmartDayTypeInline({ workout, t }) {
   return (
     <>
       <div style={{
-        marginTop: 0,
+        marginTop: 6,
         marginBottom: 8,
         textAlign: 'center',
-        color: THEME.primary,
+        color: THEME.meet,
         fontSize: 12,
         fontWeight: 900,
         lineHeight: 1.25,
@@ -7615,7 +7630,7 @@ function SmartDayTypeInline({ workout, t }) {
             appearance: 'none',
             border: 'none',
             background: 'transparent',
-            color: THEME.primary,
+            color: THEME.meet,
             padding: 0,
             margin: 0,
             font: 'inherit',
@@ -7635,9 +7650,9 @@ function SmartDayTypeInline({ workout, t }) {
             width: 11,
             height: 11,
             borderRadius: 999,
-            border: `1px solid ${THEME.primary}`,
+            border: `1px solid ${THEME.meet}`,
             background: 'transparent',
-            color: THEME.primary,
+            color: THEME.meet,
             fontSize: 8,
             fontWeight: 900,
             lineHeight: 1,
@@ -8073,6 +8088,7 @@ function CurrentWorkout({
             suffix: isMeetDay ? ` · ${t.meetDay}` : '',
           })}
           titleStyle={{
+            textShadow: 'none',
             fontSize: 30,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
@@ -8179,7 +8195,7 @@ function CurrentWorkout({
                     gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
                     justifyContent: 'center',
                     columnGap: 12,
-                    rowGap: 0,
+                    rowGap: 12,
                     padding: '0 10px'
                   }}>
                     {visiblePrepItems.map((item, pi) => (
@@ -8215,7 +8231,7 @@ function CurrentWorkout({
                 followsPrep={visiblePrepItems.length > 0}
                 t={t}
                 weightUnit={weightUnit}
-                lift={workout.lift}
+                lift={liftBlock.lift}
                 benchPressVariant={effectiveBenchPressVariant}
               />
 
@@ -9325,6 +9341,7 @@ const meetTotals = {
         display: 'grid',
         gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
         gap: 6,
+        marginTop: 10,
         marginBottom: 8
       }}>
         {statsTabs.map(tab => (
@@ -9459,9 +9476,9 @@ const meetTotals = {
       alignItems: 'center',
       gap: 10,
       marginBottom: 8,
-      padding: 10,
-      border: `1px solid ${THEME.meet}`,
-      borderRadius: 10,
+      padding: 0,
+      border: 'none',
+      borderRadius: 0,
       background: `${THEME.meet}14`
     }}>
       <div>
@@ -9481,10 +9498,10 @@ const meetTotals = {
 
       <div style={{
         minWidth: 108,
-        padding: '8px 10px',
-        border: `1px solid ${THEME.meet}`,
-        borderRadius: 10,
-        background: `${THEME.meet}1f`,
+        padding: 0,
+        border: 'none',
+        borderRadius: 0,
+        background: 'transparent',
         textAlign: 'center'
       }}>
         <div style={{ color: THEME.meet, fontSize: 11, fontWeight: 800, marginBottom: 4 }}>
@@ -9502,10 +9519,11 @@ const meetTotals = {
         <div
           key={row.lift}
           style={{
-            border: `1px solid ${COLORS[row.lift]}`,
-            borderRadius: 10,
-            padding: 10,
-            background: `${COLORS[row.lift]}14`
+            border: 'none',
+            borderTop: 'none',
+            borderRadius: 0,
+            padding: '7px 0 5px',
+            background: 'transparent'
           }}
         >
           <div style={{
@@ -9539,8 +9557,8 @@ const meetTotals = {
                 key={key}
                 style={{
                   border: 'none',
-                  borderRadius: 8,
-                  padding: 4,
+                  borderRadius: 0,
+                  padding: '1px 3px',
                   textAlign: 'center',
                   background: 'transparent'
                 }}
@@ -9550,7 +9568,7 @@ const meetTotals = {
                   fontSize: 11,
                   fontWeight: 800,
                   lineHeight: 1.15,
-                  minHeight: 22,
+                  minHeight: 16,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center'
@@ -9562,7 +9580,7 @@ const meetTotals = {
                   color: THEME.muted,
                   fontSize: 10,
                   fontWeight: 700,
-                  margin: '2px 0 5px'
+                  margin: '1px 0 3px'
                 }}>
                   {pct}
                 </div>
@@ -9577,7 +9595,7 @@ const meetTotals = {
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
-                    padding: '6px 4px',
+                    padding: '4px 4px',
                     borderRadius: 6,
                     border: `1px solid ${THEME.border}`,
                     background: THEME.bg,
@@ -9588,7 +9606,7 @@ const meetTotals = {
                   }}
                 />
 
-                <div style={{ color: THEME.muted, fontSize: 10, marginTop: 3 }}>
+                <div style={{ color: THEME.muted, fontSize: 10, marginTop: 1 }}>
                   {statsWeightUnit}
                 </div>
               </div>
@@ -9599,14 +9617,15 @@ const meetTotals = {
     </div>
 
     <div style={{
-      marginTop: 8,
-      padding: 10,
-      border: `1px solid ${THEME.meet}`,
-      borderRadius: 10,
-      background: `${THEME.meet}14`,
+      marginTop: 4,
+      padding: '6px 0 0',
+      border: 'none',
+      borderTop: 'none',
+      borderRadius: 0,
+      background: 'transparent',
       display: 'grid',
-      gap: 6,
-      fontSize: 14
+      gap: 3,
+      fontSize: 13
     }}>
       {[
         [t.totalAfterOpener, meetTotals.opener],
@@ -9997,7 +10016,7 @@ function ProgramProfileSection({
           </div>
 
           <div style={{
-            marginTop: 12,
+            marginTop: 20,
             color: THEME.muted,
             fontSize: 12,
             fontWeight: 700,
@@ -10142,7 +10161,7 @@ function WorkoutTitle({ workout, t, benchPressVariant = 'standard' }) {
       {liftBlocks.map((liftBlock, index) => (
         <React.Fragment key={`workout-title-${liftBlock.lift}-${index}`}>
           {index > 0 && (
-            <span style={{ color: THEME.muted }}> + </span>
+            <span style={{ color: THEME.text }}> + </span>
           )}
           <span style={{ color: getLiftThemeColor(liftBlock.lift) }}>
             {workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}
@@ -10150,6 +10169,39 @@ function WorkoutTitle({ workout, t, benchPressVariant = 'standard' }) {
         </React.Fragment>
       ))}
     </>
+  );
+}
+
+function compactWorkoutPlanLines(planLines = []) {
+  const groups = [];
+
+  (planLines || []).forEach(line => {
+    const text = String(line || '').trim();
+    if (!text) return;
+
+    const [rawLift, rawDetail = ''] = text.split(/\s*·\s*/);
+    const lift = rawLift === 'Bench Press' ? 'Bench' : rawLift;
+    const detail = rawDetail
+      .replace(/^(Top triple|Top single|Backoff|Work sets):\s*/i, '')
+      .trim();
+
+    if (!detail) {
+      groups.push(text);
+      return;
+    }
+
+    const last = groups[groups.length - 1];
+    if (last && typeof last === 'object' && last.lift === lift) {
+      last.details.push(detail);
+    } else {
+      groups.push({ lift, details: [detail] });
+    }
+  });
+
+  return groups.map(group =>
+    typeof group === 'string'
+      ? group
+      : `${group.lift} ${group.details.join(' / ')}`
   );
 }
 
@@ -10242,53 +10294,18 @@ function isCompletedWorkoutNewCycleBoundary(workout) {
 }
 
 function AppTopBar() {
+  return null;
+}
+
+function AppHeader({ title, subtitle, meta, children, titleStyle = {} }) {
   const versionLabel = process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev';
 
   return (
     <div
       style={{
-        width: '100%',
-        background: '#000000',
-        paddingTop: 0,
-        paddingBottom: 2,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflow: 'visible'
-      }}
-    >
-      <img
-        src="/kelani-wordmark.png?v=topbar-tight-2"
-        alt="Kelani SBD Tracker"
-        style={{
-          width: 82,
-          height: 'auto',
-          display: 'block'
-        }}
-      />
-      <div
-        style={{
-          marginTop: 2,
-          color: '#ffffff',
-          fontSize: 10,
-          fontWeight: 800,
-          lineHeight: 1
-        }}
-      >
-        {versionLabel}
-      </div>
-    </div>
-  );
-}
-
-function AppHeader({ title, subtitle, meta, children, titleStyle = {} }) {
-  return (
-    <div
-      style={{
         textAlign: 'center',
         marginTop: 0,
-        marginBottom: 8,
+        marginBottom: 0,
         paddingTop: 'var(--kelani-native-top-offset, 0px)',
         background: '#000000'
       }}
@@ -10298,7 +10315,8 @@ function AppHeader({ title, subtitle, meta, children, titleStyle = {} }) {
       <h2
         style={{
           margin: '4px 0 0',
-          color: THEME.primary,
+          color: THEME.meet,
+          textShadow: '0 0 10px rgba(255,45,45,0.45)',
           fontSize: 30,
           fontWeight: 900,
           lineHeight: 1.1,
@@ -10309,6 +10327,18 @@ function AppHeader({ title, subtitle, meta, children, titleStyle = {} }) {
         {title}
       </h2>
 
+      <div
+        style={{
+          color: THEME.muted,
+          fontSize: 10,
+          fontWeight: 800,
+          lineHeight: 1,
+          marginTop: 3,
+        }}
+      >
+        {versionLabel}
+      </div>
+
       {subtitle && (
         <div
           style={{
@@ -10316,7 +10346,7 @@ function AppHeader({ title, subtitle, meta, children, titleStyle = {} }) {
             fontSize: 15,
             fontWeight: 700,
             lineHeight: 1.35,
-            marginTop: 8,
+            marginTop: 16,
           }}
         >
           {subtitle}
@@ -10474,7 +10504,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
       <button
         type="button"
         onClick={() => setShowAllWorkouts(value => !value)}
-        style={programActionButtonStyle(THEME.primary, position === 'top' ? '0 0 8px' : '6px 0 0')}
+        style={programActionButtonStyle(THEME.primary, position === 'top' ? '14px 0 10px' : '6px 0 0')}
       >
         {showAllWorkouts ? t.showFewerWorkouts : t.showAllWorkouts}
       </button>
@@ -10645,7 +10675,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
             ? THEME.primary
             : getLiftThemeColor(workout.lift);
         const titleColor = workout.type === 'meet' ? THEME.meet : THEME.text;
-        const planLines = getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant);
+        const planLines = compactWorkoutPlanLines(getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant));
         const typeLabel = getWorkoutTypeLabel(workout, t);
         const showTypeLabel = false;
 
@@ -10733,18 +10763,34 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
                 maxWidth: 210,
                 flexShrink: 0
               }}>
-                {planLines.map((line, lineIndex) => (
-                  <div
-                    key={lineIndex}
-                    style={{
-                      whiteSpace: 'nowrap',
-                      overflow: 'visible',
-                      textOverflow: 'clip'
-                    }}
-                  >
-                    {line}
-                  </div>
-                ))}
+                {planLines.map((line, lineIndex) => {
+                  const text = String(line);
+                  const match =
+                    text.startsWith('Bench ') ? { lift: 'Bench', label: 'Bench' } :
+                    text.startsWith('Deadlift ') ? { lift: 'Deadlift', label: 'Deadlift' } :
+                    text.startsWith('Squat ') ? { lift: 'Squat', label: 'Squat' } :
+                    null;
+
+                  return (
+                    <div
+                      key={lineIndex}
+                      style={{
+                        whiteSpace: 'nowrap',
+                        overflow: 'visible',
+                        textOverflow: 'clip'
+                      }}
+                    >
+                      {match ? (
+                        <>
+                          <span style={{ color: getLiftThemeColor(match.lift) }}>{match.label}</span>
+                          <span style={{ color: THEME.text }}>{text.slice(match.label.length)}</span>
+                        </>
+                      ) : (
+                        text
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -15195,7 +15241,7 @@ const latestBodyDataRows = [
   <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
     <AppHeader
       t={t}
-      title={t.dashboard}
+      title={t.appName || 'Kelani SBD Tracker'}
       subtitle={formatCycleWorkoutSubtitle({
         t,
         currentCycle,
@@ -15209,33 +15255,53 @@ const latestBodyDataRows = [
       const nextWorkout = workouts[currentIndex];
       const isNextMeetDay = nextWorkout.type === 'meet';
 
+      const planLines = getWorkoutPlanLines(nextWorkout, t, weightUnit, benchPressVariant).slice(0, 3);
+
       return (
         <div style={{
-          background: isNextMeetDay ? `${THEME.meet}14` : 'transparent',
-          border: isNextMeetDay ? `1px solid ${THEME.meet}` : 'none',
-          borderRadius: 10,
-          padding: 8,
-          marginBottom: 6,
+          padding: '0 0 10px',
+          marginBottom: 8,
           textAlign: 'center'
         }}>
           <div style={{
-            color: '#ffffff',
-            fontSize: 14,
-            fontWeight: 900,
-            letterSpacing: 0.8,
-            textTransform: 'uppercase',
-            marginBottom: 3
-          }}>
-            {t.nextWorkout}
-          </div>
-
-          <div style={{
             color: isNextMeetDay ? THEME.meet : THEME.text,
             fontSize: 22,
-            fontWeight: 900
+            fontWeight: 900,
+            marginBottom: planLines.length ? 8 : 0
           }}>
             <WorkoutTitle workout={nextWorkout} t={t} benchPressVariant={benchPressVariant} />
           </div>
+
+          {planLines.length > 0 && (
+            <div style={{
+              color: THEME.muted,
+              fontSize: 12,
+              fontWeight: 800,
+              lineHeight: 1.35
+            }}>
+              {planLines.map((line, index) => {
+                const text = String(line);
+                const match =
+                  text.startsWith('Bench Press') ? { lift: 'Bench', label: 'Bench Press' } :
+                  text.startsWith('Deadlift') ? { lift: 'Deadlift', label: 'Deadlift' } :
+                  text.startsWith('Squat') ? { lift: 'Squat', label: 'Squat' } :
+                  null;
+
+                return (
+                  <div key={`dashboard-next-line-${index}`}>
+                    {match ? (
+                      <>
+                        <span style={{ color: getLiftThemeColor(match.lift) }}>{match.label}</span>
+                        <span style={{ color: THEME.muted }}>{text.slice(match.label.length)}</span>
+                      </>
+                    ) : (
+                      <span style={{ color: THEME.muted }}>{text}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       );
     })()}
@@ -15438,6 +15504,7 @@ const latestBodyDataRows = [
     border: 'none',
     borderRadius: 8,
     padding: '0 8px',
+    marginTop: 10,
     marginBottom: 6
   }}>
     <ProfileSection
