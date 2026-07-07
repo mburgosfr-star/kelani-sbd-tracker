@@ -3011,40 +3011,29 @@ function getSmartMeetdayBlockers(readiness = {}) {
   return blockers;
 }
 
+function getSmartMeetCompletedTrainingDays(readiness = {}) {
+  const completedCount = Number(readiness.completedCount) || 0;
+
+  const candidates = [
+    Number(readiness.meetReadyDays),
+    Number(readiness.trainingExposureDays),
+    Number(readiness.trainingWorkoutCount),
+    Number(readiness.completedTrainingWorkoutCount),
+    Number(readiness.activeBlockCompletedCount),
+    completedCount,
+  ].filter(value => Number.isFinite(value) && value >= 0);
+
+  return Math.min(Math.max(0, ...candidates), completedCount);
+}
+
 function isSmartMeetdayReady(readiness = {}) {
+  const blockers = Array.isArray(readiness.meetdayBlockers)
+    ? readiness.meetdayBlockers
+    : [];
 
-  if (readiness?.inPostMeetTrainingCooldown) {
-    return false;
-  }
-
-  if (readiness?.recentFailedMeetTrainingCooldown) {
-    return false;
-  }
-
-  const meetPlanReadiness = readiness.meetPlanReadiness || {};
-  const hasSeenAllCompetitionLifts = LIFT_ORDER.every(lift =>
-    meetPlanReadiness?.[lift]?.hasCurrentCycleEvidence
-  );
-  const isClean = (
-    Number(readiness.recentFatigueScore) === 0 &&
-    Number(readiness.recentFailedOrSkippedSetCount) === 0 &&
-    !hasUnrecoveredSmartHardEffort(readiness)
-  );
-
-  if (
-    readiness.lastWasRecoveryIntervention &&
-    Boolean(readiness.meetPlanReady) &&
-    isClean
-  ) {
-    return true;
-  }
-
-  return (
-    Number(readiness.completedCount) >= LIFT_ORDER.length &&
-    isClean &&
-    hasSeenAllCompetitionLifts &&
-    Boolean(readiness.meetPlanReady)
-  );
+  return Boolean(readiness.meetPlanReady) &&
+    blockers.length === 0 &&
+    getSmartMeetCompletedTrainingDays(readiness) >= SMART_THRESHOLDS.MEETDAY_MIN_ACTIVE_BLOCK_DAYS;
 }
 
 function shouldAccelerateSmartEasyReadiness(readiness = {}) {
@@ -4944,7 +4933,7 @@ function getCompletedWorkoutSuggestions(workout, t, benchPressVariant = 'standar
       suggestions.push(
         (attemptSet
           ? t.attemptEffortReviewHigh || '{set} felt maximal. Your attempt plan may be too aggressive; review Meet Planner or your attempt choices.'
-          : t.setEffortReviewMaxesHigh || '{set} felt maximal. Your 1RM/e1RM may be too high; consider reviewing Settings → Maxes.'
+          : t.setEffortReviewMaxesHigh || '{set} felt maximal. This is useful max/readiness feedback for future training.'
         ).replace('{set}', subject)
       );
       return;
@@ -4954,7 +4943,7 @@ function getCompletedWorkoutSuggestions(workout, t, benchPressVariant = 'standar
       suggestions.push(
         (attemptSet
           ? t.attemptEffortReviewLow || '{set} felt easy. Your attempt plan may be conservative; review Meet Planner or your attempt choices.'
-          : t.setEffortReviewMaxesLow || '{set} felt easy. Your 1RM/e1RM may be too low; consider reviewing Settings → Maxes.'
+          : t.setEffortReviewMaxesLow || '{set} felt easy. This may indicate your e1RM is ready to rise through training.'
         ).replace('{set}', subject)
       );
       return;
@@ -6149,203 +6138,7 @@ function ProfileSection({ userProfile, onSave, weightUnit, setWeightUnit, t }) {
 
 
 
-function MaxesSection({ best1RMs = {}, bestE1RMs = {}, prs = {}, onSaveMaxes, t, weightUnit = WEIGHT_UNITS.KG }) {
-  const [isOverviewOpen, setIsOverviewOpen] = useState(false);
-  const [selectedLift, setSelectedLift] = useState(null);
-  const [oneRMInput, setOneRMInput] = useState('');
-  const [e1RMInput, setE1RMInput] = useState('');
-  const [calculatorWeight, setCalculatorWeight] = useState('');
-  const [calculatorReps, setCalculatorReps] = useState('');
-  const [notice, setNotice] = useState(null);
 
-  const liftKeys = ['Squat', 'Bench', 'Deadlift'];
-
-  useEffect(() => {
-    if (!notice) return;
-    const id = window.setTimeout(() => setNotice(null), 6000);
-    return () => window.clearTimeout(id);
-  }, [notice]);
-
-  function inputValue(valueKg) {
-    const displayValue = kgToDisplayWeight(valueKg, weightUnit);
-    if (displayValue === '') return '';
-    return formatWeightValue(displayValue, weightUnit);
-  }
-
-  function setE1RMInputFromKg(valueKg) {
-    const displayValue = kgToDisplayWeight(valueKg, weightUnit);
-    if (displayValue === '') return;
-    setE1RMInput(formatWeightValue(displayValue, weightUnit));
-  }
-
-  function openLift(lift) {
-    setSelectedLift(lift);
-    setOneRMInput(inputValue(best1RMs?.[lift]));
-    setE1RMInput(inputValue(bestE1RMs?.[lift] || prs?.[lift]));
-    setCalculatorWeight('');
-    setCalculatorReps('');
-  }
-
-  function closeLift() {
-    setSelectedLift(null);
-    setOneRMInput('');
-    setE1RMInput('');
-    setCalculatorWeight('');
-    setCalculatorReps('');
-  }
-
-  function handleCalculateE1RM() {
-    const weightKg = displayWeightToKg(parseFloat(calculatorWeight), weightUnit);
-    const reps = parseInt(calculatorReps, 10);
-
-    if (!Number(weightKg) || !Number.isFinite(reps) || reps < 1) return;
-
-    const currentOneRM = displayWeightToKg(parseFloat(oneRMInput), weightUnit);
-    const estimatedE1RM = roundKgForStorage(weightKg * (1 + reps / 30));
-
-    if (Number(currentOneRM) && Number(estimatedE1RM) < Number(currentOneRM)) {
-      setNotice(t.estimatedE1RMBelow1RM);
-      return;
-    }
-
-    setE1RMInputFromKg(estimatedE1RM);
-  }
-
-  function handleSaveLift() {
-    if (!selectedLift) return;
-
-    const nextOneRM = displayWeightToKg(parseFloat(oneRMInput), weightUnit);
-    const nextE1RM = displayWeightToKg(parseFloat(e1RMInput), weightUnit);
-
-    if (!Number(nextOneRM) || !Number(nextE1RM)) return;
-
-    if (Number(nextE1RM) < Number(nextOneRM)) {
-      setE1RMInput(String(oneRMInput));
-      setNotice(t.e1RMRaisedTo1RM);
-      return;
-    }
-
-    onSaveMaxes?.(selectedLift, {
-      oneRM: nextOneRM,
-      e1RM: nextE1RM,
-    });
-
-    closeLift();
-    setIsOverviewOpen(false);
-    setNotice(t.maxesSaved);
-  }
-
-  return (
-    <>
-      <Toast message={notice} />
-
-      <SettingsListRow label={t.maxes} actionLabel={t.editMaxes || t.editProfile} onAction={() => setIsOverviewOpen(true)} />
-
-      {isOverviewOpen && (
-        <SettingsModal title={t.maxes} onClose={() => setIsOverviewOpen(false)}>
-          {liftKeys.map(lift => (
-            <div key={lift} style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr auto',
-              gap: 10,
-              alignItems: 'center',
-              padding: '10px 0',
-              borderBottom: lift === 'Deadlift' ? 'none' : `1px solid ${THEME.border}`,
-            }}>
-              <div>
-                <div style={{ fontWeight: 900, color: THEME.text, marginBottom: 4 }}>
-                  {liftLabel(lift, t)}
-                </div>
-                <div style={{ color: THEME.muted, fontSize: 13, lineHeight: 1.35 }}>
-                  {t.oneRM}: {best1RMs?.[lift] ? formatWeightFromKg(best1RMs[lift], weightUnit) : '—'} · {t.e1RM}: {(bestE1RMs?.[lift] || prs?.[lift]) ? formatWeightFromKg(bestE1RMs?.[lift] || prs?.[lift], weightUnit) : '—'}
-                </div>
-              </div>
-
-              <button onClick={() => openLift(lift)} style={{
-                padding: '8px 10px',
-                fontSize: 13,
-                fontWeight: 800,
-                background: 'transparent',
-                color: THEME.text,
-                border: `1px solid ${THEME.primary}`,
-                borderRadius: 8,
-                cursor: 'pointer',
-              }}>
-                {t.adjust}
-              </button>
-            </div>
-          ))}
-
-          <button onClick={() => setIsOverviewOpen(false)} style={{ width: '100%', marginTop: 14, padding: 10, fontSize: 14, fontWeight: 700, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
-            {t.done}
-          </button>
-        </SettingsModal>
-      )}
-
-      {selectedLift && (
-        <SettingsModal title={`${liftLabel(selectedLift, t)} · ${t.maxes}`} onClose={closeLift}>
-          <div style={{ display: 'grid', gap: 10, marginBottom: 14 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 38%) minmax(0, 1fr)', gap: 10, alignItems: 'center' }}>
-              <label style={{ fontWeight: 800, fontSize: 14 }}>{t.oneRM}</label>
-              <input type="number" min="0" step={weightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"} value={oneRMInput} onChange={e => setOneRMInput(e.target.value)} style={modalInputStyle()} />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 38%) minmax(0, 1fr)', gap: 10, alignItems: 'center' }}>
-              <label style={{ fontWeight: 800, fontSize: 14 }}>{t.e1RM}</label>
-              <input type="number" min="0" step={weightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"} value={e1RMInput} onChange={e => setE1RMInput(e.target.value)} style={modalInputStyle()} />
-            </div>
-          </div>
-
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 900, color: THEME.text, marginBottom: 10 }}>
-              {t.estimateE1RM}
-            </div>
-
-            <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 38%) minmax(0, 1fr)', gap: 10, alignItems: 'center' }}>
-                <label style={{ fontWeight: 800, fontSize: 13 }}>{t.submaxWeight}</label>
-                <input
-                  type="number"
-                  min="0"
-                  step={weightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"}
-                  value={calculatorWeight}
-                  onChange={e => setCalculatorWeight(e.target.value)}
-                  style={modalInputStyle()}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 38%) minmax(0, 1fr)', gap: 10, alignItems: 'center' }}>
-                <label style={{ fontWeight: 800, fontSize: 13 }}>{t.submaxReps}</label>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={calculatorReps}
-                  onChange={e => setCalculatorReps(e.target.value)}
-                  style={modalInputStyle()}
-                />
-              </div>
-            </div>
-
-            <button onClick={handleCalculateE1RM} style={{ width: '100%', padding: 10, fontSize: 14, fontWeight: 800, background: 'transparent', color: THEME.text, border: `1px solid ${THEME.primary}`, borderRadius: 8, cursor: 'pointer' }}>
-              {t.calculateE1RM}
-            </button>
-          </div>
-
-          <div style={modalActionRowStyle()}>
-            <button onClick={closeLift} style={modalActionButtonStyle('secondary')}>
-              {t.cancel}
-            </button>
-
-            <button onClick={handleSaveLift} style={modalActionButtonStyle('primary')}>
-              {t.save}
-            </button>
-          </div>
-        </SettingsModal>
-      )}
-    </>
-  );
-}
 
 function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) {
   const previous = bodyData || {};
@@ -7476,10 +7269,9 @@ function getSmartDecisionReasonDisplayText(summary, t = {}) {
   if (!summary?.reason) return null;
 
   const readiness = summary.readiness || {};
-  const fatigueScore = Number(readiness.recentFatigueScore) || 0;
   const activeBlockCount = Number(readiness.activeBlockCompletedCount) || 0;
   const meetReadyDays = Math.min(
-    activeBlockCount,
+    getSmartMeetCompletedTrainingDays(readiness),
     SMART_THRESHOLDS.MEETDAY_MIN_ACTIVE_BLOCK_DAYS
   );
 
@@ -7506,7 +7298,12 @@ function getSmartDecisionReasonDisplayText(summary, t = {}) {
   }
 
   if (summary.reason === SMART_DECISION_REASONS.TRAINING_STREAK_RECOVERY) {
-    return t.smartReasonTrainingStreakRecovery || `Training block ${activeBlockCount}/${SMART_THRESHOLDS.TRAINING_STREAK_RECOVERY_DAYS}${hasSmartFatigueEvidence(readiness) ? `, fatigue ${fatigueScore}/${SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE}` : ''} → recovery day.`;
+    const completedTrainingWorkouts = Math.min(
+      activeBlockCount,
+      SMART_THRESHOLDS.TRAINING_STREAK_RECOVERY_DAYS
+    );
+
+    return `Planned recovery after ${completedTrainingWorkouts}/${SMART_THRESHOLDS.TRAINING_STREAK_RECOVERY_DAYS} training workouts.`;
   }
 
   if (summary.reason === SMART_DECISION_REASONS.TRAINING_FALLBACK) {
@@ -7534,7 +7331,7 @@ function getSmartDecisionReasonDisplayText(summary, t = {}) {
       const weakestBest = Number(readiness.meetPlanWeakestBestE1RM) || 0;
       const weakestTarget = Number(readiness.meetPlanWeakestTarget) || 0;
       const weakestText = weakestLift && weakestBest > 0 && weakestTarget > 0
-        ? `${weakestLift} ${formatWeightValue(weakestBest, WEIGHT_UNITS.KG)}/${formatWeightValue(weakestTarget, WEIGHT_UNITS.KG)}`
+        ? `${weakestLift} e1RM ${formatWeightValue(weakestBest, WEIGHT_UNITS.KG)} / target ${formatWeightValue(weakestTarget, WEIGHT_UNITS.KG)}`
         : null;
 
       return t.smartReasonTrainingFallback || `Meet not ready: ${[
@@ -7589,10 +7386,10 @@ function getSmartTrainingSelectionDisplayText(workout, t = {}) {
   const target = Number(readiness.meetPlanWeakestTarget) || 0;
 
   if (best > 0 && target > 0) {
-    return t.smartTrainingSelectionLine || `Meet limiter: ${weakestLift} ${formatWeightValue(best, WEIGHT_UNITS.KG)}/${formatWeightValue(target, WEIGHT_UNITS.KG)}.`;
+    return t.smartTrainingSelectionLine || `e1RM limiter: ${weakestLift} e1RM ${formatWeightValue(best, WEIGHT_UNITS.KG)} / target ${formatWeightValue(target, WEIGHT_UNITS.KG)}.`;
   }
 
-  return t.smartTrainingSelectionLine || `Meet limiter: ${weakestLift}.`;
+  return t.smartTrainingSelectionLine || `e1RM limiter: ${weakestLift}.`;
 }
 
 function SmartDayTypeInline({ workout, t }) {
@@ -7612,7 +7409,7 @@ function SmartDayTypeInline({ workout, t }) {
   const reasonText = formatSmartInfoText(getSmartDecisionReasonDisplayText(workout?.smartDecisionSummary, t));
   const selectionText = formatSmartInfoText(getSmartTrainingSelectionDisplayText(workout, t));
 
-  const limiterMatch = selectionText?.match(/^Meet limiter:\s*(.+)$/i);
+  const limiterMatch = selectionText?.match(/^e1RM limiter:\s*(.+)$/i);
   const infoRows = [
     {
       label: t.smartDecision || 'Decision',
@@ -7624,7 +7421,7 @@ function SmartDayTypeInline({ workout, t }) {
       value: reasonText,
     } : null,
     selectionText ? {
-      label: limiterMatch ? (t.smartMeetLimiter || 'Meet limiter') : (t.smartSelection || 'Selection'),
+      label: limiterMatch ? 'e1RM limiter' : (t.smartSelection || 'Selection'),
       value: limiterMatch ? limiterMatch[1] : selectionText,
     } : null,
   ].filter(Boolean);
@@ -10190,6 +9987,28 @@ function WorkoutTitle({ workout, t, benchPressVariant = 'standard' }) {
   );
 }
 
+function compactMeetProgramPlanLine(line) {
+  const text = String(line || '');
+  const liftMatch = text.match(/^(Squat|Bench Press|Bench|Deadlift)\b/i);
+  if (!liftMatch) return text;
+
+  const lift = liftMatch[1];
+  const weights = [...text.matchAll(/(?:Opener|2nd attempt|3rd attempt):\s*1×1×([0-9.]+)\s*kg/gi)]
+    .map(match => match[1]);
+
+  if (weights.length >= 3) {
+    return `${lift} ${weights.slice(0, 3).join(' / ')} kg`;
+  }
+
+  return text
+    .replace(/\bOpener:\s*1×1×/gi, '')
+    .replace(/\s*\/\s*2nd attempt:\s*1×1×/gi, ' / ')
+    .replace(/\s*\/\s*3rd attempt:\s*1×1×/gi, ' / ')
+    .replace(/\s+kg\s*\/\s*/gi, ' / ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function compactWorkoutPlanLines(planLines = []) {
   const groups = [];
 
@@ -10683,7 +10502,8 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
 
       {renderWorkoutListToggleButton('top')}
 
-      {visibleWorkoutEntries.map(({ workout, idx }) => {
+      <div data-kelani-program-list-spacer style={{ marginTop: 14 }}>
+{visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
         const isDone = completedWorkoutNumberSet.has(Number(workout.number)) || Boolean(workout.completed);
         const completedAtLabel = isDone ? formatCompletedAt(workout.completedAt, workout.completedDate || workout.date) : null;
@@ -10693,7 +10513,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
             ? THEME.primary
             : getLiftThemeColor(workout.lift);
         const titleColor = workout.type === 'meet' ? THEME.meet : THEME.text;
-        const planLines = compactWorkoutPlanLines(getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant));
+        const planLines = compactWorkoutPlanLines(getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant)).map(compactMeetProgramPlanLine);
         const typeLabel = getWorkoutTypeLabel(workout, t);
         const showTypeLabel = false;
 
@@ -10816,6 +10636,9 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
           </div>
         );
       })}
+
+      </div>
+
 
       {renderWorkoutListToggleButton('bottom')}
 
@@ -11655,6 +11478,7 @@ function BottomNav({ screen, onChange, t }) {
   );
 }
 
+
 export default 
 function App() {
   const [showLaunchSplash, setShowLaunchSplash] = useState(true);
@@ -12288,65 +12112,6 @@ function handleResetApp() {
 }
 
 
-function handleSaveMaxes(lift, values) {
-  if (!['Squat', 'Bench', 'Deadlift'].includes(lift)) return;
-
-  const nextOneRM = Number(values?.oneRM);
-  const nextE1RM = Number(values?.e1RM);
-
-  if (!nextOneRM || !nextE1RM) return;
-
-  const storedOneRM = nextOneRM;
-  const storedE1RM = nextE1RM;
-  const updatedPrs = {
-    ...prs,
-    [lift]: storedE1RM,
-  };
-
-  setPrs(updatedPrs);
-  setWorkouts(generateWorkoutsForTrainingModel(trainingModel, {
-    programProfile,
-    squat: updatedPrs.Squat,
-    bench: updatedPrs.Bench,
-    deadlift: updatedPrs.Deadlift,
-    accessoryMode,
-    accessoryPRs,
-    preparationMode,
-    deadliftVariant,
-    benchPressVariant,
-    squatVariant,
-    cooldownMode,
-    history,
-    currentIndex,
-    currentCycle,
-    meetPlannerAttempts: {},
-  }));
-  setMeetPlannerAttempts({});
-
-  setHistory(prev => {
-    const today = new Date().toLocaleDateString('nl-NL');
-    const manualWorkoutNumber = Math.max(0, currentIndex);
-
-    return [
-      ...prev.filter(entry => !(
-        entry?.manualMax &&
-        entry?.lift === lift &&
-        Number(entry?.cycle) === Number(currentCycle) &&
-        Number(entry?.workoutNumber) === Number(manualWorkoutNumber)
-      )),
-      {
-        workoutNumber: manualWorkoutNumber,
-        cycle: currentCycle,
-        lift,
-        topWeight: storedOneRM,
-        topReps: 1,
-        e1rm: storedE1RM,
-        date: today,
-        manualMax: true,
-      },
-    ];
-  });
-}
 
 function handleStartNewCycle() {
   if (!prs.Squat || !prs.Bench || !prs.Deadlift) {
@@ -15533,14 +15298,6 @@ const latestBodyDataRows = [
       t={t}
     />
 
-    <MaxesSection
-      best1RMs={best1RMs}
-      bestE1RMs={bestE1RMs}
-      prs={prs}
-      onSaveMaxes={handleSaveMaxes}
-      t={t}
-      weightUnit={weightUnit}
-    />
 
     <BodyDataSection
       bodyData={latestBodyDataEntry}
