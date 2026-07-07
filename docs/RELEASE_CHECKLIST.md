@@ -4,6 +4,7 @@ Source of truth for every public release.
 
 ## Non-negotiable release rules
 
+- Public project information must only describe the app, user-facing changes, release details, and project materials. Do not mention private assistant tooling, private chat workflow, or internal support process.
 - Never replace an existing GitHub release APK after code changes.
 - Never overwrite an existing tag or release to publish new code.
 - Every public release needs:
