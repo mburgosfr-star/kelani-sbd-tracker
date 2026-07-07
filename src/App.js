@@ -9987,32 +9987,84 @@ function WorkoutTitle({ workout, t, benchPressVariant = 'standard' }) {
   );
 }
 
-function compactMeetProgramPlanLine(line) {
-  const text = String(line || '');
-  const liftMatch = text.match(/^(Squat|Bench Press|Bench|Deadlift)\b/i);
-  if (!liftMatch) return text;
+function ensureProgramPlanLineLift(line, workout, t, benchPressVariant = 'standard') {
+  const text = String(line || '').trim();
 
-  const lift = liftMatch[1];
-  const weights = [...text.matchAll(/(?:Opener|2nd attempt|3rd attempt):\s*1×1×([0-9.]+)\s*kg/gi)]
-    .map(match => match[1]);
-
-  if (weights.length >= 3) {
-    return `${lift} ${weights.slice(0, 3).join(' / ')} kg`;
+  if (/^(Squat|Bench Press|Bench|Deadlift)\b/i.test(text)) {
+    return text;
   }
 
-  return text
+  const liftBlocks = Array.isArray(workout?.lifts) && workout.lifts.length > 0
+    ? workout.lifts
+    : workout?.lift
+      ? [{ lift: workout.lift }]
+      : [];
+
+  if (liftBlocks.length !== 1) {
+    return text;
+  }
+
+  const lift = liftBlocks[0]?.lift;
+  if (!lift) return text;
+
+  return `${workoutLiftBlockLabel(liftBlocks[0], t, benchPressVariant)} · ${text}`;
+}
+
+function ProgramWorkoutTitleRows({ workout, t, benchPressVariant = 'standard' }) {
+  const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
+
+  if (!workout) return t.deload;
+  if (workout.type === 'rest') return t.restAndRecovery || t.deload;
+  if (workout.type === 'meet') return t.sbdMeetDay || t.meetDay;
+
+  const liftBlocks = (workout.lifts || []).length > 0
+    ? workout.lifts
+    : [{ lift: workout.lift }];
+
+  return (
+    <>
+      {liftBlocks.map((liftBlock, index) => (
+        <div
+          key={`program-workout-title-${liftBlock.lift}-${index}`}
+          style={{
+            color: getLiftThemeColor(liftBlock.lift),
+            lineHeight: 1.15,
+          }}
+        >
+          {workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}
+        </div>
+      ))}
+    </>
+  );
+}
+
+function compactProgramPlanLine(line) {
+  const text = String(line || '').trim();
+  const liftMatch = text.match(/^(Squat|Bench Press|Bench|Deadlift)\b/i);
+  const lift = liftMatch ? liftMatch[1] : '';
+
+  const compacted = text
+    .replace(/\bTop\s+(?:single|double|triple):\s*/gi, '')
+    .replace(/\bBackoff:\s*/gi, '')
+    .replace(/\bWork sets:\s*/gi, '')
     .replace(/\bOpener:\s*1×1×/gi, '')
     .replace(/\s*\/\s*2nd attempt:\s*1×1×/gi, ' / ')
     .replace(/\s*\/\s*3rd attempt:\s*1×1×/gi, ' / ')
     .replace(/\s+kg\s*\/\s*/gi, ' / ')
     .replace(/\s+/g, ' ')
     .trim();
+
+  if (lift && !compacted.toLowerCase().startsWith(lift.toLowerCase())) {
+    return `${lift} ${compacted}`;
+  }
+
+  return compacted;
 }
 
 function compactWorkoutPlanLines(planLines = []) {
   const groups = [];
 
-  (planLines || []).forEach(line => {
+  (planLines || []).map(compactProgramPlanLine).forEach(line => {
     const text = String(line || '').trim();
     if (!text) return;
 
@@ -10292,8 +10344,16 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
     Math.max(currentIndex, 0),
     Math.max(allowedWorkoutEntries.length - 1, 0)
   );
-  const visibleStart = Math.max(0, visibleCurrentIndex - 3);
-  const visibleEnd = Math.min(allowedWorkoutEntries.length, visibleCurrentIndex + 4);
+  const compactVisibleCount = 7;
+  const preferredVisibleStart = Math.max(
+    0,
+    visibleCurrentIndex - Math.floor(compactVisibleCount / 2)
+  );
+  const visibleEnd = Math.min(
+    allowedWorkoutEntries.length,
+    preferredVisibleStart + compactVisibleCount
+  );
+  const visibleStart = Math.max(0, visibleEnd - compactVisibleCount);
   const visibleWorkoutEntries = showAllWorkouts
     ? allowedWorkoutEntries
     : allowedWorkoutEntries.slice(visibleStart, visibleEnd);
@@ -10513,7 +10573,9 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
             ? THEME.primary
             : getLiftThemeColor(workout.lift);
         const titleColor = workout.type === 'meet' ? THEME.meet : THEME.text;
-        const planLines = compactWorkoutPlanLines(getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant)).map(compactMeetProgramPlanLine);
+        const rawPlanLines = getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant)
+          .map(line => ensureProgramPlanLineLift(line, workout, t, benchPressVariant));
+        const planLines = compactWorkoutPlanLines(rawPlanLines);
         const typeLabel = getWorkoutTypeLabel(workout, t);
         const showTypeLabel = false;
 
@@ -10556,7 +10618,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
 
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: isCurrent ? 800 : 700, color: titleColor }}>
-                <WorkoutTitle workout={workout} t={t} benchPressVariant={benchPressVariant} />
+                <ProgramWorkoutTitleRows workout={workout} t={t} benchPressVariant={benchPressVariant} />
                 {isCurrent && (
                   <span style={{
                     fontSize: 11,
