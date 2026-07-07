@@ -1348,11 +1348,13 @@ function generateWarmups(workPlan, lift = '') {
   const workSets = Array.isArray(workPlan)
     ? workPlan.filter(set => Number(set?.weight) > 0)
     : [{ weight: Number(workPlan) || 0, reps: null }];
+
   if (!workSets.length) return [];
 
   const targetWeight = Math.max(...workSets.map(set => Number(set.weight) || 0));
   const normalizedLift = String(lift || '');
   const MAX_WARMUP_JUMP_KG = ['Squat', 'Deadlift'].includes(normalizedLift) ? 50 : 40;
+
   if (targetWeight < 30) return [];
 
   function roundTo10(weight) {
@@ -1377,16 +1379,22 @@ function generateWarmups(workPlan, lift = '') {
   const targetReps = Math.max(Number(targetSet?.reps) || 1, 1);
   const hasTopSet = Boolean(topSet);
 
+  const highestNonTopWorkWeight = workSets
+    .filter(set => !isTopWarmupTarget(set))
+    .map(set => Number(set.weight) || 0)
+    .filter(weight => weight >= 40 && weight < targetWeight)
+    .sort((a, b) => b - a)[0] || null;
+
+  const hasCloseBackoff =
+    hasTopSet &&
+    highestNonTopWorkWeight &&
+    targetWeight - highestNonTopWorkWeight <= 25 &&
+    targetReps > 1;
+
   function finalWarmupWeight() {
     if (hasTopSet) {
-      const closeBackoff = workSets
-        .filter(set => !isTopWarmupTarget(set))
-        .map(set => Number(set.weight) || 0)
-        .filter(weight => weight >= 40 && weight < targetWeight)
-        .sort((a, b) => b - a)[0];
-
-      if (closeBackoff && targetWeight - closeBackoff <= 25 && targetReps > 1) {
-        return roundTo10(closeBackoff);
+      if (hasCloseBackoff) {
+        return roundDown10(highestNonTopWorkWeight - 5);
       }
 
       if (targetReps <= 1) return roundTo10(targetWeight * 0.92);
@@ -1399,9 +1407,15 @@ function generateWarmups(workPlan, lift = '') {
 
   function cleanWarmupWeight(weight) {
     const rounded = roundTo10(weight);
+
     if (rounded <= 20) return null;
     if (rounded >= targetWeight) return null;
     if (targetWeight - rounded < 7.5) return null;
+
+    // On top set + close backoff days, do not insert a warm-up above the later backoff.
+    // Example: Bench top 77.5, backoff 67.5 must not create 70.
+    if (hasCloseBackoff && rounded >= highestNonTopWorkWeight) return null;
+
     return rounded;
   }
 
@@ -1410,6 +1424,7 @@ function generateWarmups(workPlan, lift = '') {
     if (!hasTopSet) return Math.min(5, Math.max(targetReps, 3));
 
     const distanceToTarget = targetWeight - weight;
+
     if (targetReps <= 1) {
       if (isFinalWarmup || distanceToTarget <= 20) return 1;
       if (distanceToTarget <= 50) return 3;
@@ -1432,12 +1447,15 @@ function generateWarmups(workPlan, lift = '') {
 
   if (finalWeight) {
     let last = 20;
+
     while (finalWeight - last > MAX_WARMUP_JUMP_KG) {
       const bridge = cleanWarmupWeight(last + MAX_WARMUP_JUMP_KG);
       if (!bridge || bridge <= last || bridge >= finalWeight) break;
+
       warmupWeights.push(bridge);
       last = bridge;
     }
+
     if (!warmupWeights.includes(finalWeight)) {
       warmupWeights.push(finalWeight);
     }
@@ -1461,16 +1479,16 @@ function generateWarmups(workPlan, lift = '') {
       return distanceToWork < distanceFromPrevious;
     });
 
-  return prunedWarmupWeights
-    .map((weight, index, weights) => {
-      const isFinalWarmup = index === weights.length - 1 && weight !== 20;
-      return {
-        reps: repsForWarmup(weight, isFinalWarmup),
-        weight,
-        originalWeight: weight,
-        done: false,
-      };
-    });
+  return prunedWarmupWeights.map((weight, index, weights) => {
+    const isFinalWarmup = index === weights.length - 1 && weight !== 20;
+
+    return {
+      reps: repsForWarmup(weight, isFinalWarmup),
+      weight,
+      originalWeight: weight,
+      done: false,
+    };
+  });
 }
 
 function roundMeetWeight(weight) {
