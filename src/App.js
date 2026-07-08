@@ -14906,14 +14906,14 @@ function bodyFatStatus(value) {
 
   const ranges = {
     male: [
-      { minAge: 18, maxAge: 39, healthyMin: 8, healthyMax: 20, overfatMax: 25 },
-      { minAge: 40, maxAge: 59, healthyMin: 11, healthyMax: 22, overfatMax: 28 },
-      { minAge: 60, maxAge: 99, healthyMin: 13, healthyMax: 25, overfatMax: 30 },
+      { minAge: 18, maxAge: 39, lowMin: 6, healthyMin: 8, healthyMax: 20, overfatMax: 25 },
+      { minAge: 40, maxAge: 59, lowMin: 8, healthyMin: 11, healthyMax: 22, overfatMax: 28 },
+      { minAge: 60, maxAge: 99, lowMin: 10, healthyMin: 13, healthyMax: 25, overfatMax: 30 },
     ],
     female: [
-      { minAge: 18, maxAge: 39, healthyMin: 21, healthyMax: 33, overfatMax: 39 },
-      { minAge: 40, maxAge: 59, healthyMin: 23, healthyMax: 34, overfatMax: 40 },
-      { minAge: 60, maxAge: 99, healthyMin: 24, healthyMax: 36, overfatMax: 41 },
+      { minAge: 18, maxAge: 39, lowMin: 16, healthyMin: 21, healthyMax: 33, overfatMax: 39 },
+      { minAge: 40, maxAge: 59, lowMin: 18, healthyMin: 23, healthyMax: 34, overfatMax: 40 },
+      { minAge: 60, maxAge: 99, lowMin: 20, healthyMin: 24, healthyMax: 36, overfatMax: 41 },
     ],
   };
 
@@ -14922,7 +14922,8 @@ function bodyFatStatus(value) {
     : null;
 
   if (range) {
-    if (value < range.healthyMin) return makeStatus(t.bodyMetricUnderfat, THEME.red, '');
+    if (value < range.lowMin) return makeStatus(t.bodyMetricUnderfat, THEME.red, '');
+    if (value < range.healthyMin) return makeStatus(t.bodyMetricHealthy, THEME.primary, '');
     if (value <= range.healthyMax) return makeStatus(t.bodyMetricHealthy, THEME.yellow, '');
     if (value <= range.overfatMax) return makeStatus(t.bodyMetricOverfat, THEME.primary, '');
     return makeStatus(t.bodyMetricObese, THEME.red, '');
