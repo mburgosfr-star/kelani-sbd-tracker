@@ -216,10 +216,12 @@ const THEME = {
 const WORKOUT_CIRCLE_SIZE = 44;
 const WORKOUT_CIRCLE_FONT_SIZE = 18;
 const WORKOUT_SECTION_TITLE_FONT_SIZE = 18;
-const WORKOUT_TITLE_FONT_SIZE = 16;
 const WORKOUT_TEXT_FONT_SIZE = 15;
-const WORKOUT_ROW_PADDING_Y = 8;
-const WORKOUT_PREP_WARMUP_PADDING_Y = WORKOUT_ROW_PADDING_Y;
+const WORKOUT_CHECKLIST_ROW_HEIGHT = WORKOUT_CIRCLE_SIZE;
+const WORKOUT_CHECKLIST_COLUMN_GAP = 12;
+const WORKOUT_CHECKLIST_ROW_GAP = 8;
+const WORKOUT_CHECKLIST_TEXT_GAP = 8;
+const WORKOUT_WORK_ROW_PADDING_X = 12;
 
 function toOptionalNumber(value) {
   const parsed = Number(value);
@@ -3260,6 +3262,135 @@ function buildSmartTrainingWorkout(sourceWorkout = {}, trainingCandidate = null,
   };
 }
 
+function getLiftBlockTrainingMaxEstimate(liftBlock = {}) {
+  return Math.max(0, ...(liftBlock.sets || []).map(set => {
+    const pct = Number(set?.originalPct ?? set?.pct) || 0;
+    const weight = Number(set?.originalWeight ?? set?.weight) || 0;
+
+    return pct > 0 && weight > 0 ? weight / pct : 0;
+  }));
+}
+
+function shouldUseSmartVolumeStimulus(workout = {}, readiness = {}) {
+  if (workout?.type !== 'training') return false;
+  if (workout.smartVolumeStimulus) return false;
+  if (readiness.meetPlanReady) return false;
+  if (readiness.lastWasRecoveryIntervention) return false;
+  if (Number(readiness.recentFatigueScore) > 0) return false;
+  if (Number(readiness.recentFailedOrSkippedSetCount) > 0) return false;
+  if (hasUnrecoveredSmartHardEffort(readiness)) return false;
+
+  const recentEasyGoodCount =
+    (Number(readiness.recentEasyCount) || 0) +
+    (Number(readiness.recentGoodCount) || 0);
+
+  if (recentEasyGoodCount < 2) return false;
+
+  const allSets = [
+    ...(workout.sets || []),
+    ...(workout.lifts || []).flatMap(liftBlock => liftBlock?.sets || []),
+  ];
+
+  if (!allSets.length) return false;
+
+  const lowRepHeavySetCount = allSets.filter(set => {
+    const reps = Number(set?.reps) || 0;
+    const pct = Number(set?.pct) || 0;
+
+    return (
+      isTopSetLabel(set?.labelKey) ||
+      (reps > 0 && reps <= 3 && pct >= 0.70) ||
+      pct >= 0.80
+    );
+  }).length;
+
+  return lowRepHeavySetCount > 0;
+}
+
+function buildSmartVolumeStimulusSet({ trainingMax, reps, pct, groupKey }) {
+  const weight = roundMeetWeight(trainingMax * pct);
+
+  return {
+    labelKey: 'workSets',
+    groupKey,
+    groupLabelKey: 'workSets',
+    reps,
+    pct,
+    weight,
+    originalWeight: weight,
+    originalPct: pct,
+    done: false,
+    smartVolumeStimulus: true,
+  };
+}
+
+function buildSmartVolumeStimulusLiftBlock(liftBlock = {}) {
+  const lift = liftBlock.lift;
+  const trainingMax = getLiftBlockTrainingMaxEstimate(liftBlock);
+
+  if (!lift || trainingMax <= 0) return liftBlock;
+
+  const topPct = lift === 'Bench' ? 0.72 : 0.70;
+  const volumePct = lift === 'Bench' ? 0.64 : 0.62;
+  const volumeSetCount = lift === 'Deadlift' ? 2 : 3;
+
+  const sets = [
+    buildSmartVolumeStimulusSet({
+      trainingMax,
+      reps: 5,
+      pct: topPct,
+      groupKey: `${lift}-volume-top`,
+    }),
+    ...Array.from({ length: volumeSetCount }, () =>
+      buildSmartVolumeStimulusSet({
+        trainingMax,
+        reps: 6,
+        pct: volumePct,
+        groupKey: `${lift}-volume-backoff`,
+      })
+    ),
+  ];
+
+  return {
+    ...liftBlock,
+    sets,
+    warmups: generateWarmups(sets, lift),
+    smartVolumeStimulus: true,
+  };
+}
+
+function buildSmartVolumeStimulusWorkout(workout = {}, readiness = {}) {
+  if (!shouldUseSmartVolumeStimulus(workout, readiness)) return workout;
+
+  const meetPlanReadiness = readiness.meetPlanReadiness || {};
+  const targetLifts = (workout.lifts || [])
+    .map(liftBlock => liftBlock.lift)
+    .filter(lift => !meetPlanReadiness?.[lift]?.ready);
+
+  const shouldTransformLift = lift =>
+    targetLifts.length === 0 || targetLifts.includes(lift);
+
+  const lifts = (workout.lifts || []).map(liftBlock =>
+    shouldTransformLift(liftBlock.lift)
+      ? buildSmartVolumeStimulusLiftBlock(liftBlock)
+      : liftBlock
+  );
+
+  const primaryLift = lifts[0] || null;
+
+  return {
+    ...workout,
+    smartVolumeStimulus: true,
+    smartVolumeStimulusLifts: lifts
+      .filter(liftBlock => liftBlock.smartVolumeStimulus)
+      .map(liftBlock => liftBlock.lift)
+      .filter(Boolean),
+    lifts,
+    sets: primaryLift?.sets || workout.sets || [],
+    warmups: primaryLift?.warmups || workout.warmups || [],
+  };
+}
+
 function adjustSmartTrainingSet(set = {}, loadFactor = 1, adjustment = {}) {
   const factor = Number(loadFactor) || 1;
   if (factor === 1) return set;
@@ -3486,8 +3617,9 @@ function getSmartLiftTrainingAutoregulation(readiness = {}, liftBlock = {}) {
 function applySmartTrainingAutoregulation(workout = {}, readiness = {}) {
   if (workout?.type !== 'training') return workout;
 
+  const baseWorkout = buildSmartVolumeStimulusWorkout(workout, readiness);
   const liftAdjustments = {};
-  const adjustedLifts = (workout.lifts || []).map(liftBlock => {
+  const adjustedLifts = (baseWorkout.lifts || []).map(liftBlock => {
     const adjustment = getSmartLiftTrainingAutoregulation(readiness, liftBlock);
     liftAdjustments[liftBlock.lift] = adjustment;
 
@@ -3517,13 +3649,13 @@ function applySmartTrainingAutoregulation(workout = {}, readiness = {}) {
     return {
       ...workout,
       smartTrainingAutoregulationByLift: liftAdjustments,
-      warmups: generateWarmups(workout.sets || [], workout.lift),
+      warmups: generateWarmups(baseWorkout.sets || [], baseWorkout.lift),
       lifts: adjustedLifts,
     };
   }
 
   return {
-    ...workout,
+    ...baseWorkout,
     smartAutoregulatedTraining: true,
     smartTrainingLoadFactor: Math.min(...appliedAdjustments.map(adjustment => adjustment.loadFactor)),
     smartTrainingVolumeCap: appliedAdjustments.some(adjustment => adjustment.maxMainSets)
@@ -3532,7 +3664,7 @@ function applySmartTrainingAutoregulation(workout = {}, readiness = {}) {
     smartTrainingAdjustedLifts: appliedAdjustments.map(adjustment => adjustment.lift).filter(Boolean),
     smartTrainingAutoregulationByLift: liftAdjustments,
     sets: adjustedPrimarySets,
-    warmups: adjustedPrimaryLift?.warmups || generateWarmups(adjustedPrimarySets, workout.lift),
+    warmups: adjustedPrimaryLift?.warmups || generateWarmups(adjustedPrimarySets, baseWorkout.lift),
     lifts: adjustedLifts,
   };
 }
@@ -4561,12 +4693,15 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
 
   return (
     <div style={{
-      display: 'flex',
+      display: 'grid',
+      gridTemplateColumns: `${WORKOUT_CIRCLE_SIZE}px minmax(0, 1fr)`,
       alignItems: 'center',
+      columnGap: WORKOUT_CHECKLIST_TEXT_GAP,
       width: '100%',
       minWidth: 0,
+      height: WORKOUT_CHECKLIST_ROW_HEIGHT,
       boxSizing: 'border-box',
-      padding: `${WORKOUT_PREP_WARMUP_PADDING_Y}px 0`,
+      padding: 0,
       background: 'transparent'
     }}>
       <WorkoutCircle
@@ -4577,14 +4712,14 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
         label={label}
       />
 
-      <div style={{ flex: 1, minWidth: 0, marginLeft: 10 }}>
+      <div style={{ minWidth: 0 }}>
         <div
           title={label}
           style={{
             color: THEME.text,
             fontWeight: 800,
-            fontSize: WORKOUT_TEXT_FONT_SIZE,
-            lineHeight: 1.15
+            fontSize: WORKOUT_TEXT_FONT_SIZE - 1,
+            lineHeight: 1.05
           }}
         >
           {label}
@@ -4593,9 +4728,9 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
           title={formatPrepPrescription(item, t)}
           style={{
             color: THEME.muted,
-            fontSize: WORKOUT_TEXT_FONT_SIZE,
+            fontSize: WORKOUT_TEXT_FONT_SIZE - 1,
             marginTop: 1,
-            lineHeight: 1.15
+            lineHeight: 1.05
           }}
         >
           {formatPrepPrescription(item, t)}
@@ -4616,9 +4751,9 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
       display: 'grid',
       gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
       justifyContent: 'center',
-      columnGap: 14,
-      rowGap: 0,
-      padding: '0 8px'
+      columnGap: WORKOUT_CHECKLIST_COLUMN_GAP,
+      rowGap: WORKOUT_CHECKLIST_ROW_GAP,
+      padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`
     }}>
       {warmups.map((warmup, index) => {
         const label = `WU ${index + 1}`;
@@ -4628,13 +4763,16 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
         return (
           <React.Fragment key={index}>
             <div style={{
-              display: 'flex',
+              display: 'grid',
+              gridTemplateColumns: `${WORKOUT_CIRCLE_SIZE}px minmax(0, 1fr)`,
               alignItems: 'center',
+              columnGap: WORKOUT_CHECKLIST_TEXT_GAP,
               width: '100%',
               minWidth: 0,
+              height: WORKOUT_CHECKLIST_ROW_HEIGHT,
               boxSizing: 'border-box',
-              padding: '2px 0',
-              marginTop: index >= columnCount ? 3 : 0,
+              padding: 0,
+              marginTop: 0,
               background: 'transparent'
             }}>
               <WorkoutCircle
@@ -4646,12 +4784,12 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
                 accentColor={getLiftThemeColor(lift)}
               />
 
-              <div style={{ flex: 1, minWidth: 0, marginLeft: 10, textAlign: 'left', lineHeight: 1.15 }}>
+              <div style={{ minWidth: 0, textAlign: 'left', lineHeight: 1.05 }}>
                 <div style={{
                   color: THEME.text,
-                  fontSize: WORKOUT_TEXT_FONT_SIZE,
+                  fontSize: WORKOUT_TEXT_FONT_SIZE - 1,
                   fontWeight: 800,
-                  lineHeight: 1.15,
+                  lineHeight: 1.05,
                   whiteSpace: 'nowrap'
                 }}>
                   {label}
@@ -4659,10 +4797,10 @@ function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTim
 
                 <div style={{
                   color: THEME.muted,
-                  fontSize: WORKOUT_TEXT_FONT_SIZE,
+                  fontSize: WORKOUT_TEXT_FONT_SIZE - 1,
                   fontWeight: 700,
                   marginTop: 1,
-                  lineHeight: 1.15,
+                  lineHeight: 1.05,
                   whiteSpace: 'nowrap'
                 }}>
                   {warmup.reps} × {formatWorkoutWeightFromKg(warmup.weight, weightUnit, t, lift, benchPressVariant)}
@@ -4815,7 +4953,7 @@ function AttemptEffortFeedback({ set, t }) {
   return (
     <div style={{
       margin: '0 0 4px',
-      padding: '8px 10px',
+      padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
       borderTop: `1px solid ${THEME.primary}`,
       borderBottom: `1px solid ${THEME.primary}`,
       background: 'rgba(255, 138, 61, 0.12)',
@@ -5173,137 +5311,6 @@ function SetActionButton({ title, onClick, borderColor, disabled = false, childr
   );
 }
 
-function WorkoutActionRow({
-  rowRef,
-  left,
-  title,
-  detail,
-  meta,
-  actions,
-  feedback,
-  timerNode,
-  onBodyClick,
-  isReadOnly = false,
-  active = false,
-  activeBorder = false,
-  borderMode = 'full',
-  leftOffset = 0,
-}) {
-  const isGroupedRow = borderMode === 'group';
-  const actionsWidth = WORKOUT_CIRCLE_SIZE * 3 + 16;
-
-  const borderStyle = {};
-
-  return (
-    <div
-      ref={rowRef}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: isGroupedRow
-          ? `minmax(0, 1fr) ${actionsWidth}px`
-          : `auto minmax(0, 1fr) ${actionsWidth}px`,
-        alignItems: 'center',
-        gap: isGroupedRow ? '6px 10px' : 10,
-        padding: isGroupedRow
-          ? `${WORKOUT_ROW_PADDING_Y}px 10px ${WORKOUT_ROW_PADDING_Y}px 10px`
-          : `${WORKOUT_ROW_PADDING_Y}px 10px ${WORKOUT_ROW_PADDING_Y}px 6px`,
-        background: 'transparent',
-        boxShadow: active ? 'inset 0 0 0 1px #f39c12' : 'none',
-        borderLeft: activeBorder ? `4px solid ${THEME.primary}` : '4px solid transparent',
-        ...borderStyle,
-      }}
-    >
-      <div style={{
-        gridColumn: isGroupedRow ? '1 / 2' : '1 / 2',
-        gridRow: isGroupedRow ? '2 / 3' : '1 / 2',
-        flexShrink: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: isGroupedRow ? 'flex-start' : 'center',
-        transform: leftOffset && !isGroupedRow ? `translateX(${leftOffset}px)` : 'none',
-      }}>
-        {left}
-      </div>
-
-      <div
-        onClick={isReadOnly ? undefined : onBodyClick}
-        style={{
-          gridColumn: isGroupedRow ? '1 / -1' : '2 / 3',
-          gridRow: isGroupedRow ? '1 / 2' : '1 / 2',
-          minWidth: 0,
-          textAlign: 'left',
-          cursor: isReadOnly || !onBodyClick ? 'default' : 'pointer',
-        }}
-      >
-        {isGroupedRow ? (
-          <div style={{
-            color: THEME.text,
-            fontSize: WORKOUT_TITLE_FONT_SIZE,
-            fontWeight: 900,
-            lineHeight: 1.35,
-            paddingBottom: 1,
-            whiteSpace: 'normal',
-            overflow: 'visible',
-            textOverflow: 'clip',
-            overflowWrap: 'normal',
-          }}>
-            {title}{detail ? <>: <span style={{ color: THEME.muted }}>{detail}</span></> : null}
-          </div>
-        ) : (
-          <>
-            <div style={{
-              color: THEME.text,
-              fontSize: WORKOUT_TITLE_FONT_SIZE,
-              fontWeight: 900,
-              lineHeight: 1.25,
-            }}>
-              {title}
-            </div>
-
-            {detail && (
-              <div style={{
-                color: THEME.muted,
-                fontSize: WORKOUT_TEXT_FONT_SIZE,
-                fontWeight: 800,
-                marginTop: 1,
-                lineHeight: 1.25,
-              }}>
-                {detail}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      <div style={{
-        gridColumn: isGroupedRow ? '2 / 3' : '3 / 4',
-        gridRow: isGroupedRow ? '2 / 3' : '1 / 2',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        gap: 8,
-        minWidth: actionsWidth,
-      }}>
-        {meta}
-        {actions}
-      </div>
-
-      {false && feedback && (
-        <div style={{ gridColumn: '1 / -1' }}>
-          {feedback}
-        </div>
-      )}
-
-      {timerNode && (
-        <div style={{ gridColumn: '1 / -1' }}>
-          {timerNode}
-        </div>
-      )}
-    </div>
-  );
-}
-
-
 function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
   const displayPct = formatSetPercentDisplay(set.pct);
@@ -5399,7 +5406,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
       display: 'flex',
       justifyContent: 'flex-start',
       alignItems: 'center',
-      gap: 11,
+      gap: 8,
       marginTop: 8
     }}>
       {!isWarmup && (
@@ -6737,7 +6744,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
       display: 'flex',
       justifyContent: 'flex-start',
       alignItems: 'center',
-      gap: 11,
+      gap: 8,
       marginTop: 8
     }}>
       <SetActionButton
@@ -6796,7 +6803,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
 
   return (
     <div style={{
-      padding: '8px 8px',
+      padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
       marginBottom: 8,
     }}>
       <div style={{
@@ -6815,7 +6822,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
         justifyContent: 'flex-start',
         alignItems: 'center',
         flexWrap: 'wrap',
-        gap: 11,
+        gap: 8,
         marginTop: 6,
       }}>
         {entries.map(({ set, index }) => (
@@ -6844,9 +6851,6 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
   const firstWeight = acc.weights?.[0] || 0;
   const allSameWeight = (acc.weights || []).every(weight => Number(weight) === Number(firstWeight));
   const firstOpenIndex = (acc.done || []).findIndex(done => !done);
-  const firstSkippedIndex = (acc.skipped || []).findIndex(Boolean);
-  const firstFailedIndex = (acc.failed || []).findIndex(Boolean);
-  const feedbackIndex = firstSkippedIndex !== -1 ? firstSkippedIndex : firstFailedIndex;
   const [inputVal, setInputVal] = useState(String(firstWeight || ''));
 
   useEffect(() => {
@@ -6884,13 +6888,13 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
   const isAccessoryComplete = (acc.done || []).length > 0 && (acc.done || []).every(Boolean);
 
   const detail = (
-    <>
+    <span style={{ color: THEME.muted }}>
       {(acc.done || []).length} × {acc.reps} × {allSameWeight ? formatWeightFromKg(firstWeight, weightUnit) : normalizeWeightUnit(weightUnit)}{acc.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}
-    </>
+    </span>
   );
 
   const actions = isAccessoryComplete || isReadOnly ? null : editing ? (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginTop: 8 }}>
       <input
         type="number"
         step={normalizeWeightUnit(weightUnit) === WEIGHT_UNITS.LB ? "5" : "2.5"}
@@ -6916,92 +6920,59 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
       </span>
     </div>
   ) : (
-    <>
-      <SetActionButton
-        title={t.edit}
-        disabled={isReadOnly}
-        borderColor={THEME.primary}
-        onClick={handleEditClick}
-      >
-        ✎
-      </SetActionButton>
-
-      <SetActionButton
-        title={t.restoreOriginalWeight}
-        disabled={isReadOnly}
-        borderColor="#f39c12"
-        onClick={e => {
-          e.stopPropagation();
-          onRestoreAll();
-        }}
-      >
-        ↺
-      </SetActionButton>
-
-      <SetActionButton
-        title={t.markSetFailed}
-        disabled={isReadOnly || firstOpenIndex === -1}
-        borderColor="#e74c3c"
-        onClick={e => {
-          e.stopPropagation();
-          if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex);
-        }}
-      >
-        ✕
-      </SetActionButton>
-    </>
+    <div style={{
+      display: 'flex',
+      justifyContent: 'flex-start',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 8
+    }}>
+      <SetActionButton title={t.edit} disabled={isReadOnly} borderColor={THEME.primary} onClick={handleEditClick}>✎</SetActionButton>
+      <SetActionButton title={t.restoreOriginalWeight} disabled={isReadOnly} borderColor="#f39c12" onClick={e => { e.stopPropagation(); onRestoreAll(); }}>↺</SetActionButton>
+      <SetActionButton title={t.markSetFailed} disabled={isReadOnly || firstOpenIndex === -1} borderColor="#e74c3c" onClick={e => { e.stopPropagation(); if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex); }}>✕</SetActionButton>
+    </div>
   );
 
-  const feedback = feedbackIndex !== -1 ? (
-    <div style={{
-      marginTop: 2,
-      padding: '7px 9px',
-      border: '1px solid #e74c3c',
-      borderRadius: 8,
-      color: '#ffffff',
-      background: 'rgba(231, 76, 60, 0.16)',
-      fontSize: 12,
-      fontWeight: 800,
-      lineHeight: 1.3,
-      textAlign: 'center',
-    }}>
-      {acc.skipped?.[feedbackIndex]
-        ? t.topSetSkipped
-        : t.failedSetSkippedFeedback || 'Set missed and skipped. Continue with the next set.'}
-    </div>
-  ) : null;
-
   return (
-    <WorkoutActionRow
-      left={(
-        <div style={{
-          display: 'flex',
-          gap: 5,
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexWrap: 'nowrap',
-        }}>
-          {(acc.done || []).map((done, index) => (
-            <WorkoutCircle
-              key={index}
-              done={done}
-              active={isActiveGroup && index === firstOpenIndex}
-              skipped={!!acc.skipped?.[index]}
-              disabled={isReadOnly}
-              onClick={() => onToggle(index)}
-              label={`${accessoryLabel} ${index + 1}`}
-            />
-          ))}
-        </div>
-      )}
-      title={accessoryLabel}
-      detail={detail}
-      actions={actions}
-      feedback={feedback}
-      timerNode={timerNode}
-      isReadOnly={isReadOnly}
-      borderMode="group"
-    />
+    <div style={{
+      padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+      marginBottom: 8,
+    }}>
+      <div style={{
+        color: THEME.text,
+        fontSize: WORKOUT_TEXT_FONT_SIZE,
+        fontWeight: 800,
+        lineHeight: 1.25,
+        textAlign: 'left',
+        marginBottom: 0,
+      }}>
+        {accessoryLabel}: {detail}
+      </div>
+
+      <div style={{
+        display: 'flex',
+        justifyContent: 'flex-start',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginTop: 6,
+      }}>
+        {(acc.done || []).map((done, index) => (
+          <WorkoutCircle
+            key={index}
+            done={done}
+            active={isActiveGroup && index === firstOpenIndex}
+            skipped={!!acc.skipped?.[index]}
+            disabled={isReadOnly}
+            onClick={() => onToggle(index)}
+            label={`${accessoryLabel} ${index + 1}`}
+          />
+        ))}
+      </div>
+
+      {actions}
+      {timerNode}
+    </div>
   );
 }
 
@@ -7745,7 +7716,7 @@ function CurrentWorkout({
                 type="button"
                 onClick={() => setShowActivateConfirm(false)}
                 style={{
-                  padding: '8px 10px',
+                  padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
                   borderRadius: 6,
                   border: `1px solid ${THEME.primary}`,
                   background: 'transparent',
@@ -7765,7 +7736,7 @@ function CurrentWorkout({
                   onActivateWorkout();
                 }}
                 style={{
-                  padding: '8px 10px',
+                  padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
                   borderRadius: 6,
                   border: `1px solid ${THEME.primary}`,
                   background: THEME.primary,
@@ -8027,15 +7998,15 @@ function CurrentWorkout({
               </div>
 
               {visiblePrepItems.length > 0 && (
-                <div>
+                <div style={{ marginBottom: 10 }}>
 
                   <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
                     justifyContent: 'center',
-                    columnGap: 12,
-                    rowGap: 12,
-                    padding: '0 10px'
+                    columnGap: WORKOUT_CHECKLIST_COLUMN_GAP,
+                    rowGap: 6,
+                    padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`
                   }}>
                     {visiblePrepItems.map((item, pi) => (
                       <PrepRow
@@ -8055,8 +8026,9 @@ function CurrentWorkout({
                 </div>
               )}
 
-              <WarmupGrid
-                warmups={liftBlock.warmups || []}
+              <div style={{ marginBottom: 10 }}>
+                <WarmupGrid
+                  warmups={liftBlock.warmups || []}
                 isReadOnly={isReadOnly}
                 activeIndex={
                   !isReadOnly &&
@@ -8071,8 +8043,9 @@ function CurrentWorkout({
                 t={t}
                 weightUnit={weightUnit}
                 lift={liftBlock.lift}
-                benchPressVariant={effectiveBenchPressVariant}
-              />
+                  benchPressVariant={effectiveBenchPressVariant}
+                />
+              </div>
 
               {(liftBlock.sets || []).map((set, si) => {
                 const groupedSetEntries = getWorkoutSetGroupEntries(liftBlock.sets || [], set);
@@ -8178,7 +8151,7 @@ function CurrentWorkout({
                   {false && showMeetSetNotice && (
                     <div style={{
                       margin: 0,
-                      padding: '8px 10px',
+                      padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
                       borderTop: '1px solid #e74c3c',
                       borderBottom: '1px solid #e74c3c',
                       color: '#ffffff',
@@ -8384,7 +8357,7 @@ function CurrentWorkout({
         <SmartDayTypeInline workout={workout} t={t} />
 
       {(workout.prepItems || []).length > 0 && (
-        <div style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: (workout.warmups || []).length > 0 ? 0 : 10 }}>
+        <div style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
           <div style={{
             padding: '6px 10px',
             fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
@@ -8399,9 +8372,9 @@ function CurrentWorkout({
             display: 'grid',
                     gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
                     justifyContent: 'center',
-                    columnGap: 12,
-                    rowGap: 0,
-                    padding: '0 10px'
+                    columnGap: WORKOUT_CHECKLIST_COLUMN_GAP,
+                    rowGap: 4,
+                    padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`
           }}>
             {workout.prepItems.map((item, i) => (
               <PrepRow
@@ -15639,7 +15612,7 @@ const latestBodyDataRows = [
                       display: 'flex',
                       justifyContent: 'space-between',
                       gap: 12,
-                      padding: '8px 10px',
+                      padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
                       color: '#ffffff',
                       opacity: isInvalidSet ? 0.8 : 1,
                       borderLeft: isInvalidSet ? '3px solid #e74c3c' : '3px solid transparent'
