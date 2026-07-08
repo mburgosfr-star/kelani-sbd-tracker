@@ -12537,7 +12537,6 @@ function toggleAccessorySet(accIndex, setIndex) {
       type: 'accessory',
       accIndex,
       index: setIndex,
-      failed: true,
     });
   } else {
     const currentDone = workout?.accessories?.[accIndex]?.done?.[setIndex];
