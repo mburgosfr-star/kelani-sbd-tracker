@@ -2850,6 +2850,27 @@ function isHeavySmartTrainingCandidate(workout = {}) {
   });
 }
 
+
+function isUltraLightSmartTrainingCandidate(workout = {}) {
+  if (!workout || workout.type !== 'training') return false;
+
+  const allSets = [
+    ...(workout.sets || []),
+    ...(workout.lifts || []).flatMap(liftBlock => liftBlock.sets || []),
+  ];
+
+  const pctSets = allSets
+    .map(set => ({
+      pct: Number(set?.pct) || 0,
+      reps: Number(set?.reps) || 0,
+    }))
+    .filter(set => set.pct > 0);
+
+  if (!pctSets.length) return false;
+
+  return pctSets.every(set => set.pct <= 0.55 && set.reps <= 3);
+}
+
 function getSmartMeetPlanAttemptWeight({ lift, key, prs = {}, meetPlannerAttempts = {} }) {
   const custom = Number(meetPlannerAttempts?.[lift]?.[key]);
 
@@ -3898,14 +3919,17 @@ function selectSmartTrainingCandidate({
 
   if (readiness.lastWasRestDay || readiness.lastWasRecoveryIntervention) {
     const lastWorkoutLifts = readiness.lastWorkoutLifts || [];
+    const isPostRecoveryTrainingCandidate = candidate =>
+      !isHeavySmartTrainingCandidate(candidate) &&
+      !isUltraLightSmartTrainingCandidate(candidate);
 
     return pickFromPools(candidate =>
-      !isHeavySmartTrainingCandidate(candidate) &&
+      isPostRecoveryTrainingCandidate(candidate) &&
       countSharedWorkoutLifts(candidate, lastWorkoutLifts) === 0
     ) || pickFromPools(candidate =>
-      !isHeavySmartTrainingCandidate(candidate) &&
+      isPostRecoveryTrainingCandidate(candidate) &&
       countSharedWorkoutLifts(candidate, lastWorkoutLifts) <= 1
-    ) || pickFromPools(candidate =>
+    ) || pickFromPools(isPostRecoveryTrainingCandidate) || pickFromPools(candidate =>
       !isHeavySmartTrainingCandidate(candidate)
     ) || defaultTrainingCandidate;
   }
