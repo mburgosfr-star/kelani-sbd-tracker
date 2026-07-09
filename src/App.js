@@ -1396,7 +1396,7 @@ function generateWarmups(workPlan, lift = '') {
   function finalWarmupWeight() {
     if (hasTopSet) {
       if (hasCloseBackoff) {
-        return roundDown10(highestNonTopWorkWeight - 5);
+        return highestNonTopWorkWeight;
       }
 
       if (targetReps <= 1) return roundTo10(targetWeight * 0.92);
@@ -1416,7 +1416,7 @@ function generateWarmups(workPlan, lift = '') {
 
     // On top set + close backoff days, do not insert a warm-up above the later backoff.
     // Example: Bench top 77.5, backoff 67.5 must not create 70.
-    if (hasCloseBackoff && rounded >= highestNonTopWorkWeight) return null;
+    if (hasCloseBackoff && rounded > highestNonTopWorkWeight) return null;
 
     return rounded;
   }
