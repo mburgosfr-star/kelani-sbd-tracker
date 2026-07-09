@@ -1590,44 +1590,6 @@ const MEET_ATTEMPT_PCTS = {
   thirdAttempt: 1.025,
 };
 
-function getMeetPlannerAttemptWeight(attempts, lift, setIndex, fallback) {
-  const key = MEET_ATTEMPT_KEYS[setIndex];
-  const custom = attempts?.[lift]?.[key];
-  const value = Number(custom);
-
-  return Number.isFinite(value) && value > 0
-    ? roundMeetWeight(value)
-    : fallback;
-}
-
-function applyMeetPlannerAttemptsToWorkouts(workouts, attempts = {}, prs = {}) {
-  return (workouts || []).map(workout => {
-    if (workout.type !== 'meet') return workout;
-
-    return {
-      ...workout,
-      lifts: (workout.lifts || []).map(liftBlock => ({
-        ...liftBlock,
-        sets: (liftBlock.sets || []).map((set, setIndex) => {
-          const suggestedWeight = prs?.[liftBlock.lift]
-            ? roundMeetWeight(prs[liftBlock.lift] * (set.pct || MEET_ATTEMPT_PCTS[setIndex] || 1))
-            : set.weight;
-
-          return {
-            ...set,
-            weight: getMeetPlannerAttemptWeight(
-              attempts,
-              liftBlock.lift,
-              setIndex,
-              suggestedWeight
-            ),
-          };
-        }),
-      })),
-    };
-  });
-}
-
 const ACCESSORY_TEMPLATES = {
   standard: {
     Squat: [
@@ -8730,14 +8692,6 @@ function CurrentWorkout({
 
 function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, trainingModel = TRAINING_MODELS.CLASSIC, meetPlannerAttempts, setMeetPlannerAttempts, onBack, t, weightUnit = WEIGHT_UNITS.KG, best1RMs = {}, bestE1RMs = {} }) {
 const [activescreen, setActivescreen] = useState('lifts');
-const [showResetMeetPlannerConfirm, setShowResetMeetPlannerConfirm] = useState(false);
-const customMeetAttempts = meetPlannerAttempts || {};
-const hasCustomMeetAttempts = Object.values(customMeetAttempts).some(liftAttempts =>
-  liftAttempts &&
-  Object.values(liftAttempts).some(value =>
-    value !== undefined && value !== null && value !== ''
-  )
-);
   const liftData = {};
   const totalData = [];
   const bodyData = [];
@@ -8933,53 +8887,6 @@ function roundAttempt(weight) {
   return Math.round((Number(weight) || 0) / 2.5) * 2.5;
 }
 
-function updateMeetAttempt(lift, key, value) {
-  setMeetPlannerAttempts(prev => ({
-    ...(prev || {}),
-    [lift]: {
-      ...((prev || {})[lift] || {}),
-      [key]: value,
-    },
-  }));
-}
-
-function meetAttemptValue(lift, key, fallback) {
-  const custom = customMeetAttempts?.[lift]?.[key];
-
-  if (custom === undefined || custom === null) return fallback;
-  if (custom === '') return '';
-
-  return custom;
-}
-
-function formatMeetAttemptInput(valueKg) {
-  if (valueKg === undefined || valueKg === null || valueKg === '') return '';
-  return formatWeightValue(kgToDisplayWeight(valueKg, statsWeightUnit), statsWeightUnit);
-}
-
-function roundMeetAttemptDisplay(value) {
-  const numericValue = Number(value);
-  if (!Number.isFinite(numericValue) || numericValue <= 0) return '';
-
-  return statsWeightUnit === WEIGHT_UNITS.LB
-    ? roundToStep(numericValue, 5)
-    : roundAttempt(numericValue);
-}
-
-function commitMeetAttempt(lift, key, displayValue) {
-  const roundedDisplay = roundMeetAttemptDisplay(displayValue);
-
-  if (roundedDisplay === '') {
-    updateMeetAttempt(lift, key, '');
-    return;
-  }
-
-  const valueKg = statsWeightUnit === WEIGHT_UNITS.LB
-    ? displayWeightToKg(roundedDisplay, statsWeightUnit)
-    : roundedDisplay;
-
-  updateMeetAttempt(lift, key, valueKg);
-}
 
 function ensureStrictMeetAttempts(attempts) {
   const minStep = 2.5;
@@ -9015,12 +8922,7 @@ const suggestedMeetPlan = LIFT_ORDER.map(lift => {
   });
 });
 
-const meetPlan = suggestedMeetPlan.map(row => ({
-  ...row,
-  opener: meetAttemptValue(row.lift, 'opener', row.opener),
-  second: meetAttemptValue(row.lift, 'second', row.second),
-  third: meetAttemptValue(row.lift, 'third', row.third),
-}));
+const meetPlan = suggestedMeetPlan;
 
 const meetTotals = {
   opener: meetPlan.reduce((sum, row) => sum + (Number(row.opener) || 0), 0),
@@ -9486,27 +9388,22 @@ const meetTotals = {
                 }}>
                   {pct}
                 </div>
-
-                <input
-                  key={`${statsWeightUnit}-${row.lift}-${key}-${value}`}
-                  type="number"
-                  inputMode="decimal"
-                  step={statsWeightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"}
-                  defaultValue={formatMeetAttemptInput(value)}
-                  onBlur={e => commitMeetAttempt(row.lift, key, e.target.value)}
+                <div
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
                     padding: '4px 4px',
                     borderRadius: 6,
                     border: `1px solid ${THEME.border}`,
-                    background: THEME.bg,
+                    background: 'transparent',
                     color: THEME.text,
                     textAlign: 'center',
                     fontSize: 14,
                     fontWeight: 800
                   }}
-                />
+                >
+                  {value ? formatWeightFromKg(value, statsWeightUnit) : '—'}
+                </div>
 
                 <div style={{ color: THEME.muted, fontSize: 10, marginTop: 1 }}>
                   {statsWeightUnit}
@@ -9541,96 +9438,6 @@ const meetTotals = {
       ))}
     </div>
 
-    {hasCustomMeetAttempts && (
-      <div style={{ marginTop: 10, textAlign: 'center' }}>
-        <button
-          onClick={() => setShowResetMeetPlannerConfirm(true)}
-          style={{
-            width: 'auto',
-            minWidth: 170,
-            padding: '8px 12px',
-            fontSize: 13,
-            fontWeight: 800,
-            background: 'transparent',
-            color: THEME.text,
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 8,
-            cursor: 'pointer'
-          }}
-        >
-          {t.resetMeetPlanner}
-        </button>
-      </div>
-    )}
-
-  {showResetMeetPlannerConfirm && (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'rgba(0,0,0,0.65)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 800,
-      padding: 16
-    }}>
-      <div style={{
-        background: THEME.card,
-        border: `1px solid ${THEME.primary}`,
-        borderRadius: 12,
-        padding: 18,
-        maxWidth: 420,
-        width: '100%',
-        color: THEME.text
-      }}>
-        <h3 style={{ margin: '0 0 10px', textAlign: 'center', color: THEME.brown || '#a67c52' }}>
-          {t.resetMeetPlannerConfirmTitle}
-        </h3>
-
-        <p style={{ color: THEME.muted, fontSize: 14, lineHeight: 1.4, margin: '0 0 16px', textAlign: 'center' }}>
-          {t.resetMeetPlannerConfirmText}
-        </p>
-
-        <button
-          onClick={() => {
-            setShowResetMeetPlannerConfirm(false);
-            setMeetPlannerAttempts({});
-          }}
-          style={{
-            width: '100%',
-            padding: 12,
-            fontSize: 15,
-            fontWeight: 800,
-            background: THEME.card,
-            color: '#ffffff',
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 8,
-            cursor: 'pointer'
-          }}
-        >
-          {t.resetMeetPlanner}
-        </button>
-
-        <button
-          onClick={() => setShowResetMeetPlannerConfirm(false)}
-          style={{
-            width: '100%',
-            marginTop: 8,
-            padding: 10,
-            fontSize: 14,
-            fontWeight: 700,
-            background: 'transparent',
-            color: THEME.text,
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 8,
-            cursor: 'pointer'
-          }}
-        >
-          {t.cancel}
-        </button>
-      </div>
-    </div>
-  )}
 
     </div>
 )}
@@ -11782,16 +11589,8 @@ function App() {
   const currentIndex = Math.max(completedWorkoutCount, currentWorkoutIndex);
   const PROGRAM_VERSION = 'kelani-program-profiles-v5';
 
-  function updateMeetPlannerAttempts(next) {
-    setMeetPlannerAttempts(prev => {
-      const updated = typeof next === 'function' ? next(prev || {}) : (next || {});
-
-      setWorkouts(prevWorkouts =>
-        applyMeetPlannerAttemptsToWorkouts(prevWorkouts, updated, prs)
-      );
-
-      return updated;
-    });
+  function updateMeetPlannerAttempts() {
+    setMeetPlannerAttempts({});
   }
 
   useEffect(() => {
@@ -11921,7 +11720,6 @@ function App() {
         currentCycle: savedCycle,
       });
       const savedInProgress = data.inProgress || null;
-      const savedMeetPlannerAttempts = data.meetPlannerAttempts || {};
       const savedMeetPrepChecklist = data.meetPrepChecklist || {};
 
       const canRestoreInProgress =
@@ -11944,18 +11742,14 @@ function App() {
 
       const cleanedWorkouts = removeDeprecatedPrepItemsFromWorkouts(normalizedWorkouts);
 
-      setWorkouts(applyMeetPlannerAttemptsToWorkouts(
-        cleanedWorkouts,
-        savedMeetPlannerAttempts,
-        restoredPrs
-      ));
+      setWorkouts(cleanedWorkouts);
       setHistory(savedHistory);
       setPrs(restoredPrs);
       setAccessoryPRs(data.accessoryPRs || {});
       setCurrentCycle(savedCycle);
       setBodyWeights(normalizeBodyWeights(data));
       setUserProfile(data.userProfile || {});
-      setMeetPlannerAttempts(savedMeetPlannerAttempts);
+      setMeetPlannerAttempts({});
       setMeetPrepChecklist(savedMeetPrepChecklist);
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
       setTrainingModel(savedTrainingModel);
@@ -12986,20 +12780,7 @@ function markMeetSetFailed(liftIndex, setIndex) {
 
 
 function changeMeetWeight(liftIndex, setIndex, val) {
-  const workout = workouts[selectedIndex];
-  const lift = workout?.lifts?.[liftIndex]?.lift;
-  const key = MEET_ATTEMPT_KEYS[setIndex];
   const roundedVal = roundMeetWeight(val);
-
-  if (workout?.type === 'meet' && lift && key) {
-    setMeetPlannerAttempts(prev => ({
-      ...(prev || {}),
-      [lift]: {
-        ...((prev || {})[lift] || {}),
-        [key]: roundedVal,
-      },
-    }));
-  }
 
   setWorkouts(prev =>
     prev.map((w, wi) => {
