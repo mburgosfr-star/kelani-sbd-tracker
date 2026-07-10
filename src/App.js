@@ -1354,6 +1354,7 @@ function generateWarmups(workPlan, lift = '') {
   if (!workSets.length) return [];
 
   const targetWeight = Math.max(...workSets.map(set => Number(set.weight) || 0));
+  const lowestWorkWeight = Math.min(...workSets.map(set => Number(set.weight) || 0));
   const normalizedLift = String(lift || '');
   const MAX_WARMUP_JUMP_KG = ['Squat', 'Deadlift'].includes(normalizedLift) ? 50 : 40;
 
@@ -1411,6 +1412,12 @@ function generateWarmups(workPlan, lift = '') {
     const rounded = roundTo10(weight);
 
     if (rounded <= 20) return null;
+
+    if (!hasCloseBackoff && rounded >= lowestWorkWeight) {
+      const belowLowestWorkWeight = roundDown10(lowestWorkWeight - 0.001);
+      return belowLowestWorkWeight > 20 ? belowLowestWorkWeight : null;
+    }
+
     if (rounded >= targetWeight) return null;
     if (targetWeight - rounded < 7.5) return null;
 
@@ -2683,9 +2690,18 @@ function buildSmartReadinessSignals(context = {}) {
     !lastMeetDay ||
     postMeetTrainingDaysCompleted >= postMeetMinimumTrainingTarget
   );
+  const lastPostMeetTrainingEffort = String(lastDay?.workoutEffort || '')
+    .trim()
+    .toLowerCase();
+  const hasSuccessfulPostMeetTraining = Boolean(
+    postMeetTrainingDaysCompleted > 0 &&
+    ['easy', 'good', 'hard', 'normal'].includes(lastPostMeetTrainingEffort) &&
+    Number(lastDay?.failedOrSkippedSetCount) === 0
+  );
   const inPostMeetTrainingCooldown = Boolean(
     lastMeetDay &&
-    !postMeetMinimumTrainingTargetReached
+    !postMeetMinimumTrainingTargetReached &&
+    !hasSuccessfulPostMeetTraining
   );
 
   const lastRecoveryInterventionIndex = workoutDays.findLastIndex(day =>
@@ -5535,7 +5551,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
             fontWeight: 800,
             lineHeight: 1.2,
           }}>
-            {label}
+            {isWarmup || isAttemptSetLabel(set.labelKey) ? label : detail}
           </div>
 
           <div style={{
@@ -5544,7 +5560,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
             lineHeight: 1.2,
             marginTop: 2,
           }}>
-            {detail}
+            {isWarmup || isAttemptSetLabel(set.labelKey) ? detail : null}
           </div>
 
           {meta}
@@ -6702,7 +6718,7 @@ function getSkippedSetMessage(set, t) {
   return t.topSetSkipped || 'Set skipped. Continue with the next set.';
 }
 
-function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, label, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
+function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
   const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
@@ -6751,7 +6767,6 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
     .map(({ index }) => renderTimer?.(index))
     .find(Boolean);
 
-  const groupLabel = label || t.backoff;
   const isAdjusted = entries.some(({ set }) =>
     Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed) ||
     Number(set.weight) !== Number(set.originalWeight ?? set.weight)
@@ -6866,7 +6881,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
         textAlign: 'left',
         marginBottom: 0,
       }}>
-        {groupLabel}: {detail}
+        {detail}
       </div>
 
       <div style={{
@@ -9933,59 +9948,15 @@ function ProgramWorkoutTitleRows({ workout, t, benchPressVariant = 'standard' })
 }
 
 function compactProgramPlanLine(line) {
-  const text = String(line || '').trim();
-  const liftMatch = text.match(/^(Squat|Bench Press|Bench|Deadlift)\b/i);
-  const lift = liftMatch ? liftMatch[1] : '';
-
-  const compacted = text
-    .replace(/\bTop\s+(?:single|double|triple):\s*/gi, '')
-    .replace(/\bBackoff:\s*/gi, '')
-    .replace(/\bWork sets:\s*/gi, '')
-    .replace(/\bOpener:\s*1×1×/gi, '')
-    .replace(/\s*\/\s*2nd attempt:\s*1×1×/gi, ' / ')
-    .replace(/\s*\/\s*3rd attempt:\s*1×1×/gi, ' / ')
-    .replace(/\s+kg\s*\/\s*/gi, ' / ')
+  return String(line || '')
     .replace(/\s+/g, ' ')
     .trim();
-
-  if (lift && !compacted.toLowerCase().startsWith(lift.toLowerCase())) {
-    return `${lift} ${compacted}`;
-  }
-
-  return compacted;
 }
 
 function compactWorkoutPlanLines(planLines = []) {
-  const groups = [];
-
-  (planLines || []).map(compactProgramPlanLine).forEach(line => {
-    const text = String(line || '').trim();
-    if (!text) return;
-
-    const [rawLift, rawDetail = ''] = text.split(/\s*·\s*/);
-    const lift = rawLift === 'Bench Press' ? 'Bench' : rawLift;
-    const detail = rawDetail
-      .replace(/^(Top triple|Top single|Backoff|Work sets):\s*/i, '')
-      .trim();
-
-    if (!detail) {
-      groups.push(text);
-      return;
-    }
-
-    const last = groups[groups.length - 1];
-    if (last && typeof last === 'object' && last.lift === lift) {
-      last.details.push(detail);
-    } else {
-      groups.push({ lift, details: [detail] });
-    }
-  });
-
-  return groups.map(group =>
-    typeof group === 'string'
-      ? group
-      : `${group.lift} ${group.details.join(' / ')}`
-  );
+  return (planLines || [])
+    .map(compactProgramPlanLine)
+    .filter(Boolean);
 }
 
 function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard') {
@@ -9995,62 +9966,55 @@ function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPres
   const liftBlocks = (workout.lifts || []).length > 0
     ? workout.lifts
     : [{ lift: workout.lift, sets: workout.sets || [] }];
+  const showLiftName = liftBlocks.length > 1;
 
   return liftBlocks.flatMap(liftBlock => {
     const groups = [];
 
     (liftBlock.sets || []).forEach(set => {
-      const labelKey = set.labelKey || null;
-      const groupLabelKey = set.groupLabelKey || null;
-      const label = groupLabelKey
-        ? t[groupLabelKey]
-        : labelKey
-          ? t[labelKey]
-          : set.label || t.set;
+      const reps = Number(set.reps) || 0;
+      const weight = Number(set.weight) || 0;
+      const pct = Number(set.pct) || 0;
       const last = groups[groups.length - 1];
 
       if (
         last &&
-        last.labelKey === labelKey &&
-        last.groupLabelKey === groupLabelKey &&
-        last.label === label &&
-        last.reps === set.reps &&
-        last.weight === set.weight
+        last.reps === reps &&
+        last.weight === weight &&
+        last.pct === pct
       ) {
         last.count += 1;
         return;
       }
 
       groups.push({
-        labelKey,
-        groupLabelKey,
-        label,
-        reps: set.reps,
-        weight: set.weight,
+        reps,
+        weight,
+        pct,
         count: 1,
       });
     });
 
-    const onlyBackoff = groups.length > 0 && groups.every(group => group.labelKey === 'backoff');
-    const showLiftName = (workout.lifts || []).length > 1;
-    const liftName = workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant);
+    const liftName = workoutLiftBlockLabel(
+      liftBlock,
+      t,
+      effectiveBenchPressVariant
+    );
 
     return groups.map(group => {
-      const weightText = formatWorkoutWeightFromKg(group.weight, weightUnit, t, liftBlock.lift, liftBlock.benchPressVariant || effectiveBenchPressVariant);
-
-      if (group.groupLabelKey) {
-        return `${group.label}: ${group.count}×${group.reps}×${weightText}`;
-      }
-
-      if (onlyBackoff || !group.labelKey) {
-        return showLiftName
-          ? `${liftName}: ${group.count}×${group.reps}×${weightText}`
-          : `${group.count}×${group.reps}×${weightText}`;
-      }
+      const weightText = formatWorkoutWeightFromKg(
+        group.weight,
+        weightUnit,
+        t,
+        liftBlock.lift,
+        liftBlock.benchPressVariant || effectiveBenchPressVariant
+      );
+      const pctText = formatSetPercentDisplay(group.pct);
+      const prescription = `${group.count}×${group.reps}×${weightText}${pctText ? ` (${pctText}%)` : ''}`;
 
       return showLiftName
-        ? `${liftName} · ${group.label}: ${group.count}×${group.reps}×${weightText}`
-        : `${group.label}: ${group.count}×${group.reps}×${weightText}`;
+        ? `${liftName}: ${prescription}`
+        : prescription;
     });
   });
 }
@@ -10560,9 +10524,10 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutCount, completedW
                 {planLines.map((line, lineIndex) => {
                   const text = String(line);
                   const match =
-                    text.startsWith('Bench ') ? { lift: 'Bench', label: 'Bench' } :
-                    text.startsWith('Deadlift ') ? { lift: 'Deadlift', label: 'Deadlift' } :
-                    text.startsWith('Squat ') ? { lift: 'Squat', label: 'Squat' } :
+                    text.startsWith('Bench Press') ? { lift: 'Bench', label: 'Bench Press' } :
+              text.startsWith('Bench') ? { lift: 'Bench', label: 'Bench' } :
+                    text.startsWith('Deadlift') ? { lift: 'Deadlift', label: 'Deadlift' } :
+                    text.startsWith('Squat') ? { lift: 'Squat', label: 'Squat' } :
                     null;
 
                   return (
@@ -14968,7 +14933,7 @@ const latestBodyDataRows = [
       const nextWorkout = workouts[currentIndex];
       const isNextMeetDay = nextWorkout.type === 'meet';
 
-      const planLines = getWorkoutPlanLines(nextWorkout, t, weightUnit, benchPressVariant).slice(0, 3);
+      const planLines = getWorkoutPlanLines(nextWorkout, t, weightUnit, benchPressVariant);
 
       return (
         <div style={{
