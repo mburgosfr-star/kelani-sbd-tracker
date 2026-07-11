@@ -5379,7 +5379,7 @@ function SetActionButton({ title, onClick, borderColor, disabled = false, childr
   );
 }
 
-function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
+export function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
   const displayPct = formatSetPercentDisplay(set.pct);
   const effortLabel = getSetEffortLabel(set.effort, t);
@@ -5446,7 +5446,7 @@ function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange,
     </div>
   ) : null;
 
-  const actions = isSetComplete || isReadOnly ? null : editing ? (
+  const actions = !isActive || isWarmup || isSetComplete || isReadOnly ? null : editing ? (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8 }}>
       <input
         ref={inputRef}
@@ -6718,7 +6718,7 @@ function getSkippedSetMessage(set, t) {
   return t.topSetSkipped || 'Set skipped. Continue with the next set.';
 }
 
-function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
+export function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
   const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
@@ -6773,6 +6773,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   );
   const detailColor = isAdjusted ? '#f39c12' : THEME.muted;
   const isGroupComplete = entries.every(({ set }) => set.done || set.skipped);
+  const isActiveGroup = activeIndex >= 0;
 
   const detail = (
     <span style={{ color: detailColor }}>
@@ -6780,7 +6781,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
     </span>
   );
 
-  const actions = isGroupComplete || isReadOnly ? null : editing ? (
+  const actions = !isActiveGroup || isGroupComplete || isReadOnly ? null : editing ? (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginTop: 8 }}>
       <input
         type="number"
@@ -6870,8 +6871,8 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
 
   return (
     <div style={{
-      padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
-      marginBottom: 8,
+      padding: `4px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+      marginBottom: 4,
     }}>
       <div style={{
         color: THEME.text,
@@ -6913,7 +6914,7 @@ function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, o
   );
 }
 
-function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAccessoryWork, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG }) {
+export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAccessoryWork, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG }) {
   const [editing, setEditing] = useState(false);
   const firstWeight = acc.weights?.[0] || 0;
   const allSameWeight = (acc.weights || []).every(weight => Number(weight) === Number(firstWeight));
@@ -6960,7 +6961,7 @@ function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAcces
     </span>
   );
 
-  const actions = isAccessoryComplete || isReadOnly ? null : editing ? (
+  const actions = !isActiveGroup || isAccessoryComplete || isReadOnly ? null : editing ? (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginTop: 8 }}>
       <input
         type="number"
@@ -8006,10 +8007,10 @@ function CurrentWorkout({
           return (
             <div
               key={liftBlock.lift}
-              style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}
+              style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: 4 }}
             >
               <div style={{
-                padding: '6px 10px',
+                padding: '4px 10px',
                 textAlign: 'center',
               }}>
                 {(() => {
@@ -8945,7 +8946,7 @@ const meetTotals = {
   third: meetPlan.reduce((sum, row) => sum + (Number(row.third) || 0), 0),
 };
 
-  function renderChart(data, dataKeys, colors, emptyMessage = t.noStatsData) {
+  function renderChart(data, dataKeys, colors, emptyMessage = t.noStatsData, chartHeight = 150) {
     if (!data || data.length === 0) {
       return (
         <p style={{ color: THEME.text, textAlign: 'center', padding: 14 }}>
@@ -9047,7 +9048,7 @@ const meetTotals = {
     }
 
     return (
-      <ResponsiveContainer width="100%" height={150}>
+      <ResponsiveContainer width="100%" height={chartHeight}>
         <LineChart data={visibleData} margin={{ top: 2, right: 12, left: 10, bottom: 0 }}>
           <CartesianGrid stroke={THEME.border} vertical={false} />
           <XAxis
@@ -9202,17 +9203,19 @@ const meetTotals = {
         background: `${COLORS[lift]}14`,
         border: `1px solid ${COLORS[lift]}`,
         borderRadius: 10,
-        padding: 10,
-        marginBottom: 8
+        padding: 8,
+        marginBottom: 6
       }}
     >
-      <h3 style={{ margin: '0 0 6px', color: COLORS[lift] }}>
+      <h3 style={{ margin: '0 0 4px', color: COLORS[lift] }}>
         {liftLabel}
       </h3>
       {renderChart(
         liftData[lift] || [],
         ['oneRM', 'e1rm'],
-        [THEME.muted, COLORS[lift]]
+        [THEME.muted, COLORS[lift]],
+        t.noStatsData,
+        132
       )}
     </div>
   );
@@ -9294,21 +9297,21 @@ const meetTotals = {
       gridTemplateColumns: 'minmax(0, 1fr) auto',
       alignItems: 'center',
       gap: 10,
-      marginBottom: 8,
+      marginBottom: 10,
       padding: 0,
       border: 'none',
       borderRadius: 0,
       background: `${THEME.meet}14`
     }}>
       <div>
-        <h3 style={{ margin: '0 0 6px', color: THEME.meet }}>
+        <h3 style={{ margin: '0 0 7px', color: THEME.meet, fontSize: 20 }}>
           {t.meetPlanner}
         </h3>
 
         <p style={{
           margin: 0,
           color: THEME.muted,
-          fontSize: 13,
+          fontSize: 14,
           lineHeight: 1.4
         }}>
           {t.basedOnBestE1RM}
@@ -9323,17 +9326,17 @@ const meetTotals = {
         background: 'transparent',
         textAlign: 'center'
       }}>
-        <div style={{ color: THEME.meet, fontSize: 11, fontWeight: 800, marginBottom: 4 }}>
+        <div style={{ color: THEME.meet, fontSize: 12, fontWeight: 800, marginBottom: 4 }}>
           {t.projectedTotal}
         </div>
 
-        <div style={{ color: THEME.text, fontSize: 22, fontWeight: 900, lineHeight: 1 }}>
+        <div style={{ color: THEME.text, fontSize: 24, fontWeight: 900, lineHeight: 1 }}>
           {meetTotals.third ? formatWeightFromKg(meetTotals.third, statsWeightUnit) : '—'}
         </div>
       </div>
     </div>
 
-    <div style={{ display: 'grid', gap: 8 }}>
+    <div style={{ display: 'grid', gap: 10 }}>
       {meetPlan.map(row => (
         <div
           key={row.lift}
@@ -9341,7 +9344,7 @@ const meetTotals = {
             border: 'none',
             borderTop: 'none',
             borderRadius: 0,
-            padding: '7px 0 5px',
+            padding: '8px 0 6px',
             background: 'transparent'
           }}
         >
@@ -9350,15 +9353,15 @@ const meetTotals = {
             justifyContent: 'space-between',
             alignItems: 'center',
             gap: 12,
-            marginBottom: 8
+            marginBottom: 9
           }}>
-            <strong style={{ color: COLORS[row.lift], fontSize: 16 }}>
+            <strong style={{ color: COLORS[row.lift], fontSize: 18 }}>
               {liftLabel(row.lift, t)}
             </strong>
 
             <span style={{
               color: THEME.muted,
-              fontSize: 12,
+              fontSize: 13,
               fontWeight: 700,
               whiteSpace: 'nowrap'
             }}>
@@ -9384,10 +9387,10 @@ const meetTotals = {
               >
                 <div style={{
                   color: THEME.text,
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: 800,
                   lineHeight: 1.15,
-                  minHeight: 16,
+                  minHeight: 18,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center'
@@ -9397,9 +9400,9 @@ const meetTotals = {
 
                 <div style={{
                   color: THEME.muted,
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: 700,
-                  margin: '1px 0 3px'
+                  margin: '2px 0 4px'
                 }}>
                   {pct}
                 </div>
@@ -9407,20 +9410,20 @@ const meetTotals = {
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
-                    padding: '4px 4px',
+                    padding: '5px 4px',
                     borderRadius: 6,
-                    border: `1px solid ${THEME.border}`,
-                    background: 'transparent',
-                    color: THEME.text,
+                    border: `1px solid ${COLORS[row.lift]}`,
+                    background: `${COLORS[row.lift]}12`,
+                    color: COLORS[row.lift],
                     textAlign: 'center',
-                    fontSize: 14,
+                    fontSize: 15,
                     fontWeight: 800
                   }}
                 >
                   {value ? formatWeightFromKg(value, statsWeightUnit) : '—'}
                 </div>
 
-                <div style={{ color: THEME.muted, fontSize: 10, marginTop: 1 }}>
+                <div style={{ color: THEME.muted, fontSize: 11, marginTop: 2 }}>
                   {statsWeightUnit}
                 </div>
               </div>
@@ -9431,15 +9434,15 @@ const meetTotals = {
     </div>
 
     <div style={{
-      marginTop: 4,
-      padding: '6px 0 0',
+      marginTop: 6,
+      padding: '8px 0 0',
       border: 'none',
       borderTop: 'none',
       borderRadius: 0,
       background: 'transparent',
       display: 'grid',
-      gap: 3,
-      fontSize: 13
+      gap: 4,
+      fontSize: 14
     }}>
       {[
         [t.totalAfterOpener, meetTotals.opener],
@@ -14916,7 +14919,7 @@ const latestBodyDataRows = [
       )}
 
       {screen === 'dashboard' && (
-  <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
+  <div style={{ maxWidth: 500, margin: '0 auto', padding: '12px 14px 16px', fontFamily: 'sans-serif' }}>
     <AppHeader
       t={t}
       title={t.appName || 'Kelani SBD Tracker'}
@@ -14937,15 +14940,15 @@ const latestBodyDataRows = [
 
       return (
         <div style={{
-          padding: '0 0 10px',
-          marginBottom: 8,
+          padding: '0 0 12px',
+          marginBottom: 10,
           textAlign: 'center'
         }}>
           <div style={{
             color: isNextMeetDay ? THEME.meet : THEME.text,
-            fontSize: 22,
+            fontSize: 24,
             fontWeight: 900,
-            marginBottom: planLines.length ? 8 : 0
+            marginBottom: planLines.length ? 10 : 0
           }}>
             <WorkoutTitle workout={nextWorkout} t={t} benchPressVariant={benchPressVariant} />
           </div>
@@ -14953,9 +14956,9 @@ const latestBodyDataRows = [
           {planLines.length > 0 && (
             <div style={{
               color: THEME.muted,
-              fontSize: 12,
+              fontSize: 14,
               fontWeight: 800,
-              lineHeight: 1.35
+              lineHeight: 1.45
             }}>
               {planLines.map((line, index) => {
                 const text = String(line);
@@ -14983,14 +14986,14 @@ const latestBodyDataRows = [
         </div>
       );
     })()}
-    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 6, marginBottom: 6 }}>
+    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: '8px 6px 10px', marginBottom: 8 }}>
       {(() => {
         const cards = [
           {
             key: 'Squat',
             label: t.squat,
             color: THEME.red,
-            background: 'rgba(231, 76, 60, 0.08)',
+            background: 'rgba(255, 92, 69, 0.12)',
             oneRM: best1RMs.Squat,
             e1RM: bestE1RMs.Squat,
           },
@@ -14998,7 +15001,7 @@ const latestBodyDataRows = [
             key: 'Bench',
             label: t.bench,
             color: THEME.primary,
-            background: 'rgba(243, 156, 18, 0.08)',
+            background: 'rgba(255, 138, 61, 0.12)',
             oneRM: best1RMs.Bench,
             e1RM: bestE1RMs.Bench,
           },
@@ -15006,7 +15009,7 @@ const latestBodyDataRows = [
             key: 'Deadlift',
             label: t.deadlift,
             color: THEME.yellow,
-            background: 'rgba(241, 196, 15, 0.08)',
+            background: 'rgba(255, 209, 102, 0.12)',
             oneRM: best1RMs.Deadlift,
             e1RM: bestE1RMs.Deadlift,
           },
@@ -15014,7 +15017,7 @@ const latestBodyDataRows = [
             key: 'Total',
             label: t.total || 'Total',
             color: THEME.meet,
-            background: `${THEME.meet}14`,
+            background: `${THEME.meet}20`,
             oneRM: total1RM,
             e1RM: totalE1RM,
           },
@@ -15027,24 +15030,24 @@ const latestBodyDataRows = [
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              gap: 10
+              gap: 12
             }}>
               {cards.map(card => (
                 <div
                   key={card.key}
                   style={{
                     border: `1px solid ${card.color}`,
-                    borderRadius: 10,
-                    padding: 9,
+                    borderRadius: 11,
+                    padding: 12,
                     background: card.background,
-                    minHeight: 82
+                    minHeight: 96
                   }}
                 >
                   <div style={{
                     color: card.color,
-                    fontSize: 17,
+                    fontSize: 19,
                     fontWeight: 900,
-                    marginBottom: 6,
+                    marginBottom: 8,
                     lineHeight: 1.1
                   }}>
                     {card.label}
@@ -15053,20 +15056,20 @@ const latestBodyDataRows = [
                   <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'auto 1fr',
-                    gap: '5px 8px',
+                    gap: '7px 10px',
                     alignItems: 'baseline'
                   }}>
-                    <span style={{ color: THEME.muted, fontSize: 12, fontWeight: 900 }}>
+                    <span style={{ color: THEME.muted, fontSize: 13, fontWeight: 900 }}>
                       {t.oneRM}
                     </span>
-                    <strong style={{ color: '#ffffff', fontSize: 15, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <strong style={{ color: card.color, fontSize: 17, fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {value(card.oneRM)}
                     </strong>
 
-                    <span style={{ color: THEME.muted, fontSize: 12, fontWeight: 900 }}>
+                    <span style={{ color: THEME.muted, fontSize: 13, fontWeight: 900 }}>
                       {t.e1RM}
                     </span>
-                    <strong style={{ color: '#ffffff', fontSize: 15, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <strong style={{ color: card.color, fontSize: 17, fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {value(card.e1RM)}
                     </strong>
                   </div>
@@ -15079,7 +15082,7 @@ const latestBodyDataRows = [
       })()}
     </div>
 
-    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 8 }}>
+    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: '10px 8px 8px' }}>
       {latestBodyDataRows.length > 0 ? (
         latestBodyDataRows.map((row, index) => (
           <div
@@ -15088,11 +15091,11 @@ const latestBodyDataRows = [
               display: 'grid',
               gridTemplateColumns: '1fr auto',
               alignItems: 'center',
-              columnGap: 12,
-              marginBottom: index === latestBodyDataRows.length - 1 ? 0 : 6
+              columnGap: 14,
+              marginBottom: index === latestBodyDataRows.length - 1 ? 0 : 9
             }}
           >
-            <span style={{ color: THEME.text, fontWeight: 700, fontSize: 15 }}>
+            <span style={{ color: THEME.text, fontWeight: 800, fontSize: 16 }}>
               {row.label}
             </span>
 
@@ -15100,7 +15103,7 @@ const latestBodyDataRows = [
               textAlign: 'right',
               whiteSpace: 'nowrap',
               minWidth: 70,
-              fontSize: 15,
+              fontSize: 16,
               color: row.status?.color || THEME.primary
             }}>
               {row.value}
@@ -15110,7 +15113,7 @@ const latestBodyDataRows = [
       ) : (
         <div style={{
           color: THEME.muted,
-          fontSize: 14,
+          fontSize: 15,
           fontWeight: 700,
           lineHeight: 1.4,
           textAlign: 'center'
@@ -15245,7 +15248,7 @@ const latestBodyDataRows = [
     margin: '0 auto',
     padding: 24,
     boxSizing: 'border-box',
-    minHeight: '100dvh',
+    minHeight: 'calc(100dvh - 70px)',
     background: THEME.bg,
     color: THEME.text,
     fontFamily: 'sans-serif',
@@ -15531,17 +15534,17 @@ const latestBodyDataRows = [
         </button>
       </div>
     ) : (
-      <div style={{ background: 'transparent', border: 'none', borderRadius: 12, padding: 24, textAlign: 'center' }}>
-        <div style={{ fontSize: 40, marginBottom: 10 }}>🎉</div>
+      <div style={{ background: 'transparent', border: 'none', borderRadius: 12, padding: '8px 24px 12px', textAlign: 'center' }}>
+        <div style={{ fontSize: 40, marginBottom: 6 }}>🎉</div>
 
-        <h2 style={{ margin: '0 0 8px', color: THEME.brown || '#a67c52' }}>
+        <h2 style={{ margin: '0 0 6px', color: THEME.brown || '#a67c52' }}>
           {completedWorkoutCanStartNewCycle ? (t.cycleCompleted || 'Cycle complete')
             : completedWorkout?.type === 'rest'
               ? 'Rest day complete'
               : t.workoutCompleted}
         </h2>
 
-        <p style={{ color: THEME.muted, margin: '0 0 12px' }}>
+        <p style={{ color: THEME.muted, margin: '0 0 8px' }}>
           {completedWorkoutCanStartNewCycle ? (t.workoutAndCycleSaved || 'Cycle saved. Start the next cycle when ready.')
             : completedWorkout?.type === 'rest'
               ? 'Rest day saved. You can continue to the next workout.'
@@ -15561,7 +15564,7 @@ const latestBodyDataRows = [
               display: 'flex',
               justifyContent: 'space-between',
               gap: 12,
-              marginBottom: 10
+              marginBottom: 6
             }}>
               <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
               <strong style={{ color: '#ffffff', textAlign: 'right' }}>{value}</strong>
@@ -15574,8 +15577,8 @@ const latestBodyDataRows = [
               border: 'none',
               color: THEME.text,
               borderRadius: 8,
-              padding: 12,
-              marginBottom: 10,
+              padding: '8px 12px',
+              marginBottom: 4,
               textAlign: 'left'
             }}>
               {summaryRow(t.lifts || t.lift, liftNames || '—')}
@@ -15665,8 +15668,8 @@ const latestBodyDataRows = [
           border: 'none',
           color: THEME.text,
           borderRadius: 8,
-          padding: 12,
-          marginBottom: 20,
+          padding: '6px 12px',
+          marginBottom: 6,
           textAlign: 'left'
         }}>
           <div style={{
@@ -15677,7 +15680,7 @@ const latestBodyDataRows = [
             }[(completedSummaryForRender?.results || []).find(result => result.trackStrength !== false)?.lift || completedWorkout?.lift] || THEME.primary),
             fontSize: 16,
             fontWeight: 900,
-            marginBottom: 10,
+            marginBottom: 6,
             textAlign: 'center'
           }}>
             {liftLabel((completedSummaryForRender?.results || []).find(result => result.trackStrength !== false)?.lift || completedWorkout?.lift, t)} · 1RM / e1RM
@@ -15685,7 +15688,7 @@ const latestBodyDataRows = [
 
           {(() => {
             const row = (label, value, isPR) => (
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
                 <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
                 <strong style={{ color: '#ffffff' }}>
                   {formatWeightFromKg(value, weightUnit)} {isPR ? '🚀' : ''}
@@ -15738,16 +15741,16 @@ const latestBodyDataRows = [
             border: 'none',
             color: THEME.text,
             borderRadius: 8,
-            padding: 16,
-            marginBottom: 20,
+            padding: '4px 12px 8px',
+            marginBottom: 8,
             textAlign: 'left'
           }}>
             {(completedWorkout.lifts || []).map((liftBlock, liftIndex) => (
               <div
                 key={`force-completed-lift-${liftBlock.lift}`}
                 style={{
-                  marginTop: liftIndex === 0 ? 0 : 16,
-                  paddingTop: liftIndex === 0 ? 0 : 14,
+                  marginTop: liftIndex === 0 ? 0 : 8,
+                  paddingTop: 0,
                 }}
               >
                 <div style={{
@@ -15758,7 +15761,7 @@ const latestBodyDataRows = [
                   }[liftBlock.lift] || THEME.primary),
                   fontSize: 16,
                   fontWeight: 900,
-                  marginBottom: 8
+                  marginBottom: 4
                 }}>
                   {workoutLiftBlockLabel(liftBlock, t, benchPressVariant)}
                 </div>
@@ -15809,7 +15812,7 @@ const latestBodyDataRows = [
                         display: 'grid',
                         gridTemplateColumns: '1fr auto',
                         gap: 12,
-                        padding: '7px 0',
+                        padding: '5px 0',
                         opacity: group.isInvalidSet ? 0.75 : 1
                       }}
                     >
@@ -15866,48 +15869,54 @@ const latestBodyDataRows = [
           </button>
         )}
 
-        <button
-          onClick={() => setScreen('stats')}
-          style={{
-            width: '100%',
-            padding: 14,
-            fontSize: 16,
-            fontWeight: 600,
-            background: completedWorkoutCanStartNewCycle ? 'transparent' : THEME.primary,
-            color: '#ffffff',
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 8,
-            cursor: 'pointer',
-            marginBottom: 10
-          }}
-        >
-          {t.viewProgress}
-        </button>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: 8
+        }}>
+          <button
+            onClick={() => setScreen('stats')}
+            style={{
+              width: '100%',
+              minWidth: 0,
+              padding: '11px 8px',
+              fontSize: 14,
+              fontWeight: 700,
+              background: completedWorkoutCanStartNewCycle ? 'transparent' : THEME.primary,
+              color: '#ffffff',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 8,
+              cursor: 'pointer'
+            }}
+          >
+            {t.stats || t.viewProgress}
+          </button>
 
-        <button
-          onClick={() => {
-            const targetIndex = Number.isInteger(completedWorkoutIndex)
-              ? completedWorkoutIndex
-              : Math.max(0, (completedWorkout?.number || 1) - 1);
+          <button
+            onClick={() => {
+              const targetIndex = Number.isInteger(completedWorkoutIndex)
+                ? completedWorkoutIndex
+                : Math.max(0, (completedWorkout?.number || 1) - 1);
 
-            setSelectedIndex(targetIndex);
-            setScreen('current');
-          }}
-          style={{
-            width: '100%',
-            padding: 14,
-            fontSize: 16,
-            fontWeight: 600,
-            marginBottom: 0,
-            background: 'transparent',
-            color: '#ffffff',
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 8,
-            cursor: 'pointer'
-          }}
-        >
-          {t.backToWorkout}
-        </button>
+              setSelectedIndex(targetIndex);
+              setScreen('current');
+            }}
+            style={{
+              width: '100%',
+              minWidth: 0,
+              padding: '11px 8px',
+              fontSize: 14,
+              fontWeight: 700,
+              background: 'transparent',
+              color: '#ffffff',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 8,
+              cursor: 'pointer'
+            }}
+          >
+            {t.back || t.backToWorkout}
+          </button>
+        </div>
       </div>
     )}
   </div>
