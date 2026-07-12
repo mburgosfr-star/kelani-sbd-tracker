@@ -14,13 +14,13 @@ const SET_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'max'];
 const WORKOUT_EFFORT_OPTIONS = ['easy', 'good', 'hard', 'tooMuch'];
 const LIFT_ORDER = ['Squat', 'Bench', 'Deadlift'];
 const DEFAULT_REST_TIME_SECONDS = 300;
-const AUTO_BACKUP_PATH = 'Kelani/kelani-sbd-tracker-autosave.json';
+const AUTO_BACKUP_PATH = 'Kelani SBD Tracker/Automatic Backups/kelani-sbd-tracker-autosave.json';
 const AUTO_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-auto-backup-status';
 const REST_TIMER_NOTIFICATION_ID = 1208;
 const REST_TIMER_NOTIFICATION_CHANNEL_ID = 'kelani_rest_timer_v4';
 const REST_TIMER_NOTIFICATION_SOUND = 'kelani_rest_timer_quiet.wav';
 
-function buildBackupSummary(data) {
+export function buildBackupSummary(data) {
   const currentCycle = data?.currentCycle || 1;
   const totalWorkouts = data?.inProgress?.workouts?.length || 28;
   const selectedIndex = data?.inProgress?.selectedIndex;
@@ -38,7 +38,7 @@ function buildBackupSummary(data) {
   };
 }
 
-function buildBackupPayload(data) {
+export function buildBackupPayload(data) {
   const exportedAt = new Date().toISOString();
 
   return {
@@ -162,35 +162,115 @@ async function scheduleRestTimerNotification(
   } catch (e) {}
 }
 
+export function validateBackupPayload(backup, expectedData) {
+  if (!backup || backup.storageKey !== STORAGE_KEY) return false;
+  if (!backup.data || typeof backup.data !== 'object') return false;
+  if (!backup.summary || typeof backup.summary !== 'object') return false;
+
+  return (
+    JSON.stringify(backup.data) === JSON.stringify(expectedData) &&
+    JSON.stringify(backup.summary) === JSON.stringify(buildBackupSummary(expectedData))
+  );
+}
+
+export function isVerifiedAutomaticBackupStatus(status) {
+  return Boolean(
+    status?.ok === true &&
+    status?.source === 'automatic' &&
+    status?.verified === true &&
+    status?.exportedAt
+  );
+}
+
+export function shouldRetryAutomaticBackup(status, expectedPath = AUTO_BACKUP_PATH) {
+  return !isVerifiedAutomaticBackupStatus(status) || status?.path !== expectedPath;
+}
+
+export function formatAutomaticBackupTimestamp(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const pad = number => String(number).padStart(2, '0');
+
+  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function recordAutomaticBackupFailure(error) {
+  const attemptedAt = new Date().toISOString();
+  let previousStatus = null;
+
+  try {
+    previousStatus = JSON.parse(localStorage.getItem(AUTO_BACKUP_STATUS_KEY) || 'null');
+  } catch (e) {}
+
+  const lastSuccessfulAt = isVerifiedAutomaticBackupStatus(previousStatus)
+    ? previousStatus.exportedAt
+    : previousStatus?.lastSuccessfulAt || null;
+
+  localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
+    ok: false,
+    source: 'automatic',
+    verified: false,
+    attemptedAt,
+    lastSuccessfulAt,
+    error: error?.message || String(error || 'Automatic backup failed'),
+  }));
+}
+
 async function writeAutomaticBackup(data) {
   const backup = buildBackupPayload(data);
   const json = JSON.stringify(backup, null, 2);
 
-  if (Capacitor.isNativePlatform()) {
-    await Filesystem.mkdir({
-      path: 'Kelani',
-      directory: Directory.Documents,
-      recursive: true,
-    }).catch(() => {});
+  try {
+    let storedJson = null;
+    let uri = null;
 
-    await Filesystem.writeFile({
+    if (Capacitor.isNativePlatform()) {
+      const writeResult = await Filesystem.writeFile({
+        path: AUTO_BACKUP_PATH,
+        data: json,
+        directory: Directory.Documents,
+        encoding: Encoding.UTF8,
+        recursive: true,
+      });
+
+      uri = writeResult?.uri || null;
+
+      const readResult = await Filesystem.readFile({
+        path: AUTO_BACKUP_PATH,
+        directory: Directory.Documents,
+        encoding: Encoding.UTF8,
+      });
+
+      storedJson = typeof readResult?.data === 'string'
+        ? readResult.data
+        : String(readResult?.data || '');
+    } else {
+      localStorage.setItem('kelani-sbd-tracker-autosave', json);
+      storedJson = localStorage.getItem('kelani-sbd-tracker-autosave');
+    }
+
+    const verifiedBackup = JSON.parse(storedJson || 'null');
+
+    if (!validateBackupPayload(verifiedBackup, data)) {
+      throw new Error('Automatic backup verification failed');
+    }
+
+    localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
+      ok: true,
+      source: 'automatic',
+      verified: true,
+      exportedAt: verifiedBackup.exportedAt,
       path: AUTO_BACKUP_PATH,
-      data: json,
-      directory: Directory.Documents,
-      encoding: Encoding.UTF8,
-    });
-  } else {
-    localStorage.setItem('kelani-sbd-tracker-autosave', json);
+      uri,
+      summary: verifiedBackup.summary,
+    }));
+
+    return verifiedBackup;
+  } catch (error) {
+    recordAutomaticBackupFailure(error);
+    throw error;
   }
-
-  localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
-    ok: true,
-    exportedAt: backup.exportedAt,
-    path: AUTO_BACKUP_PATH,
-    summary: backup.summary,
-  }));
-
-  return backup;
 }
 
 
@@ -217,11 +297,16 @@ const WORKOUT_CIRCLE_SIZE = 44;
 const WORKOUT_CIRCLE_FONT_SIZE = 18;
 const WORKOUT_SECTION_TITLE_FONT_SIZE = 18;
 const WORKOUT_TEXT_FONT_SIZE = 15;
-const WORKOUT_CHECKLIST_ROW_HEIGHT = WORKOUT_CIRCLE_SIZE;
 const WORKOUT_CHECKLIST_COLUMN_GAP = 12;
-const WORKOUT_CHECKLIST_ROW_GAP = 8;
-const WORKOUT_CHECKLIST_TEXT_GAP = 8;
 const WORKOUT_WORK_ROW_PADDING_X = 12;
+const WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE = 'repeat(2, minmax(0, 1fr))';
+const WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE = 'repeat(3, minmax(0, 1fr))';
+const WORKOUT_CIRCLE_ITEM_GAP = 8;
+const WORKOUT_LABEL_CIRCLE_GAP = 6;
+const WORKOUT_SMART_LABEL_FONT_SIZE = 15;
+const WORKOUT_LIFT_HEADER_FONT_SIZE = 20;
+const WORKOUT_INFO_ICON_SIZE = 14;
+const WORKOUT_INTERACTIVE_HEADER_MIN_HEIGHT = 32;
 
 function toOptionalNumber(value) {
   const parsed = Number(value);
@@ -844,6 +929,10 @@ function normalizeTrainingModel(model) {
     : TRAINING_MODELS.CLASSIC;
 }
 
+export function getNewUserTrainingModel(model) {
+  return normalizeTrainingModel(model || TRAINING_MODELS.SMART);
+}
+
 function isSmartTrainingModel(model) {
   return normalizeTrainingModel(model) === TRAINING_MODELS.SMART;
 }
@@ -1346,7 +1435,7 @@ function generatePrepItems(lift, preparationMode = 'basicFirst') {
   }));
 }
 
-function generateWarmups(workPlan, lift = '') {
+export function generateWarmups(workPlan, lift = '') {
   const workSets = Array.isArray(workPlan)
     ? workPlan.filter(set => Number(set?.weight) > 0)
     : [{ weight: Number(workPlan) || 0, reps: null }];
@@ -1382,11 +1471,11 @@ function generateWarmups(workPlan, lift = '') {
   const targetReps = Math.max(Number(targetSet?.reps) || 1, 1);
   const hasTopSet = Boolean(topSet);
 
-  const highestNonTopWorkWeight = workSets
+  const highestNonTopWorkSet = workSets
     .filter(set => !isTopWarmupTarget(set))
-    .map(set => Number(set.weight) || 0)
-    .filter(weight => weight >= 40 && weight < targetWeight)
-    .sort((a, b) => b - a)[0] || null;
+    .filter(set => Number(set.weight) >= 40 && Number(set.weight) < targetWeight)
+    .sort((a, b) => Number(b.weight) - Number(a.weight))[0] || null;
+  const highestNonTopWorkWeight = Number(highestNonTopWorkSet?.weight) || null;
 
   const hasCloseBackoff =
     hasTopSet &&
@@ -1397,7 +1486,7 @@ function generateWarmups(workPlan, lift = '') {
   function finalWarmupWeight() {
     if (hasTopSet) {
       if (hasCloseBackoff) {
-        return highestNonTopWorkWeight;
+        return roundDown10(highestNonTopWorkWeight - 0.001);
       }
 
       if (targetReps <= 1) return roundTo10(targetWeight * 0.92);
@@ -1431,6 +1520,10 @@ function generateWarmups(workPlan, lift = '') {
   function repsForWarmup(weight, isFinalWarmup) {
     if (weight === 20) return 5;
     if (!hasTopSet) return Math.min(5, Math.max(targetReps, 3));
+
+    if (hasCloseBackoff && isFinalWarmup) {
+      return Math.min(3, Math.max(Number(highestNonTopWorkSet?.reps) || targetReps, 1));
+    }
 
     const distanceToTarget = targetWeight - weight;
 
@@ -4756,22 +4849,69 @@ function WorkoutCircle({ done = false, active = false, skipped = false, disabled
   );
 }
 
+function WorkoutCircleItem({ label, children, testId, fullWidth = false }) {
+  return (
+    <div
+      data-testid={testId}
+      data-workout-circle-item="true"
+      style={{
+        display: 'grid',
+        gridTemplateRows: 'auto auto',
+        justifyItems: 'start',
+        alignContent: 'start',
+        rowGap: WORKOUT_LABEL_CIRCLE_GAP,
+        minWidth: 0,
+        gridColumn: fullWidth ? '1 / -1' : undefined,
+      }}
+    >
+      <div style={{
+        minWidth: 0,
+        color: THEME.text,
+        fontSize: WORKOUT_TEXT_FONT_SIZE,
+        fontWeight: 800,
+        lineHeight: 1.15,
+      }}>
+        {label}
+      </div>
+
+      {children}
+    </div>
+  );
+}
+
 function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
   const label = t[item.labelKey];
+  const prescription = formatPrepPrescription(item, t);
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: `${WORKOUT_CIRCLE_SIZE}px minmax(0, 1fr)`,
-      alignItems: 'center',
-      columnGap: WORKOUT_CHECKLIST_TEXT_GAP,
-      width: '100%',
-      minWidth: 0,
-      height: WORKOUT_CHECKLIST_ROW_HEIGHT,
-      boxSizing: 'border-box',
-      padding: 0,
-      background: 'transparent'
-    }}>
+    <WorkoutCircleItem
+      label={(
+        <div>
+          <div
+            title={label}
+            style={{
+              fontSize: WORKOUT_TEXT_FONT_SIZE - 1,
+              fontWeight: 800,
+              lineHeight: 1.05,
+            }}
+          >
+            {label}
+          </div>
+          <div
+            title={prescription}
+            style={{
+              color: THEME.muted,
+              fontSize: WORKOUT_TEXT_FONT_SIZE - 1,
+              fontWeight: 700,
+              marginTop: 1,
+              lineHeight: 1.05,
+            }}
+          >
+            {prescription}
+          </div>
+        </div>
+      )}
+    >
       <WorkoutCircle
         done={item.done}
         active={isActive}
@@ -4779,102 +4919,42 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
         onClick={onToggle}
         label={label}
       />
-
-      <div style={{ minWidth: 0 }}>
-        <div
-          title={label}
-          style={{
-            color: THEME.text,
-            fontWeight: 800,
-            fontSize: WORKOUT_TEXT_FONT_SIZE - 1,
-            lineHeight: 1.05
-          }}
-        >
-          {label}
-        </div>
-        <div
-          title={formatPrepPrescription(item, t)}
-          style={{
-            color: THEME.muted,
-            fontSize: WORKOUT_TEXT_FONT_SIZE - 1,
-            marginTop: 1,
-            lineHeight: 1.05
-          }}
-        >
-          {formatPrepPrescription(item, t)}
-        </div>
-      </div>
-    </div>
+    </WorkoutCircleItem>
   );
 }
 
 
-function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
+export function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   if (!warmups.length) return null;
-
-  const columnCount = warmups.length === 1 ? 1 : 2;
 
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
-      justifyContent: 'center',
-      columnGap: WORKOUT_CHECKLIST_COLUMN_GAP,
-      rowGap: WORKOUT_CHECKLIST_ROW_GAP,
+      gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+      justifyContent: 'start',
+      gap: WORKOUT_CIRCLE_ITEM_GAP,
       padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`
     }}>
       {warmups.map((warmup, index) => {
-        const label = `WU ${index + 1}`;
+        const warmupDescription = `${warmup.reps} × ${formatWorkoutWeightFromKg(warmup.weight, weightUnit, t, lift, benchPressVariant)}`;
         const isActive = index === activeIndex;
         const isDone = !!warmup.done;
 
         return (
           <React.Fragment key={index}>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: `${WORKOUT_CIRCLE_SIZE}px minmax(0, 1fr)`,
-              alignItems: 'center',
-              columnGap: WORKOUT_CHECKLIST_TEXT_GAP,
-              width: '100%',
-              minWidth: 0,
-              height: WORKOUT_CHECKLIST_ROW_HEIGHT,
-              boxSizing: 'border-box',
-              padding: 0,
-              marginTop: 0,
-              background: 'transparent'
-            }}>
+            <WorkoutCircleItem
+              testId={`warmup-row-${index}`}
+              label={warmupDescription}
+            >
               <WorkoutCircle
                 done={isDone}
                 active={isActive}
                 disabled={isReadOnly}
                 onClick={() => onToggle(index)}
-                label={label}
+                label={warmupDescription}
                 accentColor={getLiftThemeColor(lift)}
               />
-
-              <div style={{ minWidth: 0, textAlign: 'left', lineHeight: 1.05 }}>
-                <div style={{
-                  color: THEME.text,
-                  fontSize: WORKOUT_TEXT_FONT_SIZE - 1,
-                  fontWeight: 800,
-                  lineHeight: 1.05,
-                  whiteSpace: 'nowrap'
-                }}>
-                  {label}
-                </div>
-
-                <div style={{
-                  color: THEME.muted,
-                  fontSize: WORKOUT_TEXT_FONT_SIZE - 1,
-                  fontWeight: 700,
-                  marginTop: 1,
-                  lineHeight: 1.05,
-                  whiteSpace: 'nowrap'
-                }}>
-                  {warmup.reps} × {formatWorkoutWeightFromKg(warmup.weight, weightUnit, t, lift, benchPressVariant)}
-                </div>
-              </div>
-            </div>
+            </WorkoutCircleItem>
 
             {renderTimer?.(index) && (
               <div style={{ gridColumn: '1 / -1' }}>
@@ -5425,7 +5505,10 @@ export function SetRow({ set, index, label, isWarmup = false, onToggle, onWeight
   const isSetComplete = !!set.done || !!set.skipped;
 
   const detail = (
-    <span style={{ color: isAdjusted ? '#f39c12' : THEME.muted }}>
+    <span style={{
+      color: isAdjusted ? '#f39c12' : THEME.muted,
+      whiteSpace: 'nowrap',
+    }}>
       1 × {set.reps} × {formatWorkoutWeightFromKg(set.weight, weightUnit, t, lift, benchPressVariant)}{set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}{displayPct ? ` (${displayPct}%)` : ''}
     </span>
   );
@@ -5470,13 +5553,16 @@ export function SetRow({ set, index, label, isWarmup = false, onToggle, onWeight
       <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>{normalizeWeightUnit(weightUnit)}</span>
     </div>
   ) : (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'flex-start',
-      alignItems: 'center',
-      gap: 8,
-      marginTop: 8
-    }}>
+    <div
+      data-testid="workout-set-action-grid"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+        alignItems: 'center',
+        gap: WORKOUT_CIRCLE_ITEM_GAP,
+        marginTop: 8,
+      }}
+    >
       {!isWarmup && (
         <SetActionButton
           title={t.edit}
@@ -5515,56 +5601,55 @@ export function SetRow({ set, index, label, isWarmup = false, onToggle, onWeight
     </div>
   );
 
+  const circleLabel = isWarmup
+    ? detail
+    : isAttemptSetLabel(set.labelKey)
+      ? (
+          <div>
+            <div>{label}</div>
+            <div style={{ marginTop: 2, fontWeight: 700 }}>{detail}</div>
+            {meta}
+          </div>
+        )
+      : (
+          <div>
+            {detail}
+            {meta}
+          </div>
+        );
+
   return (
     <div
       ref={rowRef}
+      data-testid="workout-set-row"
       style={{
-        padding: '6px 8px',
-        marginBottom: 6,
+        padding: `4px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+        marginBottom: 4,
       }}
     >
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        minWidth: 0,
-      }}>
-        <WorkoutCircle
-          done={set.done}
-          active={isActive}
-          skipped={set.skipped}
-          disabled={isReadOnly}
-          onClick={onToggle}
-          label={label}
-          accentColor={getLiftThemeColor(lift)}
-        />
-
-        <div style={{
-          flex: 1,
-          minWidth: 0,
-          marginLeft: 10,
-          textAlign: 'left',
-          lineHeight: 1.2,
-        }}>
-          <div style={{
-            color: THEME.text,
-            fontSize: WORKOUT_TEXT_FONT_SIZE,
-            fontWeight: 800,
-            lineHeight: 1.2,
-          }}>
-            {isWarmup || isAttemptSetLabel(set.labelKey) ? label : detail}
-          </div>
-
-          <div style={{
-            fontSize: WORKOUT_TEXT_FONT_SIZE,
-            fontWeight: 700,
-            lineHeight: 1.2,
-            marginTop: 2,
-          }}>
-            {isWarmup || isAttemptSetLabel(set.labelKey) ? detail : null}
-          </div>
-
-          {meta}
-        </div>
+      <div
+        data-testid="workout-set-row-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+          gap: WORKOUT_CIRCLE_ITEM_GAP,
+        }}
+      >
+        <WorkoutCircleItem
+          testId="workout-set-circle-item"
+          label={circleLabel}
+          fullWidth={true}
+        >
+          <WorkoutCircle
+            done={set.done}
+            active={isActive}
+            skipped={set.skipped}
+            disabled={isReadOnly}
+            onClick={onToggle}
+            label={label}
+            accentColor={getLiftThemeColor(lift)}
+          />
+        </WorkoutCircleItem>
       </div>
 
       {actions}
@@ -5572,7 +5657,7 @@ export function SetRow({ set, index, label, isWarmup = false, onToggle, onWeight
   );
 }
 
-function SettingsListRow({ label, description, value, valueColor = THEME.text, actionLabel, onAction, actionContent, danger = false, noBorder = false, compact = false }) {
+function SettingsListRow({ label, description, value, valueColor = THEME.text, actionLabel, onAction, actionContent, danger = false, noBorder = false, compact = false, valueNowrap = false, valueFontSize = 15 }) {
   return (
     <div style={{
       display: 'grid',
@@ -5609,7 +5694,7 @@ function SettingsListRow({ label, description, value, valueColor = THEME.text, a
 
       <div style={{
         color: valueColor,
-        fontSize: 15,
+        fontSize: valueFontSize,
         fontWeight: 800,
         textAlign: 'center',
         width: '100%'
@@ -5637,7 +5722,9 @@ function SettingsListRow({ label, description, value, valueColor = THEME.text, a
               {actionLabel}
             </button>
           ) : (
-            <span>{value || '—'}</span>
+            <span style={{ whiteSpace: valueNowrap ? 'nowrap' : 'normal' }}>
+              {value || '—'}
+            </span>
           )
         )}
       </div>
@@ -5826,14 +5913,6 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
         downloadJson(filename, json);
       }
 
-      localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
-        ok: true,
-        exportedAt,
-        source: 'manual',
-        filename,
-        summary: buildBackupSummary(data),
-      }));
-
       setNotice(t.exportDataSuccess);
     } catch (e) {
       setNotice(t.exportDataError);
@@ -5891,9 +5970,23 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
     }
   })();
 
-  const autoBackupDate = autoBackupStatus?.exportedAt
-    ? new Date(autoBackupStatus.exportedAt).toLocaleString()
+  const autoBackupVerified = isVerifiedAutomaticBackupStatus(autoBackupStatus);
+  const autoBackupFailed = autoBackupStatus?.source === 'automatic' && autoBackupStatus?.ok === false;
+  const autoBackupDate = autoBackupVerified
+    ? formatAutomaticBackupTimestamp(autoBackupStatus.exportedAt)
     : null;
+  const autoBackupFailureDate = autoBackupFailed && autoBackupStatus?.attemptedAt
+    ? formatAutomaticBackupTimestamp(autoBackupStatus.attemptedAt)
+    : null;
+  const autoBackupProgress = autoBackupVerified && autoBackupStatus?.summary
+    ? `C${autoBackupStatus.summary.currentCycle || 1}W${autoBackupStatus.summary.currentWorkout || 1}`
+    : null;
+  const autoBackupDisplayVerified = autoBackupVerified && Boolean(autoBackupDate);
+  const autoBackupValue = autoBackupDisplayVerified
+    ? `${autoBackupDate}${autoBackupProgress ? ` · ${autoBackupProgress}` : ''}`
+    : autoBackupFailed
+      ? `✕ ${autoBackupFailureDate || t.exportDataError}`
+      : t.noAutomaticBackupYet;
 
   return (
     <>
@@ -5961,9 +6054,11 @@ function DataSection({ meetPrepChecklist = {}, setMeetPrepChecklist = () => {}, 
 
       <SettingsListRow
         label={t.lastAutomaticBackup}
-        value={autoBackupDate || t.noAutomaticBackupYet}
-        valueColor={autoBackupStatus?.ok ? THEME.primary : THEME.red}
+        value={autoBackupValue}
+        valueColor={autoBackupDisplayVerified ? THEME.primary : autoBackupFailed ? THEME.red : THEME.muted}
         compact={true}
+        valueNowrap={true}
+        valueFontSize={13}
         noBorder={true}
       />
 
@@ -6808,13 +6903,16 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEdi
       </span>
     </div>
   ) : (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'flex-start',
-      alignItems: 'center',
-      gap: 8,
-      marginTop: 8
-    }}>
+    <div
+      data-testid="workout-set-group-action-grid"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+        alignItems: 'center',
+        gap: WORKOUT_CIRCLE_ITEM_GAP,
+        marginTop: 8,
+      }}
+    >
       <SetActionButton
         title={t.edit}
         disabled={isReadOnly}
@@ -6885,14 +6983,15 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEdi
         {detail}
       </div>
 
-      <div style={{
-        display: 'flex',
-        justifyContent: 'flex-start',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 8,
-        marginTop: 6,
-      }}>
+      <div
+        data-testid="workout-set-group-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+          gap: WORKOUT_CIRCLE_ITEM_GAP,
+          marginTop: WORKOUT_LABEL_CIRCLE_GAP,
+        }}
+      >
         {entries.map(({ set, index }) => (
           <WorkoutCircle
             key={index}
@@ -6988,13 +7087,16 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
       </span>
     </div>
   ) : (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'flex-start',
-      alignItems: 'center',
-      gap: 8,
-      marginTop: 8
-    }}>
+    <div
+      data-testid="workout-accessory-action-grid"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+        alignItems: 'center',
+        gap: WORKOUT_CIRCLE_ITEM_GAP,
+        marginTop: 8,
+      }}
+    >
       <SetActionButton title={t.edit} disabled={isReadOnly} borderColor={THEME.primary} onClick={handleEditClick}>✎</SetActionButton>
       <SetActionButton title={t.restoreOriginalWeight} disabled={isReadOnly} borderColor="#f39c12" onClick={e => { e.stopPropagation(); onRestoreAll(); }}>↺</SetActionButton>
       <SetActionButton title={t.markSetFailed} disabled={isReadOnly || firstOpenIndex === -1} borderColor="#e74c3c" onClick={e => { e.stopPropagation(); if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex); }}>✕</SetActionButton>
@@ -7017,14 +7119,15 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
         {accessoryLabel}: {detail}
       </div>
 
-      <div style={{
-        display: 'flex',
-        justifyContent: 'flex-start',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 8,
-        marginTop: 6,
-      }}>
+      <div
+        data-testid="workout-accessory-group-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+          gap: WORKOUT_CIRCLE_ITEM_GAP,
+          marginTop: WORKOUT_LABEL_CIRCLE_GAP,
+        }}
+      >
         {(acc.done || []).map((done, index) => (
           <WorkoutCircle
             key={index}
@@ -7492,55 +7595,54 @@ function SmartDayTypeInline({ workout, t }) {
   return (
     <>
       <div style={{
-        marginTop: 6,
+        marginTop: 4,
         marginBottom: 8,
         textAlign: 'center',
-        color: THEME.meet,
-        fontSize: 12,
-        fontWeight: 900,
-        lineHeight: 1.25,
       }}>
-        <span>Smart: </span>
         <button
           type="button"
+          aria-label={`Smart: ${label}. ${t.smartWorkoutInfo || 'Open workout information'}`}
           onClick={() => setShowSmartInfo(true)}
           style={{
             appearance: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            minHeight: WORKOUT_INTERACTIVE_HEADER_MIN_HEIGHT,
+            padding: '4px 10px',
+            margin: 0,
             border: 'none',
+            borderRadius: 8,
             background: 'transparent',
             color: THEME.meet,
-            padding: 0,
-            margin: 0,
-            font: 'inherit',
+            fontSize: WORKOUT_SMART_LABEL_FONT_SIZE,
             fontWeight: 900,
+            lineHeight: 1.2,
             cursor: 'pointer',
             textDecoration: 'none',
           }}
         >
-          {label}
-        </button>
-
-        <button
-          type="button"
-          aria-label="Smart workout info"
-          onClick={() => setShowSmartInfo(true)}
-          style={{
-            width: 11,
-            height: 11,
-            borderRadius: 999,
-            border: `1px solid ${THEME.meet}`,
-            background: 'transparent',
-            color: THEME.meet,
-            fontSize: 8,
-            fontWeight: 900,
-            lineHeight: 1,
-            padding: 0,
-            marginLeft: 4,
-            verticalAlign: 'text-top',
-            cursor: 'pointer',
-          }}
-        >
-          i
+          <span>Smart: {label}</span>
+          <span
+            aria-hidden="true"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: WORKOUT_INFO_ICON_SIZE,
+              height: WORKOUT_INFO_ICON_SIZE,
+              flex: `0 0 ${WORKOUT_INFO_ICON_SIZE}px`,
+              borderRadius: 999,
+              border: `1px solid ${THEME.meet}`,
+              color: THEME.meet,
+              fontSize: 9,
+              fontWeight: 900,
+              lineHeight: 1,
+            }}
+          >
+            i
+          </span>
         </button>
       </div>
 
@@ -8010,7 +8112,7 @@ function CurrentWorkout({
               style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: 4 }}
             >
               <div style={{
-                padding: '4px 10px',
+                padding: '2px 10px 4px',
                 textAlign: 'center',
               }}>
                 {(() => {
@@ -8027,17 +8129,23 @@ function CurrentWorkout({
                       disabled={!guideAvailable}
                       onClick={() => guideAvailable && setSelectedExerciseGuideLift(liftBlock.lift)}
                       title={guideAvailable ? (t.exerciseGuide || 'Guide') : undefined}
+                      aria-label={guideAvailable
+                        ? `${workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)} — ${t.exerciseGuide || 'Guide'}`
+                        : workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 6,
-                        padding: 0,
+                        gap: 7,
+                        minHeight: WORKOUT_INTERACTIVE_HEADER_MIN_HEIGHT,
+                        padding: '4px 12px',
                         border: 'none',
+                        borderRadius: 8,
                         background: 'transparent',
                         color: liftColor,
-                        fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+                        fontSize: WORKOUT_LIFT_HEADER_FONT_SIZE,
                         fontWeight: 900,
+                        lineHeight: 1.1,
                         cursor: guideAvailable ? 'pointer' : 'default',
                       }}
                     >
@@ -8047,15 +8155,15 @@ function CurrentWorkout({
                           display: 'inline-flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          width: 11,
-                          height: 11,
+                          width: WORKOUT_INFO_ICON_SIZE,
+                          height: WORKOUT_INFO_ICON_SIZE,
+                          flex: `0 0 ${WORKOUT_INFO_ICON_SIZE}px`,
                           borderRadius: 999,
                           border: `1px solid ${liftColor}`,
                           color: liftColor,
-                          fontSize: 8,
+                          fontSize: 9,
                           fontWeight: 900,
                           lineHeight: 1,
-                          marginLeft: 1,
                         }}>
                           i
                         </span>
@@ -8070,7 +8178,7 @@ function CurrentWorkout({
 
                   <div style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                    gridTemplateColumns: WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE,
                     justifyContent: 'center',
                     columnGap: WORKOUT_CHECKLIST_COLUMN_GAP,
                     rowGap: 6,
@@ -8438,7 +8546,7 @@ function CurrentWorkout({
 
           <div style={{
             display: 'grid',
-                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                    gridTemplateColumns: WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE,
                     justifyContent: 'center',
                     columnGap: WORKOUT_CHECKLIST_COLUMN_GAP,
                     rowGap: 4,
@@ -10596,7 +10704,7 @@ function Onboarding({ onStart, t }) {
   const [onboardingError, setOnboardingError] = useState('');
   const [onboardingWeightUnit, setOnboardingWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
   const [onboardingTrainingModel, setOnboardingTrainingModel] = useState(() =>
-    normalizeTrainingModel(localStorage.getItem('trainingModel'))
+    getNewUserTrainingModel(localStorage.getItem('trainingModel'))
   );
   const [squat, setSquat] = useState('');
   const [bench, setBench] = useState('');
@@ -11537,6 +11645,8 @@ function App() {
   const [meetPlannerAttempts, setMeetPlannerAttempts] = useState({});
   const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const automaticBackupKeyRef = useRef(null);
+  const automaticBackupStartupAttemptedRef = useRef(false);
 
   useEffect(() => {
     if (!workouts.length) return;
@@ -11772,7 +11882,7 @@ function App() {
   useEffect(() => {
     if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    const storedData = {
       version: 1,
       history,
       prs,
@@ -11798,8 +11908,45 @@ function App() {
         selectedIndex,
         workouts,
       },
-    }));
-  }, [hasLoadedData, history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts]);
+    };
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(storedData));
+
+    if (Capacitor.isNativePlatform() && !automaticBackupStartupAttemptedRef.current) {
+      automaticBackupStartupAttemptedRef.current = true;
+
+      let savedAutomaticBackupStatus = null;
+
+      try {
+        savedAutomaticBackupStatus = JSON.parse(
+          localStorage.getItem(AUTO_BACKUP_STATUS_KEY) || 'null'
+        );
+      } catch (e) {}
+
+      if (shouldRetryAutomaticBackup(savedAutomaticBackupStatus)) {
+        writeAutomaticBackup(storedData).catch(error => {
+          console.error('Automatic backup retry failed', error);
+        });
+      }
+    }
+
+    if (screen === 'completed' && completedWorkout) {
+      const backupKey = completedWorkout.completedAt ||
+        `${currentCycle}:${completedWorkout.number || completedWorkoutIndex || currentIndex}:${history.length}`;
+
+      if (automaticBackupKeyRef.current !== backupKey) {
+        automaticBackupKeyRef.current = backupKey;
+
+        writeAutomaticBackup(storedData).catch(error => {
+          console.error('Automatic backup failed', error);
+
+          if (automaticBackupKeyRef.current === backupKey) {
+            automaticBackupKeyRef.current = null;
+          }
+        });
+      }
+    }
+  }, [hasLoadedData, history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
 
   useEffect(() => {
     if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
@@ -11842,33 +11989,6 @@ function App() {
     setSelectedIndex(currentIndex);
   }, [hasLoadedData, trainingModel, selectedIndex, currentIndex]);
 
-  useEffect(() => {
-    if (screen !== 'completed' || !completedWorkout) return;
-
-    const timeoutId = setTimeout(() => {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (!saved) return;
-
-        writeAutomaticBackup(JSON.parse(saved)).catch(error => {
-          console.error('Automatic backup failed', error);
-          localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
-            ok: false,
-            exportedAt: new Date().toISOString(),
-          }));
-        });
-      } catch (error) {
-        console.error('Automatic backup failed', error);
-        localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
-          ok: false,
-          exportedAt: new Date().toISOString(),
-        }));
-      }
-    }, 250);
-
-    return () => clearTimeout(timeoutId);
-  }, [screen, completedWorkout]);
-
   function handleStart(s, b, d, profile = {}, initialBodyData = null) {
     const today = new Date().toLocaleDateString('nl-NL');
 
@@ -11876,7 +11996,7 @@ function App() {
     localStorage.removeItem('app_version');
 
     const selectedWeightUnit = normalizeWeightUnit(profile.weightUnit || weightUnit);
-    const defaultTrainingModel = normalizeTrainingModel(profile.trainingModel || TRAINING_MODELS.CLASSIC);
+    const defaultTrainingModel = getNewUserTrainingModel(profile.trainingModel);
     const defaultProgramProfile = 'kelaniSbd';
     const defaultSettings = settingsForProgramProfile(defaultProgramProfile);
     const defaultAccessoryMode = defaultSettings.accessoryMode;
