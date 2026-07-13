@@ -9,90 +9,47 @@ beforeAll(() => {
 });
 
 const t = {
-  edit: 'Edit',
-  restoreOriginalWeight: 'Restore',
-  markSetFailed: 'Fail',
-  set: 'Set',
-  perSideSuffix: '/ side',
+  edit: 'Edit', restoreOriginalWeight: 'Restore', markSetFailed: 'Fail',
+  set: 'Set', perSideSuffix: '/ side', setEffortHard: 'Hard',
 };
 
-test('keeps a single-set prescription on one line across the shared grid', () => {
+test('keeps reps visible inside a completed set circle', () => {
   const view = render(
     <SetRow
-      set={{
-        labelKey: 'topDouble',
-        reps: 2,
-        weight: 140,
-        pct: 0.775,
-        done: false,
-        skipped: false,
-      }}
-      index={0}
-      label="Top double"
-      onToggle={() => {}}
-      onWeightChange={() => {}}
-      onMarkFailed={() => {}}
-      onRestoreWeight={() => {}}
-      isActive={true}
-      isReadOnly={false}
-      t={t}
-      lift="Deadlift"
+      set={{ labelKey: 'topDouble', reps: 2, weight: 140, pct: 0.775,
+        effort: 'hard', done: true, skipped: false }}
+      index={0} label="Top double" onToggle={() => {}}
+      onWeightChange={() => {}} onMarkFailed={() => {}}
+      onRestoreWeight={() => {}} isActive={false} isReadOnly={false}
+      t={t} lift="Deadlift"
     />
   );
 
-  const circleItem = view.getByTestId('workout-set-circle-item');
-  const prescription = view.getByText('1 × 2 × 140 kg (77.5%)');
-  const actionGrid = view.getByTestId('workout-set-action-grid');
-
-  expect(circleItem.style.gridColumn).toBe('1 / -1');
-  expect(prescription.style.whiteSpace).toBe('nowrap');
-  expect(actionGrid.style.gridTemplateColumns).toBe('repeat(3, minmax(0, 1fr))');
-  expect(actionGrid.style.gap).toBe('8px');
+  const item = view.getByTestId('workout-set-circle-item');
+  expect(item.firstElementChild).toHaveTextContent('140 kg (77.5%)');
+  expect(view.getByTestId('workout-circle-reps')).toHaveTextContent('2');
+  expect(view.getByTestId('workout-circle-status')).toHaveTextContent('✓');
+  expect(view.getByTestId('workout-set-effort-label')).toHaveTextContent('Hard');
+  expect(view.queryByText('2 × 140 kg (77.5%)')).toBeNull();
 });
 
-test('aligns grouped workout actions with the same three circle columns', () => {
+test('gives every grouped set its own weight label and reps value', () => {
   const view = render(
     <BackoffGroup
       entries={[
-        {
-          index: 1,
-          set: {
-            labelKey: 'backoff',
-            reps: 3,
-            weight: 125,
-            pct: 0.7,
-            done: false,
-            skipped: false,
-          },
-        },
-        {
-          index: 2,
-          set: {
-            labelKey: 'backoff',
-            reps: 3,
-            weight: 125,
-            pct: 0.7,
-            done: false,
-            skipped: false,
-          },
-        },
+        { index: 1, set: { reps: 3, weight: 125, pct: 0.7, done: false, skipped: false } },
+        { index: 2, set: { reps: 3, weight: 125, pct: 0.7, done: true, skipped: false } },
       ]}
-      activeIndex={1}
-      isReadOnly={false}
-      onToggle={() => {}}
-      onEditAll={() => {}}
-      onRestoreAll={() => {}}
-      onMarkFailed={() => {}}
-      renderTimer={() => null}
-      t={t}
-      lift="Deadlift"
+      activeIndex={1} isReadOnly={false} onToggle={() => {}}
+      onEditAll={() => {}} onRestoreAll={() => {}} onMarkFailed={() => {}}
+      renderTimer={() => null} t={t} lift="Deadlift"
     />
   );
 
-  const circleGrid = view.getByTestId('workout-set-group-grid');
-  const actionGrid = view.getByTestId('workout-set-group-action-grid');
-
-  expect(actionGrid.style.gridTemplateColumns).toBe(circleGrid.style.gridTemplateColumns);
-  expect(actionGrid.style.gap).toBe(circleGrid.style.gap);
-  expect(actionGrid.children).toHaveLength(3);
+  expect(view.getAllByText('125 kg (70%)')).toHaveLength(2);
+  const reps = view.getAllByTestId('workout-circle-reps');
+  expect(reps.map(node => node.textContent)).toEqual(['3', '3']);
+  expect(view.queryByText('3 × 125 kg (70%)')).toBeNull();
+  expect(view.getByTestId('workout-set-group-action-grid').style.gap).toBe('8px');
+  expect(view.getByTestId('workout-circle-status')).toHaveTextContent('✓');
 });

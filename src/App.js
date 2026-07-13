@@ -2290,7 +2290,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
 }
 
 
-function generateUltraProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly') {
+export function generateUltraProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly') {
   const ultraProgram = [
     // Ultra block 1: high-frequency base, all lifts practiced often.
     { type: 'training', label: 'Ultra Primary SBD', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.725, labelKey: 'topTriple' }, { sets: 2, reps: 5, pct: 0.625, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'workSets' }] }, { lift: 'Deadlift', blocks: [{ sets: 2, reps: 3, pct: 0.600, labelKey: 'workSets' }] }] },
@@ -2312,7 +2312,7 @@ function generateUltraProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {},
 
     { type: 'training', label: 'Ultra Heavy Squat Practice', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 2, pct: 0.850, labelKey: 'topDouble' }, { sets: 2, reps: 3, pct: 0.750, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 3, pct: 0.700, labelKey: 'workSets' }] }] },
     { type: 'training', label: 'Ultra Heavy Bench Practice', labelKey: 'practice', lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 2, pct: 0.850, labelKey: 'topDouble' }, { sets: 3, reps: 3, pct: 0.750, labelKey: 'backoff' }] }, { lift: 'Squat', blocks: [{ sets: 2, reps: 3, pct: 0.650, labelKey: 'workSets' }] }] },
-    { type: 'training', label: 'Ultra Deadlift + Bench Volume', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.800, labelKey: 'topDouble' }, { sets: 1, reps: 3, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 4, reps: 3, pct: 0.700, labelKey: 'workSets' }] }] },
+    { type: 'training', label: 'Ultra Deadlift + Bench Volume', labelKey: 'practice', lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 2, pct: 0.800, labelKey: 'topDouble' }, { sets: 4, reps: 4, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 4, reps: 4, pct: 0.700, labelKey: 'workSets' }] }] },
     { type: 'rest', labelKey: 'restAndRecovery', workoutEffort: 'easy', lifts: [], sets: [], warmups: [], accessories: [], cooldownItems: [] },
 
     // Ultra block 3: meet-specific singles without max testing.
@@ -4765,20 +4765,27 @@ function formatPrepPrescription(item, t) {
   return item.perSide ? `${item.prescription} / ${t.side}` : item.prescription;
 }
 
-function WorkoutCircle({ done = false, active = false, skipped = false, disabled = false, onClick, label, accentColor = THEME.primary }) {
+function WorkoutCircle({
+  done = false,
+  active = false,
+  skipped = false,
+  disabled = false,
+  onClick,
+  label,
+  accentColor = THEME.primary,
+  reps = null,
+}) {
   const isActiveOpen = active && !done && !skipped;
   const isOpen = !done && !skipped;
+  const numericReps = Number(reps);
+  const hasReps = Number.isFinite(numericReps) && numericReps > 0;
 
-  const borderColor = skipped
-    ? '#e74c3c'
-    : accentColor;
-
+  const borderColor = skipped ? '#e74c3c' : accentColor;
   const background = skipped
     ? '#e74c3c'
     : done
       ? accentColor
       : `${accentColor}14`;
-
   const color = skipped || done ? THEME.bg : THEME.text;
 
   return (
@@ -4818,6 +4825,7 @@ function WorkoutCircle({ done = false, active = false, skipped = false, disabled
         }}
         disabled={disabled}
         style={{
+          position: 'relative',
           width: WORKOUT_CIRCLE_SIZE,
           height: WORKOUT_CIRCLE_SIZE,
           minWidth: WORKOUT_CIRCLE_SIZE,
@@ -4843,21 +4851,88 @@ function WorkoutCircle({ done = false, active = false, skipped = false, disabled
           animation: isActiveOpen ? 'kelaniActiveWorkoutCirclePulse 1.05s ease-in-out infinite' : 'none',
         }}
       >
-        {skipped ? '✕' : done ? '✓' : ''}
+        {hasReps ? (
+          <>
+            <span data-testid="workout-circle-reps">{numericReps}</span>
+            {(done || skipped) && (
+              <span
+                data-testid="workout-circle-status"
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  top: -5,
+                  right: -5,
+                  width: 16,
+                  height: 16,
+                  borderRadius: '50%',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxSizing: 'border-box',
+                  border: `1px solid ${borderColor}`,
+                  background: THEME.bg,
+                  color: borderColor,
+                  fontSize: 10,
+                  fontWeight: 900,
+                  lineHeight: 1,
+                  pointerEvents: 'none',
+                }}
+              >
+                {skipped ? '✕' : '✓'}
+              </span>
+            )}
+          </>
+        ) : (
+          skipped ? '✕' : done ? '✓' : ''
+        )}
       </button>
     </>
   );
 }
 
-function WorkoutCircleItem({ label, children, testId, fullWidth = false }) {
+
+function formatWarmupPercentDisplay(warmupWeight, referenceSets = []) {
+  const referenceSet = (referenceSets || [])
+    .filter(set =>
+      Number.isFinite(Number(set?.weight)) &&
+      Number(set.weight) > 0 &&
+      Number.isFinite(Number(set?.pct)) &&
+      Number(set.pct) > 0
+    )
+    .sort((a, b) =>
+      (Number(b.pct) - Number(a.pct)) ||
+      (Number(b.weight) - Number(a.weight))
+    )[0];
+
+  if (!referenceSet) return null;
+
+  const estimatedMax = Number(referenceSet.weight) / Number(referenceSet.pct);
+  const percentage = estimatedMax > 0
+    ? (Number(warmupWeight) / estimatedMax) * 100
+    : 0;
+
+  if (!Number.isFinite(percentage) || percentage <= 0) return null;
+  return Math.max(5, Math.round(percentage / 5) * 5);
+}
+
+
+function WorkoutCircleItem({
+  label,
+  children,
+  footer = null,
+  testId,
+  fullWidth = false,
+  containerRef = null,
+}) {
   return (
     <div
+      ref={containerRef}
       data-testid={testId}
       data-workout-circle-item="true"
       style={{
         display: 'grid',
-        gridTemplateRows: 'auto auto',
-        justifyItems: 'start',
+        gridTemplateRows: 'auto auto auto',
+        justifyItems: 'center',
         alignContent: 'start',
         rowGap: WORKOUT_LABEL_CIRCLE_GAP,
         minWidth: 0,
@@ -4865,16 +4940,19 @@ function WorkoutCircleItem({ label, children, testId, fullWidth = false }) {
       }}
     >
       <div style={{
+        width: '100%',
         minWidth: 0,
         color: THEME.text,
         fontSize: WORKOUT_TEXT_FONT_SIZE,
         fontWeight: 800,
         lineHeight: 1.15,
+        textAlign: 'center',
       }}>
         {label}
       </div>
 
       {children}
+      {footer}
     </div>
   );
 }
@@ -4924,19 +5002,51 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
 }
 
 
-export function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
+export function WorkoutLiftGrid({ children, testId = 'workout-lift-grid' }) {
+  return (
+    <div
+      data-testid={testId}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+        justifyContent: 'start',
+        gap: WORKOUT_CIRCLE_ITEM_GAP,
+        padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`,
+        marginBottom: 10,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, compactGrid = false, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   if (!warmups.length) return null;
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
-      justifyContent: 'start',
-      gap: WORKOUT_CIRCLE_ITEM_GAP,
-      padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`
-    }}>
+    <div
+      data-testid="workout-warmup-grid"
+      style={compactGrid ? {
+        display: 'contents',
+      } : {
+        display: 'grid',
+        gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+        justifyContent: 'start',
+        gap: WORKOUT_CIRCLE_ITEM_GAP,
+        padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`,
+      }}
+    >
       {warmups.map((warmup, index) => {
-        const warmupDescription = `${warmup.reps} × ${formatWorkoutWeightFromKg(warmup.weight, weightUnit, t, lift, benchPressVariant)}`;
+        const warmupPct = formatWarmupPercentDisplay(warmup.weight, referenceSets);
+        const warmupWeight = formatWorkoutWeightFromKg(
+          warmup.weight,
+          weightUnit,
+          t,
+          lift,
+          benchPressVariant
+        );
+        const warmupDescription = `${warmupWeight}${warmupPct ? ` (${warmupPct}%)` : ''}`;
+        const warmupAriaLabel = `${warmup.reps} × ${warmupDescription}`;
         const isActive = index === activeIndex;
         const isDone = !!warmup.done;
 
@@ -4951,13 +5061,17 @@ export function WarmupGrid({ warmups = [], isReadOnly, activeIndex, onToggle, re
                 active={isActive}
                 disabled={isReadOnly}
                 onClick={() => onToggle(index)}
-                label={warmupDescription}
+                label={warmupAriaLabel}
                 accentColor={getLiftThemeColor(lift)}
+                reps={warmup.reps}
               />
             </WorkoutCircleItem>
 
             {renderTimer?.(index) && (
-              <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{
+                gridColumn: '1 / -1',
+                order: compactGrid ? 1 : undefined,
+              }}>
                 {renderTimer(index)}
               </div>
             )}
@@ -5459,7 +5573,7 @@ function SetActionButton({ title, onClick, borderColor, disabled = false, childr
   );
 }
 
-export function SetRow({ set, index, label, isWarmup = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
+export function SetRow({ set, index, label, isWarmup = false, compactGrid = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
   const displayPct = formatSetPercentDisplay(set.pct);
   const effortLabel = getSetEffortLabel(set.effort, t);
@@ -5509,28 +5623,35 @@ export function SetRow({ set, index, label, isWarmup = false, onToggle, onWeight
       color: isAdjusted ? '#f39c12' : THEME.muted,
       whiteSpace: 'nowrap',
     }}>
-      1 × {set.reps} × {formatWorkoutWeightFromKg(set.weight, weightUnit, t, lift, benchPressVariant)}{set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}{displayPct ? ` (${displayPct}%)` : ''}
+      {formatWorkoutWeightFromKg(set.weight, weightUnit, t, lift, benchPressVariant)}{set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}{displayPct ? ` (${displayPct}%)` : ''}
     </span>
   );
 
   const meta = effortLabel ? (
     <div style={{
       display: 'inline-flex',
-      marginTop: 3,
+      marginTop: 0,
       padding: '2px 7px',
       borderRadius: 999,
       border: `1px solid ${THEME.primary}`,
       color: THEME.primary,
-      fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+      fontSize: WORKOUT_TEXT_FONT_SIZE - 2,
       fontWeight: 800,
-      lineHeight: 1.2,
+      lineHeight: 1.15,
     }}>
       {effortLabel}
     </div>
   ) : null;
 
   const actions = !isActive || isWarmup || isSetComplete || isReadOnly ? null : editing ? (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8 }}>
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+      gap: 8,
+      gridColumn: compactGrid ? '1 / -1' : undefined,
+      order: compactGrid ? 1 : undefined,
+    }}>
       <input
         ref={inputRef}
         type="text"
@@ -5559,8 +5680,11 @@ export function SetRow({ set, index, label, isWarmup = false, onToggle, onWeight
         display: 'grid',
         gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
         alignItems: 'center',
+        justifyItems: 'center',
         gap: WORKOUT_CIRCLE_ITEM_GAP,
         marginTop: 8,
+        gridColumn: compactGrid ? '1 / -1' : undefined,
+      order: compactGrid ? 1 : undefined,
       }}
     >
       {!isWarmup && (
@@ -5601,35 +5725,24 @@ export function SetRow({ set, index, label, isWarmup = false, onToggle, onWeight
     </div>
   );
 
-  const circleLabel = isWarmup
-    ? detail
-    : isAttemptSetLabel(set.labelKey)
-      ? (
-          <div>
-            <div>{label}</div>
-            <div style={{ marginTop: 2, fontWeight: 700 }}>{detail}</div>
-            {meta}
-          </div>
-        )
-      : (
-          <div>
-            {detail}
-            {meta}
-          </div>
-        );
+  const circleLabel = detail;
 
   return (
     <div
-      ref={rowRef}
+      ref={compactGrid ? null : rowRef}
       data-testid="workout-set-row"
-      style={{
+      style={compactGrid ? {
+        display: 'contents',
+      } : {
         padding: `4px ${WORKOUT_WORK_ROW_PADDING_X}px`,
         marginBottom: 4,
       }}
     >
       <div
         data-testid="workout-set-row-grid"
-        style={{
+        style={compactGrid ? {
+          display: 'contents',
+        } : {
           display: 'grid',
           gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
           gap: WORKOUT_CIRCLE_ITEM_GAP,
@@ -5638,7 +5751,20 @@ export function SetRow({ set, index, label, isWarmup = false, onToggle, onWeight
         <WorkoutCircleItem
           testId="workout-set-circle-item"
           label={circleLabel}
-          fullWidth={true}
+          fullWidth={!compactGrid}
+          containerRef={compactGrid ? rowRef : null}
+          footer={meta ? (
+            <div
+              data-testid="workout-set-effort-label"
+              style={{
+                width: WORKOUT_CIRCLE_SIZE,
+                display: 'flex',
+                justifyContent: 'center',
+              }}
+            >
+              {meta}
+            </div>
+          ) : null}
         >
           <WorkoutCircle
             done={set.done}
@@ -5648,6 +5774,7 @@ export function SetRow({ set, index, label, isWarmup = false, onToggle, onWeight
             onClick={onToggle}
             label={label}
             accentColor={getLiftThemeColor(lift)}
+            reps={set.reps}
           />
         </WorkoutCircleItem>
       </div>
@@ -6813,7 +6940,7 @@ function getSkippedSetMessage(set, t) {
   return t.topSetSkipped || 'Set skipped. Continue with the next set.';
 }
 
-export function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
+export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = false, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' }) {
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
   const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
@@ -6823,10 +6950,6 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEdi
   const failedEntry = latestActionEntry?.set?.failed || latestActionEntry?.set?.skipped
     ? latestActionEntry
     : null;
-  const allSameReps = entries.every(({ set }) => Number(set.reps) === Number(firstSet.reps));
-  const displaySet = firstOpenEntry?.set || firstSet;
-  const weightDisplay = formatWorkoutWeightFromKg(displaySet.weight || firstSet.weight, weightUnit, t, lift, benchPressVariant);
-  const displayPct = formatSetPercentDisplay(firstSet.pct);
   const [inputVal, setInputVal] = useState(String(firstSet.weight || ''));
 
   useEffect(() => {
@@ -6862,22 +6985,19 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEdi
     .map(({ index }) => renderTimer?.(index))
     .find(Boolean);
 
-  const isAdjusted = entries.some(({ set }) =>
-    Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed) ||
-    Number(set.weight) !== Number(set.originalWeight ?? set.weight)
-  );
-  const detailColor = isAdjusted ? '#f39c12' : THEME.muted;
   const isGroupComplete = entries.every(({ set }) => set.done || set.skipped);
   const isActiveGroup = activeIndex >= 0;
 
-  const detail = (
-    <span style={{ color: detailColor }}>
-      {entries.length} × {allSameReps ? firstSet.reps : '—'} × {weightDisplay}{firstSet.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}{displayPct ? ` (${displayPct}%)` : ''}
-    </span>
-  );
-
   const actions = !isActiveGroup || isGroupComplete || isReadOnly ? null : editing ? (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginTop: 8 }}>
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+      gap: 8,
+      marginTop: 8,
+      gridColumn: compactGrid ? '1 / -1' : undefined,
+      order: compactGrid ? 1 : undefined,
+    }}>
       <input
         type="number"
         step={normalizeWeightUnit(weightUnit) === WEIGHT_UNITS.LB ? "5" : "2.5"}
@@ -6909,8 +7029,11 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEdi
         display: 'grid',
         gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
         alignItems: 'center',
+        justifyItems: 'center',
         gap: WORKOUT_CIRCLE_ITEM_GAP,
         marginTop: 8,
+        gridColumn: compactGrid ? '1 / -1' : undefined,
+      order: compactGrid ? 1 : undefined,
       }}
     >
       <SetActionButton
@@ -6952,6 +7075,8 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEdi
     <div style={{
       marginTop: 8,
       padding: '7px 9px',
+      gridColumn: compactGrid ? '1 / -1' : undefined,
+      order: compactGrid ? 1 : undefined,
       border: '1px solid #e74c3c',
       borderRadius: 8,
       color: '#ffffff',
@@ -6968,46 +7093,68 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, onToggle, onEdi
   ) : null;
 
   return (
-    <div style={{
-      padding: `4px ${WORKOUT_WORK_ROW_PADDING_X}px`,
-      marginBottom: 4,
-    }}>
-      <div style={{
-        color: THEME.text,
-        fontSize: WORKOUT_TEXT_FONT_SIZE,
-        fontWeight: 800,
-        lineHeight: 1.25,
-        textAlign: 'left',
-        marginBottom: 0,
-      }}>
-        {detail}
-      </div>
-
+    <div
+      data-testid="workout-set-group"
+      style={compactGrid ? {
+        display: 'contents',
+      } : {
+        padding: `4px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+        marginBottom: 4,
+      }}
+    >
       <div
         data-testid="workout-set-group-grid"
-        style={{
+        style={compactGrid ? {
+          display: 'contents',
+        } : {
           display: 'grid',
           gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
           gap: WORKOUT_CIRCLE_ITEM_GAP,
-          marginTop: WORKOUT_LABEL_CIRCLE_GAP,
+          marginTop: 0,
         }}
       >
-        {entries.map(({ set, index }) => (
-          <WorkoutCircle
-            key={index}
-            done={set.done}
-            active={index === activeIndex}
-            skipped={set.skipped}
-            disabled={isReadOnly}
-            onClick={() => onToggle(index)}
-            label={`${t.set} ${index + 1}`}
-            accentColor={getLiftThemeColor(lift)}
-          />
-        ))}
+        {entries.map(({ set, index }) => {
+          const setDisplayPct = formatSetPercentDisplay(set.pct);
+          const setIsAdjusted =
+            Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed) ||
+            Number(set.weight) !== Number(set.originalWeight ?? set.weight);
+          const setDescription = (
+            <span style={{
+              color: setIsAdjusted ? '#f39c12' : THEME.muted,
+              fontSize: WORKOUT_TEXT_FONT_SIZE,
+              whiteSpace: 'nowrap',
+            }}>
+              {formatWorkoutWeightFromKg(set.weight, weightUnit, t, lift, benchPressVariant)}{set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}{setDisplayPct ? ` (${setDisplayPct}%)` : ''}
+            </span>
+          );
+
+          return (
+            <WorkoutCircleItem
+              key={index}
+              testId={`workout-set-group-item-${index}`}
+              label={setDescription}
+            >
+              <WorkoutCircle
+                done={set.done}
+                active={index === activeIndex}
+                skipped={set.skipped}
+                disabled={isReadOnly}
+                onClick={() => onToggle(index)}
+                label={`${t.set} ${index + 1}`}
+                accentColor={getLiftThemeColor(lift)}
+                reps={set.reps}
+              />
+            </WorkoutCircleItem>
+          );
+        })}
       </div>
 
       {actions}
-      {timerNode}
+      {compactGrid && timerNode ? (
+        <div style={{ gridColumn: '1 / -1', order: 1 }}>
+          {timerNode}
+        </div>
+      ) : timerNode}
       {feedback}
     </div>
   );
@@ -8202,9 +8349,11 @@ function CurrentWorkout({
                 </div>
               )}
 
-              <div style={{ marginBottom: 10 }}>
+              <WorkoutLiftGrid testId={`workout-lift-grid-${li}`}>
                 <WarmupGrid
+                  compactGrid
                   warmups={liftBlock.warmups || []}
+                  referenceSets={liftBlock.sets || []}
                 isReadOnly={isReadOnly}
                 activeIndex={
                   !isReadOnly &&
@@ -8221,7 +8370,6 @@ function CurrentWorkout({
                 lift={liftBlock.lift}
                   benchPressVariant={effectiveBenchPressVariant}
                 />
-              </div>
 
               {(liftBlock.sets || []).map((set, si) => {
                 const groupedSetEntries = getWorkoutSetGroupEntries(liftBlock.sets || [], set);
@@ -8246,6 +8394,7 @@ function CurrentWorkout({
                   return (
                     <React.Fragment key={`secondary-set-group-${li}`}>
                       <BackoffGroup
+                        compactGrid
                         entries={secondarySetEntries}
                         activeIndex={
                           !isReadOnly &&
@@ -8280,6 +8429,7 @@ function CurrentWorkout({
                   return (
                     <React.Fragment key={`set-group-${li}-${si}`}>
                       <BackoffGroup
+                        compactGrid
                         entries={groupedSetEntries}
                         activeIndex={
                           !isReadOnly &&
@@ -8362,6 +8512,7 @@ function CurrentWorkout({
                   )}
 
                   <SetRow
+                    compactGrid
                     set={set}
                     index={si}
                     label={set.labelKey ? t[set.labelKey] : `${t.set} ${si + 1}`}
@@ -8383,13 +8534,22 @@ function CurrentWorkout({
                     lift={liftBlock.lift}
                     benchPressVariant={effectiveBenchPressVariant}
                   />
-                  {renderInlineTimer({ type: 'meetSet', liftIndex: li, index: si })}
+                  {(() => {
+                    const timerNode = renderInlineTimer({ type: 'meetSet', liftIndex: li, index: si });
+                    return timerNode ? (
+                      <div style={{ gridColumn: '1 / -1', order: 1 }}>
+                        {timerNode}
+                      </div>
+                    ) : null;
+                  })()}
                   {set.done && !set.failed && !set.skipped && !set.effort && (
-                    <EffortPicker
-                      value={set.effort}
-                      onChange={effort => handleToggle(() => onMeetSetEffortChange(li, si, effort))}
-                      t={t}
-                    />
+                    <div style={{ gridColumn: '1 / -1', order: 1 }}>
+                      <EffortPicker
+                        value={set.effort}
+                        onChange={effort => handleToggle(() => onMeetSetEffortChange(li, si, effort))}
+                        t={t}
+                      />
+                    </div>
                   )}
                   {false && set.done && !set.failed && !set.skipped && set.effort && isAttemptSetLabel(set.labelKey) && (
                     <AttemptEffortFeedback set={set} t={t} />
@@ -8397,6 +8557,7 @@ function CurrentWorkout({
                 </React.Fragment>
                 );
               })}
+              </WorkoutLiftGrid>
             </div>
           );
         })}
@@ -8576,6 +8737,7 @@ function CurrentWorkout({
         }}>
           <WarmupGrid
             warmups={workout.warmups || []}
+            referenceSets={workout.sets || []}
             isReadOnly={isReadOnly}
             activeIndex={!isReadOnly && allPrepDone ? workout.warmups.findIndex(wu => !wu.done) : -1}
             onToggle={i => handleToggle(() => onToggleWarmup(i))}
@@ -8775,30 +8937,30 @@ function CurrentWorkout({
         />
       )}
 
+
       <button
         onClick={() => {
           if (isReadOnly) return;
           onComplete();
         }}
+        data-testid="complete-workout-button"
         disabled={!allDone || isReadOnly}
         style={{
           width: '100%',
           padding: 10,
           fontSize: 16,
-          fontWeight: 600,
+          fontWeight: 700,
           background: THEME.card,
           color: (allDone && !isReadOnly) ? 'white' : '#666',
           border: `1px solid ${THEME.primary}`,
           borderRadius: 8,
           cursor: (allDone && !isReadOnly) ? 'pointer' : 'not-allowed',
-          marginBottom: 10,
-          opacity: 1
+          margin: '14px 0 10px',
+          opacity: 1,
         }}
       >
         {isReadOnly
           ? t.previewNotCompletable
-          : allDone
-          ? t.completeWorkout
           : t.completeWorkout}
       </button>
 
