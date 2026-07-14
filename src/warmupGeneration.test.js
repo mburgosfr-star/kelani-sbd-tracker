@@ -29,3 +29,23 @@ test('keeps close-backoff warmups below the backoff weight', () => {
     { reps: 3, weight: 60 },
   ]);
 });
+
+
+test('reuses a round squat backoff as the final warmup before a topsingle', () => {
+  const sets = [
+    { labelKey: 'opener', reps: 1, weight: 130 },
+    ...Array.from({ length: 4 }, () => ({
+      labelKey: 'backoff',
+      reps: 4,
+      weight: 100,
+    })),
+  ];
+
+  expect(
+    generateWarmups(sets, 'Squat').map(({ reps, weight }) => ({ reps, weight }))
+  ).toEqual([
+    { reps: 5, weight: 20 },
+    { reps: 5, weight: 70 },
+    { reps: 3, weight: 100 },
+  ]);
+});

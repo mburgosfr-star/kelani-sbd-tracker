@@ -1483,8 +1483,20 @@ export function generateWarmups(workPlan, lift = '') {
     targetWeight - highestNonTopWorkWeight <= 25 &&
     targetReps > 1;
 
+  const usesReusableRoundBackoffWarmup =
+    hasTopSet &&
+    targetReps <= 1 &&
+    highestNonTopWorkWeight > 20 &&
+    highestNonTopWorkWeight < targetWeight &&
+    highestNonTopWorkWeight % 10 === 0 &&
+    targetWeight - highestNonTopWorkWeight <= MAX_WARMUP_JUMP_KG;
+
   function finalWarmupWeight() {
     if (hasTopSet) {
+      if (usesReusableRoundBackoffWarmup) {
+        return highestNonTopWorkWeight;
+      }
+
       if (hasCloseBackoff) {
         return roundDown10(highestNonTopWorkWeight - 0.001);
       }
@@ -1502,7 +1514,7 @@ export function generateWarmups(workPlan, lift = '') {
 
     if (rounded <= 20) return null;
 
-    if (!hasCloseBackoff && rounded >= lowestWorkWeight) {
+    if (!hasCloseBackoff && !usesReusableRoundBackoffWarmup && rounded >= lowestWorkWeight) {
       const belowLowestWorkWeight = roundDown10(lowestWorkWeight - 0.001);
       return belowLowestWorkWeight > 20 ? belowLowestWorkWeight : null;
     }
@@ -1521,7 +1533,7 @@ export function generateWarmups(workPlan, lift = '') {
     if (weight === 20) return 5;
     if (!hasTopSet) return Math.min(5, Math.max(targetReps, 3));
 
-    if (hasCloseBackoff && isFinalWarmup) {
+    if ((hasCloseBackoff || usesReusableRoundBackoffWarmup) && isFinalWarmup) {
       return Math.min(3, Math.max(Number(highestNonTopWorkSet?.reps) || targetReps, 1));
     }
 
@@ -1577,6 +1589,10 @@ export function generateWarmups(workPlan, lift = '') {
 
       const distanceFromPrevious = currentWeight - previousWeight;
       const distanceToWork = target - currentWeight;
+
+      if (usesReusableRoundBackoffWarmup && currentWeight === highestNonTopWorkWeight) {
+        return true;
+      }
 
       return distanceToWork < distanceFromPrevious;
     });
@@ -2322,7 +2338,7 @@ export function generateUltraProgram(s, b, d, accessoryMode = 'off', accessoryPR
     { type: 'training', label: 'Ultra SBD Confidence', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.875, labelKey: 'topSingle' }, { sets: 1, reps: 2, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.825, labelKey: 'topSingle' }, { sets: 1, reps: 2, pct: 0.700, labelKey: 'backoff' }] }, { lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.750, labelKey: 'topSingle' }, { sets: 1, reps: 2, pct: 0.650, labelKey: 'backoff' }] }] },
 
     // Peak and taper: openers, then freshness.
-    { type: 'training', label: 'Ultra Squat Opener', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 2, pct: 0.600, labelKey: 'backoff' }] }] },
+    { type: 'training', label: 'Ultra Squat Opener', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 4, reps: 4, pct: 0.700, labelKey: 'backoff' }] }] },
     { type: 'training', label: 'Ultra Bench Opener', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Bench', blocks: [{ sets: 1, reps: 1, pct: 0.900, labelKey: 'opener' }, { sets: 1, reps: 2, pct: 0.650, labelKey: 'backoff' }] }] },
     { type: 'rest', labelKey: 'restAndRecovery', workoutEffort: 'easy', lifts: [], sets: [], warmups: [], accessories: [], cooldownItems: [] },
     { type: 'training', label: 'Ultra Deadlift Opener-ish', labelKey: 'practice', disableAccessories: true, lifts: [{ lift: 'Deadlift', blocks: [{ sets: 1, reps: 1, pct: 0.850, labelKey: 'topSingle' }] }] },
@@ -2890,6 +2906,7 @@ function buildSmartReadinessSignals(context = {}) {
     lastMeetWorkoutNumber: Number(lastMeetDay?.workoutNumber) || 0,
     lastWorkoutEffort: lastDay?.workoutEffort || null,
     lastWorkoutLifts: lastDay?.lifts || [],
+    lastWorkoutPrimaryLift: (lastDay?.lifts || [])[0] || null,
     lastWorkoutPrescriptionSignature: getSmartTrainingPrescriptionSignature(lastDay || {}),
     lastSmartDayType: lastDay?.smartDayType || null,
     lastWasRestDay: Boolean(lastDay?.restDay || lastDay?.smartDayType === SMART_DAY_TYPES.RECOVERY),
@@ -2917,6 +2934,43 @@ function buildSmartReadinessSignals(context = {}) {
       inPostMeetTrainingCooldown
     ),
   };
+}
+
+export function isHeavySmartTrainingLift(workout = {}, lift = null) {
+  if (!lift || workout.smartDayType === SMART_DAY_TYPES.DELOAD) return false;
+
+  const liftBlock = (workout.lifts || []).find(block => block?.lift === lift);
+  const sets = liftBlock
+    ? (liftBlock.sets || [])
+    : workout.lift === lift
+      ? (workout.sets || [])
+      : [];
+
+  return sets.some(set => {
+    const label = String(set?.labelKey || set?.label || '').toLowerCase();
+    const pct = Number(set?.pct) || 0;
+    const reps = Number(set?.reps) || 0;
+
+    return (
+      label.includes('opener') ||
+      label.includes('attempt') ||
+      label.includes('max') ||
+      label.includes('topsingle') ||
+      label.includes('topdouble') ||
+      (reps > 0 && reps <= 2 && pct >= 0.80) ||
+      pct >= 0.85
+    );
+  });
+}
+
+export function repeatsHeavyPrimaryLift(candidate = {}, readiness = {}) {
+  const lastPrimaryLift = readiness.lastWorkoutPrimaryLift || null;
+
+  return Boolean(
+    lastPrimaryLift &&
+    hasUnrecoveredSmartHardEffort(readiness) &&
+    isHeavySmartTrainingLift(candidate, lastPrimaryLift)
+  );
 }
 
 function isHeavySmartTrainingCandidate(workout = {}) {
@@ -4223,16 +4277,17 @@ function selectSmartTrainingCandidate({
 
   if (hasUnrecoveredSmartHardEffort(readiness)) {
     const lastWorkoutLifts = readiness.lastWorkoutLifts || [];
+    const avoidsRepeatedHeavyPrimary = candidate =>
+      !repeatsHeavyPrimaryLift(candidate, readiness);
 
     return pickFromPools(candidate =>
+      avoidsRepeatedHeavyPrimary(candidate) &&
       countSharedWorkoutLifts(candidate, lastWorkoutLifts) === 0
     ) || pickFromPools(candidate =>
-      countSharedWorkoutLifts(candidate, lastWorkoutLifts) <= 1 &&
-      !isHeavySmartTrainingCandidate(candidate)
+      avoidsRepeatedHeavyPrimary(candidate) &&
+      countSharedWorkoutLifts(candidate, lastWorkoutLifts) <= 1
     ) || orderedPools
-      .map(pool => pickLowestOverlapCandidate(pool, candidate =>
-        !isHeavySmartTrainingCandidate(candidate)
-      ))
+      .map(pool => pickLowestOverlapCandidate(pool, avoidsRepeatedHeavyPrimary))
       .find(Boolean) || defaultTrainingCandidate;
   }
 
@@ -4469,6 +4524,7 @@ function generateSmartWorkouts({
             lastMeetWorkoutNumber: smartDecision.readiness.lastMeetWorkoutNumber || 0,
             lastWorkoutEffort: smartDecision.readiness.lastWorkoutEffort || null,
             lastWorkoutLifts: smartDecision.readiness.lastWorkoutLifts || [],
+            lastWorkoutPrimaryLift: smartDecision.readiness.lastWorkoutPrimaryLift || null,
             lastSmartDayType: smartDecision.readiness.lastSmartDayType || null,
             lastWasRestDay: Boolean(smartDecision.readiness.lastWasRestDay),
             lastWasRecoveryIntervention: Boolean(smartDecision.readiness.lastWasRecoveryIntervention),
@@ -7484,10 +7540,19 @@ function getSmartDayTypeDisplayLabel(dayType, t = {}) {
   return null;
 }
 
-function getSmartMeetdayBlockerDisplayLabels(blockers = [], t = {}) {
+export function getSmartMeetdayBlockerDisplayLabels(blockers = [], t = {}, readiness = {}) {
+  const fatigueScore = Number(readiness.recentFatigueScore) || 0;
+  const lastEffort = String(readiness.lastWorkoutEffort || '').trim().toUpperCase();
+  const fatigueCause = lastEffort
+    ? `previous workout ${lastEffort}`
+    : null;
+  const fatigueLabel = fatigueScore > 0
+    ? `fatigue ${fatigueScore}/${SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE}${fatigueCause ? ` (${fatigueCause})` : ''}`
+    : (t.smartBlockerFatigue || 'fatigue');
+
   const labels = {
     'active-block-too-short': t.smartBlockerActiveBlock || 'block too short',
-    fatigue: t.smartBlockerFatigue || 'fatigue',
+    fatigue: fatigueLabel,
     'failed-skipped': t.smartBlockerFailedSkipped || 'failed/skipped',
     'missing-lift-exposure': t.smartBlockerMissingLiftExposure || 'lift exposure',
     'meet-plan-not-ready': t.smartBlockerMeetPlanNotReady || 'meet plan',
@@ -7632,8 +7697,11 @@ function getSmartDecisionReasonDisplayText(summary, t = {}) {
       return t.smartReasonTrainingFallback || `Fresh after recovery. ${getSmartFatigueFailedDisplayText(readiness)} → training day.`;
     }
 
-    const blockers = getSmartMeetdayBlockerDisplayLabels(readiness.meetdayBlockers || [], t)
-      .slice(0, 3);
+    const blockers = getSmartMeetdayBlockerDisplayLabels(
+      readiness.meetdayBlockers || [],
+      t,
+      readiness
+    ).slice(0, 3);
 
     if (blockers.length > 0) {
       if (canMentionSmartMeetPlanReady(readiness)) {
@@ -7705,6 +7773,37 @@ function getSmartTrainingSelectionDisplayText(workout, t = {}) {
   return t.smartTrainingSelectionLine || `e1RM limiter: ${weakestLift}.`;
 }
 
+export function getSmartModalDetailRows(workout = {}, t = {}) {
+  const summary = workout?.smartDecisionSummary || {};
+  const readiness = summary.readiness || {};
+  const rows = [];
+
+  if (
+    summary.dayType === SMART_DAY_TYPES.TRAINING &&
+    summary.reason === SMART_DECISION_REASONS.TRAINING_FALLBACK
+  ) {
+    if (!readiness.meetPlanReady) {
+      rows.push({
+        label: t.smartMeetStatus || 'Meet status',
+        value: t.smartMeetPlanNotReady || 'Meet plan not ready',
+      });
+    }
+
+    if ((readiness.meetdayBlockers || []).includes('fatigue')) {
+      const fatigueScore = Number(readiness.recentFatigueScore) || 0;
+      const lastEffort = String(readiness.lastWorkoutEffort || '').trim().toUpperCase();
+      const cause = lastEffort ? ` — previous workout ${lastEffort}` : '';
+
+      rows.push({
+        label: t.smartBlockerFatigue || 'Fatigue',
+        value: `${fatigueScore}/${SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE}${cause}`,
+      });
+    }
+  }
+
+  return rows;
+}
+
 function SmartDayTypeInline({ workout, t }) {
   const [showSmartInfo, setShowSmartInfo] = useState(false);
   const label = getSmartDayTypeDisplayLabel(workout?.smartDayType, t);
@@ -7721,6 +7820,8 @@ function SmartDayTypeInline({ workout, t }) {
 
   const reasonText = formatSmartInfoText(getSmartDecisionReasonDisplayText(workout?.smartDecisionSummary, t));
   const selectionText = formatSmartInfoText(getSmartTrainingSelectionDisplayText(workout, t));
+  const detailRows = getSmartModalDetailRows(workout, t);
+  const usesStructuredTrainingFallback = detailRows.length > 0;
 
   const limiterMatch = selectionText?.match(/^e1RM limiter:\s*(.+)$/i);
   const infoRows = [
@@ -7729,7 +7830,8 @@ function SmartDayTypeInline({ workout, t }) {
       value: label,
       emphasis: true,
     },
-    reasonText ? {
+    ...detailRows,
+    !usesStructuredTrainingFallback && reasonText ? {
       label: t.smartReason || 'Reason',
       value: reasonText,
     } : null,
