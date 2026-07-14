@@ -49,3 +49,23 @@ test('reuses a round squat backoff as the final warmup before a topsingle', () =
     { reps: 3, weight: 100 },
   ]);
 });
+
+
+test('rounds a decimal squat backoff down for a reusable final warmup', () => {
+  const sets = [
+    { labelKey: 'opener', reps: 1, weight: 130 },
+    ...Array.from({ length: 4 }, () => ({
+      labelKey: 'backoff',
+      reps: 4,
+      weight: 102.5,
+    })),
+  ];
+
+  expect(
+    generateWarmups(sets, 'Squat').map(({ reps, weight }) => ({ reps, weight }))
+  ).toEqual([
+    { reps: 5, weight: 20 },
+    { reps: 5, weight: 70 },
+    { reps: 3, weight: 100 },
+  ]);
+});

@@ -1483,18 +1483,22 @@ export function generateWarmups(workPlan, lift = '') {
     targetWeight - highestNonTopWorkWeight <= 25 &&
     targetReps > 1;
 
+  const reusableBackoffWarmupWeight =
+    highestNonTopWorkWeight > 20
+      ? roundDown10(highestNonTopWorkWeight)
+      : 0;
   const usesReusableRoundBackoffWarmup =
     hasTopSet &&
     targetReps <= 1 &&
-    highestNonTopWorkWeight > 20 &&
-    highestNonTopWorkWeight < targetWeight &&
-    highestNonTopWorkWeight % 10 === 0 &&
-    targetWeight - highestNonTopWorkWeight <= MAX_WARMUP_JUMP_KG;
+    reusableBackoffWarmupWeight > 20 &&
+    reusableBackoffWarmupWeight < targetWeight &&
+    reusableBackoffWarmupWeight <= highestNonTopWorkWeight &&
+    targetWeight - reusableBackoffWarmupWeight <= MAX_WARMUP_JUMP_KG;
 
   function finalWarmupWeight() {
     if (hasTopSet) {
       if (usesReusableRoundBackoffWarmup) {
-        return highestNonTopWorkWeight;
+        return reusableBackoffWarmupWeight;
       }
 
       if (hasCloseBackoff) {
@@ -1590,7 +1594,7 @@ export function generateWarmups(workPlan, lift = '') {
       const distanceFromPrevious = currentWeight - previousWeight;
       const distanceToWork = target - currentWeight;
 
-      if (usesReusableRoundBackoffWarmup && currentWeight === highestNonTopWorkWeight) {
+      if (usesReusableRoundBackoffWarmup && currentWeight === reusableBackoffWarmupWeight) {
         return true;
       }
 
