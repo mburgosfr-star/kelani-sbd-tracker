@@ -963,6 +963,8 @@ const SMART_OVERRIDES = {
 
 const SMART_THRESHOLDS = {
   RECENT_DAYS: 3,
+  ROLLING_TRAINING_DAYS: 6,
+  HEAVY_DEADLIFT_LOOKBACK_DAYS: 4,
   FATIGUE_RECOVERY_SCORE: 2,
   TRAINING_STREAK_RECOVERY_DAYS: 3,
   FAILED_SET_FATIGUE_CAP: 2,
@@ -1617,9 +1619,6 @@ function roundMeetWeight(weight) {
   return Math.round((Number(weight) || 0) / 2.5) * 2.5;
 }
 
-function ceilMeetWeight(weight) {
-  return Math.ceil(((Number(weight) || 0) - 1e-9) / 2.5) * 2.5;
-}
 
 
 
@@ -1922,7 +1921,12 @@ function generateAccessoriesForLift(lift, accessoryMode = 'off', accessoryPRs = 
     });
 }
 
-function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedWorkoutNumbers = new Set()) {
+export function applyAccessoryPlanToWorkouts(
+  workouts,
+  generatedWorkouts,
+  completedWorkoutNumbers = new Set(),
+  activeWorkoutNumber = null
+) {
   function mergePrepItems(currentItems = [], generatedItems = []) {
     return (generatedItems || []).map((item, index) => ({
       ...item,
@@ -2035,7 +2039,11 @@ function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedWork
     });
   }
 
-  function mergeLiftBlock(currentLiftBlock, generatedLiftBlock) {
+  function mergeLiftBlock(
+    currentLiftBlock,
+    generatedLiftBlock,
+    preserveMainLiftProgress = false
+  ) {
     if (!currentLiftBlock) return generatedLiftBlock;
 
     const sameVariant =
@@ -2047,12 +2055,16 @@ function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedWork
     return {
       ...generatedLiftBlock,
       prepItems: mergePrepItems(currentLiftBlock.prepItems, generatedLiftBlock.prepItems),
-      warmups: (generatedLiftBlock.warmups || []).map((warmup, index) =>
-        mergeWarmup(currentLiftBlock.warmups?.[index], warmup)
-      ),
-      sets: (generatedLiftBlock.sets || []).map((set, index) =>
-        mergeSet(currentLiftBlock.sets?.[index], set)
-      ),
+      warmups: preserveMainLiftProgress
+        ? (generatedLiftBlock.warmups || []).map((warmup, index) =>
+          mergeWarmup(currentLiftBlock.warmups?.[index], warmup)
+        )
+        : generatedLiftBlock.warmups || [],
+      sets: preserveMainLiftProgress
+        ? (generatedLiftBlock.sets || []).map((set, index) =>
+          mergeSet(currentLiftBlock.sets?.[index], set)
+        )
+        : generatedLiftBlock.sets || [],
     };
   }
 
@@ -2065,8 +2077,17 @@ function applyAccessoryPlanToWorkouts(workouts, generatedWorkouts, completedWork
       (workout.accessories || []).map(accessory => [accessoryKey(accessory), accessory])
     );
 
+    const workoutNumber = Number(generated.number || workout.number) || 0;
+    const preserveMainLiftProgress =
+      Number(activeWorkoutNumber) > 0 &&
+      workoutNumber === Number(activeWorkoutNumber);
+
     const mergedLifts = (generated.lifts || []).map((generatedLiftBlock, liftIndex) =>
-      mergeLiftBlock((workout.lifts || [])[liftIndex], generatedLiftBlock)
+      mergeLiftBlock(
+        (workout.lifts || [])[liftIndex],
+        generatedLiftBlock,
+        preserveMainLiftProgress
+      )
     );
     const primaryLiftBlock = mergedLifts[0] || {};
     const mergedCooldownItems = mergeCooldownItems(workout.cooldownItems, generated.cooldownItems);
@@ -2419,10 +2440,12 @@ function buildSmartTrainingContext({
 }
 
 function getSmartEffortScore(effort) {
-  if (effort === 'easy') return -1;
-  if (effort === 'good' || effort === 'normal') return 0;
-  if (effort === 'hard') return 1;
-  if (effort === 'tooMuch' || ['veryHard', 'max'].includes(effort)) return 2;
+  const normalizedEffort = String(effort || '').trim().toLowerCase();
+
+  if (normalizedEffort === 'easy') return -1;
+  if (normalizedEffort === 'good' || normalizedEffort === 'normal') return 0;
+  if (normalizedEffort === 'hard') return 1;
+  if (['toomuch', 'veryhard', 'max'].includes(normalizedEffort)) return 2;
   return 0;
 }
 
@@ -2455,6 +2478,33 @@ function countFailedOrSkippedSetsForLiftFromSnapshot(snapshot = {}, lift = null)
       : [];
 
   return sets.filter(set => set?.failed || set?.skipped).length;
+}
+
+function getSmartLiftSetsFromSnapshot(snapshot = {}, lift = null) {
+  if (!lift) return [];
+
+  const liftBlock = (snapshot?.lifts || []).find(block => block?.lift === lift);
+
+  if (liftBlock) return liftBlock.sets || [];
+  if (snapshot?.lift === lift) return snapshot?.sets || [];
+
+  return [];
+}
+
+function getSmartLiftSetEffortScoreFromSnapshot(snapshot = {}, lift = null) {
+  return Math.max(
+    0,
+    ...getSmartLiftSetsFromSnapshot(snapshot, lift)
+      .map(set => getSmartEffortScore(set?.effort))
+  );
+}
+
+function getSmartLiftMaxPctFromSnapshot(snapshot = {}, lift = null) {
+  return Math.max(
+    0,
+    ...getSmartLiftSetsFromSnapshot(snapshot, lift)
+      .map(set => Number(set?.originalPct ?? set?.pct) || 0)
+  );
 }
 
 
@@ -2619,6 +2669,18 @@ function buildSmartReadinessSignals(context = {}) {
         ...counts,
         [lift]: 0,
       }), {}),
+      setEffortScoresByLift: LIFT_ORDER.reduce((scores, lift) => ({
+        ...scores,
+        [lift]: 0,
+      }), {}),
+      heavyLiftByLift: LIFT_ORDER.reduce((flags, lift) => ({
+        ...flags,
+        [lift]: false,
+      }), {}),
+      maxPctByLift: LIFT_ORDER.reduce((values, lift) => ({
+        ...values,
+        [lift]: 0,
+      }), {}),
       lifts: [],
     };
 
@@ -2652,6 +2714,22 @@ function buildSmartReadinessSignals(context = {}) {
       current.failedOrSkippedSetCountsByLift[lift] = Math.max(
         Number(current.failedOrSkippedSetCountsByLift[lift]) || 0,
         liftFailedCount
+      );
+
+      current.setEffortScoresByLift[lift] = Math.max(
+        Number(current.setEffortScoresByLift[lift]) || 0,
+        getSmartLiftSetEffortScoreFromSnapshot(entry?.workoutSnapshot, lift)
+      );
+
+      current.heavyLiftByLift[lift] = Boolean(
+        current.heavyLiftByLift[lift] ||
+        isHeavySmartTrainingLift(entry?.workoutSnapshot || entry, lift) ||
+        getSmartLiftSetEffortScoreFromSnapshot(entry?.workoutSnapshot, lift) > 0
+      );
+
+      current.maxPctByLift[lift] = Math.max(
+        Number(current.maxPctByLift[lift]) || 0,
+        getSmartLiftMaxPctFromSnapshot(entry?.workoutSnapshot, lift)
       );
     });
 
@@ -2830,6 +2908,47 @@ function buildSmartReadinessSignals(context = {}) {
     [lift]: activeBlockDays.filter(day => (day.lifts || []).includes(lift)).length,
   }), {});
 
+  const rollingTrainingDays = workoutDays
+    .filter(day =>
+      !day.restDay &&
+      day.smartDayType !== SMART_DAY_TYPES.RECOVERY &&
+      day.smartDayType !== SMART_DAY_TYPES.DELOAD &&
+      day.type !== 'rest'
+    )
+    .slice(-SMART_THRESHOLDS.ROLLING_TRAINING_DAYS);
+
+  const rollingLiftExposureCounts = LIFT_ORDER.reduce((counts, lift) => ({
+    ...counts,
+    [lift]: rollingTrainingDays.filter(day => (day.lifts || []).includes(lift)).length,
+  }), {});
+
+  const lastTrainingDay = rollingTrainingDays[rollingTrainingDays.length - 1] || null;
+
+  const recentHeavyDeadliftDays = rollingTrainingDays
+    .slice(-SMART_THRESHOLDS.HEAVY_DEADLIFT_LOOKBACK_DAYS)
+    .filter(day => Boolean(day.heavyLiftByLift?.Deadlift));
+
+  const recentLiftSetEffortScores = LIFT_ORDER.reduce((scores, lift) => ({
+    ...scores,
+    [lift]: rollingTrainingDays.reduce(
+      (score, day) => score + (Number(day.setEffortScoresByLift?.[lift]) || 0),
+      0
+    ),
+  }), {});
+
+  const recentSharedLowerBodyFatigueScore =
+    (Number(recentLiftSetEffortScores.Squat) || 0) +
+    (Number(recentLiftSetEffortScores.Deadlift) || 0);
+
+  const recentSquatExposureDays = rollingTrainingDays
+    .filter(day => (Number(day.maxPctByLift?.Squat) || 0) > 0)
+    .slice(-2);
+
+  const recentSquatMaxPct = Math.max(
+    0,
+    ...recentSquatExposureDays.map(day => Number(day.maxPctByLift?.Squat) || 0)
+  );
+
   const recentDays = activeBlockDays.slice(-SMART_THRESHOLDS.RECENT_DAYS);
 
   const recentHardCount = recentDays.filter(day =>
@@ -2878,6 +2997,12 @@ function buildSmartReadinessSignals(context = {}) {
     completedCount: workoutDays.length,
     activeBlockCompletedCount: activeBlockDays.length,
     activeBlockLiftExposureCounts,
+    rollingLiftExposureCounts,
+    recentLiftSetEffortScores,
+    recentSharedLowerBodyFatigueScore,
+    lastTrainingDayHeavyDeadlift: Boolean(lastTrainingDay?.heavyLiftByLift?.Deadlift),
+    recentHeavyDeadliftDayCount: recentHeavyDeadliftDays.length,
+    recentSquatMaxPct,
     meetPlanReady: Boolean(smartMeetPlanReadiness.ready),
     meetPlanHasCurrentCycleEvidence: smartMeetPlanReadiness.hasCurrentCycleMeetEvidence,
     meetPlanReadiness: smartMeetPlanReadiness.byLift,
@@ -2967,6 +3092,56 @@ export function isHeavySmartTrainingLift(workout = {}, lift = null) {
   });
 }
 
+export function isMaximalSmartTrainingLift(workout = {}, lift = null) {
+  if (!lift || workout.smartDayType === SMART_DAY_TYPES.DELOAD) return false;
+
+  const liftBlock = (workout.lifts || []).find(block => block?.lift === lift);
+  const sets = liftBlock
+    ? (liftBlock.sets || [])
+    : workout.lift === lift
+      ? (workout.sets || [])
+      : [];
+
+  return sets.some(set => {
+    const label = String(set?.labelKey || set?.label || '').toLowerCase();
+    const pct = Number(set?.pct) || 0;
+    const reps = Number(set?.reps) || 0;
+
+    return (
+      label.includes('attempt') ||
+      label.includes('max') ||
+      label.includes('opener') ||
+      (reps === 1 && pct >= 0.9)
+    );
+  });
+}
+
+export function violatesSmartTrainingSafety(candidate = {}, readiness = {}) {
+  const hasHeavyDeadlift = isHeavySmartTrainingLift(candidate, 'Deadlift');
+  const hasMaximalSquat = isMaximalSmartTrainingLift(candidate, 'Squat');
+  const recentHeavyDeadliftDayCount =
+    Number(readiness.recentHeavyDeadliftDayCount) || 0;
+  const recentSquatMaxPct = Number(readiness.recentSquatMaxPct) || 0;
+
+  if (hasHeavyDeadlift && readiness.lastTrainingDayHeavyDeadlift) {
+    return true;
+  }
+
+  if (hasMaximalSquat && recentHeavyDeadliftDayCount >= 2) {
+    return true;
+  }
+
+  if (
+    hasMaximalSquat &&
+    recentSquatMaxPct > 0 &&
+    recentSquatMaxPct < 0.8
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function repeatsHeavyPrimaryLift(candidate = {}, readiness = {}) {
   const lastPrimaryLift = readiness.lastWorkoutPrimaryLift || null;
 
@@ -3018,7 +3193,7 @@ function isHeavySmartTrainingCandidate(workout = {}) {
 }
 
 
-function isUltraLightSmartTrainingCandidate(workout = {}) {
+export function isUltraLightSmartTrainingCandidate(workout = {}) {
   if (!workout || workout.type !== 'training') return false;
 
   const allSets = [
@@ -3036,6 +3211,54 @@ function isUltraLightSmartTrainingCandidate(workout = {}) {
   if (!pctSets.length) return false;
 
   return pctSets.every(set => set.pct <= 0.55 && set.reps <= 3);
+}
+
+export function hasEffectiveSmartTrainingStimulus(workout = {}) {
+  if (!workout || workout.type !== 'training') return false;
+  if (isUltraLightSmartTrainingCandidate(workout)) return false;
+
+  const liftBlocks = (workout.lifts || []).length
+    ? workout.lifts
+    : workout.lift
+      ? [{
+        lift: workout.lift,
+        sets: workout.sets || [],
+      }]
+      : [];
+
+  if (!liftBlocks.length) return false;
+
+  return liftBlocks.every(liftBlock => {
+    const sets = liftBlock.sets || [];
+    const hasHeavySingle = sets.some(set =>
+      Number(set?.reps) === 1 &&
+      Number(set?.pct) >= 0.85
+    );
+
+    if (!hasHeavySingle) {
+      const effectiveSets = sets.filter(set =>
+        Number(set?.pct) >= 0.60 &&
+        Number(set?.reps) >= 3
+      );
+
+      return effectiveSets.length >= 2;
+    }
+
+    const backoffSets = sets.filter(set => {
+      const label = String(set?.labelKey || '').toLowerCase();
+      const reps = Number(set?.reps) || 0;
+      const pct = Number(set?.pct) || 0;
+
+      return (
+        ['backoff', 'worksets'].includes(label) &&
+        reps >= 4 &&
+        reps <= 6 &&
+        pct >= 0.60
+      );
+    });
+
+    return backoffSets.length >= 4;
+  });
 }
 
 function getSmartMeetPlanAttemptWeight({ lift, key, prs = {}, meetPlannerAttempts = {} }) {
@@ -3560,284 +3783,6 @@ function buildSmartVolumeStimulusWorkout(workout = {}, readiness = {}) {
   };
 }
 
-function adjustSmartTrainingSet(set = {}, loadFactor = 1, adjustment = {}) {
-  const factor = Number(loadFactor) || 1;
-  if (factor === 1) return set;
-
-  const nextSet = { ...set };
-  const weight = Number(nextSet.weight);
-  const pct = Number(nextSet.pct);
-  const targetTopWeight = Number(adjustment.easySuccessTargetTopWeight) || 0;
-  const shouldForceEvidenceTarget =
-    adjustment.easySuccessProgression === true &&
-    targetTopWeight > 0 &&
-    isTopSetLabel(nextSet.labelKey);
-
-  if (Number.isFinite(weight) && weight > 0) {
-    const factorWeight = Math.max(2.5, Math.round((weight * factor) / 2.5) * 2.5);
-    const targetWeight = shouldForceEvidenceTarget
-      ? Math.max(2.5, ceilMeetWeight(targetTopWeight))
-      : factorWeight;
-
-    nextSet.weight = Math.max(factorWeight, targetWeight);
-    nextSet.originalWeight = nextSet.weight;
-  }
-
-  if (Number.isFinite(pct) && pct > 0) {
-    nextSet.pct = Math.max(0.01, Math.round(pct * factor * 1000) / 1000);
-    nextSet.originalPct = nextSet.pct;
-  }
-
-  nextSet.failedWeight = null;
-  nextSet.adjustedWeight = null;
-  nextSet.adjustedFromFailedSet = false;
-  nextSet.adjustedFromOriginal = false;
-
-  return nextSet;
-}
-
-function adjustSmartTrainingSets(sets = [], adjustment = {}) {
-  const cappedSets = adjustment.maxMainSets
-    ? (sets || []).slice(0, adjustment.maxMainSets)
-    : (sets || []);
-
-  return cappedSets.map(set => adjustSmartTrainingSet(set, adjustment.loadFactor, adjustment));
-}
-
-
-function getSmartTopSetForProgression(sets = []) {
-  return (sets || [])
-    .filter(set => Number(set?.weight) > 0 && Number(set?.reps) > 0)
-    .map(set => ({
-      set,
-      e1rm: epley(Number(set.weight) || 0, Number(set.reps) || 1),
-    }))
-    .sort((a, b) => b.e1rm - a.e1rm)[0]?.set || null;
-}
-
-function getSmartEasySuccessProgressionPlan(readiness = {}, liftBlock = {}) {
-  const lift = liftBlock?.lift || null;
-  const liftReadiness = readiness.meetPlanReadiness?.[lift] || null;
-  const recentEasyCount = Number(readiness.recentEasyCount) || 0;
-  const recentGoodCount = Number(readiness.recentGoodCount) || 0;
-  const recentHardCount = Number(readiness.recentHardCount) || 0;
-  const recentMaxCount = Number(readiness.recentMaxCount) || 0;
-  const recentFatigueScore = Number(readiness.recentFatigueScore) || 0;
-  const recentFailedOrSkippedSetCount = Number(readiness.recentFailedOrSkippedSetCount) || 0;
-  const topSet = getSmartTopSetForProgression(liftBlock?.sets || []);
-
-  const empty = {
-    loadFactor: 1,
-    targetTopWeight: null,
-    targetTopE1RM: null,
-    topReps: null,
-    isSingle: false,
-    cleanHardBuild: false,
-    cleanMaxBuild: false,
-  };
-
-  const normalizedLastHardWorkoutEffort = String(readiness.lastWorkoutEffort || '').trim().toLowerCase();
-
-  const hasCleanHardEvidence =
-    recentHardCount >= 1 ||
-    normalizedLastHardWorkoutEffort === 'hard';
-
-  const normalizedLastWorkoutEffort = String(readiness.lastWorkoutEffort || '').trim().toLowerCase();
-
-  const hasCleanMaxEvidence =
-    recentMaxCount >= 1 ||
-    normalizedLastWorkoutEffort === 'max' ||
-    getSmartEffortScore(readiness.lastWorkoutEffort) >= 2;
-
-  const completedCount = Number(readiness.completedCount) || 0;
-  const hardProgressionCadence = completedCount % 2 === 0;
-  const maxProgressionCadence = completedCount % 18 === 2;
-
-  const cleanMaxBuild =
-    hasCleanMaxEvidence &&
-    maxProgressionCadence &&
-    recentFailedOrSkippedSetCount === 0;
-
-  const cleanHardBuild =
-    !cleanMaxBuild &&
-    hasCleanHardEvidence &&
-    hardProgressionCadence &&
-    recentFailedOrSkippedSetCount === 0;
-
-  if (!lift || !liftReadiness || liftReadiness.ready === true || !topSet) return empty;
-  if (recentEasyCount < 2 && recentGoodCount < 2 && !cleanHardBuild && !cleanMaxBuild) return empty;
-  if (recentFailedOrSkippedSetCount > 0) return empty;
-  if (recentFatigueScore > 0 && !cleanHardBuild && !cleanMaxBuild) return empty;
-  if (hasUnrecoveredSmartHardEffort(readiness) && !cleanHardBuild && !cleanMaxBuild) return empty;
-
-  const topWeight = Number(topSet.weight) || 0;
-  const topReps = Math.max(Number(topSet.reps) || 1, 1);
-  if (topWeight <= 0) return empty;
-
-  const currentBestE1RM = Number(liftReadiness.currentCycleBestE1RM) || 0;
-  const liftTarget = Math.max(
-    Number(liftReadiness.currentCycleTarget) || 0,
-    Number(liftReadiness.plannedTopAttempt) || 0,
-    lift === readiness.meetPlanWeakestLift
-      ? Number(readiness.meetPlanWeakestTarget) || 0
-      : 0
-  );
-  const acceleratedEasyBuild = shouldAccelerateSmartEasyReadiness(readiness);
-  const cleanGoodBuild = !acceleratedEasyBuild && recentGoodCount >= 2;
-  const e1rmStep = acceleratedEasyBuild
-    ? (lift === 'Bench' ? 5 : 10)
-    : cleanGoodBuild
-      ? (lift === 'Bench' ? 1.25 : 2.5)
-      : cleanHardBuild
-        ? (lift === 'Bench' ? 0.4 : 0.8)
-        : cleanMaxBuild
-          ? (lift === 'Bench' ? 0.1 : 0.2)
-          : (lift === 'Bench' ? 2.5 : 5);
-
-  const nextTargetE1RM = currentBestE1RM > 0
-    ? Math.min(
-      liftTarget > 0 ? liftTarget : currentBestE1RM + e1rmStep,
-      currentBestE1RM + e1rmStep
-    )
-    : 0;
-
-  const targetTopWeight = nextTargetE1RM > 0
-    ? nextTargetE1RM / (1 + topReps / 30)
-    : topWeight * 1.025;
-
-  const minimumBumpFactor = cleanMaxBuild
-    ? 1.001
-    : 1.025;
-  const isSingle = topReps <= 1;
-  const desiredFactor = Math.max(minimumBumpFactor, targetTopWeight / topWeight);
-
-  if (isSingle) {
-    return {
-      loadFactor: Math.max(1, desiredFactor),
-      targetTopWeight,
-      targetTopE1RM: nextTargetE1RM || null,
-      topReps,
-      isSingle,
-      cleanHardBuild,
-      cleanMaxBuild,
-    };
-  }
-
-  const maxBumpFactor = acceleratedEasyBuild
-    ? (lift === 'Bench' ? 1.12 : 1.16)
-    : cleanGoodBuild
-      ? (lift === 'Bench' ? 1.025 : 1.03)
-      : cleanHardBuild
-        ? (lift === 'Bench' ? 1.006 : 1.01)
-        : cleanMaxBuild
-          ? (lift === 'Bench' ? 1.003 : 1.005)
-          : (lift === 'Bench' ? 1.05 : 1.06);
-
-  return {
-    loadFactor: Math.max(1, Math.min(maxBumpFactor, desiredFactor)),
-    targetTopWeight,
-    targetTopE1RM: nextTargetE1RM || null,
-    topReps,
-    isSingle,
-    cleanHardBuild,
-    cleanMaxBuild,
-  };
-}
-
-function getSmartLiftTrainingAutoregulation(readiness = {}, liftBlock = {}) {
-  const hasPerLiftFailedCounts = Boolean(readiness.recentFailedOrSkippedSetCountsByLift);
-  const recentFailedCount = hasPerLiftFailedCounts
-    ? Number(readiness.recentFailedOrSkippedSetCountsByLift?.[liftBlock?.lift]) || 0
-    : Number(readiness.recentFailedOrSkippedSetCount) || 0;
-  const hasRecentFailedSets = recentFailedCount > 0;
-  const hasHardLiftOverlap =
-    hasUnrecoveredSmartHardEffort(readiness) &&
-    (readiness.lastWorkoutLifts || []).includes(liftBlock?.lift);
-
-  const easySuccessProgressionPlan = getSmartEasySuccessProgressionPlan(readiness, liftBlock);
-  const easySuccessProgressionFactor = easySuccessProgressionPlan.loadFactor;
-  const cleanHardBuild = easySuccessProgressionPlan.cleanHardBuild === true;
-  const cleanMaxBuild = easySuccessProgressionPlan.cleanMaxBuild === true;
-
-  const loadFactor = hasRecentFailedSets && hasHardLiftOverlap
-    ? 0.9
-    : hasHardLiftOverlap && !cleanHardBuild && !cleanMaxBuild
-      ? 0.95
-      : easySuccessProgressionFactor;
-
-  const maxMainSets = hasRecentFailedSets ? 2 : null;
-
-  return {
-    lift: liftBlock?.lift || null,
-    recentFailedCount,
-    hasRecentFailedSets,
-    hasHardLiftOverlap,
-    easySuccessProgression: loadFactor > 1,
-    cleanHardProgression: cleanHardBuild,
-    cleanMaxProgression: cleanMaxBuild,
-    easySuccessTargetTopWeight: loadFactor > 1 ? easySuccessProgressionPlan.targetTopWeight : null,
-    easySuccessTargetTopE1RM: loadFactor > 1 ? easySuccessProgressionPlan.targetTopE1RM : null,
-    loadFactor,
-    maxMainSets,
-    hasAdjustment: loadFactor !== 1 || Boolean(maxMainSets),
-  };
-}
-
-function applySmartTrainingAutoregulation(workout = {}, readiness = {}) {
-  if (workout?.type !== 'training') return workout;
-
-  const baseWorkout = buildSmartVolumeStimulusWorkout(workout, readiness);
-  const liftAdjustments = {};
-  const adjustedLifts = (baseWorkout.lifts || []).map(liftBlock => {
-    const adjustment = getSmartLiftTrainingAutoregulation(readiness, liftBlock);
-    liftAdjustments[liftBlock.lift] = adjustment;
-
-    if (!adjustment.hasAdjustment) {
-      return {
-        ...liftBlock,
-        warmups: generateWarmups(liftBlock.sets || [], liftBlock.lift),
-      };
-    }
-
-    const adjustedSets = adjustSmartTrainingSets(liftBlock.sets || [], adjustment);
-
-    return {
-      ...liftBlock,
-      sets: adjustedSets,
-      warmups: generateWarmups(adjustedSets, liftBlock.lift),
-    };
-  });
-
-  const adjustedPrimaryLift = adjustedLifts[0] || null;
-  const adjustedPrimarySets = adjustedPrimaryLift?.sets || workout.sets || [];
-  const appliedAdjustments = Object.values(liftAdjustments).filter(adjustment =>
-    adjustment?.hasAdjustment
-  );
-
-  if (!appliedAdjustments.length) {
-    return {
-      ...workout,
-      smartTrainingAutoregulationByLift: liftAdjustments,
-      warmups: generateWarmups(baseWorkout.sets || [], baseWorkout.lift),
-      lifts: adjustedLifts,
-    };
-  }
-
-  return {
-    ...baseWorkout,
-    smartAutoregulatedTraining: true,
-    smartTrainingLoadFactor: Math.min(...appliedAdjustments.map(adjustment => adjustment.loadFactor)),
-    smartTrainingVolumeCap: appliedAdjustments.some(adjustment => adjustment.maxMainSets)
-      ? 2
-      : null,
-    smartTrainingAdjustedLifts: appliedAdjustments.map(adjustment => adjustment.lift).filter(Boolean),
-    smartTrainingAutoregulationByLift: liftAdjustments,
-    sets: adjustedPrimarySets,
-    warmups: adjustedPrimaryLift?.warmups || generateWarmups(adjustedPrimarySets, baseWorkout.lift),
-    lifts: adjustedLifts,
-  };
-}
-
 function reduceSmartDeloadSet(set = {}) {
   const nextSet = { ...set };
   const weight = Number(nextSet.weight);
@@ -4109,17 +4054,26 @@ function selectSmartTrainingCandidate({
 
   function scoreCandidate(candidate) {
     const candidateLifts = getWorkoutLiftNames(candidate);
-    const liftExposureCounts = readiness.activeBlockLiftExposureCounts || {};
+    const liftExposureCounts =
+      readiness.rollingLiftExposureCounts ||
+      readiness.activeBlockLiftExposureCounts ||
+      {};
     const meetPlanReadiness = readiness.meetPlanReadiness || {};
-    const exposureValues = LIFT_ORDER.map(lift => Number(liftExposureCounts[lift]) || 0);
-    const minExposure = Math.min(...exposureValues);
+    const targetExposureCounts = {
+      Squat: 3,
+      Bench: 4,
+      Deadlift: 2,
+    };
     const totalExposurePenalty = candidateLifts.reduce(
       (total, lift) => total + (Number(liftExposureCounts[lift]) || 0),
       0
     );
-    const undertrainedBonus = candidateLifts.filter(lift =>
-      (Number(liftExposureCounts[lift]) || 0) === minExposure
-    ).length * 4;
+    const undertrainedBonus = candidateLifts.reduce((bonus, lift) => {
+      const target = Number(targetExposureCounts[lift]) || 0;
+      const actual = Number(liftExposureCounts[lift]) || 0;
+
+      return bonus + Math.max(target - actual, 0) * 2;
+    }, 0);
     const shouldUseMeetPlanTrainingBias =
       Number(readiness.completedCount) > 0 &&
       Number(readiness.activeBlockCompletedCount) > 0;
@@ -4143,20 +4097,46 @@ function selectSmartTrainingCandidate({
       0
     );
     const liftCountPenalty = Math.max(getWorkoutLiftNames(candidate).length - 1, 0);
-    const heavyPenalty = isHeavySmartTrainingCandidate(candidate) ? 1 : 0;
+    const heavyPenalty = isHeavySmartTrainingCandidate(candidate) ? 2 : 0;
+    const lowerBodyFatiguePenalty = candidateLifts.reduce((penalty, lift) => {
+      if (!['Squat', 'Deadlift'].includes(lift)) return penalty;
 
-    return weakestLiftBonus + meetPlanNeedsWorkBonus + undertrainedBonus - totalExposurePenalty - overlapPenalty - failedLiftPenalty - liftCountPenalty - heavyPenalty;
+      return penalty + Math.min(
+        Number(readiness.recentSharedLowerBodyFatigueScore) || 0,
+        4
+      );
+    }, 0);
+
+    return weakestLiftBonus +
+      meetPlanNeedsWorkBonus +
+      undertrainedBonus -
+      totalExposurePenalty -
+      overlapPenalty -
+      failedLiftPenalty -
+      liftCountPenalty -
+      heavyPenalty -
+      lowerBodyFatiguePenalty;
   }
 
   function pickBestCandidate(pool = [], predicate = () => true) {
     return (pool || [])
-      .filter(candidate => candidate?.type === 'training' && predicate(candidate))
+      .filter(candidate =>
+        candidate?.type === 'training' &&
+        hasEffectiveSmartTrainingStimulus(candidate) &&
+        !violatesSmartTrainingSafety(candidate, readiness) &&
+        predicate(candidate)
+      )
       .sort((a, b) => scoreCandidate(b) - scoreCandidate(a))[0] || null;
   }
 
   function pickLowestOverlapCandidate(pool = [], predicate = () => true) {
     return (pool || [])
-      .filter(candidate => candidate?.type === 'training' && predicate(candidate))
+      .filter(candidate =>
+        candidate?.type === 'training' &&
+        hasEffectiveSmartTrainingStimulus(candidate) &&
+        !violatesSmartTrainingSafety(candidate, readiness) &&
+        predicate(candidate)
+      )
       .sort((a, b) => {
         const overlapDiff =
           countSharedWorkoutLifts(a, readiness.lastWorkoutLifts || []) -
@@ -4175,6 +4155,8 @@ function selectSmartTrainingCandidate({
       .flatMap(pool => pool || [])
       .filter(candidate =>
         candidate?.type === 'training' &&
+        hasEffectiveSmartTrainingStimulus(candidate) &&
+        !violatesSmartTrainingSafety(candidate, readiness) &&
         isSmartPeakCandidateForLift(candidate, lift)
       );
 
@@ -4469,10 +4451,24 @@ function generateSmartWorkouts({
       smartDecision.dayType === SMART_DAY_TYPES.TRAINING &&
       workout.type === 'meet';
 
+    const hasEffectiveTrainingCandidate =
+      fallbackTrainingCandidate?.type === 'training' &&
+      hasEffectiveSmartTrainingStimulus(fallbackTrainingCandidate);
+
+    const shouldBuildNoEffectiveTrainingRecovery =
+      isDecisionWorkout &&
+      smartDecision.dayType === SMART_DAY_TYPES.TRAINING &&
+      !hasEffectiveTrainingCandidate &&
+      (
+        workout.type !== 'training' ||
+        !hasEffectiveSmartTrainingStimulus(workout) ||
+        violatesSmartTrainingSafety(workout, smartDecision.readiness)
+      );
+
     const shouldUseFallbackTraining =
       isDecisionWorkout &&
       smartDecision.dayType === SMART_DAY_TYPES.TRAINING &&
-      fallbackTrainingCandidate?.type === 'training' &&
+      hasEffectiveTrainingCandidate &&
       (
         workout.type !== 'training' ||
         shouldBlockSmartMeetDay ||
@@ -4486,8 +4482,10 @@ function generateSmartWorkouts({
 
     const smartWorkout = shouldBuildRecoveryDay
       ? buildSmartRecoveryWorkout(workout)
-      : shouldBlockSmartMeetDay && !fallbackTrainingCandidate
+      : shouldBuildNoEffectiveTrainingRecovery
         ? buildSmartRecoveryWorkout(workout)
+        : shouldBlockSmartMeetDay && !fallbackTrainingCandidate
+          ? buildSmartRecoveryWorkout(workout)
         : shouldBuildMeetDay
           ? buildSmartMeetWorkout(workout, smartMeetCandidate)
           : shouldBuildDeloadDay
@@ -4503,12 +4501,16 @@ function generateSmartWorkouts({
     const adjustedSmartWorkout =
       isDecisionWorkout &&
       smartDecision.dayType === SMART_DAY_TYPES.TRAINING
-        ? applySmartTrainingAutoregulation(smartWorkout, smartDecision.readiness)
+        ? buildSmartVolumeStimulusWorkout(smartWorkout, smartDecision.readiness)
         : smartWorkout;
+
+    const effectiveSmartDayType = shouldBuildNoEffectiveTrainingRecovery
+      ? SMART_DAY_TYPES.RECOVERY
+      : smartDecision.dayType;
 
     const smartDecisionSummary = isDecisionWorkout
       ? {
-        dayType: smartDecision.dayType,
+        dayType: effectiveSmartDayType,
         reason: smartDecision.reason,
         overrideType: smartDecision.overrideType,
         readiness: smartDecision.readiness
@@ -4516,6 +4518,16 @@ function generateSmartWorkouts({
             completedCount: smartDecision.readiness.completedCount || 0,
             activeBlockCompletedCount: smartDecision.readiness.activeBlockCompletedCount || 0,
             activeBlockLiftExposureCounts: smartDecision.readiness.activeBlockLiftExposureCounts || {},
+            rollingLiftExposureCounts: smartDecision.readiness.rollingLiftExposureCounts || {},
+            recentLiftSetEffortScores: smartDecision.readiness.recentLiftSetEffortScores || {},
+            recentSharedLowerBodyFatigueScore:
+              smartDecision.readiness.recentSharedLowerBodyFatigueScore || 0,
+            lastTrainingDayHeavyDeadlift:
+              Boolean(smartDecision.readiness.lastTrainingDayHeavyDeadlift),
+            recentHeavyDeadliftDayCount:
+              smartDecision.readiness.recentHeavyDeadliftDayCount || 0,
+            recentSquatMaxPct:
+              smartDecision.readiness.recentSquatMaxPct || 0,
             meetPlanReady: Boolean(smartDecision.readiness.meetPlanReady),
             meetPlanHasCurrentCycleEvidence: Boolean(smartDecision.readiness.meetPlanHasCurrentCycleEvidence),
             meetPlanReadiness: smartDecision.readiness.meetPlanReadiness || {},
@@ -4564,12 +4576,12 @@ function generateSmartWorkouts({
       smartCurrentCycle: smartContext.currentCycle,
       smartDecision: null,
       smartDecisionSummary,
-      smartDayType: isDecisionWorkout ? smartDecision.dayType : null,
+      smartDayType: isDecisionWorkout ? effectiveSmartDayType : null,
       smartOverride: shouldBuildMeetDay
         ? SMART_OVERRIDES.MEETDAY
         : shouldBuildDeloadDay
           ? SMART_OVERRIDES.DELOAD
-          : shouldBuildRecoveryDay
+          : shouldBuildRecoveryDay || shouldBuildNoEffectiveTrainingRecovery
             ? SMART_OVERRIDES.RECOVERY
           : shouldUseFallbackTraining
             ? (
@@ -4582,7 +4594,7 @@ function generateSmartWorkouts({
   });
 }
 
-function generateWorkoutsForTrainingModel(model, args = {}) {
+export function generateWorkoutsForTrainingModel(model, args = {}) {
   const workoutArgs = {
     programProfile: normalizeProgramProfile(args.programProfile),
     squat: args.squat,
@@ -7781,28 +7793,47 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
   const summary = workout?.smartDecisionSummary || {};
   const readiness = summary.readiness || {};
   const rows = [];
+  const isTrainingFallback =
+    summary.dayType === SMART_DAY_TYPES.TRAINING &&
+    summary.reason === SMART_DECISION_REASONS.TRAINING_FALLBACK;
+  const isFatigueRecovery =
+    summary.dayType === SMART_DAY_TYPES.RECOVERY &&
+    summary.reason === SMART_DECISION_REASONS.FATIGUE_RECOVERY;
+
+  if (isTrainingFallback && !readiness.meetPlanReady) {
+    rows.push({
+      label: t.smartMeetStatus || 'Meet status',
+      value: t.smartMeetPlanNotReady || 'Meet plan not ready',
+    });
+  }
 
   if (
-    summary.dayType === SMART_DAY_TYPES.TRAINING &&
-    summary.reason === SMART_DECISION_REASONS.TRAINING_FALLBACK
+    isFatigueRecovery ||
+    (isTrainingFallback && (readiness.meetdayBlockers || []).includes('fatigue'))
   ) {
-    if (!readiness.meetPlanReady) {
+    const fatigueScore = Number(readiness.recentFatigueScore) || 0;
+    const fatigueThreshold = SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE;
+    const lastEffort = String(readiness.lastWorkoutEffort || '').trim().toUpperCase();
+    const failedCount = Number(readiness.recentFailedOrSkippedSetCount) || 0;
+
+    rows.push({
+      label: t.smartBlockerFatigue || 'Fatigue',
+      value: fatigueScore >= fatigueThreshold
+        ? `${fatigueScore} — recovery required`
+        : `${fatigueScore} — below recovery threshold`,
+    });
+
+    if (lastEffort) {
       rows.push({
-        label: t.smartMeetStatus || 'Meet status',
-        value: t.smartMeetPlanNotReady || 'Meet plan not ready',
+        label: t.smartCause || 'Cause',
+        value: `Previous workout ${lastEffort}`,
       });
     }
 
-    if ((readiness.meetdayBlockers || []).includes('fatigue')) {
-      const fatigueScore = Number(readiness.recentFatigueScore) || 0;
-      const lastEffort = String(readiness.lastWorkoutEffort || '').trim().toUpperCase();
-      const cause = lastEffort ? ` — previous workout ${lastEffort}` : '';
-
-      rows.push({
-        label: t.smartBlockerFatigue || 'Fatigue',
-        value: `${fatigueScore}/${SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE}${cause}`,
-      });
-    }
+    rows.push({
+      label: t.smartBlockerFailedSkipped || 'Failed/skipped',
+      value: `${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT} — deload threshold`,
+    });
   }
 
   return rows;
@@ -7825,7 +7856,7 @@ function SmartDayTypeInline({ workout, t }) {
   const reasonText = formatSmartInfoText(getSmartDecisionReasonDisplayText(workout?.smartDecisionSummary, t));
   const selectionText = formatSmartInfoText(getSmartTrainingSelectionDisplayText(workout, t));
   const detailRows = getSmartModalDetailRows(workout, t);
-  const usesStructuredTrainingFallback = detailRows.length > 0;
+  const usesStructuredSmartDetails = detailRows.length > 0;
 
   const limiterMatch = selectionText?.match(/^e1RM limiter:\s*(.+)$/i);
   const infoRows = [
@@ -7835,7 +7866,7 @@ function SmartDayTypeInline({ workout, t }) {
       emphasis: true,
     },
     ...detailRows,
-    !usesStructuredTrainingFallback && reasonText ? {
+    !usesStructuredSmartDetails && reasonText ? {
       label: t.smartReason || 'Reason',
       value: reasonText,
     } : null,
@@ -12245,7 +12276,8 @@ function App() {
       return removeDeprecatedPrepItemsFromWorkouts(applyAccessoryPlanToWorkouts(
         baseWorkouts,
         generatedWorkouts,
-        getCompletedWorkoutNumbers(history, currentCycle)
+        getCompletedWorkoutNumbers(history, currentCycle),
+        Number(currentIndex) + 1
       ));
     });
   }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, currentIndex, currentCycle, meetPlannerAttempts]);
