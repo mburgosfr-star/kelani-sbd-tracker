@@ -243,6 +243,24 @@ test('preserves begun set progress only for the active workout', () => {
   });
 });
 
+
+test('gives Ultra Bench Strength three Deadlift work sets', () => {
+  const workouts = generateUltraProgram(145, 100, 180);
+  const workout = workouts.find(item => item.label === 'Ultra Bench Strength');
+  const deadlift = workout.lifts.find(item => item.lift === 'Deadlift');
+
+  expect(deadlift.sets).toHaveLength(3);
+
+  deadlift.sets.forEach(set => {
+    expect(set).toMatchObject({
+      labelKey: 'workSets',
+      reps: 3,
+      pct: 0.625,
+      weight: 112.5,
+    });
+  });
+});
+
 test('uses four-rep volume work at 70% after the Deadlift top double', () => {
   const workouts = generateUltraProgram(145, 100, 180);
   const workout = workouts.find(
@@ -761,6 +779,159 @@ test('does not repeat the last training prescription after Rest & recovery', () 
 
   expect(prescriptionSignature(decisionWorkout))
     .not.toBe(prescriptionSignature(previousTraining));
+});
+
+
+test('does not repeat a recent training prescription after another workout and recovery', () => {
+  const makeSnapshot = (number, lifts, workoutEffort = 'good') => ({
+    number,
+    type: 'training',
+    smartDayType: 'training',
+    lift: lifts[0]?.lift,
+    lifts,
+    prepItems: [],
+    warmups: [],
+    sets: [],
+    accessories: [],
+    workoutEffort,
+  });
+
+  const deadliftBench = makeSnapshot(14, [
+    {
+      lift: 'Deadlift',
+      prepItems: [],
+      warmups: [],
+      sets: [
+        { labelKey: 'topDouble', reps: 2, pct: 0.80, weight: 145, done: true },
+        { labelKey: 'backoff', reps: 4, pct: 0.70, weight: 125, done: true },
+        { labelKey: 'backoff', reps: 4, pct: 0.70, weight: 125, done: true },
+        { labelKey: 'backoff', reps: 4, pct: 0.70, weight: 125, done: true },
+        { labelKey: 'backoff', reps: 4, pct: 0.70, weight: 125, done: true },
+      ],
+    },
+    {
+      lift: 'Bench',
+      prepItems: [],
+      warmups: [],
+      sets: [
+        { labelKey: 'workSets', reps: 4, pct: 0.70, weight: 67.5, done: true },
+        { labelKey: 'workSets', reps: 4, pct: 0.70, weight: 67.5, done: true },
+        { labelKey: 'workSets', reps: 4, pct: 0.70, weight: 67.5, done: true },
+        { labelKey: 'workSets', reps: 4, pct: 0.70, weight: 67.5, done: true },
+      ],
+    },
+  ]);
+
+  const squatBench = makeSnapshot(15, [
+    {
+      lift: 'Squat',
+      prepItems: [],
+      warmups: [],
+      sets: [
+        {
+          labelKey: 'topTriple',
+          reps: 3,
+          pct: 0.775,
+          weight: 112.5,
+          done: false,
+          skipped: true,
+        },
+        { labelKey: 'backoff', reps: 5, pct: 0.675, weight: 97.5, done: true },
+        { labelKey: 'backoff', reps: 5, pct: 0.675, weight: 97.5, done: true },
+      ],
+    },
+    {
+      lift: 'Bench',
+      prepItems: [],
+      warmups: [],
+      sets: [
+        { labelKey: 'workSets', reps: 4, pct: 0.65, weight: 62.5, done: true },
+        { labelKey: 'workSets', reps: 4, pct: 0.65, weight: 62.5, done: true },
+        { labelKey: 'workSets', reps: 4, pct: 0.65, weight: 62.5, done: true },
+        { labelKey: 'workSets', reps: 4, pct: 0.65, weight: 62.5, done: true },
+      ],
+    },
+  ], 'tooMuch');
+
+  const history = [
+    {
+      cycle: 3,
+      workoutNumber: 14,
+      lift: 'Deadlift',
+      workoutEffort: 'good',
+      workoutSnapshot: deadliftBench,
+    },
+    {
+      cycle: 3,
+      workoutNumber: 15,
+      lift: 'Squat',
+      workoutEffort: 'tooMuch',
+      failedOrSkippedSetCount: 1,
+      workoutSnapshot: squatBench,
+    },
+    {
+      cycle: 3,
+      workoutNumber: 16,
+      restDay: true,
+      workoutEffort: 'easy',
+      smartDayType: 'recovery',
+      workoutSnapshot: {
+        number: 16,
+        type: 'rest',
+        smartDayType: 'recovery',
+        lifts: [],
+        sets: [],
+        workoutEffort: 'easy',
+      },
+    },
+  ];
+
+  const workouts = generateWorkoutsForTrainingModel('smart', {
+    programProfile: 'kelaniSbdUltra',
+    squat: 145,
+    bench: 100,
+    deadlift: 180,
+    history,
+    currentIndex: 16,
+    currentCycle: 3,
+    meetPlannerAttempts: {
+      Squat: [132.5, 140, 147.5],
+      Bench: [90, 95, 100],
+      Deadlift: [167.5, 177.5, 185],
+    },
+  });
+
+  const decisionWorkout = workouts.find(workout =>
+    workout?.smartDecisionSummary
+  );
+
+  const signature = workout =>
+    (workout?.lifts || [])
+      .flatMap(liftBlock =>
+        (liftBlock.sets || [])
+          .filter(set => !set.warmup && !set.isWarmup)
+          .map(set => [
+            liftBlock.lift,
+            set.labelKey || set.label || set.type || '',
+            Number(set.reps) || 0,
+            Number(set.weight ?? set.originalWeight) || 0,
+            Number(set.pct ?? set.originalPct) || 0,
+          ].join(':'))
+      )
+      .sort()
+      .join('|');
+
+  expect(decisionWorkout).toBeTruthy();
+  expect(
+    decisionWorkout.smartDecisionSummary.readiness
+      .recentTrainingPrescriptionSignatures
+  ).toHaveLength(2);
+
+  if (decisionWorkout.smartDecisionSummary.dayType === 'training') {
+    expect(signature(decisionWorkout)).not.toBe(signature(deadliftBench));
+  } else {
+    expect(decisionWorkout.smartDecisionSummary.dayType).toBe('recovery');
+  }
 });
 
 test('explains fatigue with score and previous workout effort', () => {
