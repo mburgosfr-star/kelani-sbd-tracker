@@ -3034,9 +3034,9 @@ function buildSmartReadinessSignals(context = {}) {
     lastWorkoutNumber: Number(lastDay?.workoutNumber) || 0,
     lastMeetWorkoutNumber: Number(lastMeetDay?.workoutNumber) || 0,
     lastWorkoutEffort: lastDay?.workoutEffort || null,
-    lastWorkoutLifts: lastDay?.lifts || [],
-    lastWorkoutPrimaryLift: (lastDay?.lifts || [])[0] || null,
-    lastWorkoutPrescriptionSignature: getSmartTrainingPrescriptionSignature(lastDay || {}),
+    lastWorkoutLifts: lastTrainingDay?.lifts || [],
+    lastWorkoutPrimaryLift: (lastTrainingDay?.lifts || [])[0] || null,
+    lastWorkoutPrescriptionSignature: getSmartTrainingPrescriptionSignature(lastTrainingDay || {}),
     lastSmartDayType: lastDay?.smartDayType || null,
     lastWasRestDay: Boolean(lastDay?.restDay || lastDay?.smartDayType === SMART_DAY_TYPES.RECOVERY),
     lastWasRecoveryIntervention: Boolean(
