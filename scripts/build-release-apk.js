@@ -25,11 +25,17 @@ const publicApkRel = `release/kelani-sbd-tracker-v${version}.apk`;
 const publicShaRel = `release/kelani-sbd-tracker-v${version}.apk.sha256`;
 const phoneApkRel = 'release/kelani-sbd-tracker-phone-test.apk';
 const manifestRel = 'release/build-manifest.json';
+const phoneProofRel = 'release/phone-test-proof.json';
+const preflightProofRel = 'release/preflight-proof.json';
+const izzyReportRel = 'release/izzy-report.json';
 
 const publicApk = path.join(root, publicApkRel);
 const publicSha = path.join(root, publicShaRel);
 const phoneApk = path.join(root, phoneApkRel);
 const manifestPath = path.join(root, manifestRel);
+const phoneProofPath = path.join(root, phoneProofRel);
+const preflightProofPath = path.join(root, preflightProofRel);
+const izzyReportPath = path.join(root, izzyReportRel);
 
 function fail(message) {
   console.error(`ERROR: ${message}`);
@@ -96,7 +102,15 @@ function assertCleanSourceTreeExceptRelease() {
 function removeOldReleaseInputs() {
   fs.mkdirSync(releaseDir, { recursive: true });
 
-  for (const filePath of [publicApk, publicSha, phoneApk, manifestPath]) {
+  for (const filePath of [
+    publicApk,
+    publicSha,
+    phoneApk,
+    manifestPath,
+    phoneProofPath,
+    preflightProofPath,
+    izzyReportPath,
+  ]) {
     fs.rmSync(filePath, { force: true });
   }
 }
@@ -107,6 +121,12 @@ const commit = output('git', ['rev-parse', 'HEAD']);
 assertCleanSourceTreeExceptRelease();
 removeOldReleaseInputs();
 
+run('npm', ['test', '--', '--runInBand'], {
+  env: {
+    ...env,
+    CI: 'true',
+  },
+});
 run('npm', ['run', 'build']);
 run('npx', ['cap', 'sync', 'android']);
 

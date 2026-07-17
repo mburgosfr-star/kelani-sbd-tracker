@@ -27,14 +27,22 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "android:release-apk": "node scripts/build-release-apk.js",
-    "github:release": "node scripts/create-github-release.js",
+    "github:release": "npm run release:publish",
     "android:izzy-test": "node scripts/test-izzy-build.js",
     "android:install-apk": "node scripts/install-apk.js",
-    "android:release-gate": "npm run android:build-manifest && npm run android:apk-metadata && npm run android:apk-hygiene && node scripts/guarded-release.js --check",
-    "android:guarded-release": "npm run android:build-manifest && npm run android:apk-metadata && npm run android:apk-hygiene && node scripts/guarded-release.js --release",
+    "android:release-gate": "npm run release:preflight && npm run release:check",
+    "android:guarded-release": "npm run release:finish",
     "android:apk-hygiene": "node scripts/check-release-apk-hygiene.js",
     "android:apk-metadata": "node scripts/check-release-apk-metadata.js",
-    "android:build-manifest": "node scripts/check-release-build-manifest.js"
+    "android:build-manifest": "node scripts/check-release-build-manifest.js",
+    "release:build": "node scripts/build-release-apk.js",
+    "release:install": "node scripts/install-apk.js",
+    "release:phone-tested": "node scripts/mark-phone-tested.js",
+    "release:preflight": "node scripts/release-preflight.js",
+    "release:check": "node scripts/guarded-release.js --check",
+    "release:publish": "node scripts/guarded-release.js --release",
+    "release:finish": "npm run release:preflight && npm run release:publish",
+    "release:self-check": "node scripts/check-release-automation.js"
   },
   "eslintConfig": {
     "extends": [

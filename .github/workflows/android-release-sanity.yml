@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   release-sanity:
-    name: Build and inspect Android release APK
+    name: Test app and isolated Android release build
     runs-on: ubuntu-24.04
 
     steps:
@@ -33,7 +33,7 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
-      - name: Set up Java
+      - name: Set up Java 21
         uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -42,46 +42,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Izzy-style clean Android build
+      - name: Validate release automation
+        run: npm run release:self-check
+
+      - name: Run all tests
+        run: npm test -- --runInBand
+        env:
+          CI: "true"
+
+      - name: Build production web assets
+        run: npm run build
+
+      - name: Run isolated Izzy and NeoStore build
         run: npm run android:izzy-test
 
-      - name: Ensure generated tracked files are committed
+      - name: Ensure validation changed no tracked files
         run: |
-          if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
-            echo "ERROR: build changed tracked files. Commit generated source updates before release."
+          STATUS="$(git status --porcelain --untracked-files=no)"
+
+          if [[ -n "$STATUS" ]]; then
+            echo "ERROR: validation changed tracked files"
             git status --short
             git diff --stat
-            git diff -- package-lock.json | sed -n '1,260p'
             exit 1
           fi
 
-      - name: Locate release APK
-        id: apk
-        run: |
-          APK="$(find android/app/build/outputs/apk/release -type f \( -name "app-release.apk" -o -name "app-release-unsigned.apk" \) | sort | tail -n 1)"
-
-          if [[ -z "$APK" ]]; then
-            echo "ERROR: no release APK found"
-            find android/app/build/outputs/apk -type f -print || true
-            exit 1
-          fi
-
-          echo "apk=$APK" >> "$GITHUB_OUTPUT"
-          echo "APK=$APK"
-          sha256sum "$APK"
-
-      - name: Check APK package metadata
-        run: npm run android:apk-metadata
-        env:
-          KELANI_APK_METADATA_FILES: ${{ steps.apk.outputs.apk }}
-
-      - name: Check APK asset hygiene
-        run: npm run android:apk-hygiene
-        env:
-          KELANI_APK_HYGIENE_FILES: ${{ steps.apk.outputs.apk }}
-
-      - name: Inspect Capacitor plugins
-        run: |
-          unzip -p "${{ steps.apk.outputs.apk }}" assets/capacitor.plugins.json | python3 -m json.tool
-          unzip -p "${{ steps.apk.outputs.apk }}" assets/capacitor.plugins.json | grep -F "@capacitor/local-notifications"
-          unzip -p "${{ steps.apk.outputs.apk }}" assets/capacitor.plugins.json | grep -F "@capacitor/status-bar"
+          echo "Tracked repository state remained clean"

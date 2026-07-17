@@ -1,154 +1,53 @@
 # Kelani SBD Tracker release checklist
 
-Source of truth for every public release.
+Dit is het enige geldige proces voor iedere publieke release.
 
-## Non-negotiable release rules
+## Harde regels
 
-- Public project information must only describe the app, user-facing changes, release details, and project materials. Do not mention private assistant tooling, private chat workflow, or internal support process.
-- Never replace an existing GitHub release APK after code changes.
-- Never overwrite an existing tag or release to publish new code.
-- Every public release needs:
-  - higher `package.json` version
-  - higher Android `versionName`
-  - higher Android `versionCode`
-- Run the Izzy/NeoStore preflight before creating the GitHub release.
-- Do not put Izzy/NeoStore preflight details in public release notes.
-- Public release notes must contain only user-facing app changes.
+- Bestaande tags, GitHub-releases, APK's en checksums worden nooit vervangen.
+- Maak geen tags of GitHub-releases handmatig.
+- Gebruik `gh release create` nooit rechtstreeks.
+- Publiceer uitsluitend met `npm run release:publish`.
+- Publieke release notes bevatten alleen gebruikersgerichte wijzigingen.
+- Android volgt pas na een geslaagde zichtbare webtest.
+- Elke wijziging aan commit, versie, APK, checksum, release notes of release-automatisering maakt het preflightbewijs ongeldig.
 
-## Standard release order
+## Verplichte volgorde
 
-1. Commit and push all app-code changes.
-2. Bump version in:
-   - `package.json`
-   - `android/app/build.gradle` `versionCode`
-   - `android/app/build.gradle` `versionName`
-3. Run web build.
-4. Run Capacitor sync.
-5. Build release APK with Java 21.
-6. Install APK on phone.
-7. Run phone test.
-8. Run Izzy/NeoStore preflight.
-9. Create release assets.
-10. Create GitHub release.
+1. Codewijziging, tests, productiebuild en zichtbare webtest.
+2. Capacitor-sync, Android-releasebuild, installatie en telefoontest.
+3. Code en versiebump committen, inclusief `release-notes-vX.Y.Z.md`.
+4. Voer daarna uitsluitend deze commando's uit:
 
-## Phone test minimum
+```bash
+npm run release:build
+npm run release:install
+npm run release:phone-tested -- --confirmed
+npm run release:preflight
+npm run release:check
+npm run release:publish
+```
 
-Check:
+## Wat de automatisering afdwingt
 
-- Version shown in app.
-- Dashboard.
-- Smart Program fewer/more.
-- Program left lift rows.
-- Program compact plan rows.
-- Workout warm-ups.
-- Recovery smart modal.
-- No premature meet day.
-- Settings.
-- Stats.
-- Export / Last backup.
-- Support link.
+`release:build` draait alle tests, maakt de productiebuild, synchroniseert Android, bouwt de definitieve signed APK, maakt de SHA-256 en schrijft een commitgebonden buildmanifest.
 
-## Izzy/NeoStore risks to prevent
+`release:phone-tested -- --confirmed` controleert via ADB de geïnstalleerde package, versionName en versionCode en koppelt de telefoontest aan exact dezelfde APK-checksum.
 
-Past issues to prevent:
+`release:preflight` vereist een echte clean clone, `npm ci`, alle tests, productiebuild, Capacitor-sync, Java 21, geïsoleerde Gradle-home, geen private signinggegevens, geen buildcache, geen configuratiecache, een clean unsigned APK, geldige v2-signing van de lokale APK, correcte metadata, byte-identieke publieke assets en geen verdachte assets of sourcemaps.
 
-- Release signing must remain optional. Izzy must be able to build without private signing secrets.
-- Generated public web assets must be reproducible between local signed APK and clean unsigned APK.
-- No unintended backup/original/broken assets may be packaged in the APK.
+Een geslaagde preflight schrijft:
 
-## Izzy/NeoStore preflight
+```text
+release/preflight-proof.json
+```
 
-Run from the committed release commit.
+Dat bewijs is gekoppeld aan commit, versie, versionCode, APK-SHA, release-notes-SHA en de hashes van de release-automatisering.
 
-### 1. Basic checks
+`release:check` controleert publicatie zonder iets te wijzigen.
 
-    cd ~/kel-powerlifting
+`release:publish` weigert wanneer HEAD, versie, APK, checksum, telefoonbewijs, release notes, scripts, tag of GitHub-release niet exact overeenkomen. Alleen dit commando mag `main` pushen, de tag maken en de release publiceren.
 
-    grep -n "\"version\"\|versionCode\|versionName" package.json android/app/build.gradle
-    git status --short
-    grep -RIn "signingConfig\|storePassword\|keyPassword\|storeFile" android/app/build.gradle android/app 2>/dev/null
-    find public android/app/src/main/assets/public -type f | sort
+## Veilige fouten
 
-    APK=$(find android/app/build/outputs/apk/release -name "*.apk" -type f | head -n 1)
-    echo "$APK"
-    unzip -l "$APK" | grep -Ei "original|backup|broken|scope|before-current|manifest.json|main\..*\.js|index.html|kelani-wordmark|kelani-banner"
-
-### 2. Clean clone build
-
-    cd ~/kel-powerlifting
-
-    rm -rf /tmp/kelani-izzy-preflight /tmp/kelani-izzy-gradle-home
-    git clone . /tmp/kelani-izzy-preflight
-
-    cd /tmp/kelani-izzy-preflight
-
-    npm ci
-    npm run build
-    npx cap sync android
-
-    export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
-    export PATH="$JAVA_HOME/bin:$PATH"
-
-    export ANDROID_HOME=/home/kel/Android/Sdk
-    export ANDROID_SDK_ROOT=/home/kel/Android/Sdk
-    export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
-
-    cd android
-    ./gradlew --no-daemon -g /tmp/kelani-izzy-gradle-home assembleRelease
-    cd ..
-
-### 3. Compare local signed APK with clean unsigned APK
-
-    cd ~/kel-powerlifting
-
-    export ANDROID_HOME=/home/kel/Android/Sdk
-    export ANDROID_SDK_ROOT=/home/kel/Android/Sdk
-
-    LOCAL_APK=$(find android/app/build/outputs/apk/release -name "*.apk" -type f | head -n 1)
-    CLEAN_APK=/tmp/kelani-izzy-preflight/android/app/build/outputs/apk/release/app-release-unsigned.apk
-
-    rm -rf /tmp/kelani-apk-compare
-    mkdir -p /tmp/kelani-apk-compare/local /tmp/kelani-apk-compare/clean
-
-    unzip -q "$LOCAL_APK" 'assets/public/*' -d /tmp/kelani-apk-compare/local
-    unzip -q "$CLEAN_APK" 'assets/public/*' -d /tmp/kelani-apk-compare/clean
-
-    diff -qr /tmp/kelani-apk-compare/local/assets/public /tmp/kelani-apk-compare/clean/assets/public
-
-    AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
-    "$AAPT" dump badging "$LOCAL_APK" | head -n 3
-    "$AAPT" dump badging "$CLEAN_APK" | head -n 3
-
-    APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
-    "$APKSIGNER" verify --verbose "$LOCAL_APK"
-
-Required result:
-
-- Public asset diff prints no differences.
-- VersionCode and versionName match the intended release.
-- Local APK verifies.
-- No backup/original/broken assets exist.
-
-## Release assets
-
-Replace `X.Y.Z` with the release version.
-
-    cd ~/kel-powerlifting
-
-    rm -rf release
-    mkdir -p release
-
-    cp android/app/build/outputs/apk/release/app-release.apk release/kelani-sbd-tracker-vX.Y.Z.apk
-    sha256sum release/kelani-sbd-tracker-vX.Y.Z.apk > release/kelani-sbd-tracker-vX.Y.Z.apk.sha256
-
-## GitHub release notes
-
-Do not mention:
-
-- Izzy preflight
-- NeoStore preflight
-- clean clone build
-- APK asset comparison
-- internal release process
-
-Only list user-facing app changes.
+Alle releasecommando's draaien als kindproces. Een fout geeft een niet-nul exitcode, maar zet geen `set -e` in de interactieve shell en sluit de terminaltab niet.
