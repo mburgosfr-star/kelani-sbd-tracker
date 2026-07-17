@@ -57,10 +57,6 @@ function main() {
   const expected = readVersionInfo(root);
   const commit = getHeadCommit(root);
   const tag = `v${expected.versionName}`;
-  const notes = readReleaseNotes(
-    expected.versionName,
-    root
-  );
 
   const branch = output('git', [
     'rev-parse',
@@ -89,6 +85,10 @@ function main() {
   }
 
   const proof = readJson(proofPath);
+  const notes = readReleaseNotes(
+    expected.versionName,
+    root
+  );
   const publicApk = path.join(root, proof.apk?.publicPath || '');
   const phoneApk = path.join(
     root,

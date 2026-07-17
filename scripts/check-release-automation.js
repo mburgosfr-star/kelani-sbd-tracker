@@ -98,6 +98,23 @@ for (const signal of [
   }
 }
 
+const branchCheckPosition = guarded.indexOf(
+  "if (branch !== 'main')"
+);
+const releaseNotesPosition = guarded.indexOf(
+  'const notes = readReleaseNotes'
+);
+
+if (
+  branchCheckPosition < 0 ||
+  releaseNotesPosition < 0 ||
+  branchCheckPosition > releaseNotesPosition
+) {
+  fail(
+    'Publication must reject non-main branches before reading release notes.'
+  );
+}
+
 for (const signal of [
   'preflight-proof.json',
   'Release APK changed after preflight.',
