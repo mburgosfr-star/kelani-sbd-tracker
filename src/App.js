@@ -1,3 +1,9 @@
+import {
+  buildSmartLiftPrescription,
+  buildSmartLiftStates,
+  rankSmartLiftPriorities,
+} from './smartPrescriptionEngine';
+
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { translations } from './translations';
@@ -4354,6 +4360,224 @@ function buildSmartTrainingSelectionSummary(candidate = null, readiness = {}) {
   };
 }
 
+function buildGeneratedSmartTrainingWorkout({
+  sourceWorkout = {},
+  programProfile = 'kelaniSbd',
+  squat = 0,
+  bench = 0,
+  deadlift = 0,
+  accessoryMode = 'off',
+  accessoryPRs = {},
+  preparationMode = 'basicFirst',
+  deadliftVariant = 'standard',
+  benchPressVariant = 'standard',
+  squatVariant = 'standard',
+  history = [],
+  currentCycle = 1,
+  readiness = {},
+} = {}) {
+  const trainingMaxes = {
+    Squat: Number(squat) || 0,
+    Bench: Number(bench) || 0,
+    Deadlift: Number(deadlift) || 0,
+  };
+
+  const liftStates = buildSmartLiftStates({
+    history,
+    currentCycle,
+    trainingMaxes,
+    meetPlanReadiness: readiness.meetPlanReadiness || {},
+    rollingWindow: SMART_THRESHOLDS.ROLLING_TRAINING_DAYS,
+  });
+
+  const priorities = rankSmartLiftPriorities(liftStates, {
+    programProfile,
+  });
+
+  const availablePriorities = priorities.filter(item =>
+    Number(trainingMaxes[item.lift]) > 0
+  );
+
+  const shouldPrioritizeMeetWeakestLift = Boolean(
+    !readiness.meetPlanReady &&
+    readiness.meetPlanWeakestLift &&
+    Number(readiness.recentFatigueScore) === 0 &&
+    Number(readiness.recentFailedOrSkippedSetCount) === 0 &&
+    !hasUnrecoveredSmartHardEffort(readiness)
+  );
+
+  const meetWeakestPriority = shouldPrioritizeMeetWeakestLift
+    ? availablePriorities.find(
+      item => item.lift === readiness.meetPlanWeakestLift
+    ) || null
+    : null;
+
+  const primaryPriority =
+    meetWeakestPriority ||
+    availablePriorities[0] ||
+    null;
+
+  if (!primaryPriority) return null;
+
+  const primaryLift = primaryPriority.lift;
+
+  const secondaryCandidates = availablePriorities
+    .filter(item => item.lift !== primaryLift)
+    .map(item => {
+      const state = liftStates[item.lift] || {};
+      const wasInLastWorkout = (
+        readiness.lastWorkoutLifts || []
+      ).includes(item.lift);
+
+      const bothLowerBody =
+        ['Squat', 'Deadlift'].includes(primaryLift) &&
+        ['Squat', 'Deadlift'].includes(item.lift);
+
+      const lowerBodyFatiguePenalty =
+        bothLowerBody
+          ? Math.min(
+            Number(readiness.recentSharedLowerBodyFatigueScore) || 0,
+            4
+          ) * 3
+          : 0;
+
+      const immediateRepeatPenalty =
+        wasInLastWorkout ? 20 : 0;
+
+      const stalenessBonus =
+        (Number(state.workoutsSinceExposure) || 0) * 4;
+
+      return {
+        ...item,
+        secondaryScore:
+          item.score +
+          stalenessBonus -
+          immediateRepeatPenalty -
+          lowerBodyFatiguePenalty,
+      };
+    })
+    .sort((a, b) =>
+      b.secondaryScore - a.secondaryScore ||
+      b.score - a.score
+    );
+
+  const secondaryPriority =
+    secondaryCandidates[0] || null;
+
+  const selectedLifts = [
+    {
+      lift: primaryLift,
+      role: 'primary',
+      priority: primaryPriority,
+    },
+    ...(secondaryPriority
+      ? [{
+        lift: secondaryPriority.lift,
+        role: 'secondary',
+        priority: secondaryPriority,
+      }]
+      : []),
+  ];
+
+  const liftBlocks = selectedLifts.map(selection => {
+    const prescription = buildSmartLiftPrescription({
+      state: liftStates[selection.lift],
+      role: selection.role,
+    });
+
+    if (!prescription.validation.valid) {
+      throw new Error(
+        `Invalid Smart prescription for ${selection.lift}: ` +
+        prescription.validation.errors.join(' ')
+      );
+    }
+
+    const liftBlock = {
+      lift: selection.lift,
+      role: selection.role,
+      sets: prescription.sets,
+      warmups: generateWarmups(
+        prescription.sets,
+        selection.lift
+      ),
+      prepItems: [],
+      smartPrescription: {
+        role: selection.role,
+        priorityScore: selection.priority.score,
+        progressionAnchorPct:
+          prescription.progressionAnchorPct || 0,
+        regressionReason:
+          prescription.regressionReason || null,
+      },
+    };
+
+    if (selection.lift === 'Squat') {
+      liftBlock.squatVariant =
+        normalizeSquatVariant(squatVariant);
+    }
+
+    if (selection.lift === 'Bench') {
+      liftBlock.benchPressVariant =
+        normalizeBenchPressVariant(benchPressVariant);
+    }
+
+    if (selection.lift === 'Deadlift') {
+      liftBlock.deadliftVariant =
+        normalizeDeadliftVariant(deadliftVariant);
+    }
+
+    return liftBlock;
+  });
+
+  const primaryBlock = liftBlocks[0];
+
+  const accessories = selectedLifts.flatMap(selection =>
+    generateAccessoriesForLift(
+      selection.lift,
+      accessoryMode,
+      accessoryPRs,
+      trainingMaxes
+    )
+  );
+
+  return {
+    ...resetSmartWorkoutProgress(sourceWorkout),
+    number: sourceWorkout.number,
+    type: 'training',
+    label: null,
+    labelKey: 'practice',
+    lift: primaryLift,
+    lifts: liftBlocks,
+    sets: primaryBlock?.sets || [],
+    warmups: primaryBlock?.warmups || [],
+    prepItems: primaryBlock?.prepItems || [],
+    accessories,
+    cooldownItems: [],
+    preparationMode:
+      normalizePreparationMode(preparationMode),
+    smartSourceWorkoutNumber: null,
+    smartGeneratedPrescription: true,
+    smartGeneratedPrescriptionVersion: 1,
+    smartLiftPriorities: priorities,
+    smartTrainingSelectionSummary: {
+      sourceWorkoutNumber: null,
+      candidateLifts: selectedLifts.map(item => item.lift),
+      primaryLift,
+      secondaryLift: secondaryPriority?.lift || null,
+      generatedFromHistory: true,
+      templateIndependent: true,
+      reasonFlags: [
+        'generated-prescription',
+        'history-based-lift-priority',
+        readiness.meetPlanWeakestLift === primaryLift
+          ? 'meet-plan-weakest-lift-primary'
+          : null,
+      ].filter(Boolean),
+    },
+    [SMART_GENERATED_FLAGS.TRAINING]: true,
+  };
+}
+
 function generateSmartWorkouts({
   programProfile,
   squat,
@@ -4418,6 +4642,29 @@ function generateSmartWorkouts({
     Math.max(smartDecision.index, 0),
     Math.max(generatedWorkouts.length - 1, 0)
   );
+
+  const generatedSmartTrainingWorkout =
+    smartDecision.dayType === SMART_DAY_TYPES.TRAINING
+      ? buildGeneratedSmartTrainingWorkout({
+        sourceWorkout:
+          generatedWorkouts[visibleThroughIndex] || {
+            number: visibleThroughIndex + 1,
+          },
+        programProfile,
+        squat,
+        bench,
+        deadlift,
+        accessoryMode,
+        accessoryPRs,
+        preparationMode,
+        deadliftVariant,
+        benchPressVariant,
+        squatVariant,
+        history,
+        currentCycle,
+        readiness: smartDecision.readiness,
+      })
+      : null;
 
   const smartTrainingCandidateDebug = buildSmartTrainingCandidateDebug({
     generatedWorkouts,
@@ -4516,11 +4763,25 @@ function generateSmartWorkouts({
               ? buildSmartTrainingWorkout(workout, workout)
               : workout;
 
+    const generatedPrescriptionWorkout =
+      isDecisionWorkout &&
+      smartDecision.dayType === SMART_DAY_TYPES.TRAINING &&
+      generatedSmartTrainingWorkout
+        ? {
+          ...generatedSmartTrainingWorkout,
+          number: workout.number,
+        }
+        : smartWorkout;
+
     const adjustedSmartWorkout =
       isDecisionWorkout &&
-      smartDecision.dayType === SMART_DAY_TYPES.TRAINING
-        ? buildSmartVolumeStimulusWorkout(smartWorkout, smartDecision.readiness)
-        : smartWorkout;
+      smartDecision.dayType === SMART_DAY_TYPES.TRAINING &&
+      !generatedSmartTrainingWorkout
+        ? buildSmartVolumeStimulusWorkout(
+          generatedPrescriptionWorkout,
+          smartDecision.readiness
+        )
+        : generatedPrescriptionWorkout;
 
     const finalSmartWorkout = adjustedSmartWorkout;
 
@@ -4588,12 +4849,20 @@ function generateSmartWorkouts({
 
     return {
       ...finalSmartWorkout,
-      smartTrainingSelectionSummary: isDecisionWorkout && smartDecision.dayType === SMART_DAY_TYPES.TRAINING
-        ? buildSmartTrainingSelectionSummary(
-          shouldUseFallbackTraining ? fallbackTrainingCandidate : adjustedSmartWorkout,
-          smartDecision.readiness
-        )
-        : null,
+      smartTrainingSelectionSummary:
+        isDecisionWorkout &&
+        smartDecision.dayType === SMART_DAY_TYPES.TRAINING
+          ? (
+            generatedSmartTrainingWorkout
+              ? generatedSmartTrainingWorkout.smartTrainingSelectionSummary
+              : buildSmartTrainingSelectionSummary(
+                shouldUseFallbackTraining
+                  ? fallbackTrainingCandidate
+                  : adjustedSmartWorkout,
+                smartDecision.readiness
+              )
+          )
+          : null,
       smartVisible: index <= visibleThroughIndex,
       smartSelectable: index <= visibleThroughIndex,
       smartCurrentIndex: smartContext.currentIndex,
@@ -4987,6 +5256,40 @@ function WorkoutCircle({
 }
 
 
+function WorkoutWeightPercentLabel({
+  weightText,
+  percentText = null,
+  color = THEME.muted,
+}) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color,
+        lineHeight: 1.08,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span>{weightText}</span>
+      {percentText ? (
+        <span
+          style={{
+            marginTop: 2,
+            fontSize: '0.82em',
+            fontWeight: 700,
+            opacity: 0.9,
+          }}
+        >
+          {percentText}%
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function formatWarmupPercentDisplay(warmupWeight, referenceSets = []) {
   const referenceSet = (referenceSets || [])
     .filter(set =>
@@ -5141,8 +5444,13 @@ export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activ
           lift,
           benchPressVariant
         );
-        const warmupDescription = `${warmupWeight}${warmupPct ? ` (${warmupPct}%)` : ''}`;
-        const warmupAriaLabel = `${warmup.reps} × ${warmupDescription}`;
+        const warmupDescription = (
+          <WorkoutWeightPercentLabel
+            weightText={warmupWeight}
+            percentText={warmupPct}
+          />
+        );
+        const warmupAriaLabel = `${warmup.reps} × ${warmupWeight}${warmupPct ? `, ${warmupPct}%` : ''}`;
         const isActive = index === activeIndex;
         const isDone = !!warmup.done;
 
@@ -5609,12 +5917,17 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
   const isSetComplete = !!set.done || !!set.skipped;
 
   const detail = (
-    <span style={{
-      color: isAdjusted ? '#f39c12' : THEME.muted,
-      whiteSpace: 'nowrap',
-    }}>
-      {formatWorkoutWeightFromKg(set.weight, weightUnit, t, lift, benchPressVariant)}{set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}{displayPct ? ` (${displayPct}%)` : ''}
-    </span>
+    <WorkoutWeightPercentLabel
+      weightText={`${formatWorkoutWeightFromKg(
+        set.weight,
+        weightUnit,
+        t,
+        lift,
+        benchPressVariant
+      )}${set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}`}
+      percentText={displayPct}
+      color={isAdjusted ? '#f39c12' : THEME.muted}
+    />
   );
 
   const meta = effortLabel ? (
@@ -7109,12 +7422,18 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
             Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed) ||
             Number(set.weight) !== Number(set.originalWeight ?? set.weight);
           const setDescription = (
-            <span style={{
-              color: setIsAdjusted ? '#f39c12' : THEME.muted,
-              fontSize: WORKOUT_TEXT_FONT_SIZE,
-              whiteSpace: 'nowrap',
-            }}>
-              {formatWorkoutWeightFromKg(set.weight, weightUnit, t, lift, benchPressVariant)}{set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}{setDisplayPct ? ` (${setDisplayPct}%)` : ''}
+            <span style={{ fontSize: WORKOUT_TEXT_FONT_SIZE }}>
+              <WorkoutWeightPercentLabel
+                weightText={`${formatWorkoutWeightFromKg(
+                  set.weight,
+                  weightUnit,
+                  t,
+                  lift,
+                  benchPressVariant
+                )}${set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}`}
+                percentText={setDisplayPct}
+                color={setIsAdjusted ? '#f39c12' : THEME.muted}
+              />
             </span>
           );
 

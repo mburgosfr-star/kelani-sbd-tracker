@@ -28,7 +28,7 @@ test('aligns weight labels above rep circles in the shared grid', () => {
   const warmupItem = warmupView.getByTestId('warmup-row-0');
   const shared = 'repeat(3, minmax(0, 1fr))';
   expect(warmupItem.parentElement.style.gridTemplateColumns).toBe(shared);
-  expect(warmupItem.firstElementChild).toHaveTextContent('20 kg (10%)');
+  expect(warmupItem.firstElementChild).toHaveTextContent('20 kg10%');
   expect(warmupItem.querySelector('[data-testid="workout-circle-reps"]')).toHaveTextContent('5');
   warmupView.unmount();
 
@@ -43,7 +43,7 @@ test('aligns weight labels above rep circles in the shared grid', () => {
   );
   expect(setView.getByTestId('workout-set-row-grid').style.gridTemplateColumns).toBe(shared);
   expect(setView.getByTestId('workout-set-circle-item').firstElementChild)
-    .toHaveTextContent('140 kg (77.5%)');
+    .toHaveTextContent('140 kg77.5%');
   setView.unmount();
 
   const groupView = render(
@@ -61,7 +61,7 @@ test('aligns weight labels above rep circles in the shared grid', () => {
   expect(grid.style.gridTemplateColumns).toBe(shared);
   expect(grid.style.marginTop).toBe('0px');
   groupView.getAllByTestId(/workout-set-group-item-/).forEach(item => {
-    expect(item.firstElementChild).toHaveTextContent('125 kg (70%)');
+    expect(item.firstElementChild).toHaveTextContent('125 kg70%');
     expect(item.querySelector('[data-testid="workout-circle-reps"]')).toHaveTextContent('3');
   });
 });

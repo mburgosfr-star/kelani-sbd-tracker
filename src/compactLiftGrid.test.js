@@ -54,8 +54,8 @@ test('flows weight labels and rep circles through one compact lift grid', () => 
   expect(items).toHaveLength(6);
   const labels = Array.from(items).map(item => item.firstElementChild.textContent);
   expect(labels).toEqual([
-    '20 kg (10%)', '70 kg (40%)', '120 kg (65%)',
-    '145 kg (80%)', '125 kg (70%)', '125 kg (70%)',
+    '20 kg10%', '70 kg40%', '120 kg65%',
+    '145 kg80%', '125 kg70%', '125 kg70%',
   ]);
   expect(view.getAllByTestId('workout-circle-reps').map(node => node.textContent))
     .toEqual(['5', '5', '3', '2', '4', '4']);

@@ -26,7 +26,7 @@ test('keeps reps visible inside a completed set circle', () => {
   );
 
   const item = view.getByTestId('workout-set-circle-item');
-  expect(item.firstElementChild).toHaveTextContent('140 kg (77.5%)');
+  expect(item.firstElementChild).toHaveTextContent('140 kg77.5%');
   expect(view.getByTestId('workout-circle-reps')).toHaveTextContent('2');
   expect(view.getByTestId('workout-circle-status')).toHaveTextContent('✓');
   expect(view.getByTestId('workout-set-effort-label')).toHaveTextContent('Hard');
@@ -46,7 +46,12 @@ test('gives every grouped set its own weight label and reps value', () => {
     />
   );
 
-  expect(view.getAllByText('125 kg (70%)')).toHaveLength(2);
+  const groupedItems = view.getAllByTestId(/workout-set-group-item-/);
+  expect(groupedItems).toHaveLength(2);
+
+  groupedItems.forEach(item => {
+    expect(item.firstElementChild).toHaveTextContent('125 kg70%');
+  });
   const reps = view.getAllByTestId('workout-circle-reps');
   expect(reps.map(node => node.textContent)).toEqual(['3', '3']);
   expect(view.queryByText('3 × 125 kg (70%)')).toBeNull();

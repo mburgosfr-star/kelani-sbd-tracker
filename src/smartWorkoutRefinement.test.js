@@ -1014,3 +1014,309 @@ test('shows structured recovery details without a combined Reason row', () => {
     },
   ]);
 });
+
+test('generates progressive C3W18 training without template prescriptions', () => {
+  const makeSnapshot = ({
+    number,
+    lifts,
+    workoutEffort = 'good',
+  }) => ({
+    number,
+    type: 'training',
+    smartDayType: 'training',
+    lift: lifts[0]?.lift || null,
+    lifts,
+    sets: [],
+    warmups: [],
+    prepItems: [],
+    accessories: [],
+    workoutEffort,
+  });
+
+  const history = [
+    {
+      cycle: 3,
+      workoutNumber: 13,
+      lift: 'Deadlift',
+      topWeight: 140,
+      topReps: 2,
+      e1rm: 149,
+      workoutEffort: 'good',
+      workoutSnapshot: makeSnapshot({
+        number: 13,
+        lifts: [
+          {
+            lift: 'Deadlift',
+            sets: [
+              {
+                labelKey: 'topDouble',
+                reps: 2,
+                pct: 0.775,
+                weight: 140,
+                done: true,
+              },
+              {
+                labelKey: 'backoff',
+                reps: 3,
+                pct: 0.70,
+                weight: 125,
+                done: true,
+              },
+              {
+                labelKey: 'backoff',
+                reps: 3,
+                pct: 0.70,
+                weight: 125,
+                done: true,
+              },
+            ],
+          },
+          {
+            lift: 'Squat',
+            sets: [
+              {
+                labelKey: 'workSets',
+                reps: 4,
+                pct: 0.625,
+                weight: 90,
+                done: true,
+              },
+              {
+                labelKey: 'workSets',
+                reps: 4,
+                pct: 0.625,
+                weight: 90,
+                done: true,
+              },
+              {
+                labelKey: 'workSets',
+                reps: 4,
+                pct: 0.625,
+                weight: 90,
+                done: true,
+              },
+            ],
+          },
+        ],
+      }),
+    },
+    {
+      cycle: 3,
+      workoutNumber: 14,
+      lift: 'Deadlift',
+      topWeight: 145,
+      topReps: 2,
+      e1rm: 155,
+      workoutEffort: 'hard',
+      workoutSnapshot: makeSnapshot({
+        number: 14,
+        workoutEffort: 'hard',
+        lifts: [
+          {
+            lift: 'Deadlift',
+            sets: [
+              {
+                labelKey: 'topDouble',
+                reps: 2,
+                pct: 0.80,
+                weight: 145,
+                done: true,
+              },
+              ...Array.from({ length: 4 }, () => ({
+                labelKey: 'backoff',
+                reps: 4,
+                pct: 0.70,
+                weight: 125,
+                done: true,
+              })),
+            ],
+          },
+          {
+            lift: 'Bench',
+            sets: Array.from({ length: 4 }, () => ({
+              labelKey: 'workSets',
+              reps: 4,
+              pct: 0.70,
+              weight: 70,
+              done: true,
+            })),
+          },
+        ],
+      }),
+    },
+    {
+      cycle: 3,
+      workoutNumber: 15,
+      lift: 'Squat',
+      topWeight: 112.5,
+      topReps: 3,
+      e1rm: 124,
+      workoutEffort: 'tooMuch',
+      failedOrSkippedSetCount: 1,
+      workoutSnapshot: makeSnapshot({
+        number: 15,
+        workoutEffort: 'tooMuch',
+        lifts: [
+          {
+            lift: 'Squat',
+            sets: [
+              {
+                labelKey: 'topTriple',
+                reps: 3,
+                pct: 0.775,
+                weight: 112.5,
+                done: false,
+                skipped: true,
+              },
+              {
+                labelKey: 'backoff',
+                reps: 5,
+                pct: 0.675,
+                weight: 97.5,
+                done: true,
+              },
+              {
+                labelKey: 'backoff',
+                reps: 5,
+                pct: 0.675,
+                weight: 97.5,
+                done: true,
+              },
+            ],
+          },
+        ],
+      }),
+    },
+    {
+      cycle: 3,
+      workoutNumber: 16,
+      restDay: true,
+      workoutEffort: 'easy',
+      smartDayType: 'recovery',
+      workoutSnapshot: {
+        number: 16,
+        type: 'rest',
+        smartDayType: 'recovery',
+        lifts: [],
+        sets: [],
+        workoutEffort: 'easy',
+      },
+    },
+    {
+      cycle: 3,
+      workoutNumber: 17,
+      lift: 'Bench',
+      topWeight: 82.5,
+      topReps: 2,
+      e1rm: 88,
+      workoutEffort: 'good',
+      workoutSnapshot: makeSnapshot({
+        number: 17,
+        lifts: [
+          {
+            lift: 'Bench',
+            sets: [
+              {
+                labelKey: 'topDouble',
+                reps: 2,
+                pct: 0.825,
+                weight: 82.5,
+                done: true,
+              },
+              ...Array.from({ length: 3 }, () => ({
+                labelKey: 'backoff',
+                reps: 4,
+                pct: 0.725,
+                weight: 72.5,
+                done: true,
+              })),
+            ],
+          },
+          {
+            lift: 'Deadlift',
+            sets: Array.from({ length: 3 }, () => ({
+              labelKey: 'workSets',
+              reps: 3,
+              pct: 0.625,
+              weight: 112.5,
+              done: true,
+            })),
+          },
+        ],
+      }),
+    },
+  ];
+
+  const workouts = generateWorkoutsForTrainingModel('smart', {
+    programProfile: 'kelaniSbdUltra',
+    squat: 145,
+    bench: 100,
+    deadlift: 180,
+    history,
+    currentIndex: 17,
+    currentCycle: 3,
+    meetPlannerAttempts: {
+      Squat: [132.5, 140, 147.5],
+      Bench: [90, 95, 100],
+      Deadlift: [167.5, 177.5, 185],
+    },
+  });
+
+  const decisionWorkout = workouts.find(workout =>
+    workout?.smartDecisionSummary
+  );
+
+  expect(decisionWorkout).toBeTruthy();
+
+  expect(decisionWorkout.smartDecisionSummary.dayType)
+    .toBe('training');
+  expect(decisionWorkout.smartGeneratedPrescription)
+    .toBe(true);
+  expect(decisionWorkout.smartSourceWorkoutNumber)
+    .toBeNull();
+  expect(
+    decisionWorkout.smartTrainingSelectionSummary
+      .templateIndependent
+  ).toBe(true);
+
+  const deadlift = decisionWorkout.lifts.find(
+    liftBlock => liftBlock.lift === 'Deadlift'
+  );
+
+  expect(deadlift).toBeTruthy();
+
+  const deadliftTop = deadlift.sets.find(
+    set => set.labelKey === 'topDouble'
+  );
+
+  expect(deadliftTop).toBeTruthy();
+  expect(deadliftTop.pct).toBeGreaterThanOrEqual(0.80);
+
+  const deadliftBackoffs = deadlift.sets.filter(
+    set => set.labelKey === 'backoff'
+  );
+
+  expect(deadliftBackoffs.length).toBeGreaterThanOrEqual(4);
+
+  deadliftBackoffs.forEach(set => {
+    expect(set.reps).toBeGreaterThanOrEqual(4);
+    expect(set.reps).toBeLessThanOrEqual(6);
+  });
+
+  const secondaryLift = decisionWorkout.lifts.find(
+    liftBlock => liftBlock.role === 'secondary'
+  );
+
+  expect(secondaryLift).toBeTruthy();
+
+  const secondaryWorkSets = secondaryLift.sets.filter(
+    set => set.labelKey === 'workSets'
+  );
+
+  expect(secondaryWorkSets.length).toBeGreaterThanOrEqual(4);
+
+  secondaryWorkSets.forEach(set => {
+    expect(set.reps).toBeGreaterThanOrEqual(4);
+    expect(set.reps).toBeLessThanOrEqual(6);
+  });
+});
