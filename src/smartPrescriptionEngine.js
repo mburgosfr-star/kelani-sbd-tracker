@@ -17,7 +17,7 @@ const VOLUME_LABEL_KEYS = new Set([
   'worksets',
 ]);
 
-const PROFILE_EXPOSURE_TARGETS = Object.freeze({
+export const PROFILE_EXPOSURE_TARGETS = Object.freeze({
   kelaniSbdUltra: {
     Squat: 3,
     Bench: 4,
@@ -717,6 +717,7 @@ function getSecondaryVolumePct(state = {}) {
 export function buildSmartLiftPrescription({
   state,
   role = 'primary',
+  isSingleLiftWorkout = false,
 } = {}) {
   if (!state || !SMART_LIFTS.includes(state.lift)) {
     throw new Error('A valid Smart lift state is required.');
@@ -728,7 +729,7 @@ export function buildSmartLiftPrescription({
     );
   }
 
-  const volumeSetCount = getNormalVolumeSetCount(state);
+  let volumeSetCount = getNormalVolumeSetCount(state);
   const sets = [];
   let progressionAnchorPct = 0;
   let regressionReason = null;
@@ -755,11 +756,23 @@ export function buildSmartLiftPrescription({
       ? top.progressionReason
       : null;
 
-    const volumePct = roundPct(
+    let volumePct = roundPct(
       clamp(top.pct - 0.10, 0.60, 0.75)
     );
 
-    const volumeReps = getPrimaryVolumeReps(top.reps);
+    let volumeReps = getPrimaryVolumeReps(top.reps);
+
+    const singleLiftBenchVolume =
+      isSingleLiftWorkout &&
+      state.lift === 'Bench' &&
+      normalizeEffort(state.lastExposure?.workoutEffort) !== 'tooMuch' &&
+      Number(state.recentFailedOrSkippedSetCount) === 0;
+
+    if (singleLiftBenchVolume) {
+      volumeSetCount = 6;
+      volumeReps = 6;
+      volumePct = 0.70;
+    }
 
     for (let index = 0; index < volumeSetCount; index += 1) {
       sets.push(buildGeneratedSet({

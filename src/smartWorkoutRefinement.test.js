@@ -980,8 +980,8 @@ test('splits training fallback details into separate modal rows', () => {
       value: 'Previous workout HARD',
     },
     {
-      label: 'Failed/skipped',
-      value: '0/2 — deload threshold',
+      label: 'Failed',
+      value: '0/2 — below deload threshold',
     },
   ]);
 });
@@ -1009,8 +1009,8 @@ test('shows structured recovery details without a combined Reason row', () => {
       value: 'Previous workout TOOMUCH',
     },
     {
-      label: 'Failed/skipped',
-      value: '1/2 — deload threshold',
+      label: 'Failed',
+      value: '1/2 — below deload threshold',
     },
   ]);
 });
@@ -1267,7 +1267,6 @@ test('generates progressive C3W18 training without template prescriptions', () =
   );
 
   expect(decisionWorkout).toBeTruthy();
-
   expect(decisionWorkout.smartDecisionSummary.dayType)
     .toBe('training');
   expect(decisionWorkout.smartGeneratedPrescription)
@@ -1279,44 +1278,152 @@ test('generates progressive C3W18 training without template prescriptions', () =
       .templateIndependent
   ).toBe(true);
 
-  const deadlift = decisionWorkout.lifts.find(
-    liftBlock => liftBlock.lift === 'Deadlift'
+  expect(
+    decisionWorkout.smartTrainingSelectionSummary
+      .reasonFlags
+  ).toContain('projected-frequency-guard');
+  expect(
+    decisionWorkout.smartTrainingSelectionSummary
+      .frequencyExposureCounts
+  ).toEqual({
+    Squat: 2,
+    Bench: 2,
+    Deadlift: 3,
+  });
+  expect(
+    decisionWorkout.smartTrainingSelectionSummary
+      .frequencyEligibleLifts
+  ).toEqual(['Squat', 'Bench']);
+  expect(
+    decisionWorkout.lifts.map(liftBlock => liftBlock.lift)
+  ).toEqual(['Bench', 'Squat']);
+
+  decisionWorkout.lifts.forEach(liftBlock => {
+    const volumeSets = liftBlock.sets.filter(set =>
+      ['backoff', 'workSets'].includes(set.labelKey)
+    );
+
+    expect(volumeSets.length).toBeGreaterThanOrEqual(4);
+    volumeSets.forEach(set => {
+      expect(set.reps).toBeGreaterThanOrEqual(4);
+      expect(set.reps).toBeLessThanOrEqual(6);
+    });
+  });
+
+  const c3w18Snapshot = makeSnapshot({
+    number: 18,
+    workoutEffort: 'hard',
+    lifts: [
+      {
+        lift: 'Deadlift',
+        role: 'primary',
+        sets: [
+          {
+            labelKey: 'topDouble',
+            reps: 2,
+            pct: 0.825,
+            weight: 147.5,
+            done: true,
+          },
+          ...Array.from({ length: 4 }, () => ({
+            labelKey: 'backoff',
+            reps: 4,
+            pct: 0.725,
+            weight: 130,
+            done: true,
+          })),
+        ],
+      },
+      {
+        lift: 'Squat',
+        role: 'secondary',
+        sets: Array.from({ length: 4 }, () => ({
+          labelKey: 'workSets',
+          reps: 4,
+          pct: 0.65,
+          weight: 95,
+          done: true,
+        })),
+      },
+    ],
+  });
+
+  const c3w19Workouts = generateWorkoutsForTrainingModel(
+    'smart',
+    {
+      programProfile: 'kelaniSbdUltra',
+      squat: 145,
+      bench: 100,
+      deadlift: 180,
+      history: [
+        ...history,
+        {
+          cycle: 3,
+          workoutNumber: 18,
+          lift: 'Deadlift',
+          topWeight: 147.5,
+          topReps: 2,
+          e1rm: 157.33,
+          workoutEffort: 'hard',
+          workoutSnapshot: c3w18Snapshot,
+        },
+        {
+          cycle: 3,
+          workoutNumber: 18,
+          lift: 'Squat',
+          topWeight: 95,
+          topReps: 4,
+          e1rm: 107.67,
+          workoutEffort: 'hard',
+          workoutSnapshot: c3w18Snapshot,
+        },
+      ],
+      currentIndex: 18,
+      currentCycle: 3,
+      meetPlannerAttempts: {
+        Squat: [132.5, 140, 147.5],
+        Bench: [90, 95, 100],
+        Deadlift: [167.5, 177.5, 185],
+      },
+    }
   );
 
-  expect(deadlift).toBeTruthy();
-
-  const deadliftTop = deadlift.sets.find(
-    set => set.labelKey === 'topDouble'
+  const c3w19 = c3w19Workouts.find(workout =>
+    workout?.smartDecisionSummary
   );
 
-  expect(deadliftTop).toBeTruthy();
-  expect(deadliftTop.pct).toBeGreaterThanOrEqual(0.80);
-
-  const deadliftBackoffs = deadlift.sets.filter(
+  expect(c3w19).toBeTruthy();
+  expect(c3w19.lifts.map(liftBlock => liftBlock.lift))
+    .toEqual(['Bench']);
+  expect(c3w19.smartTrainingSelectionSummary.primaryLift)
+    .toBe('Bench');
+  expect(c3w19.smartTrainingSelectionSummary.secondaryLift)
+    .toBeNull();
+  const c3w19BenchBackoffs = c3w19.lifts[0].sets.filter(
     set => set.labelKey === 'backoff'
   );
 
-  expect(deadliftBackoffs.length).toBeGreaterThanOrEqual(4);
-
-  deadliftBackoffs.forEach(set => {
-    expect(set.reps).toBeGreaterThanOrEqual(4);
-    expect(set.reps).toBeLessThanOrEqual(6);
+  expect(c3w19BenchBackoffs).toHaveLength(6);
+  c3w19BenchBackoffs.forEach(set => {
+    expect(set).toMatchObject({
+      reps: 6,
+      pct: 0.70,
+      weight: 70,
+    });
   });
-
-  const secondaryLift = decisionWorkout.lifts.find(
-    liftBlock => liftBlock.role === 'secondary'
-  );
-
-  expect(secondaryLift).toBeTruthy();
-
-  const secondaryWorkSets = secondaryLift.sets.filter(
-    set => set.labelKey === 'workSets'
-  );
-
-  expect(secondaryWorkSets.length).toBeGreaterThanOrEqual(4);
-
-  secondaryWorkSets.forEach(set => {
-    expect(set.reps).toBeGreaterThanOrEqual(4);
-    expect(set.reps).toBeLessThanOrEqual(6);
+  expect(
+    c3w19.smartTrainingSelectionSummary
+      .frequencyExposureCounts
+  ).toEqual({
+    Squat: 3,
+    Bench: 2,
+    Deadlift: 4,
   });
+  expect(
+    c3w19.smartTrainingSelectionSummary
+      .frequencyEligibleLifts
+  ).toEqual(['Bench']);
+  expect(
+    c3w19.smartTrainingSelectionSummary.reasonFlags
+  ).toContain('projected-frequency-guard');
 });

@@ -164,6 +164,48 @@ test('progresses a successful good top double instead of moving backwards', () =
   });
 });
 
+test('adds six-by-six Bench volume to a safe single-lift workout', () => {
+  const history = makeLiftHistory({
+    lift: 'Bench',
+    trainingMax: 100,
+    pct: 0.825,
+    workoutEffort: 'good',
+  });
+
+  const state = buildSmartLiftState({
+    history,
+    currentCycle: 1,
+    lift: 'Bench',
+    trainingMax: 100,
+  });
+
+  const prescription = buildSmartLiftPrescription({
+    state,
+    role: 'primary',
+    isSingleLiftWorkout: true,
+  });
+
+  expect(prescription.validation.valid).toBe(true);
+  expect(prescription.sets[0]).toMatchObject({
+    labelKey: 'topDouble',
+    reps: 2,
+    pct: 0.85,
+    weight: 85,
+  });
+
+  const backoffs = prescription.sets.slice(1);
+
+  expect(backoffs).toHaveLength(6);
+  backoffs.forEach(set => {
+    expect(set).toMatchObject({
+      labelKey: 'backoff',
+      reps: 6,
+      pct: 0.70,
+      weight: 70,
+    });
+  });
+});
+
 test('holds a hard successful top double without treating hard as failure', () => {
   const history = makeLiftHistory({
     lift: 'Deadlift',

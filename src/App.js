@@ -2,6 +2,7 @@ import {
   buildSmartLiftPrescription,
   buildSmartLiftStates,
   rankSmartLiftPriorities,
+  PROFILE_EXPOSURE_TARGETS,
 } from './smartPrescriptionEngine';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -986,6 +987,8 @@ const SMART_DELOAD = {
   LOAD_FACTOR: 0.9,
   MIN_PCT: 0.5,
 };
+
+const SMART_PRESCRIPTION_VERSION = 2;
 
 const SMART_GENERATED_FLAGS = {
   RECOVERY: 'smartGeneratedRecovery',
@@ -2085,9 +2088,14 @@ export function applyAccessoryPlanToWorkouts(
     );
 
     const workoutNumber = Number(generated.number || workout.number) || 0;
+    const sameSmartPrescriptionVersion =
+      !generated.smartGeneratedPrescription ||
+      Number(workout.smartGeneratedPrescriptionVersion) ===
+        Number(generated.smartGeneratedPrescriptionVersion);
     const preserveMainLiftProgress =
       Number(activeWorkoutNumber) > 0 &&
-      workoutNumber === Number(activeWorkoutNumber);
+      workoutNumber === Number(activeWorkoutNumber) &&
+      sameSmartPrescriptionVersion;
 
     const mergedLifts = (generated.lifts || []).map((generatedLiftBlock, liftIndex) =>
       mergeLiftBlock(
@@ -4360,6 +4368,89 @@ function buildSmartTrainingSelectionSummary(candidate = null, readiness = {}) {
   };
 }
 
+function getProjectedSmartLiftEligibility({
+  history = [],
+  currentCycle = 1,
+  programProfile = 'kelaniSbd',
+  targetWorkoutNumber = 1,
+} = {}) {
+  const targets =
+    PROFILE_EXPOSURE_TARGETS[programProfile] ||
+    PROFILE_EXPOSURE_TARGETS.kelaniSbd;
+
+  const completedDays = new Map();
+
+  (history || []).forEach(entry => {
+    const cycle = Number(
+      entry?.cycle ||
+      entry?.workoutSnapshot?.smartCurrentCycle ||
+      currentCycle
+    ) || currentCycle;
+    const workoutNumber = Number(entry?.workoutNumber) || 0;
+
+    if (
+      cycle !== Number(currentCycle) ||
+      workoutNumber <= 0 ||
+      workoutNumber >= Number(targetWorkoutNumber)
+    ) return;
+
+    const snapshot = entry?.workoutSnapshot || entry;
+    const isRecovery = Boolean(
+      entry?.restDay ||
+      entry?.completionOnly ||
+      snapshot?.restDay ||
+      snapshot?.completionOnly ||
+      String(entry?.smartDayType || snapshot?.smartDayType || '').toLowerCase() === 'recovery'
+    );
+
+    const lifts = new Set();
+
+    if (!isRecovery) {
+      if (Array.isArray(snapshot?.lifts)) {
+        snapshot.lifts.forEach(block => {
+          if (LIFT_ORDER.includes(block?.lift)) lifts.add(block.lift);
+        });
+      }
+
+      const directLift = LIFT_ORDER.includes(snapshot?.lift)
+        ? snapshot.lift
+        : LIFT_ORDER.includes(entry?.lift)
+          ? entry.lift
+          : null;
+
+      if (directLift) lifts.add(directLift);
+    }
+
+    const day = completedDays.get(workoutNumber) || new Set();
+    lifts.forEach(lift => day.add(lift));
+    completedDays.set(workoutNumber, day);
+  });
+
+  const previousSixDays = [...completedDays.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .slice(0, 6)
+    .sort((a, b) => a[0] - b[0]);
+
+  const exposureCounts = LIFT_ORDER.reduce((counts, lift) => ({
+    ...counts,
+    [lift]: previousSixDays.reduce(
+      (total, [, lifts]) => total + Number(lifts.has(lift)),
+      0
+    ),
+  }), {});
+
+  const eligibleLifts = LIFT_ORDER.filter(lift =>
+    Number(exposureCounts[lift]) < Number(targets[lift] || 0)
+  );
+
+  return {
+    targets,
+    exposureCounts,
+    eligibleLifts,
+    previousWorkoutNumbers: previousSixDays.map(([number]) => number),
+  };
+}
+
 function buildGeneratedSmartTrainingWorkout({
   sourceWorkout = {},
   programProfile = 'kelaniSbd',
@@ -4394,8 +4485,20 @@ function buildGeneratedSmartTrainingWorkout({
     programProfile,
   });
 
+  const frequencyEligibility = getProjectedSmartLiftEligibility({
+    history,
+    currentCycle,
+    programProfile,
+    targetWorkoutNumber: sourceWorkout.number,
+  });
+
+  const frequencyEligibleSet = new Set(
+    frequencyEligibility.eligibleLifts
+  );
+
   const availablePriorities = priorities.filter(item =>
-    Number(trainingMaxes[item.lift]) > 0
+    Number(trainingMaxes[item.lift]) > 0 &&
+    frequencyEligibleSet.has(item.lift)
   );
 
   const shouldPrioritizeMeetWeakestLift = Boolean(
@@ -4483,6 +4586,7 @@ function buildGeneratedSmartTrainingWorkout({
     const prescription = buildSmartLiftPrescription({
       state: liftStates[selection.lift],
       role: selection.role,
+      isSingleLiftWorkout: selectedLifts.length === 1,
     });
 
     if (!prescription.validation.valid) {
@@ -4557,7 +4661,7 @@ function buildGeneratedSmartTrainingWorkout({
       normalizePreparationMode(preparationMode),
     smartSourceWorkoutNumber: null,
     smartGeneratedPrescription: true,
-    smartGeneratedPrescriptionVersion: 1,
+    smartGeneratedPrescriptionVersion: SMART_PRESCRIPTION_VERSION,
     smartLiftPriorities: priorities,
     smartTrainingSelectionSummary: {
       sourceWorkoutNumber: null,
@@ -4566,9 +4670,19 @@ function buildGeneratedSmartTrainingWorkout({
       secondaryLift: secondaryPriority?.lift || null,
       generatedFromHistory: true,
       templateIndependent: true,
+      frequencyTargets: frequencyEligibility.targets,
+      frequencyExposureCounts: frequencyEligibility.exposureCounts,
+      frequencyEligibleLifts: frequencyEligibility.eligibleLifts,
+      frequencyWindowWorkoutNumbers:
+        frequencyEligibility.previousWorkoutNumbers,
       reasonFlags: [
         'generated-prescription',
         'history-based-lift-priority',
+        availablePriorities.length < priorities.filter(item =>
+          Number(trainingMaxes[item.lift]) > 0
+        ).length
+          ? 'projected-frequency-guard'
+          : null,
         readiness.meetPlanWeakestLift === primaryLift
           ? 'meet-plan-weakest-lift-primary'
           : null,
@@ -8068,8 +8182,10 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
     }
 
     rows.push({
-      label: t.smartBlockerFailedSkipped || 'Failed/skipped',
-      value: `${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT} — deload threshold`,
+      label: t.smartBlockerFailed || 'Failed',
+      value: failedCount >= SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT
+        ? `${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT} — deload required`
+        : `${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT} — below deload threshold`,
     });
   }
 
@@ -8108,7 +8224,7 @@ function SmartDayTypeInline({ workout, t }) {
       value: reasonText,
     } : null,
     selectionText ? {
-      label: limiterMatch ? 'e1RM limiter' : (t.smartSelection || 'Selection'),
+      label: limiterMatch ? 'e1RM limit' : (t.smartSelection || 'Selection'),
       value: limiterMatch ? limiterMatch[1] : selectionText,
     } : null,
   ].filter(Boolean);
@@ -8220,9 +8336,9 @@ function SmartDayTypeInline({ workout, t }) {
                     key={row.label}
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '88px minmax(0, 1fr)',
-                      gap: 10,
-                      alignItems: 'start',
+                      gridTemplateColumns: '76px minmax(0, 1fr)',
+                      gap: 9,
+                      alignItems: 'center',
                       padding: '8px 9px',
                       borderRadius: 8,
                       border: `1px solid ${THEME.border}`,
@@ -8231,21 +8347,22 @@ function SmartDayTypeInline({ workout, t }) {
                   >
                     <div style={{
                       color: THEME.muted,
-                      fontSize: 12,
+                      fontSize: 10.5,
                       fontWeight: 900,
-                      lineHeight: 1.25,
+                      lineHeight: 1.15,
                       textAlign: 'left',
                       textTransform: 'uppercase',
-                      letterSpacing: 0.4,
+                      letterSpacing: 0.28,
+                      whiteSpace: 'nowrap',
                     }}>
                       {row.label}
                     </div>
 
                     <div style={{
                       color: row.emphasis ? THEME.primary : THEME.text,
-                      fontSize: 13,
-                      fontWeight: 850,
-                      lineHeight: 1.35,
+                      fontSize: 13.5,
+                      fontWeight: 900,
+                      lineHeight: 1.3,
                       textAlign: 'left',
                     }}>
                       {row.value}
