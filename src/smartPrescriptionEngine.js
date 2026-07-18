@@ -771,7 +771,7 @@ export function buildSmartLiftPrescription({
     if (singleLiftBenchVolume) {
       volumeSetCount = 6;
       volumeReps = 6;
-      volumePct = 0.70;
+      volumePct = Math.min(volumePct, 0.70);
     }
 
     for (let index = 0; index < volumeSetCount; index += 1) {
@@ -878,6 +878,14 @@ export function validateSmartLiftPrescription(
   });
 
   const topPct = Number(topSets[0]?.pct) || 0;
+  if (
+    topPct > 0 &&
+    [...volumeGroups.values()].some(group =>
+      group.some(set => (Number(set.pct) || 0) >= topPct)
+    )
+  ) {
+    errors.push('Back-off work must be lighter than top work.');
+  }
   const anchorPct =
     Number(prescription.progressionAnchorPct) || 0;
 

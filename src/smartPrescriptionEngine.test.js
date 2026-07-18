@@ -206,6 +206,103 @@ test('adds six-by-six Bench volume to a safe single-lift workout', () => {
   });
 });
 
+test('keeps Ana C1W10 single-lift Bench back-offs below top work', () => {
+  const volumeExposure = ({
+    workoutNumber,
+    workoutEffort,
+    sets,
+  }) => ({
+    cycle: 1,
+    workoutNumber,
+    lift: 'Bench',
+    workoutEffort,
+    workoutSnapshot: {
+      number: workoutNumber,
+      type: 'training',
+      smartDayType: 'training',
+      lift: 'Bench',
+      lifts: [{
+        lift: 'Bench',
+        sets: sets.map(({ reps, pct, weight }) => ({
+          labelKey: 'workSets',
+          reps,
+          pct,
+          weight,
+          originalPct: pct,
+          originalWeight: weight,
+          done: true,
+          failed: false,
+          skipped: false,
+        })),
+      }],
+      workoutEffort,
+    },
+  });
+
+  const history = [
+    volumeExposure({
+      workoutNumber: 1,
+      workoutEffort: 'easy',
+      sets: Array.from(
+        { length: 3 },
+        () => ({ reps: 5, pct: 0.60, weight: 20 })
+      ),
+    }),
+    volumeExposure({
+      workoutNumber: 3,
+      workoutEffort: 'good',
+      sets: [
+        { reps: 5, pct: 0.72, weight: 22.5 },
+        ...Array.from(
+          { length: 3 },
+          () => ({ reps: 6, pct: 0.64, weight: 20 })
+        ),
+      ],
+    }),
+    volumeExposure({
+      workoutNumber: 6,
+      workoutEffort: 'hard',
+      sets: Array.from(
+        { length: 4 },
+        () => ({ reps: 5, pct: 0.675, weight: 22.5 })
+      ),
+    }),
+  ];
+
+  const state = buildSmartLiftState({
+    history,
+    currentCycle: 1,
+    lift: 'Bench',
+    trainingMax: 32.5,
+  });
+  const prescription = buildSmartLiftPrescription({
+    state,
+    role: 'primary',
+    isSingleLiftWorkout: true,
+  });
+
+  expect(state.lastSuccessfulTop).toBeNull();
+  expect(prescription.validation.valid).toBe(true);
+  expect(prescription.sets[0]).toMatchObject({
+    labelKey: 'topTriple',
+    reps: 3,
+    pct: 0.70,
+    weight: 22.5,
+  });
+
+  const backoffs = prescription.sets.slice(1);
+  expect(backoffs).toHaveLength(6);
+  backoffs.forEach(set => {
+    expect(set).toMatchObject({
+      labelKey: 'backoff',
+      reps: 6,
+      pct: 0.60,
+      weight: 20,
+    });
+    expect(set.pct).toBeLessThan(prescription.sets[0].pct);
+  });
+});
+
 test('holds a hard successful top double without treating hard as failure', () => {
   const history = makeLiftHistory({
     lift: 'Deadlift',
@@ -326,6 +423,32 @@ test('rejects an invalid low-volume normal training block', () => {
   expect(validation.valid).toBe(false);
   expect(validation.errors).toContain(
     'Back-off and work-set blocks require 4–6 sets.'
+  );
+});
+
+test('rejects back-off work at the same intensity as top work', () => {
+  const validation = validateSmartLiftPrescription({
+    lift: 'Bench',
+    role: 'primary',
+    sets: [
+      {
+        labelKey: 'topTriple',
+        groupKey: 'Bench-top',
+        reps: 3,
+        pct: 0.70,
+      },
+      ...Array.from({ length: 6 }, () => ({
+        labelKey: 'backoff',
+        groupKey: 'Bench-backoff',
+        reps: 6,
+        pct: 0.70,
+      })),
+    ],
+  });
+
+  expect(validation.valid).toBe(false);
+  expect(validation.errors).toContain(
+    'Back-off work must be lighter than top work.'
   );
 });
 

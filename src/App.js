@@ -988,7 +988,7 @@ const SMART_DELOAD = {
   MIN_PCT: 0.5,
 };
 
-const SMART_PRESCRIPTION_VERSION = 2;
+const SMART_PRESCRIPTION_VERSION = 3;
 
 const SMART_GENERATED_FLAGS = {
   RECOVERY: 'smartGeneratedRecovery',
@@ -7586,7 +7586,6 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
 export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAccessoryWork, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG }) {
   const [editing, setEditing] = useState(false);
   const firstWeight = acc.weights?.[0] || 0;
-  const allSameWeight = (acc.weights || []).every(weight => Number(weight) === Number(firstWeight));
   const firstOpenIndex = (acc.done || []).findIndex(done => !done);
   const [inputVal, setInputVal] = useState(String(firstWeight || ''));
 
@@ -7623,12 +7622,6 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
 
   const accessoryLabel = acc.nameKey ? t[acc.nameKey] : acc.name;
   const isAccessoryComplete = (acc.done || []).length > 0 && (acc.done || []).every(Boolean);
-
-  const detail = (
-    <span style={{ color: THEME.muted }}>
-      {(acc.done || []).length} × {acc.reps} × {allSameWeight ? formatWeightFromKg(firstWeight, weightUnit) : normalizeWeightUnit(weightUnit)}{acc.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}
-    </span>
-  );
 
   const actions = !isActiveGroup || isAccessoryComplete || isReadOnly ? null : editing ? (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginTop: 8 }}>
@@ -7674,19 +7667,25 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
   );
 
   return (
-    <div style={{
-      padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
-      marginBottom: 8,
-    }}>
-      <div style={{
-        color: THEME.text,
-        fontSize: WORKOUT_TEXT_FONT_SIZE,
-        fontWeight: 800,
-        lineHeight: 1.25,
-        textAlign: 'left',
-        marginBottom: 0,
-      }}>
-        {accessoryLabel}: {detail}
+    <div
+      data-testid="workout-accessory-group"
+      style={{
+        padding: `4px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+        marginBottom: 8,
+      }}
+    >
+      <div
+        data-testid="workout-accessory-label"
+        style={{
+          color: THEME.text,
+          fontSize: WORKOUT_TEXT_FONT_SIZE,
+          fontWeight: 800,
+          lineHeight: 1.25,
+          textAlign: 'center',
+          marginBottom: 0,
+        }}
+      >
+        {accessoryLabel}
       </div>
 
       <div
@@ -7694,21 +7693,56 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
         style={{
           display: 'grid',
           gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+          justifyItems: 'center',
           gap: WORKOUT_CIRCLE_ITEM_GAP,
           marginTop: WORKOUT_LABEL_CIRCLE_GAP,
         }}
       >
-        {(acc.done || []).map((done, index) => (
-          <WorkoutCircle
-            key={index}
-            done={done}
-            active={isActiveGroup && index === firstOpenIndex}
-            skipped={!!acc.skipped?.[index]}
-            disabled={isReadOnly}
-            onClick={() => onToggle(index)}
-            label={`${accessoryLabel} ${index + 1}`}
-          />
-        ))}
+        {(acc.done || []).map((done, index) => {
+          const setWeight =
+            Number(acc.weights?.[index] ?? firstWeight) || 0;
+          const originalWeight =
+            Number(acc.originalWeights?.[index] ?? setWeight) ||
+            setWeight;
+          const isAdjusted =
+            Boolean(
+              acc.adjustedFromFailedSet?.[index] ||
+              acc.adjustedFromOriginal?.[index] ||
+              acc.failed?.[index]
+            ) ||
+            setWeight !== originalWeight;
+          const weightText =
+            `${formatWeightFromKg(setWeight, weightUnit)}` +
+            `${acc.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}`;
+
+          return (
+            <WorkoutCircleItem
+              key={index}
+              testId={`workout-accessory-set-item-${index}`}
+              label={(
+                <span
+                  style={{
+                    color: isAdjusted ? '#f39c12' : THEME.text,
+                    fontSize: WORKOUT_TEXT_FONT_SIZE,
+                    fontWeight: 800,
+                  }}
+                >
+                  {weightText}
+                </span>
+              )}
+            >
+              <WorkoutCircle
+                done={done}
+                active={isActiveGroup && index === firstOpenIndex}
+                skipped={!!acc.skipped?.[index]}
+                disabled={isReadOnly}
+                onClick={() => onToggle(index)}
+                label={`${accessoryLabel} ${index + 1}: ${weightText}, ${acc.reps} reps`}
+                reps={acc.reps}
+              />
+            </WorkoutCircleItem>
+          );
+        })}
       </div>
 
       {actions}
