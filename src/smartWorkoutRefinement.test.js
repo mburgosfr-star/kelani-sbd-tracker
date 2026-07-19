@@ -1296,7 +1296,11 @@ test('generates progressive C3W18 training without template prescriptions', () =
   ).toEqual(['Squat', 'Bench']);
   expect(
     decisionWorkout.lifts.map(liftBlock => liftBlock.lift)
-  ).toEqual(['Bench', 'Squat']);
+  ).toEqual(['Squat', 'Bench']);
+  expect(
+    decisionWorkout.smartDecisionSummary.readiness
+      .meetPlanWeakestLift
+  ).toBe('Squat');
 
   decisionWorkout.lifts.forEach(liftBlock => {
     const volumeSets = liftBlock.sets.filter(set =>
@@ -1422,7 +1426,7 @@ test('generates progressive C3W18 training without template prescriptions', () =
   expect(
     c3w19.smartTrainingSelectionSummary
       .frequencyEligibleLifts
-  ).toEqual(['Bench']);
+  ).toEqual(['Squat', 'Bench']);
   expect(
     c3w19.smartTrainingSelectionSummary.reasonFlags
   ).toContain('projected-frequency-guard');
