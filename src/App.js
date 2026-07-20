@@ -1080,7 +1080,7 @@ const SMART_DELOAD = {
   MIN_PCT: 0.5,
 };
 
-const SMART_PRESCRIPTION_VERSION = 5;
+const SMART_PRESCRIPTION_VERSION = 6;
 
 const SMART_GENERATED_FLAGS = {
   RECOVERY: 'smartGeneratedRecovery',
@@ -2023,6 +2023,32 @@ function generateAccessoriesForLift(lift, accessoryMode = 'off', accessoryPRs = 
     });
 }
 
+
+export function selectSmartAccessoriesForWorkout(
+  accessoriesByLift = []
+) {
+  const normalizedLists = (accessoriesByLift || [])
+    .filter(Array.isArray);
+
+  if (normalizedLists.length <= 1) {
+    return normalizedLists.flat();
+  }
+
+  const usedKeys = new Set();
+  return normalizedLists.flatMap(accessories => {
+    const selected = (accessories || []).find(accessory => {
+      const key = accessory?.key || accessory?.nameKey || accessory?.name;
+      return key && !usedKeys.has(key);
+    });
+
+    if (!selected) return [];
+
+    const key = selected.key || selected.nameKey || selected.name;
+    usedKeys.add(key);
+    return [selected];
+  });
+}
+
 export function applyAccessoryPlanToWorkouts(
   workouts,
   generatedWorkouts,
@@ -2730,6 +2756,19 @@ function hasSameSmartTrainingPrescriptionAsLastWorkout(candidate = {}, readiness
   return Boolean(
     candidateSignature &&
     recentSignatures.includes(candidateSignature)
+  );
+}
+
+
+export function shouldVaryRepeatedSmartPrescription(
+  candidate = {},
+  readiness = {}
+) {
+  return Boolean(
+    hasSameSmartTrainingPrescriptionAsLastWorkout(candidate, readiness) &&
+    (readiness.lastWasRecoveryIntervention || readiness.lastWasRestDay) &&
+    Number(readiness.recentFatigueScore) === 0 &&
+    Number(readiness.recentFailedOrSkippedSetCount) === 0
   );
 }
 
@@ -4885,11 +4924,14 @@ function buildGeneratedSmartTrainingWorkout({
       : []),
   ];
 
-  const liftBlocks = selectedLifts.map(selection => {
+  const buildLiftBlocks = ({ avoidRecentRepeat = false } = {}) =>
+    selectedLifts.map((selection, selectionIndex) => {
     const prescription = buildSmartLiftPrescription({
       state: liftStates[selection.lift],
       role: selection.role,
       isSingleLiftWorkout: selectedLifts.length === 1,
+      avoidRecentRepeat:
+        avoidRecentRepeat && selectionIndex === 0,
     });
 
     if (!prescription.validation.valid) {
@@ -4921,6 +4963,8 @@ function buildGeneratedSmartTrainingWorkout({
           prescription.plannedVolumePct || 0,
         meetSpecificProgression:
           Boolean(prescription.meetSpecificProgression),
+        repeatVariationApplied:
+          Boolean(prescription.repeatVariationApplied),
         regressionReason:
           prescription.regressionReason || null,
       },
@@ -4944,15 +4988,40 @@ function buildGeneratedSmartTrainingWorkout({
     return liftBlock;
   });
 
+
+  let liftBlocks = buildLiftBlocks();
+  const initialPrimaryBlock = liftBlocks[0];
+  const initialCandidate = {
+    type: 'training',
+    lift: primaryLift,
+    lifts: liftBlocks,
+    sets: initialPrimaryBlock?.sets || [],
+  };
+  const shouldVaryRecentRepeat =
+    shouldVaryRepeatedSmartPrescription(
+      initialCandidate,
+      readiness
+    );
+
+  if (shouldVaryRecentRepeat) {
+    liftBlocks = buildLiftBlocks({ avoidRecentRepeat: true });
+  }
+
   const primaryBlock = liftBlocks[0];
 
-  const accessories = selectedLifts.flatMap(selection =>
+  const accessoriesByLift = selectedLifts.map(selection =>
     generateAccessoriesForLift(
       selection.lift,
       accessoryMode,
       accessoryPRs,
       trainingMaxes
     )
+  );
+  const accessories = selectSmartAccessoriesForWorkout(
+    accessoriesByLift
+  );
+  const repeatVariationApplied = Boolean(
+    primaryBlock?.smartPrescription?.repeatVariationApplied
   );
 
   return {
@@ -5020,6 +5089,9 @@ function buildGeneratedSmartTrainingWorkout({
           : null,
         readiness.meetPlanWeakestLift === primaryLift
           ? 'meet-plan-weakest-lift-primary'
+          : null,
+        repeatVariationApplied
+          ? 'recent-prescription-variation'
           : null,
       ].filter(Boolean),
     },

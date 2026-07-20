@@ -768,6 +768,7 @@ export function buildSmartLiftPrescription({
   state,
   role = 'primary',
   isSingleLiftWorkout = false,
+  avoidRecentRepeat = false,
 } = {}) {
   if (!state || !SMART_LIFTS.includes(state.lift)) {
     throw new Error('A valid Smart lift state is required.');
@@ -788,10 +789,43 @@ export function buildSmartLiftPrescription({
   ) || 0;
   let plannedVolumePct = 0;
   let meetSpecificProgression = false;
+  let repeatVariationApplied = false;
   let regressionReason = null;
 
   if (role === 'primary') {
-    const top = getNextPrimaryTop(state);
+    const baseTop = getNextPrimaryTop(state);
+    let top = { ...baseTop };
+
+    if (
+      avoidRecentRepeat &&
+      baseTop.progressionDirection !== 'regress' &&
+      normalizeEffort(state.lastExposure?.workoutEffort) !== 'toomuch' &&
+      Number(state.recentFailedOrSkippedSetCount) === 0
+    ) {
+      const currentLimit = TOP_PCT_LIMITS[top.reps];
+
+      if (top.pct < currentLimit.max) {
+        top.pct = roundPct(Math.min(
+          currentLimit.max,
+          top.pct + 0.025
+        ));
+        repeatVariationApplied = top.pct !== baseTop.pct;
+      } else if (top.reps > 1) {
+        const nextReps = top.reps - 1;
+        const nextLimit = TOP_PCT_LIMITS[nextReps];
+        top = {
+          ...top,
+          reps: nextReps,
+          pct: roundPct(clamp(
+            top.pct + 0.025,
+            nextLimit.min,
+            nextLimit.max
+          )),
+        };
+        repeatVariationApplied = true;
+      }
+    }
+
     const topLabelKey = top.reps === 1
       ? 'topSingle'
       : top.reps === 2
@@ -816,8 +850,11 @@ export function buildSmartLiftPrescription({
       ? top.progressionReason
       : null;
 
+    const volumeReferenceTopPct = repeatVariationApplied
+      ? baseTop.pct
+      : top.pct;
     let volumePct = roundPct(
-      clamp(top.pct - 0.10, 0.60, 0.75)
+      clamp(volumeReferenceTopPct - 0.10, 0.60, 0.75)
     );
 
     if (meetSpecificProgression && volumeAnchorPct > 0) {
@@ -888,6 +925,7 @@ export function buildSmartLiftPrescription({
     volumeAnchorPct,
     plannedVolumePct,
     meetSpecificProgression,
+    repeatVariationApplied,
     regressionReason,
     smartGeneratedPrescription: true,
   };
