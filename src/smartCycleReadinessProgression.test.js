@@ -109,6 +109,7 @@ test.each([100, 200])(
     const prescription = buildSmartLiftPrescription({
       state,
       role: 'primary',
+      isSingleLiftWorkout: false,
     });
 
     expect(prescription.validation.valid).toBe(true);
@@ -116,6 +117,7 @@ test.each([100, 200])(
     expect(prescription.topSetAnchorPct).toBe(0.70);
     expect(prescription.volumeAnchorPct).toBe(0.70);
     expect(prescription.plannedVolumePct).toBe(0.675);
+    expect(prescription.sets.slice(1)).toHaveLength(3);
     expect(prescription.sets[0]).toMatchObject({
       labelKey: 'topTriple',
       reps: 3,
@@ -191,13 +193,35 @@ test('names the cycle estimate and opener separately in the Smart modal', () => 
       },
     })
   ).toEqual([
-    { label: 'Meet status', value: 'Squat: opener not yet demonstrated' },
-    { label: 'Best successful cycle e1RM', value: '116.2 kg' },
-    { label: 'Planned meet opener', value: '130 kg' },
-    { label: 'Gap to opener', value: '13.8 kg' },
+    {
+      label: 'Meet status',
+      value: 'Squat — opener not yet demonstrated',
+    },
+    { label: 'Cycle e1RM', value: '116.2 kg', kind: 'metric' },
+    { label: 'Meet opener', value: '130 kg', kind: 'metric' },
+    { label: 'Gap', value: '13.8 kg', kind: 'metric' },
     {
       label: 'Readiness basis',
       value: 'Only successful sets from the active cycle count.',
+      kind: 'note',
     },
   ]);
+});
+
+
+test('keeps four-set secondary Bench volume unchanged', () => {
+  const state = buildSmartLiftState({
+    history: [],
+    currentCycle: 1,
+    lift: 'Bench',
+    trainingMax: 100,
+  });
+  const prescription = buildSmartLiftPrescription({
+    state,
+    role: 'secondary',
+    isSingleLiftWorkout: false,
+  });
+
+  expect(prescription.validation.valid).toBe(true);
+  expect(prescription.sets).toHaveLength(4);
 });

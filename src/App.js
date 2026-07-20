@@ -1080,7 +1080,7 @@ const SMART_DELOAD = {
   MIN_PCT: 0.5,
 };
 
-const SMART_PRESCRIPTION_VERSION = 4;
+const SMART_PRESCRIPTION_VERSION = 5;
 
 const SMART_GENERATED_FLAGS = {
   RECOVERY: 'smartGeneratedRecovery',
@@ -8525,28 +8525,32 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
     rows.push({
       label: t.smartMeetStatus || 'Meet status',
       value: weakestLift
-        ? `${weakestLift}: ${t.smartOpenerNotDemonstrated || 'opener not yet demonstrated'}`
+        ? `${weakestLift} — ${t.smartOpenerNotDemonstrated || 'opener not yet demonstrated'}`
         : (t.smartMeetPlanNotReady || 'Meet plan not ready'),
     });
 
     if (cycleEstimate > 0 && plannedOpener > 0) {
       rows.push(
         {
-          label: t.smartCycleEstimate || 'Best successful cycle e1RM',
+          label: t.smartCycleEstimateShort || 'Cycle e1RM',
           value: formatEstimate(cycleEstimate),
+          kind: 'metric',
         },
         {
-          label: t.smartPlannedOpener || 'Planned meet opener',
+          label: t.smartPlannedOpenerShort || 'Meet opener',
           value: formatWeightFromKg(plannedOpener, WEIGHT_UNITS.KG),
+          kind: 'metric',
         },
         {
-          label: t.smartOpenerGap || 'Gap to opener',
+          label: t.smartOpenerGapShort || 'Gap',
           value: formatEstimate(openerGap),
+          kind: 'metric',
         },
         {
           label: t.smartReadinessBasis || 'Readiness basis',
           value: t.smartReadinessBasisText ||
             'Only successful sets from the active cycle count.',
+          kind: 'note',
         }
       );
     }
@@ -8622,6 +8626,16 @@ function SmartDayTypeInline({ workout, t }) {
       value: limiterMatch ? limiterMatch[1] : selectionText,
     } : null,
   ].filter(Boolean);
+  const decisionRow = infoRows.find(row => row.emphasis) || null;
+  const meetStatusLabel = t.smartMeetStatus || 'Meet status';
+  const statusRows = infoRows.filter(row => row.label === meetStatusLabel);
+  const metricRows = infoRows.filter(row => row.kind === 'metric');
+  const noteRows = infoRows.filter(row => row.kind === 'note');
+  const otherRows = infoRows.filter(row =>
+    !row.emphasis &&
+    row.label !== meetStatusLabel &&
+    !['metric', 'note'].includes(row.kind)
+  );
 
   return (
     <>
@@ -8699,11 +8713,11 @@ function SmartDayTypeInline({ workout, t }) {
             onClick={e => e.stopPropagation()}
             style={{
               width: '100%',
-              maxWidth: 420,
+              maxWidth: 390,
               background: THEME.card,
               border: `1px solid ${THEME.primary}`,
-              borderRadius: 12,
-              padding: 16,
+              borderRadius: 16,
+              padding: 18,
               boxSizing: 'border-box',
               boxShadow: '0 18px 50px rgba(0, 0, 0, 0.55)',
             }}
@@ -8722,42 +8736,176 @@ function SmartDayTypeInline({ workout, t }) {
             {infoRows.length > 0 ? (
               <div style={{
                 display: 'grid',
-                gap: 8,
-                marginBottom: 14,
+                gap: 10,
+                marginBottom: 16,
               }}>
-                {infoRows.map(row => (
-                  <div
-                    key={row.label}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '76px minmax(0, 1fr)',
-                      gap: 9,
-                      alignItems: 'center',
-                      padding: '8px 9px',
-                      borderRadius: 8,
-                      border: `1px solid ${THEME.border}`,
-                      background: row.emphasis ? `${THEME.primary}12` : 'rgba(255, 255, 255, 0.025)',
-                    }}
-                  >
+                {decisionRow && (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '72px minmax(0, 1fr)',
+                    gap: 10,
+                    alignItems: 'center',
+                    minWidth: 0,
+                    padding: '9px 11px',
+                    borderRadius: 10,
+                    border: `1px solid ${THEME.border}`,
+                    background: `${THEME.primary}12`,
+                  }}>
                     <div style={{
                       color: THEME.muted,
-                      fontSize: 10.5,
+                      fontSize: 10,
                       fontWeight: 900,
                       lineHeight: 1.15,
-                      textAlign: 'left',
                       textTransform: 'uppercase',
-                      letterSpacing: 0.28,
-                      whiteSpace: 'nowrap',
+                      letterSpacing: 0.35,
+                    }}>
+                      {decisionRow.label}
+                    </div>
+                    <div style={{
+                      minWidth: 0,
+                      color: THEME.primary,
+                      fontSize: 14.5,
+                      fontWeight: 900,
+                      lineHeight: 1.25,
+                      overflowWrap: 'anywhere',
+                    }}>
+                      {decisionRow.value}
+                    </div>
+                  </div>
+                )}
+
+                {statusRows.map(row => (
+                  <div key={row.label} style={{
+                    minWidth: 0,
+                    padding: '10px 11px',
+                    borderRadius: 10,
+                    border: `1px solid ${THEME.border}`,
+                    background: 'rgba(255, 255, 255, 0.025)',
+                  }}>
+                    <div style={{
+                      marginBottom: 4,
+                      color: THEME.muted,
+                      fontSize: 9.5,
+                      fontWeight: 900,
+                      lineHeight: 1.15,
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.35,
                     }}>
                       {row.label}
                     </div>
-
                     <div style={{
-                      color: row.emphasis ? THEME.primary : THEME.text,
-                      fontSize: 13.5,
+                      color: THEME.text,
+                      fontSize: 15,
                       fontWeight: 900,
                       lineHeight: 1.3,
-                      textAlign: 'left',
+                      overflowWrap: 'anywhere',
+                    }}>
+                      {row.value}
+                    </div>
+                  </div>
+                ))}
+
+                {metricRows.length > 0 && (
+                  <div
+                    data-testid="smartMeetMetricGrid"
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                      gap: 7,
+                      minWidth: 0,
+                    }}
+                  >
+                    {metricRows.map(row => (
+                      <div key={row.label} style={{
+                        minWidth: 0,
+                        padding: '10px 6px 9px',
+                        borderRadius: 10,
+                        border: `1px solid ${THEME.border}`,
+                        background: 'rgba(255, 255, 255, 0.035)',
+                        textAlign: 'center',
+                      }}>
+                        <div style={{
+                          color: THEME.text,
+                          fontSize: 15.5,
+                          fontWeight: 900,
+                          lineHeight: 1.15,
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {row.value}
+                        </div>
+                        <div style={{
+                          marginTop: 5,
+                          color: THEME.muted,
+                          fontSize: 9,
+                          fontWeight: 900,
+                          lineHeight: 1.15,
+                          textTransform: 'uppercase',
+                          letterSpacing: 0.2,
+                          overflowWrap: 'anywhere',
+                        }}>
+                          {row.label}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {noteRows.map(row => (
+                  <div key={row.label} style={{
+                    minWidth: 0,
+                    padding: '10px 11px',
+                    borderRadius: 10,
+                    border: `1px solid ${THEME.border}`,
+                    background: 'rgba(255, 255, 255, 0.02)',
+                  }}>
+                    <div style={{
+                      marginBottom: 4,
+                      color: THEME.muted,
+                      fontSize: 9.5,
+                      fontWeight: 900,
+                      lineHeight: 1.15,
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.35,
+                    }}>
+                      {row.label}
+                    </div>
+                    <div style={{
+                      color: THEME.text,
+                      fontSize: 12.5,
+                      fontWeight: 750,
+                      lineHeight: 1.4,
+                      overflowWrap: 'anywhere',
+                    }}>
+                      {row.value}
+                    </div>
+                  </div>
+                ))}
+
+                {otherRows.map(row => (
+                  <div key={row.label} style={{
+                    minWidth: 0,
+                    padding: '10px 11px',
+                    borderRadius: 10,
+                    border: `1px solid ${THEME.border}`,
+                    background: 'rgba(255, 255, 255, 0.025)',
+                  }}>
+                    <div style={{
+                      marginBottom: 4,
+                      color: THEME.muted,
+                      fontSize: 9.5,
+                      fontWeight: 900,
+                      lineHeight: 1.15,
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.35,
+                    }}>
+                      {row.label}
+                    </div>
+                    <div style={{
+                      color: THEME.text,
+                      fontSize: 13.5,
+                      fontWeight: 850,
+                      lineHeight: 1.35,
+                      overflowWrap: 'anywhere',
                     }}>
                       {row.value}
                     </div>

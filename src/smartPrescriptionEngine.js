@@ -841,6 +841,13 @@ export function buildSmartLiftPrescription({
       volumePct = Math.min(volumePct, 0.70);
     }
 
+    if (meetSpecificProgression && !isSingleLiftWorkout) {
+      // The heavier meet-specific top set already adds stimulus. On a
+      // mixed-lift day, three back-off sets preserve progression without
+      // leaving a visually incomplete four-item grid or overloading the day.
+      volumeSetCount = 3;
+    }
+
     plannedVolumePct = volumePct;
 
     for (let index = 0; index < volumeSetCount; index += 1) {
@@ -933,10 +940,21 @@ export function validateSmartLiftPrescription(
     );
   }
 
+  const allowsThreeSetMeetBlock = Boolean(
+    prescription.role === 'primary' &&
+    prescription.meetSpecificProgression
+  );
+
   volumeGroups.forEach(group => {
-    if (group.length < 4 || group.length > 6) {
+    const validSetCount =
+      (group.length >= 4 && group.length <= 6) ||
+      (allowsThreeSetMeetBlock && group.length === 3);
+
+    if (!validSetCount) {
       errors.push(
-        'Back-off and work-set blocks require 4–6 sets.'
+        allowsThreeSetMeetBlock
+          ? 'Meet-specific back-off blocks require 3–6 sets.'
+          : 'Back-off and work-set blocks require 4–6 sets.'
       );
     }
 
