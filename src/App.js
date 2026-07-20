@@ -1080,7 +1080,7 @@ const SMART_DELOAD = {
   MIN_PCT: 0.5,
 };
 
-const SMART_PRESCRIPTION_VERSION = 3;
+const SMART_PRESCRIPTION_VERSION = 4;
 
 const SMART_GENERATED_FLAGS = {
   RECOVERY: 'smartGeneratedRecovery',
@@ -4913,6 +4913,14 @@ function buildGeneratedSmartTrainingWorkout({
         priorityScore: selection.priority.score,
         progressionAnchorPct:
           prescription.progressionAnchorPct || 0,
+        topSetAnchorPct:
+          prescription.topSetAnchorPct || 0,
+        volumeAnchorPct:
+          prescription.volumeAnchorPct || 0,
+        plannedVolumePct:
+          prescription.plannedVolumePct || 0,
+        meetSpecificProgression:
+          Boolean(prescription.meetSpecificProgression),
         regressionReason:
           prescription.regressionReason || null,
       },
@@ -8475,31 +8483,9 @@ function getSmartDecisionReasonDisplayText(summary, t = {}) {
 }
 
 function getSmartTrainingSelectionDisplayText(workout, t = {}) {
-  const readiness = workout?.smartDecisionSummary?.readiness || {};
-  const summary = workout?.smartTrainingSelectionSummary || {};
-  const weakestLift = readiness.meetPlanWeakestLift;
-  const isNewCycleStart =
-    Number(readiness.completedCount) === 0 &&
-    Number(readiness.activeBlockCompletedCount) === 0;
-
-  if ((summary.avoidedFailedLifts || []).length > 0) {
-    return t.smartTrainingSelectionLine || `Avoiding ${summary.avoidedFailedLifts.join(' + ')} after failed/skipped set.`;
-  }
-
-  if ((summary.selectedFailedLifts || []).length > 0) {
-    return t.smartTrainingSelectionLine || `${summary.selectedFailedLifts.join(' + ')} capped after failed/skipped set.`;
-  }
-
-  if (isNewCycleStart || !weakestLift || canMentionSmartMeetPlanReady(readiness)) return null;
-
-  const best = Number(readiness.meetPlanWeakestBestE1RM) || 0;
-  const target = Number(readiness.meetPlanWeakestTarget) || 0;
-
-  if (best > 0 && target > 0) {
-    return t.smartTrainingSelectionLine || `e1RM limiter: ${weakestLift} e1RM ${formatWeightValue(best, WEIGHT_UNITS.KG)} / target ${formatWeightValue(target, WEIGHT_UNITS.KG)}.`;
-  }
-
-  return t.smartTrainingSelectionLine || `e1RM limiter: ${weakestLift}.`;
+  // Meet-readiness numbers are presented as explicitly named detail rows.
+  // The old combined “e1RM limiter / target” sentence was ambiguous.
+  return null;
 }
 
 export function getSmartModalDetailRows(workout = {}, t = {}) {
@@ -8514,10 +8500,56 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
     summary.reason === SMART_DECISION_REASONS.FATIGUE_RECOVERY;
 
   if (isTrainingFallback && !readiness.meetPlanReady) {
+    const weakestLift = readiness.meetPlanWeakestLift || null;
+    const weakestReadiness = weakestLift
+      ? readiness.meetPlanReadiness?.[weakestLift] || {}
+      : {};
+    const cycleEstimate = Number(
+      weakestReadiness.currentCycleBestE1RM ??
+      readiness.meetPlanWeakestBestE1RM
+    ) || 0;
+    const plannedOpener = Number(
+      weakestReadiness.readinessTargetAttempt ??
+      weakestReadiness.attempts?.opener ??
+      readiness.meetPlanWeakestTarget
+    ) || 0;
+    const openerGap = cycleEstimate > 0 && plannedOpener > 0
+      ? Math.max(plannedOpener - cycleEstimate, 0)
+      : 0;
+    const formatEstimate = value =>
+      `${formatDecimalDisplay(value, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      })} kg`;
+
     rows.push({
       label: t.smartMeetStatus || 'Meet status',
-      value: t.smartMeetPlanNotReady || 'Meet plan not ready',
+      value: weakestLift
+        ? `${weakestLift}: ${t.smartOpenerNotDemonstrated || 'opener not yet demonstrated'}`
+        : (t.smartMeetPlanNotReady || 'Meet plan not ready'),
     });
+
+    if (cycleEstimate > 0 && plannedOpener > 0) {
+      rows.push(
+        {
+          label: t.smartCycleEstimate || 'Best successful cycle e1RM',
+          value: formatEstimate(cycleEstimate),
+        },
+        {
+          label: t.smartPlannedOpener || 'Planned meet opener',
+          value: formatWeightFromKg(plannedOpener, WEIGHT_UNITS.KG),
+        },
+        {
+          label: t.smartOpenerGap || 'Gap to opener',
+          value: formatEstimate(openerGap),
+        },
+        {
+          label: t.smartReadinessBasis || 'Readiness basis',
+          value: t.smartReadinessBasisText ||
+            'Only successful sets from the active cycle count.',
+        }
+      );
+    }
   }
 
   if (

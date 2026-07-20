@@ -525,6 +525,21 @@ export function buildSmartLiftState({
     })
   );
 
+  const recentSuccessfulVolumeBlocks = recentExposures
+    .filter(exposure => exposure.smartDayType !== 'deload')
+    .map(exposure => findSuccessfulVolumeBlock(
+      exposure.sets,
+      trainingMax
+    ))
+    .filter(block => block && Number(block.setCount) >= 4);
+
+  const highestRecentSuccessfulVolumePct = Math.max(
+    0,
+    ...recentSuccessfulVolumeBlocks.map(block =>
+      Number(block.pct) || 0
+    )
+  );
+
   const meetReadiness = meetPlanReadiness?.[lift] || {};
 
   const state = {
@@ -544,6 +559,7 @@ export function buildSmartLiftState({
     lastAttemptedTop,
     lastSuccessfulVolume,
     highestRecentSuccessfulTopPct,
+    highestRecentSuccessfulVolumePct,
     recentFailedOrSkippedSetCount: recentExposures.reduce(
       (total, exposure) =>
         total +
@@ -556,6 +572,13 @@ export function buildSmartLiftState({
         Number(meetReadiness.currentCycleReadinessRatio) || 0,
       currentCycleShortfall:
         Number(meetReadiness.currentCycleShortfall) || 0,
+      currentCycleBestE1RM:
+        Number(meetReadiness.currentCycleBestE1RM) || 0,
+      readinessTargetAttempt:
+        Number(
+          meetReadiness.readinessTargetAttempt ??
+          meetReadiness.attempts?.opener
+        ) || 0,
       plannedTopAttempt:
         Number(meetReadiness.plannedTopAttempt) || 0,
     },
@@ -668,10 +691,37 @@ function getNextPrimaryTop(state = {}) {
     pct = Math.max(pct, Number(anchor.pct) || 0);
   }
 
+  const meetRatio = Number(
+    state.meetReadiness?.currentCycleReadinessRatio
+  ) || 0;
+  const recentVolumeAnchor = Number(
+    state.highestRecentSuccessfulVolumePct
+  ) || 0;
+  const canUseMeetSpecificVolumeAnchor =
+    progression.direction !== 'regress' &&
+    !state.meetReadiness?.ready &&
+    meetRatio > 0 &&
+    meetRatio < 1 &&
+    recentVolumeAnchor > 0;
+  const meetSpecificTopFloor = canUseMeetSpecificVolumeAnchor
+    ? clamp(
+      recentVolumeAnchor + 0.075,
+      limit.min,
+      limit.max
+    )
+    : 0;
+
+  if (meetSpecificTopFloor > 0) {
+    pct = Math.max(pct, meetSpecificTopFloor);
+  }
+
   return {
     reps,
     pct: roundPct(pct),
     anchorPct: Number(anchor.pct) || 0,
+    volumeAnchorPct: recentVolumeAnchor,
+    meetSpecificTopFloor: roundPct(meetSpecificTopFloor),
+    meetSpecificProgression: meetSpecificTopFloor > 0,
     progressionDirection: progression.direction,
     progressionReason: progression.reason,
   };
@@ -732,6 +782,12 @@ export function buildSmartLiftPrescription({
   let volumeSetCount = getNormalVolumeSetCount(state);
   const sets = [];
   let progressionAnchorPct = 0;
+  let topSetAnchorPct = 0;
+  let volumeAnchorPct = Number(
+    state.highestRecentSuccessfulVolumePct
+  ) || 0;
+  let plannedVolumePct = 0;
+  let meetSpecificProgression = false;
   let regressionReason = null;
 
   if (role === 'primary') {
@@ -752,6 +808,10 @@ export function buildSmartLiftPrescription({
     }));
 
     progressionAnchorPct = top.anchorPct;
+    topSetAnchorPct = top.anchorPct;
+    meetSpecificProgression = Boolean(
+      top.meetSpecificProgression
+    );
     regressionReason = top.progressionDirection === 'regress'
       ? top.progressionReason
       : null;
@@ -759,6 +819,13 @@ export function buildSmartLiftPrescription({
     let volumePct = roundPct(
       clamp(top.pct - 0.10, 0.60, 0.75)
     );
+
+    if (meetSpecificProgression && volumeAnchorPct > 0) {
+      volumePct = roundPct(Math.min(
+        top.pct - 0.025,
+        Math.max(volumePct, volumeAnchorPct - 0.025)
+      ));
+    }
 
     let volumeReps = getPrimaryVolumeReps(top.reps);
 
@@ -774,6 +841,8 @@ export function buildSmartLiftPrescription({
       volumePct = Math.min(volumePct, 0.70);
     }
 
+    plannedVolumePct = volumePct;
+
     for (let index = 0; index < volumeSetCount; index += 1) {
       sets.push(buildGeneratedSet({
         lift: state.lift,
@@ -786,6 +855,7 @@ export function buildSmartLiftPrescription({
     }
   } else {
     const volumePct = getSecondaryVolumePct(state);
+    plannedVolumePct = volumePct;
     const previousReps =
       Number(state.lastSuccessfulVolume?.reps) || 5;
     const volumeReps = clamp(previousReps, 4, 6);
@@ -807,6 +877,10 @@ export function buildSmartLiftPrescription({
     role,
     sets,
     progressionAnchorPct,
+    topSetAnchorPct,
+    volumeAnchorPct,
+    plannedVolumePct,
+    meetSpecificProgression,
     regressionReason,
     smartGeneratedPrescription: true,
   };
