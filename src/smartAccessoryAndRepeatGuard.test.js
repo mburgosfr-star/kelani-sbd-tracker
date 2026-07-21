@@ -72,7 +72,7 @@ test('uses the next unique accessory when both lifts share the same first choice
   ]);
 });
 
-test('recognizes a safe exact prescription repeat after recovery', () => {
+test('recognizes a safe exact recent prescription repeat', () => {
   const candidate = {
     type: 'training',
     lift: 'Bench',
@@ -104,7 +104,7 @@ test('recognizes a safe exact prescription repeat after recovery', () => {
     lastWasRestDay: false,
     recentFatigueScore: 0,
     recentFailedOrSkippedSetCount: 0,
-  })).toBe(false);
+  })).toBe(true);
 });
 
 test('changes only the top stimulus when a safe repeat must be varied', () => {
@@ -166,4 +166,37 @@ test('changes only the top stimulus when a safe repeat must be varied', () => {
   expect(varied.sets.slice(1).map(set => [set.reps, set.pct]))
     .toEqual(repeated.sets.slice(1).map(set => [set.reps, set.pct]));
   expect(varied.repeatVariationApplied).toBe(true);
+});
+
+test('recognizes a repeated primary Deadlift block from an earlier mixed workout', () => {
+  const candidate = {
+    type: 'training',
+    lift: 'Deadlift',
+    lifts: [{
+      lift: 'Deadlift',
+      sets: [
+        trainingSet({
+          labelKey: 'topDouble', reps: 2, pct: 0.80, trainingMax: 60,
+        }),
+        ...Array.from({ length: 4 }, () =>
+          trainingSet({
+            labelKey: 'backoff', reps: 4, pct: 0.70, trainingMax: 60,
+          })
+        ),
+      ],
+    }],
+  };
+
+  const deadliftSignature = [
+    'Deadlift:2:47.5:0.8',
+    ...Array.from({ length: 4 }, () => 'Deadlift:4:42.5:0.7'),
+  ].sort().join('|');
+
+  expect(shouldVaryRepeatedSmartPrescription(candidate, {
+    recentPrimaryLiftPrescriptionSignaturesByLift: {
+      Deadlift: [deadliftSignature],
+    },
+    recentFatigueScore: 1,
+    recentFailedOrSkippedSetCount: 0,
+  })).toBe(true);
 });

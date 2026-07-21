@@ -2747,11 +2747,65 @@ function getSmartTrainingPrescriptionSignature(workout = {}) {
   return [...new Set(snapshotSignatures)].sort().join('||');
 }
 
+
+function getSmartPrimaryLiftPrescriptionSignature(
+  workout = {},
+  targetLift = null
+) {
+  const snapshots =
+    Array.isArray(workout?.entries) && workout.entries.length > 0
+      ? workout.entries
+        .map(entry => entry?.workoutSnapshot || entry)
+        .filter(Boolean)
+      : [workout];
+
+  const signatures = snapshots.map(snapshot => {
+    const liftBlocks =
+      Array.isArray(snapshot?.lifts) ? snapshot.lifts : [];
+    const primaryBlock =
+      liftBlocks.find(block => block?.role === 'primary') ||
+      liftBlocks[0];
+
+    if (
+      !primaryBlock ||
+      (targetLift && primaryBlock.lift !== targetLift)
+    ) {
+      return '';
+    }
+
+    return getSmartTrainingPrescriptionSignature({
+      lifts: [primaryBlock],
+    });
+  }).filter(Boolean);
+
+  return [...new Set(signatures)].sort().join('||');
+}
+
 function hasSameSmartTrainingPrescriptionAsLastWorkout(candidate = {}, readiness = {}) {
-  const candidateSignature = getSmartTrainingPrescriptionSignature(candidate);
-  const recentSignatures = Array.isArray(readiness.recentTrainingPrescriptionSignatures)
-    ? readiness.recentTrainingPrescriptionSignatures
-    : [readiness.lastWorkoutPrescriptionSignature].filter(Boolean);
+  const primaryLift =
+    candidate?.lifts?.find(block => block?.role === 'primary')?.lift ||
+    candidate?.lifts?.[0]?.lift ||
+    candidate?.lift;
+  const primarySignature =
+    getSmartPrimaryLiftPrescriptionSignature(candidate, primaryLift);
+  const recentPrimarySignatures =
+    readiness.recentPrimaryLiftPrescriptionSignaturesByLift?.[
+      primaryLift
+    ] || [];
+
+  if (
+    primarySignature &&
+    recentPrimarySignatures.includes(primarySignature)
+  ) {
+    return true;
+  }
+
+  const candidateSignature =
+    getSmartTrainingPrescriptionSignature(candidate);
+  const recentSignatures =
+    Array.isArray(readiness.recentTrainingPrescriptionSignatures)
+      ? readiness.recentTrainingPrescriptionSignatures
+      : [readiness.lastWorkoutPrescriptionSignature].filter(Boolean);
 
   return Boolean(
     candidateSignature &&
@@ -2766,8 +2820,8 @@ export function shouldVaryRepeatedSmartPrescription(
 ) {
   return Boolean(
     hasSameSmartTrainingPrescriptionAsLastWorkout(candidate, readiness) &&
-    (readiness.lastWasRecoveryIntervention || readiness.lastWasRestDay) &&
-    Number(readiness.recentFatigueScore) === 0 &&
+    Number(readiness.recentFatigueScore) <
+      SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE &&
     Number(readiness.recentFailedOrSkippedSetCount) === 0
   );
 }
@@ -3133,6 +3187,16 @@ function buildSmartReadinessSignals(context = {}) {
     .map(day => getSmartTrainingPrescriptionSignature(day))
     .filter(Boolean);
 
+  const recentPrimaryLiftPrescriptionSignaturesByLift =
+    LIFT_ORDER.reduce((signatures, lift) => ({
+      ...signatures,
+      [lift]: rollingTrainingDays
+        .map(day =>
+          getSmartPrimaryLiftPrescriptionSignature(day, lift)
+        )
+        .filter(Boolean),
+    }), {});
+
   const recentHeavyDeadliftDays = rollingTrainingDays
     .slice(-SMART_THRESHOLDS.HEAVY_DEADLIFT_LOOKBACK_DAYS)
     .filter(day => Boolean(day.heavyLiftByLift?.Deadlift));
@@ -3247,6 +3311,7 @@ function buildSmartReadinessSignals(context = {}) {
     lastWorkoutPrimaryLift: (lastTrainingDay?.lifts || [])[0] || null,
     lastWorkoutPrescriptionSignature: getSmartTrainingPrescriptionSignature(lastTrainingDay || {}),
     recentTrainingPrescriptionSignatures,
+    recentPrimaryLiftPrescriptionSignaturesByLift,
     lastSmartDayType: lastDay?.smartDayType || null,
     lastWasRestDay: Boolean(lastDay?.restDay || lastDay?.smartDayType === SMART_DAY_TYPES.RECOVERY),
     lastWasRecoveryIntervention: Boolean(
