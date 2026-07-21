@@ -1307,7 +1307,7 @@ test('generates progressive C3W18 training without template prescriptions', () =
       ['backoff', 'workSets'].includes(set.labelKey)
     );
 
-    expect(volumeSets.length).toBeGreaterThanOrEqual(4);
+    expect(volumeSets).toHaveLength(3);
     volumeSets.forEach(set => {
       expect(set.reps).toBeGreaterThanOrEqual(4);
       expect(set.reps).toBeLessThanOrEqual(6);

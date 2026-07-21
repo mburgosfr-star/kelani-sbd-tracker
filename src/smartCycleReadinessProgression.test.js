@@ -209,7 +209,7 @@ test('names the cycle estimate and opener separately in the Smart modal', () => 
 });
 
 
-test('keeps four-set secondary Bench volume unchanged', () => {
+test('uses three-set secondary Bench volume on a mixed Smart day', () => {
   const state = buildSmartLiftState({
     history: [],
     currentCycle: 1,
@@ -220,8 +220,9 @@ test('keeps four-set secondary Bench volume unchanged', () => {
     state,
     role: 'secondary',
     isSingleLiftWorkout: false,
+    isMixedLiftWorkout: true,
   });
 
   expect(prescription.validation.valid).toBe(true);
-  expect(prescription.sets).toHaveLength(4);
+  expect(prescription.sets).toHaveLength(3);
 });

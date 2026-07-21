@@ -1080,7 +1080,7 @@ const SMART_DELOAD = {
   MIN_PCT: 0.5,
 };
 
-const SMART_PRESCRIPTION_VERSION = 6;
+const SMART_PRESCRIPTION_VERSION = 7;
 
 const SMART_GENERATED_FLAGS = {
   RECOVERY: 'smartGeneratedRecovery',
@@ -4930,6 +4930,7 @@ function buildGeneratedSmartTrainingWorkout({
       state: liftStates[selection.lift],
       role: selection.role,
       isSingleLiftWorkout: selectedLifts.length === 1,
+      isMixedLiftWorkout: selectedLifts.length > 1,
       avoidRecentRepeat:
         avoidRecentRepeat && selectionIndex === 0,
     });

@@ -355,4 +355,13 @@ test('replaces a stale pre-generated next workout immediately after completion',
     'Squat',
     'Bench',
   ]);
+  expect(
+    refreshedWorkouts[10].smartGeneratedPrescriptionVersion
+  ).toBe(7);
+  expect(
+    refreshedWorkouts[10].lifts[0].sets.slice(1)
+  ).toHaveLength(3);
+  expect(
+    refreshedWorkouts[10].lifts[1].sets
+  ).toHaveLength(3);
 });

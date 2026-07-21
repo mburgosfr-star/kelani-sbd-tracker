@@ -768,6 +768,7 @@ export function buildSmartLiftPrescription({
   state,
   role = 'primary',
   isSingleLiftWorkout = false,
+  isMixedLiftWorkout = false,
   avoidRecentRepeat = false,
 } = {}) {
   if (!state || !SMART_LIFTS.includes(state.lift)) {
@@ -781,6 +782,11 @@ export function buildSmartLiftPrescription({
   }
 
   let volumeSetCount = getNormalVolumeSetCount(state);
+
+  if (isMixedLiftWorkout) {
+    volumeSetCount = 3;
+  }
+
   const sets = [];
   let progressionAnchorPct = 0;
   let topSetAnchorPct = 0;
@@ -925,6 +931,9 @@ export function buildSmartLiftPrescription({
     volumeAnchorPct,
     plannedVolumePct,
     meetSpecificProgression,
+    ...(isMixedLiftWorkout
+      ? { isMixedLiftWorkout: true }
+      : {}),
     repeatVariationApplied,
     regressionReason,
     smartGeneratedPrescription: true,
@@ -978,20 +987,23 @@ export function validateSmartLiftPrescription(
     );
   }
 
-  const allowsThreeSetMeetBlock = Boolean(
-    prescription.role === 'primary' &&
-    prescription.meetSpecificProgression
+  const allowsThreeSetVolumeBlock = Boolean(
+    prescription.isMixedLiftWorkout ||
+    (
+      prescription.role === 'primary' &&
+      prescription.meetSpecificProgression
+    )
   );
 
   volumeGroups.forEach(group => {
     const validSetCount =
       (group.length >= 4 && group.length <= 6) ||
-      (allowsThreeSetMeetBlock && group.length === 3);
+      (allowsThreeSetVolumeBlock && group.length === 3);
 
     if (!validSetCount) {
       errors.push(
-        allowsThreeSetMeetBlock
-          ? 'Meet-specific back-off blocks require 3–6 sets.'
+        allowsThreeSetVolumeBlock
+          ? 'Mixed or meet-specific volume blocks require 3–6 sets.'
           : 'Back-off and work-set blocks require 4–6 sets.'
       );
     }
