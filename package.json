@@ -37,6 +37,8 @@
     "android:build-manifest": "node scripts/check-release-build-manifest.js",
     "release:build": "node scripts/build-release-apk.js",
     "release:install": "node scripts/install-apk.js",
+    "release:web-tested": "node scripts/mark-web-tested.js",
+    "release:prepare": "node scripts/prepare-release.js",
     "release:phone-tested": "node scripts/mark-phone-tested.js",
     "release:preflight": "node scripts/release-preflight.js",
     "release:check": "node scripts/guarded-release.js --check",

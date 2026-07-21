@@ -25,6 +25,10 @@ const pkg = JSON.parse(read('package.json'));
 const expectedScripts = {
   'release:build': 'node scripts/build-release-apk.js',
   'release:install': 'node scripts/install-apk.js',
+  'release:web-tested':
+    'node scripts/mark-web-tested.js',
+  'release:prepare':
+    'node scripts/prepare-release.js',
   'release:phone-tested':
     'node scripts/mark-phone-tested.js',
   'release:preflight':
@@ -62,6 +66,8 @@ for (const [name, expected] of Object.entries(expectedScripts)) {
 const requiredFiles = [
   'scripts/release-common.js',
   'scripts/build-release-apk.js',
+  'scripts/mark-web-tested.js',
+  'scripts/prepare-release.js',
   'scripts/test-izzy-build.js',
   'scripts/mark-phone-tested.js',
   'scripts/release-preflight.js',
@@ -73,6 +79,8 @@ for (const file of requiredFiles) {
   read(file);
 }
 
+const webTestMarker = read('scripts/mark-web-tested.js');
+const prepareRelease = read('scripts/prepare-release.js');
 const preflight = read('scripts/release-preflight.js');
 const guarded = read('scripts/guarded-release.js');
 const izzy = read('scripts/test-izzy-build.js');
@@ -95,6 +103,33 @@ for (const signal of [
 ]) {
   if (!preflight.includes(signal)) {
     fail(`Preflight is missing required check: ${signal}`);
+  }
+}
+
+for (const signal of [
+  '--confirmed',
+  'web-test-proof.json',
+  'confirmedByUser: true',
+  'visibleWebTestPassed: true',
+  'getHeadCommit',
+]) {
+  if (!webTestMarker.includes(signal)) {
+    fail(`Web-test marker is missing required check: ${signal}`);
+  }
+}
+
+for (const signal of [
+  '--confirmed',
+  '--version',
+  '--version-code',
+  'web-test-proof.json',
+  'release-preparation-proof.json',
+  'sourceCommit',
+  'targetVersion',
+  'targetVersionCode',
+]) {
+  if (!prepareRelease.includes(signal)) {
+    fail(`Release preparation is missing required check: ${signal}`);
   }
 }
 
@@ -180,6 +215,8 @@ for (const requiredPath of [
   "package.json",
   "package-lock.json",
   "android/app/build.gradle",
+  "scripts/mark-web-tested.js",
+  "scripts/prepare-release.js",
   "scripts/install-apk.js",
   "scripts/create-github-release.js",
   "scripts/check-release-automation.js",
@@ -211,6 +248,8 @@ for (const signal of [
 }
 
 for (const command of [
+  'npm run release:web-tested -- --confirmed',
+  'npm run release:prepare -- --version X.Y.Z --version-code N --confirmed',
   'npm run release:build',
   'npm run release:install',
   'npm run release:phone-tested -- --confirmed',

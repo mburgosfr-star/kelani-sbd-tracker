@@ -5,6 +5,10 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
+const {
+  assertReleasePreparationProof,
+} = require('./release-common');
+
 const root = path.resolve(__dirname, '..');
 const pkg = require(path.join(root, 'package.json'));
 const version = pkg.version;
@@ -117,6 +121,13 @@ function removeOldReleaseInputs() {
 
 const versionCode = readExpectedVersionCode();
 const commit = output('git', ['rev-parse', 'HEAD']);
+
+try {
+  assertReleasePreparationProof(root);
+} catch (error) {
+  console.error(`ERROR: ${error.message}`);
+  process.exit(1);
+}
 
 assertCleanSourceTreeExceptRelease();
 removeOldReleaseInputs();

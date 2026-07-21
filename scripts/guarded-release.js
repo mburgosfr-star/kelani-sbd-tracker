@@ -16,6 +16,7 @@ const {
   assertCleanSourceTreeExceptRelease,
   readReleaseNotes,
   releaseScriptHashes,
+  assertReleasePreparationProof,
 } = require('./release-common');
 
 const releaseMode = process.argv.includes('--release');
@@ -56,6 +57,8 @@ function main() {
 
   const expected = readVersionInfo(root);
   const commit = getHeadCommit(root);
+  const releasePreparation =
+    assertReleasePreparationProof(root);
   const tag = `v${expected.versionName}`;
 
   const branch = output('git', [
@@ -136,6 +139,23 @@ function main() {
     fail('Release notes changed after preflight.');
   }
 
+  if (
+    proof.releasePreparation?.preparationProofSha256 !==
+      sha256File(
+        releasePreparation.preparationProofPath
+      ) ||
+    proof.releasePreparation?.webTestProofSha256 !==
+      sha256File(releasePreparation.webProofPath) ||
+    proof.releasePreparation?.sourceCommit !==
+      releasePreparation.preparationProof.sourceCommit ||
+    proof.releasePreparation?.webTestCommit !==
+      releasePreparation.webProof.commit
+  ) {
+    fail(
+      'Release permission or web-test proof changed after preflight.'
+    );
+  }
+
   const currentScriptHashes = releaseScriptHashes(root);
   if (
     JSON.stringify(currentScriptHashes) !==
@@ -146,6 +166,8 @@ function main() {
 
   if (
     !proof.checks?.sourceClean ||
+    !proof.checks?.webTestProof ||
+    !proof.checks?.releasePreparationProof ||
     !proof.checks?.phoneTestProof ||
     !proof.checks?.localV2Signing ||
     !proof.checks?.cleanUnsignedBuild ||

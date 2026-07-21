@@ -414,6 +414,8 @@ function releaseScriptHashes(base = root) {
     "package-lock.json",
     "android/app/build.gradle",
     "scripts/build-release-apk.js",
+    "scripts/mark-web-tested.js",
+    "scripts/prepare-release.js",
     "scripts/install-apk.js",
     "scripts/test-izzy-build.js",
     "scripts/mark-phone-tested.js",
@@ -436,6 +438,132 @@ function releaseScriptHashes(base = root) {
       sha256File(path.join(base, relativePath)),
     ])
   );
+}
+
+function assertReleasePreparationProof(base = root) {
+  const current = readVersionInfo(base);
+  const releaseCommit = getHeadCommit(base);
+  const releaseDir = path.join(base, 'release');
+
+  const webProofPath = path.join(
+    releaseDir,
+    'web-test-proof.json'
+  );
+  const preparationProofPath = path.join(
+    releaseDir,
+    'release-preparation-proof.json'
+  );
+
+  if (!fs.existsSync(webProofPath)) {
+    fail(
+      'Missing web-test proof. Run:\n' +
+      'npm run release:web-tested -- --confirmed'
+    );
+  }
+
+  if (!fs.existsSync(preparationProofPath)) {
+    fail(
+      'Missing release-preparation proof. Explicit permission is required:\n' +
+      'npm run release:prepare -- ' +
+      '--version X.Y.Z --version-code N --confirmed'
+    );
+  }
+
+  const webProof = readJson(webProofPath);
+  const preparationProof = readJson(preparationProofPath);
+
+  if (
+    webProof.schema !== 1 ||
+    webProof.generatedBy !== 'scripts/mark-web-tested.js' ||
+    webProof.confirmedByUser !== true ||
+    webProof.visibleWebTestPassed !== true
+  ) {
+    fail('Web-test proof is invalid or was not explicitly confirmed.');
+  }
+
+  if (
+    preparationProof.schema !== 1 ||
+    preparationProof.generatedBy !==
+      'scripts/prepare-release.js' ||
+    preparationProof.confirmedByUser !== true
+  ) {
+    fail(
+      'Release preparation is invalid or was not explicitly confirmed.'
+    );
+  }
+
+  if (
+    preparationProof.webTestProofSha256 !==
+      sha256File(webProofPath) ||
+    preparationProof.sourceCommit !== webProof.commit ||
+    preparationProof.webTestCommit !== webProof.commit ||
+    preparationProof.sourceVersion !== webProof.versionName ||
+    preparationProof.sourceVersionCode !== webProof.versionCode
+  ) {
+    fail(
+      'Release preparation does not match the confirmed visible web test.'
+    );
+  }
+
+  if (
+    current.versionName !== preparationProof.targetVersion ||
+    current.versionCode !== preparationProof.targetVersionCode
+  ) {
+    fail(
+      'Current version fields do not match the explicitly approved release.'
+    );
+  }
+
+  const parentCommit = output(
+    'git',
+    ['rev-parse', `${releaseCommit}^`],
+    { cwd: base }
+  );
+
+  if (parentCommit !== preparationProof.sourceCommit) {
+    fail(
+      'The release commit must directly follow the web-tested feature commit.'
+    );
+  }
+
+  const expectedPaths = [
+    'android/app/build.gradle',
+    'package-lock.json',
+    'package.json',
+    `release-notes-v${current.versionName}.md`,
+  ].sort();
+
+  const changedPaths = output(
+    'git',
+    [
+      'diff',
+      '--name-only',
+      preparationProof.sourceCommit,
+      releaseCommit,
+    ],
+    { cwd: base }
+  )
+    .split('\n')
+    .filter(Boolean)
+    .sort();
+
+  if (
+    JSON.stringify(changedPaths) !==
+    JSON.stringify(expectedPaths)
+  ) {
+    fail(
+      'Release commit contains unexpected or missing files.\n' +
+      `Expected exactly:\n  ${expectedPaths.join('\n  ')}\n` +
+      `Found:\n  ${changedPaths.join('\n  ')}`
+    );
+  }
+
+  return {
+    webProof,
+    webProofPath,
+    preparationProof,
+    preparationProofPath,
+  };
 }
 
 function sanitizedBuildEnv(extra = {}) {
@@ -479,5 +607,6 @@ module.exports = {
   publicAssetManifest,
   readReleaseNotes,
   releaseScriptHashes,
+  assertReleasePreparationProof,
   sanitizedBuildEnv,
 };

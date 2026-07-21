@@ -9,24 +9,30 @@ Dit is het enige geldige proces voor iedere publieke release.
 - Gebruik `gh release create` nooit rechtstreeks.
 - Publiceer uitsluitend met `npm run release:publish`.
 - Publieke release notes bevatten alleen gebruikersgerichte wijzigingen.
-- Android volgt pas na een geslaagde zichtbare webtest.
+- Releasevoorbereiding mag pas beginnen na een geslaagde zichtbare webtest.
+- De gebruiker moet releasevoorbereiding daarna afzonderlijk en expliciet goedkeuren.
+- Een webtestbevestiging is nooit automatisch toestemming voor releasevoorbereiding.
+- Versievelden mogen uitsluitend worden gewijzigd met `npm run release:prepare`.
 - Elke wijziging aan commit, versie, APK, checksum, release notes of release-automatisering maakt het preflightbewijs ongeldig.
 
 ## Verplichte volgorde
 
-1. Codewijziging, tests, productiebuild en zichtbare webtest.
-2. Capacitor-sync, Android-releasebuild, installatie en telefoontest.
-3. Code en versiebump committen, inclusief `release-notes-vX.Y.Z.md`.
-4. Voer daarna uitsluitend deze commando's uit:
+1. Rond de codewijziging af en draai alle tests en de productiebuild.
+2. Voer daarna een zichtbare webtest uit.
+3. Leg de geslaagde webtest vast met `npm run release:web-tested -- --confirmed`.
+4. Stop en vraag afzonderlijk toestemming voor releasevoorbereiding.
+5. Bereid alleen na toestemming de afgesproken versie voor met `npm run release:prepare -- --version X.Y.Z --version-code N --confirmed`.
+6. Maak de release notes en commit uitsluitend de goedgekeurde releasebestanden.
+7. Push `main` en wacht op een groene Android release sanity.
+8. Voer daarna achtereenvolgens `release:build`, `release:install`, `release:phone-tested`, `release:preflight`, `release:check` en `release:publish` uit.
 
-```bash
-npm run release:build
-npm run release:install
-npm run release:phone-tested -- --confirmed
-npm run release:preflight
-npm run release:check
-npm run release:publish
-```
+Verplichte releasecommando’s:
+- `npm run release:build`
+- `npm run release:install`
+- `npm run release:phone-tested -- --confirmed`
+- `npm run release:preflight`
+- `npm run release:check`
+- `npm run release:publish`
 
 ## Wat de automatisering afdwingt
 

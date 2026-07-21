@@ -20,6 +20,7 @@ const {
   publicAssetManifest,
   readReleaseNotes,
   releaseScriptHashes,
+  assertReleasePreparationProof,
 } = require('./release-common');
 
 function sameJson(a, b) {
@@ -31,6 +32,8 @@ function main() {
 
   const expected = readVersionInfo(root);
   const commit = getHeadCommit(root);
+  const releasePreparation =
+    assertReleasePreparationProof(root);
   const notes = readReleaseNotes(
     expected.versionName,
     root
@@ -153,6 +156,18 @@ function main() {
     packageName: expected.packageName,
     versionName: expected.versionName,
     versionCode: expected.versionCode,
+    releasePreparation: {
+      sourceCommit:
+        releasePreparation.preparationProof.sourceCommit,
+      webTestCommit:
+        releasePreparation.webProof.commit,
+      preparationProofSha256:
+        sha256File(
+          releasePreparation.preparationProofPath
+        ),
+      webTestProofSha256:
+        sha256File(releasePreparation.webProofPath),
+    },
     releaseNotes: {
       path: notes.relativePath,
       sha256: notes.sha256,
@@ -180,6 +195,8 @@ function main() {
     scripts,
     checks: {
       sourceClean: true,
+      webTestProof: true,
+      releasePreparationProof: true,
       buildManifest: true,
       phoneTestProof: true,
       apkHashesMatch: true,
