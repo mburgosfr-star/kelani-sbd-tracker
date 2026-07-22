@@ -2,14 +2,14 @@
 
 [<img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroidButtonGreyBorder_nofont.png" height="80" alt="Get it at IzzyOnDroid">](https://apt.izzysoft.de/packages/com.kel.powerlifting)
 
-[![IzzyOnDroid](https://img.shields.io/endpoint?url=https://apt.izzysoft.de/fdroid/api/v1/shield/com.kel.powerlifting&label=IzzyOnDroid)](https://apt.izzysoft.de/packages/com.kel.powerlifting)
+[![Latest release](https://img.shields.io/github/v/release/mburgosfr-star/kelani-sbd-tracker?label=Latest%20release)](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases/latest)
 
 **Kelani SBD Tracker** is a calm, offline-first powerlifting app for structured Squat, Bench Press and Deadlift training.
 
 It helps you plan, track and complete SBD workouts without accounts, ads, subscriptions, analytics or cloud lock-in. Your training data stays on your device unless you choose to export it.
 
-Website: https://mburgosfr-star.github.io/kelani-site/  
-Support Kelani: https://mburgosfr-star.github.io/kelani-site/#support
+Latest release: https://github.com/mburgosfr-star/kelani-sbd-tracker/releases/latest
+Issues and support: https://github.com/mburgosfr-star/kelani-sbd-tracker/issues
 
 ## Why Kelani?
 
@@ -26,11 +26,29 @@ Kelani is intentionally smaller and calmer. It focuses on the training flow itse
 - **Open source** — the code is public
 - **Built for practical long-term progress, not social media engagement**
 
+## Smart Training
+
+Smart Training creates the next workout from the lifter’s actual training history instead of relying on a fixed template.
+
+It can:
+
+- select primary and secondary lifts from recent training frequency and meet readiness;
+- prescribe warm-ups, top work, back-off work and accessories;
+- adapt to successful work, perceived effort, fatigue, failed sets and skipped sets;
+- track whether planned meet openers have been demonstrated;
+- avoid unnecessary repetition of recent primary-lift prescriptions;
+- preserve complete set grids on mixed-lift and single-lift training days;
+- refresh pending workouts when the prescription model changes.
+
+All Smart calculations run locally on the device.
+
 ## Features
 
 - Structured Squat, Bench Press and Deadlift training cycles
-- Workout tracking with warm-ups, main work, back-off work and optional accessories
+- Smart and manually planned training
+- Workout tracking with warm-ups, top work, back-off work and optional accessories
 - Automatic progression based on completed training
+- Lift-specific readiness and estimated 1RM tracking
 - Rest timer with audio signals
 - 1RM, estimated 1RM and strength statistics
 - Bodyweight and body composition logging
@@ -53,11 +71,13 @@ https://github.com/mburgosfr-star/kelani-sbd-tracker/releases/latest
 
 ## Screenshots
 
-![Dashboard](screenshots/dashboard.png)
+| Dashboard | Smart Training |
+|---|---|
+| ![Kelani dashboard](screenshots/dashboard.png) | ![Kelani Smart Training](screenshots/smart-training.png) |
 
-![Workout](screenshots/workout.png)
-
-![Stats](screenshots/stats.png)
+| Workout | Statistics |
+|---|---|
+| ![Kelani workout](screenshots/workout.png) | ![Kelani statistics](screenshots/stats.png) |
 
 ## Feedback and support
 
@@ -80,42 +100,28 @@ Kelani is free, offline-first and open source. There are no ads, subscriptions o
 
 If the app helps your training, you can support the project here:
 
-https://mburgosfr-star.github.io/kelani-site/#support
+https://github.com/sponsors/mburgosfr-star
 
 Support helps keep Kelani maintained, tested on real devices, improved over time, and independent.
 
 ## Build from source
 
-Requires JDK 21.
+A recent Node.js version and JDK 21 are required.
 
-```bash
-npm install
-npm run build
-npx cap sync android
-cd android
-./gradlew assembleRelease
-```
+    npm ci
+    npm run build
+    npx cap sync android
+    cd android
+    ./gradlew assembleRelease
 
-For the local signed release APK workflow used by the maintainer:
+Official APKs are built, tested and published through the guarded release process.
 
-```bash
-npm install
-npm run android:release-apk
-```
+## Project links
 
-For a clean release-style build:
+- Latest release: https://github.com/mburgosfr-star/kelani-sbd-tracker/releases/latest
+- All releases: https://github.com/mburgosfr-star/kelani-sbd-tracker/releases
+- Issues and feature requests: https://github.com/mburgosfr-star/kelani-sbd-tracker/issues
+- IzzyOnDroid: https://apt.izzysoft.de/packages/com.kel.powerlifting
+- GitHub Sponsors: https://github.com/sponsors/mburgosfr-star
 
-```bash
-npm install
-npm run build
-npx cap sync android
-cd android
-./gradlew clean assembleRelease --no-build-cache --no-configuration-cache --no-daemon
-```
-
-## Maintainer
-
-Maintained by Kel.
-
-- GitHub: https://github.com/mburgosfr-star
-- Website: https://mburgosfr-star.github.io/kelani-site/
+Maintained by [Kel](https://github.com/mburgosfr-star).
