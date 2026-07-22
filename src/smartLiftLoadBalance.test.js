@@ -357,7 +357,7 @@ test('replaces a stale pre-generated next workout immediately after completion',
   ]);
   expect(
     refreshedWorkouts[10].smartGeneratedPrescriptionVersion
-  ).toBe(7);
+  ).toBe(8);
   expect(
     refreshedWorkouts[10].lifts[0].sets.slice(1)
   ).toHaveLength(3);

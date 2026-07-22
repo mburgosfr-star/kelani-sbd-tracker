@@ -164,6 +164,27 @@ test('progresses a successful good top double instead of moving backwards', () =
   });
 });
 
+test('uses five-set volume on a single-lift Squat workout', () => {
+  const state = buildSmartLiftState({
+    history: [],
+    currentCycle: 1,
+    lift: 'Squat',
+    trainingMax: 150,
+  });
+
+  const prescription = buildSmartLiftPrescription({
+    state,
+    role: 'primary',
+    isSingleLiftWorkout: true,
+  });
+
+  const backoffs = prescription.sets.filter(
+    set => set.labelKey === 'backoff'
+  );
+
+  expect(backoffs).toHaveLength(5);
+});
+
 test('adds six-by-six Bench volume to a safe single-lift workout', () => {
   const history = makeLiftHistory({
     lift: 'Bench',

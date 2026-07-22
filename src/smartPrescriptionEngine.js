@@ -783,7 +783,9 @@ export function buildSmartLiftPrescription({
 
   let volumeSetCount = getNormalVolumeSetCount(state);
 
-  if (isMixedLiftWorkout) {
+  if (isSingleLiftWorkout) {
+    volumeSetCount = 5;
+  } else if (isMixedLiftWorkout) {
     volumeSetCount = 3;
   }
 
