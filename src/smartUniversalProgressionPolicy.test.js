@@ -277,3 +277,214 @@ test.each([
     })).toBe(false);
   }
 );
+
+test('Ana exact Deadlift stimulus progresses beyond C1W9 at C1W14', () => {
+  const lift = 'Deadlift';
+  const trainingMax = 60;
+  const candidate = {
+    type: 'training',
+    lift,
+    lifts: [{
+      lift,
+      role: 'primary',
+      sets: [
+        setFor({
+          lift,
+          labelKey: 'topDouble',
+          reps: 2,
+          pct: 0.80,
+          trainingMax,
+        }),
+        ...Array.from({ length: 5 }, () =>
+          setFor({
+            lift,
+            labelKey: 'backoff',
+            reps: 4,
+            pct: 0.70,
+            trainingMax,
+          })
+        ),
+      ],
+    }],
+  };
+  const priorSignature = [
+    'Deadlift:2:47.5:0.8',
+    ...Array.from(
+      { length: 4 },
+      () => 'Deadlift:4:42.5:0.7'
+    ),
+  ].sort().join('|');
+
+  expect(shouldVaryRepeatedSmartPrescription(candidate, {
+    recentPrimaryLiftPrescriptionSignaturesByLift: {
+      Deadlift: [priorSignature],
+    },
+    recentFatigueScore: 0,
+    recentFailedOrSkippedSetCount: 0,
+  })).toBe(true);
+
+  const state = {
+    lift,
+    trainingMax,
+    progression: {
+      direction: 'hold',
+      adjustment: 0,
+      reason: 'good-feedback',
+    },
+    lastSuccessfulTop: {
+      reps: 2,
+      pct: 0.80,
+    },
+    lastExposure: {
+      workoutEffort: 'good',
+    },
+    highestRecentSuccessfulVolumePct: 0.70,
+    recentFailedOrSkippedSetCount: 0,
+    meetReadiness: {
+      ready: false,
+      currentCycleReadinessRatio: 0.90,
+    },
+  };
+  const prescription = buildSmartLiftPrescription({
+    state,
+    role: 'primary',
+    isSingleLiftWorkout: true,
+    avoidRecentRepeat: true,
+  });
+
+  expect(prescription.validation.valid).toBe(true);
+  expect(prescription.repeatVariationApplied).toBe(true);
+  expect(prescription.sets[0]).toMatchObject({
+    labelKey: 'topDouble',
+    reps: 2,
+    pct: 0.825,
+    weight: 50,
+  });
+
+  const initialWarmups = generateWarmups(
+    prescription.sets,
+    lift
+  );
+  const completedSets = completeSmartLiftGrid({
+    sets: prescription.sets,
+    warmups: initialWarmups,
+    preferMoreVolume: true,
+  });
+  const finalWarmups = generateWarmups(
+    completedSets,
+    lift
+  );
+
+  expect(
+    (finalWarmups.length + completedSets.length) % 3
+  ).toBe(0);
+});
+
+test.each([
+  ['Squat', 42.5],
+  ['Squat', 145],
+  ['Bench', 32.5],
+  ['Bench', 100],
+  ['Deadlift', 60],
+  ['Deadlift', 180],
+])(
+  'detects equivalent repeated top-double stimulus for %s at %s kg regardless of set count',
+  (lift, trainingMax) => {
+    const topWeight = round25(trainingMax * 0.80);
+    const volumeWeight = round25(trainingMax * 0.70);
+
+    [2, 3, 4, 5, 6].forEach(candidateCount => {
+      const candidate = {
+        type: 'training',
+        lift,
+        lifts: [{
+          lift,
+          role: 'primary',
+          sets: [
+            setFor({
+              lift,
+              labelKey: 'topDouble',
+              reps: 2,
+              pct: 0.80,
+              trainingMax,
+            }),
+            ...Array.from({ length: candidateCount }, () =>
+              setFor({
+                lift,
+                labelKey: 'backoff',
+                reps: 4,
+                pct: 0.70,
+                trainingMax,
+              })
+            ),
+          ],
+        }],
+      };
+      const priorCount = candidateCount === 6 ? 2 : 6;
+      const priorSignature = [
+        `${lift}:2:${topWeight}:0.8`,
+        ...Array.from(
+          { length: priorCount },
+          () => `${lift}:4:${volumeWeight}:0.7`
+        ),
+      ].sort().join('|');
+
+      expect(shouldVaryRepeatedSmartPrescription(candidate, {
+        recentPrimaryLiftPrescriptionSignaturesByLift: {
+          [lift]: [priorSignature],
+        },
+        recentFatigueScore: 0,
+        recentFailedOrSkippedSetCount: 0,
+      })).toBe(true);
+    });
+  }
+);
+
+test.each([
+  ['Squat', 42.5],
+  ['Squat', 145],
+  ['Bench', 32.5],
+  ['Bench', 100],
+  ['Deadlift', 60],
+  ['Deadlift', 180],
+])(
+  'progresses safe repeated top-double work universally for %s at %s kg',
+  (lift, trainingMax) => {
+    const state = {
+      lift,
+      trainingMax,
+      progression: {
+        direction: 'hold',
+        adjustment: 0,
+        reason: 'good-feedback',
+      },
+      lastSuccessfulTop: {
+        reps: 2,
+        pct: 0.80,
+      },
+      lastExposure: {
+        workoutEffort: 'good',
+      },
+      highestRecentSuccessfulVolumePct: 0.70,
+      recentFailedOrSkippedSetCount: 0,
+      meetReadiness: {
+        ready: false,
+        currentCycleReadinessRatio: 0.90,
+      },
+    };
+
+    const progressed = buildSmartLiftPrescription({
+      state,
+      role: 'primary',
+      isSingleLiftWorkout: true,
+      avoidRecentRepeat: true,
+    });
+
+    expect(progressed.validation.valid).toBe(true);
+    expect(progressed.sets[0]).toMatchObject({
+      reps: 2,
+      pct: 0.825,
+    });
+    expect(progressed.repeatVariationApplied).toBe(true);
+  }
+);
