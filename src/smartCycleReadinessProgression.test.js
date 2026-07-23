@@ -178,17 +178,29 @@ test('names the cycle estimate and opener separately in the Smart modal', () => 
         reason: 'training-fallback',
         readiness: {
           meetPlanReady: false,
+          meetPlanOpenerReadyCount: 0,
+          meetPlanSecondAttemptReadyCount: 0,
+          meetPlanThirdAttemptPotentialCount: 0,
           meetPlanWeakestLift: 'Squat',
+          meetPlanWeakestPhase: 'opener',
           meetPlanWeakestBestE1RM: 116.16666666666666,
           meetPlanWeakestTarget: 130,
           meetPlanReadiness: {
             Squat: {
               currentCycleBestE1RM: 116.16666666666666,
               readinessTargetAttempt: 130,
+              readinessPhase: 'opener',
+              openerReady: false,
               attempts: { opener: 130 },
             },
           },
-          meetdayBlockers: ['meet-plan-not-ready'],
+          meetProjection: {
+            available: true,
+            label: 'C3W27–C3W29',
+            limitingLift: 'Squat',
+            limitingPhase: 'opener',
+          },
+          meetdayBlockers: ['opener-readiness'],
         },
       },
     })
@@ -197,17 +209,79 @@ test('names the cycle estimate and opener separately in the Smart modal', () => 
       label: 'Meet status',
       value: 'Squat — opener not yet demonstrated',
     },
+    { label: 'Openers', value: '0/3', kind: 'metric' },
+    { label: '2nd attempts', value: '0/3', kind: 'metric' },
+    { label: '3rd potential', value: '0/3', kind: 'metric' },
     { label: 'Cycle e1RM', value: '116.2 kg', kind: 'metric' },
     { label: 'Meet opener', value: '130 kg', kind: 'metric' },
     { label: 'Gap', value: '13.8 kg', kind: 'metric' },
+    { label: 'Projected meet', value: 'C3W27–C3W29' },
+    { label: 'Limiting lift', value: 'Squat — opener' },
     {
       label: 'Readiness basis',
       value: 'Only successful sets from the active cycle count.',
       kind: 'note',
     },
+    {
+      label: 'Projection assumption',
+      value: 'Assumes normal progress, successful workouts and unchanged meet attempts.',
+      kind: 'note',
+    },
   ]);
 });
 
+
+
+test('shows the second-attempt support phase in the Smart modal', () => {
+  const rows = getSmartModalDetailRows({
+    smartDecisionSummary: {
+      dayType: 'training',
+      reason: 'training-fallback',
+      readiness: {
+        meetPlanReady: false,
+        meetPlanOpenerReadyCount: 3,
+        meetPlanSecondAttemptReadyCount: 2,
+        meetPlanThirdAttemptPotentialCount: 0,
+        meetPlanWeakestLift: 'Deadlift',
+        meetPlanWeakestPhase: 'second-attempt',
+        meetPlanWeakestBestE1RM: 167.5,
+        meetPlanWeakestTarget: 170.625,
+        meetPlanReadiness: {
+          Deadlift: {
+            currentCycleBestE1RM: 167.5,
+            readinessTargetAttempt: 170.625,
+            readinessPhase: 'second-attempt',
+            openerReady: true,
+          },
+        },
+        meetProjection: {
+          available: true,
+          label: 'C3W29–C3W31',
+          limitingLift: 'Deadlift',
+          limitingPhase: 'second-attempt',
+        },
+      },
+    },
+  });
+
+  expect(rows[0]).toEqual({
+    label: 'Meet status',
+    value: 'Deadlift — second attempt not yet supported',
+  });
+  expect(rows).toContainEqual({
+    label: '2nd support',
+    value: '170.6 kg',
+    kind: 'metric',
+  });
+  expect(rows).toContainEqual({
+    label: 'Projected meet',
+    value: 'C3W29–C3W31',
+  });
+  expect(rows).toContainEqual({
+    label: 'Limiting lift',
+    value: 'Deadlift — 2nd attempt',
+  });
+});
 
 test('uses three-set secondary Bench volume on a mixed Smart day', () => {
   const state = buildSmartLiftState({

@@ -1068,6 +1068,12 @@ const SMART_THRESHOLDS = {
   FAILED_SET_DELOAD_COUNT: 2,
   MEETDAY_MIN_ACTIVE_BLOCK_DAYS: 8,
   MEETDAY_CURRENT_CYCLE_READINESS_RATIO: 1.0,
+  MEETDAY_SECOND_ATTEMPT_SUPPORT_RATIO: 0.975,
+  MEETDAY_THIRD_ATTEMPT_POTENTIAL_RATIO: 1.0,
+  MEET_PROJECTION_FALLBACK_GAIN_RATIO: 0.0125,
+  MEET_PROJECTION_MIN_GAIN_KG: 1.25,
+  MEET_PROJECTION_RANGE_LOW_FACTOR: 0.85,
+  MEET_PROJECTION_RANGE_HIGH_FACTOR: 1.25,
   POST_MEET_RECOVERY_MAX_DAYS: 3,
   POST_MEET_MIN_TRAINING_DAYS: 8,
   POST_FAILED_MEET_MIN_TRAINING_DAYS: 12,
@@ -1080,7 +1086,7 @@ const SMART_DELOAD = {
   MIN_PCT: 0.5,
 };
 
-const SMART_PRESCRIPTION_VERSION = 9;
+const SMART_PRESCRIPTION_VERSION = 10;
 
 const SMART_GENERATED_FLAGS = {
   RECOVERY: 'smartGeneratedRecovery',
@@ -3281,37 +3287,70 @@ function buildSmartReadinessSignals(context = {}) {
 
   const recentFatigueScore =
     Math.max(effortFatigueScore, 0) + failedSetFatigueScore;
+  const lastWasRecoveryIntervention = Boolean(
+    lastDay?.restDay ||
+    lastDay?.smartDayType === SMART_DAY_TYPES.RECOVERY ||
+    lastDay?.smartDayType === SMART_DAY_TYPES.DELOAD
+  );
+  const profileExposureTargets =
+    PROFILE_EXPOSURE_TARGETS[context.programProfile] ||
+    PROFILE_EXPOSURE_TARGETS.kelaniSbd;
+  const meetProjection = buildSmartMeetWorkoutProjection({
+    meetPlanReadiness: smartMeetPlanReadiness,
+    currentCycle: targetCycle,
+    currentWorkoutNumber: Math.max(
+      1,
+      (Number(context.currentIndex) || 0) + 1
+    ),
+    rollingLiftExposureCounts,
+    rollingTrainingDayCount: rollingTrainingDays.length,
+    profileExposureTargets,
+    lastWasRecoveryIntervention,
+  });
 
   return {
     completedCount: workoutDays.length,
     activeBlockCompletedCount: activeBlockDays.length,
     activeBlockLiftExposureCounts,
     rollingLiftExposureCounts,
+    rollingTrainingDayCount: rollingTrainingDays.length,
     recentLiftSetEffortScores,
     recentSharedLowerBodyFatigueScore,
     lastTrainingDayHeavyDeadlift: Boolean(lastTrainingDay?.heavyLiftByLift?.Deadlift),
     recentHeavyDeadliftDayCount: recentHeavyDeadliftDays.length,
     recentSquatMaxPct,
     meetPlanReady: Boolean(smartMeetPlanReadiness.ready),
+    meetPlanOpenerReady: Boolean(smartMeetPlanReadiness.openerReady),
+    meetPlanSecondAttemptReady: Boolean(
+      smartMeetPlanReadiness.secondAttemptReady
+    ),
+    meetPlanOpenerReadyCount:
+      smartMeetPlanReadiness.openerReadyCount || 0,
+    meetPlanSecondAttemptReadyCount:
+      smartMeetPlanReadiness.secondAttemptReadyCount || 0,
+    meetPlanThirdAttemptPotentialCount:
+      smartMeetPlanReadiness.thirdAttemptPotentialCount || 0,
     meetPlanHasCurrentCycleEvidence: smartMeetPlanReadiness.hasCurrentCycleMeetEvidence,
     meetPlanReadiness: smartMeetPlanReadiness.byLift,
     meetPlanWeakestLift: smartMeetPlanReadiness.weakestLift || null,
+    meetPlanWeakestPhase: smartMeetPlanReadiness.weakestPhase || null,
     meetPlanWeakestRatio: smartMeetPlanReadiness.weakestRatio || 0,
     meetPlanWeakestTarget: smartMeetPlanReadiness.weakestTarget || 0,
     meetPlanWeakestBestE1RM: smartMeetPlanReadiness.weakestBestE1RM || 0,
+    meetProjection,
     meetdayBlockers: getSmartMeetdayBlockers({
       activeBlockCompletedCount: activeBlockDays.length,
       activeBlockLiftExposureCounts,
       recentFatigueScore,
       recentFailedOrSkippedSetCount,
       meetPlanReady: Boolean(smartMeetPlanReadiness.ready),
+      meetPlanOpenerReady: Boolean(smartMeetPlanReadiness.openerReady),
+      meetPlanSecondAttemptReady: Boolean(
+        smartMeetPlanReadiness.secondAttemptReady
+      ),
       meetPlanReadiness: smartMeetPlanReadiness.byLift,
       lastWorkoutEffort: lastDay?.workoutEffort || null,
-      lastWasRecoveryIntervention: Boolean(
-        lastDay?.restDay ||
-        lastDay?.smartDayType === SMART_DAY_TYPES.RECOVERY ||
-        lastDay?.smartDayType === SMART_DAY_TYPES.DELOAD
-      ),
+      lastWasRecoveryIntervention,
       lastMeetWorkoutNumber: Number(lastMeetDay?.workoutNumber) || 0,
       lastMeetFailedOrSkippedSetCount,
       lastMeetWasFailed,
@@ -3330,11 +3369,7 @@ function buildSmartReadinessSignals(context = {}) {
     recentPrimaryLiftPrescriptionSignaturesByLift,
     lastSmartDayType: lastDay?.smartDayType || null,
     lastWasRestDay: Boolean(lastDay?.restDay || lastDay?.smartDayType === SMART_DAY_TYPES.RECOVERY),
-    lastWasRecoveryIntervention: Boolean(
-      lastDay?.restDay ||
-      lastDay?.smartDayType === SMART_DAY_TYPES.RECOVERY ||
-      lastDay?.smartDayType === SMART_DAY_TYPES.DELOAD
-    ),
+    lastWasRecoveryIntervention,
     inPostMeetRecovery,
     postMeetRecoveryTarget,
     postMeetRecoveryReason,
@@ -3565,6 +3600,57 @@ function getSmartMeetPlanAttemptWeight({ lift, key, prs = {}, meetPlannerAttempt
   return base > 0 ? roundMeetWeight(base * pct) : 0;
 }
 
+function getSmartMeetProgressionEvidence(entries = [], lift = null) {
+  const bestByWorkout = new Map();
+
+  (entries || []).forEach(entry => {
+    if (!entry || entry.lift !== lift) return;
+
+    const workoutNumber = Number(entry.workoutNumber) || 0;
+    const achievedE1RM = Number(
+      getAchievedHistoryMaxCandidates(entry).e1rm
+    ) || 0;
+
+    if (workoutNumber <= 0 || achievedE1RM <= 0) return;
+
+    bestByWorkout.set(
+      workoutNumber,
+      Math.max(
+        Number(bestByWorkout.get(workoutNumber)) || 0,
+        achievedE1RM
+      )
+    );
+  });
+
+  const observations = [...bestByWorkout.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([workoutNumber, e1rm]) => ({ workoutNumber, e1rm }));
+  const gains = [];
+  let runningBest = 0;
+
+  observations.forEach(observation => {
+    if (observation.e1rm <= runningBest) return;
+
+    if (runningBest > 0) {
+      gains.push(observation.e1rm - runningBest);
+    }
+
+    runningBest = observation.e1rm;
+  });
+
+  const recentGains = gains.slice(-3);
+  const observedGainPerExposure = recentGains.length > 0
+    ? recentGains.reduce((total, gain) => total + gain, 0) /
+      recentGains.length
+    : 0;
+
+  return {
+    successfulExposureCount: observations.length,
+    progressionGainCount: gains.length,
+    observedGainPerExposure,
+  };
+}
+
 export function buildSmartMeetPlanReadiness({
   history = [],
   prs = {},
@@ -3578,14 +3664,16 @@ export function buildSmartMeetPlanReadiness({
     !entry?.manualMax &&
     !entry?.seedMax
   );
-  const currentCycleBestMaxes = calculateAchievedMaxesFromHistory(currentCycleEntries);
+  const currentCycleBestMaxes =
+    calculateAchievedMaxesFromHistory(currentCycleEntries);
 
   const byLift = LIFT_ORDER.reduce((acc, lift) => {
     const bestE1RM = Math.max(
       Number(prs?.[lift]) || 0,
       Number(bestMaxes?.[lift]?.e1rm) || 0
     );
-    const currentCycleBestE1RM = Number(currentCycleBestMaxes?.[lift]?.e1rm) || 0;
+    const currentCycleBestE1RM =
+      Number(currentCycleBestMaxes?.[lift]?.e1rm) || 0;
 
     const attempts = MEET_ATTEMPT_KEYS.reduce((attemptAcc, key) => ({
       ...attemptAcc,
@@ -3602,19 +3690,98 @@ export function buildSmartMeetPlanReadiness({
       Number(attempts.secondAttempt) || 0,
       Number(attempts.thirdAttempt) || 0
     );
-
-    const readinessTargetAttempt = Number(attempts.opener) || 0;
+    const openerTargetAttempt = Number(attempts.opener) || 0;
+    const secondAttemptSupportTarget =
+      (Number(attempts.secondAttempt) || 0) *
+      SMART_THRESHOLDS.MEETDAY_SECOND_ATTEMPT_SUPPORT_RATIO;
+    const thirdAttemptPotentialTarget =
+      (Number(attempts.thirdAttempt) || 0) *
+      SMART_THRESHOLDS.MEETDAY_THIRD_ATTEMPT_POTENTIAL_RATIO;
+    const hasCurrentCycleEvidence = currentCycleBestE1RM > 0;
+    const openerReadinessRatio = openerTargetAttempt > 0
+      ? currentCycleBestE1RM / openerTargetAttempt
+      : 0;
+    const secondAttemptReadinessRatio = secondAttemptSupportTarget > 0
+      ? currentCycleBestE1RM / secondAttemptSupportTarget
+      : 0;
+    const thirdAttemptPotentialRatio = thirdAttemptPotentialTarget > 0
+      ? currentCycleBestE1RM / thirdAttemptPotentialTarget
+      : 0;
+    const openerReady = Boolean(
+      openerTargetAttempt > 0 &&
+      openerReadinessRatio >=
+        SMART_THRESHOLDS.MEETDAY_CURRENT_CYCLE_READINESS_RATIO
+    );
+    const secondAttemptReady = Boolean(
+      secondAttemptSupportTarget > 0 &&
+      secondAttemptReadinessRatio >= 1
+    );
+    const thirdAttemptPotential = Boolean(
+      thirdAttemptPotentialTarget > 0 &&
+      thirdAttemptPotentialRatio >= 1
+    );
+    const readinessPhase = !openerReady
+      ? 'opener'
+      : !secondAttemptReady
+        ? 'second-attempt'
+        : 'ready';
+    const readinessTargetAttempt = readinessPhase === 'opener'
+      ? openerTargetAttempt
+      : secondAttemptSupportTarget;
     const readinessRatio = readinessTargetAttempt > 0
       ? bestE1RM / readinessTargetAttempt
       : 0;
     const currentCycleReadinessRatio = readinessTargetAttempt > 0
       ? currentCycleBestE1RM / readinessTargetAttempt
       : 0;
-    const hasCurrentCycleEvidence = currentCycleBestE1RM > 0;
-    const currentCycleTarget = readinessTargetAttempt * SMART_THRESHOLDS.MEETDAY_CURRENT_CYCLE_READINESS_RATIO;
+    const currentCycleTarget = readinessTargetAttempt;
     const currentCycleShortfall = hasCurrentCycleEvidence
       ? Math.max(0, currentCycleTarget - currentCycleBestE1RM)
       : null;
+    const openerShortfall = hasCurrentCycleEvidence
+      ? Math.max(0, openerTargetAttempt - currentCycleBestE1RM)
+      : null;
+    const meetReadinessShortfall = hasCurrentCycleEvidence
+      ? Math.max(
+        0,
+        secondAttemptSupportTarget - currentCycleBestE1RM
+      )
+      : null;
+    const progressionEvidence = getSmartMeetProgressionEvidence(
+      currentCycleEntries,
+      lift
+    );
+    const fallbackGainPerExposure = Math.max(
+      SMART_THRESHOLDS.MEET_PROJECTION_MIN_GAIN_KG,
+      (Number(prs?.[lift]) || currentCycleTarget || 0) *
+        SMART_THRESHOLDS.MEET_PROJECTION_FALLBACK_GAIN_RATIO
+    );
+    const maximumCredibleGain = Math.max(
+      fallbackGainPerExposure,
+      currentCycleTarget * 0.05
+    );
+    const projectedGainPerExposure =
+      progressionEvidence.observedGainPerExposure > 0
+        ? Math.min(
+          Math.max(
+            progressionEvidence.observedGainPerExposure,
+            fallbackGainPerExposure * 0.5
+          ),
+          maximumCredibleGain
+        )
+        : fallbackGainPerExposure;
+    const projectedOpenerExposureCount = openerShortfall > 0
+      ? Math.max(
+        1,
+        Math.ceil(openerShortfall / projectedGainPerExposure)
+      )
+      : 0;
+    const projectedExposureCount = meetReadinessShortfall > 0
+      ? Math.max(
+        1,
+        Math.ceil(meetReadinessShortfall / projectedGainPerExposure)
+      )
+      : 0;
 
     return {
       ...acc,
@@ -3624,12 +3791,33 @@ export function buildSmartMeetPlanReadiness({
         hasCurrentCycleEvidence,
         attempts,
         plannedTopAttempt,
+        openerTargetAttempt,
+        secondAttemptSupportTarget,
+        thirdAttemptPotentialTarget,
+        openerReadinessRatio,
+        secondAttemptReadinessRatio,
+        thirdAttemptPotentialRatio,
+        openerReady,
+        secondAttemptReady,
+        thirdAttemptPotential,
+        readinessPhase,
         readinessTargetAttempt,
         currentCycleTarget,
         currentCycleShortfall,
+        openerShortfall,
+        meetReadinessShortfall,
         readinessRatio,
         currentCycleReadinessRatio,
-        ready: readinessTargetAttempt > 0 && currentCycleReadinessRatio >= SMART_THRESHOLDS.MEETDAY_CURRENT_CYCLE_READINESS_RATIO,
+        successfulExposureCount:
+          progressionEvidence.successfulExposureCount,
+        progressionGainCount:
+          progressionEvidence.progressionGainCount,
+        observedGainPerExposure:
+          progressionEvidence.observedGainPerExposure,
+        projectedGainPerExposure,
+        projectedOpenerExposureCount,
+        projectedExposureCount,
+        ready: openerReady && secondAttemptReady,
       },
     };
   }, {});
@@ -3637,23 +3825,161 @@ export function buildSmartMeetPlanReadiness({
   const hasCurrentCycleMeetEvidence = LIFT_ORDER.some(lift =>
     Number(byLift[lift]?.currentCycleBestE1RM) > 0
   );
-
+  const openerReady = LIFT_ORDER.every(
+    lift => byLift[lift]?.openerReady
+  );
+  const secondAttemptReady = LIFT_ORDER.every(
+    lift => byLift[lift]?.secondAttemptReady
+  );
+  const ready = openerReady && secondAttemptReady;
+  const weakestPhase = !openerReady
+    ? 'opener'
+    : !secondAttemptReady
+      ? 'second-attempt'
+      : 'ready';
+  const weakestCandidates = weakestPhase === 'opener'
+    ? LIFT_ORDER.filter(lift => !byLift[lift]?.openerReady)
+    : weakestPhase === 'second-attempt'
+      ? LIFT_ORDER.filter(lift => !byLift[lift]?.secondAttemptReady)
+      : [...LIFT_ORDER];
+  const ratioForPhase = lift => weakestPhase === 'opener'
+    ? Number(byLift[lift]?.openerReadinessRatio) || 0
+    : Number(byLift[lift]?.secondAttemptReadinessRatio) || 0;
   const weakestLift = hasCurrentCycleMeetEvidence
-    ? LIFT_ORDER
-      .filter(lift => byLift[lift]?.readinessTargetAttempt > 0)
-      .sort((a, b) =>
-        (byLift[a]?.currentCycleReadinessRatio || 0) - (byLift[b]?.currentCycleReadinessRatio || 0)
-      )[0] || null
+    ? weakestCandidates
+      .filter(lift => Number(byLift[lift]?.readinessTargetAttempt) > 0)
+      .sort((a, b) => ratioForPhase(a) - ratioForPhase(b))[0] || null
     : null;
 
   return {
     byLift,
     hasCurrentCycleMeetEvidence,
-    ready: LIFT_ORDER.every(lift => byLift[lift]?.ready),
+    openerReady,
+    secondAttemptReady,
+    ready,
+    openerReadyCount: LIFT_ORDER.filter(
+      lift => byLift[lift]?.openerReady
+    ).length,
+    secondAttemptReadyCount: LIFT_ORDER.filter(
+      lift => byLift[lift]?.secondAttemptReady
+    ).length,
+    thirdAttemptPotentialCount: LIFT_ORDER.filter(
+      lift => byLift[lift]?.thirdAttemptPotential
+    ).length,
     weakestLift,
-    weakestRatio: weakestLift ? byLift[weakestLift]?.currentCycleReadinessRatio || 0 : 0,
-    weakestTarget: weakestLift ? byLift[weakestLift]?.currentCycleTarget || 0 : 0,
-    weakestBestE1RM: weakestLift ? byLift[weakestLift]?.currentCycleBestE1RM || 0 : 0,
+    weakestPhase,
+    weakestRatio: weakestLift ? ratioForPhase(weakestLift) : 0,
+    weakestTarget: weakestLift
+      ? Number(byLift[weakestLift]?.currentCycleTarget) || 0
+      : 0,
+    weakestBestE1RM: weakestLift
+      ? Number(byLift[weakestLift]?.currentCycleBestE1RM) || 0
+      : 0,
+  };
+}
+
+export function buildSmartMeetWorkoutProjection({
+  meetPlanReadiness = {},
+  currentCycle = 1,
+  currentWorkoutNumber = 1,
+  rollingLiftExposureCounts = {},
+  rollingTrainingDayCount = 0,
+  profileExposureTargets = {},
+  lastWasRecoveryIntervention = false,
+} = {}) {
+  const byLift = meetPlanReadiness.byLift || {};
+  const missingEvidence = LIFT_ORDER.some(lift =>
+    !byLift[lift]?.hasCurrentCycleEvidence ||
+    Number(byLift[lift]?.readinessTargetAttempt) <= 0
+  );
+
+  if (missingEvidence) {
+    return {
+      available: false,
+      reason: 'insufficient-active-cycle-data',
+      limitingLift: meetPlanReadiness.weakestLift || null,
+      limitingPhase: meetPlanReadiness.weakestPhase || null,
+    };
+  }
+
+  const recoveryOverhead =
+    (SMART_THRESHOLDS.TRAINING_STREAK_RECOVERY_DAYS + 1) /
+    SMART_THRESHOLDS.TRAINING_STREAK_RECOVERY_DAYS;
+  const perLift = LIFT_ORDER.map(lift => {
+    const liftReadiness = byLift[lift] || {};
+    const requiredExposures = Math.max(
+      0,
+      Number(liftReadiness.projectedExposureCount) || 0
+    );
+    const observedFrequency = rollingTrainingDayCount > 0
+      ? (Number(rollingLiftExposureCounts[lift]) || 0) /
+        rollingTrainingDayCount
+      : 0;
+    const profileFrequency =
+      (Number(profileExposureTargets[lift]) || 0) /
+      SMART_THRESHOLDS.ROLLING_TRAINING_DAYS;
+    const effectiveFrequency = Math.max(
+      observedFrequency,
+      profileFrequency,
+      1 / SMART_THRESHOLDS.ROLLING_TRAINING_DAYS
+    );
+    const expectedWorkouts = requiredExposures > 0
+      ? requiredExposures * (1 / effectiveFrequency) * recoveryOverhead
+      : 0;
+
+    return {
+      lift,
+      phase: liftReadiness.readinessPhase || 'ready',
+      requiredExposures,
+      expectedWorkouts,
+      minimumWorkouts: Math.ceil(
+        expectedWorkouts *
+        SMART_THRESHOLDS.MEET_PROJECTION_RANGE_LOW_FACTOR
+      ),
+      maximumWorkouts: Math.ceil(
+        expectedWorkouts *
+        SMART_THRESHOLDS.MEET_PROJECTION_RANGE_HIGH_FACTOR
+      ),
+    };
+  });
+  const limiter = [...perLift].sort((a, b) =>
+    b.maximumWorkouts - a.maximumWorkouts ||
+    b.requiredExposures - a.requiredExposures
+  )[0] || null;
+  const taperWorkouts = lastWasRecoveryIntervention ? 0 : 1;
+  const minimumWorkoutsBeforeMeet =
+    (limiter?.minimumWorkouts || 0) + taperWorkouts;
+  const maximumWorkoutsBeforeMeet =
+    (limiter?.maximumWorkouts || 0) + taperWorkouts;
+  const safeCurrentWorkoutNumber = Math.max(
+    1,
+    Number(currentWorkoutNumber) || 1
+  );
+  const minimumWorkoutNumber =
+    safeCurrentWorkoutNumber + minimumWorkoutsBeforeMeet;
+  const maximumWorkoutNumber =
+    safeCurrentWorkoutNumber + maximumWorkoutsBeforeMeet;
+  const label = minimumWorkoutNumber === maximumWorkoutNumber
+    ? `C${currentCycle}W${minimumWorkoutNumber}`
+    : `C${currentCycle}W${minimumWorkoutNumber}–C${currentCycle}W${maximumWorkoutNumber}`;
+
+  return {
+    available: true,
+    cycle: Number(currentCycle) || 1,
+    currentWorkoutNumber: safeCurrentWorkoutNumber,
+    minimumWorkoutNumber,
+    maximumWorkoutNumber,
+    label,
+    limitingLift: meetPlanReadiness.ready
+      ? null
+      : limiter?.lift || meetPlanReadiness.weakestLift || null,
+    limitingPhase: meetPlanReadiness.ready
+      ? 'ready'
+      : limiter?.phase || meetPlanReadiness.weakestPhase || null,
+    taperWorkouts,
+    minimumWorkoutsBeforeMeet,
+    maximumWorkoutsBeforeMeet,
+    perLift,
   };
 }
 
@@ -3701,7 +4027,13 @@ function getSmartMeetdayBlockers(readiness = {}) {
   }
 
   if (!readiness.meetPlanReady) {
-    blockers.push('meet-plan-not-ready');
+    if (!readiness.meetPlanOpenerReady) {
+      blockers.push('opener-readiness');
+    } else if (!readiness.meetPlanSecondAttemptReady) {
+      blockers.push('second-attempt-readiness');
+    } else {
+      blockers.push('meet-plan-not-ready');
+    }
   }
 
   if (hasUnrecoveredSmartHardEffort(readiness)) {
@@ -5331,6 +5663,7 @@ function generateSmartWorkouts({
 
   const smartDecision = decideSmartNextWorkoutIndex({
     ...smartContext,
+    programProfile,
     prs: {
       Squat: squat,
       Bench: bench,
@@ -5500,6 +5833,8 @@ function generateSmartWorkouts({
             activeBlockCompletedCount: smartDecision.readiness.activeBlockCompletedCount || 0,
             activeBlockLiftExposureCounts: smartDecision.readiness.activeBlockLiftExposureCounts || {},
             rollingLiftExposureCounts: smartDecision.readiness.rollingLiftExposureCounts || {},
+            rollingTrainingDayCount:
+              smartDecision.readiness.rollingTrainingDayCount || 0,
             recentLiftSetEffortScores: smartDecision.readiness.recentLiftSetEffortScores || {},
             recentSharedLowerBodyFatigueScore:
               smartDecision.readiness.recentSharedLowerBodyFatigueScore || 0,
@@ -5510,12 +5845,27 @@ function generateSmartWorkouts({
             recentSquatMaxPct:
               smartDecision.readiness.recentSquatMaxPct || 0,
             meetPlanReady: Boolean(smartDecision.readiness.meetPlanReady),
+            meetPlanOpenerReady: Boolean(
+              smartDecision.readiness.meetPlanOpenerReady
+            ),
+            meetPlanSecondAttemptReady: Boolean(
+              smartDecision.readiness.meetPlanSecondAttemptReady
+            ),
+            meetPlanOpenerReadyCount:
+              smartDecision.readiness.meetPlanOpenerReadyCount || 0,
+            meetPlanSecondAttemptReadyCount:
+              smartDecision.readiness.meetPlanSecondAttemptReadyCount || 0,
+            meetPlanThirdAttemptPotentialCount:
+              smartDecision.readiness.meetPlanThirdAttemptPotentialCount || 0,
             meetPlanHasCurrentCycleEvidence: Boolean(smartDecision.readiness.meetPlanHasCurrentCycleEvidence),
             meetPlanReadiness: smartDecision.readiness.meetPlanReadiness || {},
             meetPlanWeakestLift: smartDecision.readiness.meetPlanWeakestLift || null,
+            meetPlanWeakestPhase:
+              smartDecision.readiness.meetPlanWeakestPhase || null,
             meetPlanWeakestRatio: smartDecision.readiness.meetPlanWeakestRatio || 0,
             meetPlanWeakestTarget: smartDecision.readiness.meetPlanWeakestTarget || 0,
             meetPlanWeakestBestE1RM: smartDecision.readiness.meetPlanWeakestBestE1RM || 0,
+            meetProjection: smartDecision.readiness.meetProjection || null,
             meetdayBlockers: smartDecision.readiness.meetdayBlockers || [],
             lastWorkoutNumber: smartDecision.readiness.lastWorkoutNumber || 0,
             lastMeetWorkoutNumber: smartDecision.readiness.lastMeetWorkoutNumber || 0,
@@ -8543,6 +8893,9 @@ export function getSmartMeetdayBlockerDisplayLabels(blockers = [], t = {}, readi
     fatigue: fatigueLabel,
     'failed-skipped': t.smartBlockerFailedSkipped || 'failed/skipped',
     'missing-lift-exposure': t.smartBlockerMissingLiftExposure || 'lift exposure',
+    'opener-readiness': t.smartBlockerOpenerReadiness || 'opener readiness',
+    'second-attempt-readiness':
+      t.smartBlockerSecondAttemptReadiness || 'second-attempt readiness',
     'meet-plan-not-ready': t.smartBlockerMeetPlanNotReady || 'meet plan',
     'last-workout-hard': t.smartBlockerLastWorkoutHard || 'last workout hard',
     'after-recovery-intervention': t.smartBlockerAfterRecovery || 'after recovery',
@@ -8749,38 +9102,75 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
   const isFatigueRecovery =
     summary.dayType === SMART_DAY_TYPES.RECOVERY &&
     summary.reason === SMART_DECISION_REASONS.FATIGUE_RECOVERY;
+  const hasMeetReadinessDetail = Boolean(
+    readiness.meetPlanWeakestLift ||
+    Object.keys(readiness.meetPlanReadiness || {}).length > 0
+  );
 
   if (isTrainingFallback && !readiness.meetPlanReady) {
     const weakestLift = readiness.meetPlanWeakestLift || null;
     const weakestReadiness = weakestLift
       ? readiness.meetPlanReadiness?.[weakestLift] || {}
       : {};
+    const weakestPhase =
+      readiness.meetPlanWeakestPhase ||
+      weakestReadiness.readinessPhase ||
+      (weakestReadiness.openerReady ? 'second-attempt' : 'opener');
     const cycleEstimate = Number(
       weakestReadiness.currentCycleBestE1RM ??
       readiness.meetPlanWeakestBestE1RM
     ) || 0;
-    const plannedOpener = Number(
+    const readinessTarget = Number(
       weakestReadiness.readinessTargetAttempt ??
-      weakestReadiness.attempts?.opener ??
       readiness.meetPlanWeakestTarget
     ) || 0;
-    const openerGap = cycleEstimate > 0 && plannedOpener > 0
-      ? Math.max(plannedOpener - cycleEstimate, 0)
+    const readinessGap = cycleEstimate > 0 && readinessTarget > 0
+      ? Math.max(readinessTarget - cycleEstimate, 0)
       : 0;
     const formatEstimate = value =>
       `${formatDecimalDisplay(value, {
         minimumFractionDigits: 1,
         maximumFractionDigits: 1,
       })} kg`;
+    const targetLabel = weakestPhase === 'second-attempt'
+      ? (t.smartSecondAttemptSupportShort || '2nd support')
+      : (t.smartPlannedOpenerShort || 'Meet opener');
+    const statusText = weakestLift
+      ? weakestPhase === 'second-attempt'
+        ? `${weakestLift} — ${t.smartSecondAttemptNotSupported || 'second attempt not yet supported'}`
+        : `${weakestLift} — ${t.smartOpenerNotDemonstrated || 'opener not yet demonstrated'}`
+      : (t.smartMeetPlanNotReady || 'Meet plan not ready');
 
     rows.push({
       label: t.smartMeetStatus || 'Meet status',
-      value: weakestLift
-        ? `${weakestLift} — ${t.smartOpenerNotDemonstrated || 'opener not yet demonstrated'}`
-        : (t.smartMeetPlanNotReady || 'Meet plan not ready'),
+      value: statusText,
     });
 
-    if (cycleEstimate > 0 && plannedOpener > 0) {
+    if (
+      readiness.meetPlanOpenerReadyCount !== undefined &&
+      readiness.meetPlanSecondAttemptReadyCount !== undefined &&
+      readiness.meetPlanThirdAttemptPotentialCount !== undefined
+    ) {
+      rows.push(
+        {
+          label: t.smartOpenerReadiness || 'Openers',
+          value: `${Number(readiness.meetPlanOpenerReadyCount) || 0}/3`,
+          kind: 'metric',
+        },
+        {
+          label: t.smartSecondAttemptReadiness || '2nd attempts',
+          value: `${Number(readiness.meetPlanSecondAttemptReadyCount) || 0}/3`,
+          kind: 'metric',
+        },
+        {
+          label: t.smartThirdAttemptPotential || '3rd potential',
+          value: `${Number(readiness.meetPlanThirdAttemptPotentialCount) || 0}/3`,
+          kind: 'metric',
+        }
+      );
+    }
+
+    if (cycleEstimate > 0 && readinessTarget > 0) {
       rows.push(
         {
           label: t.smartCycleEstimateShort || 'Cycle e1RM',
@@ -8788,22 +9178,65 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
           kind: 'metric',
         },
         {
-          label: t.smartPlannedOpenerShort || 'Meet opener',
-          value: formatWeightFromKg(plannedOpener, WEIGHT_UNITS.KG),
+          label: targetLabel,
+          value: weakestPhase === 'second-attempt'
+            ? formatEstimate(readinessTarget)
+            : formatWeightFromKg(readinessTarget, WEIGHT_UNITS.KG),
           kind: 'metric',
         },
         {
           label: t.smartOpenerGapShort || 'Gap',
-          value: formatEstimate(openerGap),
+          value: formatEstimate(readinessGap),
           kind: 'metric',
-        },
-        {
-          label: t.smartReadinessBasis || 'Readiness basis',
-          value: t.smartReadinessBasisText ||
-            'Only successful sets from the active cycle count.',
-          kind: 'note',
         }
       );
+    }
+  }
+
+  const meetProjection = readiness.meetProjection || null;
+  if (
+    meetProjection &&
+    summary.dayType !== SMART_DAY_TYPES.MEET
+  ) {
+    rows.push({
+      label: t.smartProjectedMeet || 'Projected meet',
+      value: meetProjection.available
+        ? meetProjection.label
+        : (t.smartProjectionUnavailable ||
+          'Not enough active-cycle data for a reliable projection.'),
+    });
+
+    if (meetProjection.available && meetProjection.limitingLift) {
+      const limitingPhase = meetProjection.limitingPhase === 'second-attempt'
+        ? (t.smartAttemptPhaseSecond || '2nd attempt')
+        : (t.smartAttemptPhaseOpener || 'opener');
+
+      rows.push({
+        label: t.smartLimitingLift || 'Limiting lift',
+        value: `${meetProjection.limitingLift} — ${limitingPhase}`,
+      });
+    }
+  }
+
+  if (
+    isTrainingFallback &&
+    !readiness.meetPlanReady &&
+    hasMeetReadinessDetail
+  ) {
+    rows.push({
+      label: t.smartReadinessBasis || 'Readiness basis',
+      value: t.smartReadinessBasisText ||
+        'Only successful sets from the active cycle count.',
+      kind: 'note',
+    });
+
+    if (readiness.meetProjection?.available) {
+      rows.push({
+        label: t.smartProjectionAssumption || 'Projection assumption',
+        value: t.smartProjectionAssumptionText ||
+          'Assumes normal progress, successful workouts and unchanged meet attempts.',
+        kind: 'note',
+      });
     }
   }
 
