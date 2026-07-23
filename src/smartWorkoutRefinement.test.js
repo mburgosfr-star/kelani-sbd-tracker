@@ -968,7 +968,7 @@ test('splits training fallback details into separate modal rows', () => {
     })
   ).toEqual([
     {
-      label: 'Meet status',
+      label: 'Current blocker',
       value: 'Meet plan not ready',
     },
     {

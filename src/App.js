@@ -9092,6 +9092,249 @@ function getSmartTrainingSelectionDisplayText(workout, t = {}) {
   return null;
 }
 
+function getSmartSetDisplayLabel(set = {}, t = {}) {
+  const labelKey = String(set?.labelKey || '').trim();
+  const fallbackLabels = {
+    topTriple: 'Top triple',
+    topDouble: 'Top double',
+    topSingle: 'Top single',
+    heavySingle: 'Heavy single',
+    opener: 'Opener',
+    workSets: 'Work sets',
+    backoff: 'Backoff',
+  };
+
+  return t[labelKey] || fallbackLabels[labelKey] || labelKey || 'Top set';
+}
+
+function formatSmartPrescriptionPercent(pct) {
+  const formatted = formatSetPercentDisplay(pct);
+  return formatted ? `${formatted}%` : null;
+}
+
+function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}) {
+  const prescription = liftBlock?.smartPrescription || null;
+  if (!prescription) return null;
+
+  const sets = (liftBlock.sets || []).filter(
+    set => !set?.warmup && !set?.isWarmup
+  );
+  if (!sets.length) return null;
+
+  const volumeSets = sets.filter(set =>
+    ['backoff', 'workSets'].includes(set?.labelKey)
+  );
+  const topSet = sets.find(set =>
+    isTopSetLabel(set?.labelKey)
+  ) || sets.find(set =>
+    !['backoff', 'workSets'].includes(set?.labelKey)
+  ) || null;
+  const parts = [];
+
+  if (topSet) {
+    const currentPct = Number(
+      topSet.pct ?? topSet.originalPct
+    ) || 0;
+    const previousPct = Number(
+      prescription.topSetAnchorPct ||
+      prescription.progressionAnchorPct
+    ) || 0;
+    const currentText = formatSmartPrescriptionPercent(currentPct);
+    const previousText = formatSmartPrescriptionPercent(previousPct);
+    const topLabel = getSmartSetDisplayLabel(topSet, t);
+
+    if (previousText && currentText) {
+      const delta = currentPct - previousPct;
+      const deltaText = Math.abs(delta) >= 0.0001
+        ? ` (${delta > 0 ? '+' : ''}${formatDecimalDisplay(delta * 100, {
+          minimumFractionDigits: Number.isInteger(delta * 100) ? 0 : 1,
+          maximumFractionDigits: 1,
+        })} pp)`
+        : '';
+      parts.push(
+        `${topLabel}: ${previousText} → ${currentText}${deltaText}`
+      );
+    } else if (currentText) {
+      parts.push(`${topLabel}: ${currentText}`);
+    }
+  }
+
+  if (volumeSets.length > 0) {
+    const grouped = [];
+    volumeSets.forEach(set => {
+      const pct = Number(set?.pct ?? set?.originalPct) || 0;
+      const reps = Number(set?.reps) || 0;
+      const key = `${reps}:${pct}`;
+      const existing = grouped.find(item => item.key === key);
+
+      if (existing) {
+        existing.count += 1;
+      } else {
+        grouped.push({ key, count: 1, reps, pct });
+      }
+    });
+
+    parts.push(grouped.map(group => {
+      const pctText = formatSmartPrescriptionPercent(group.pct) || '—';
+      return `${group.count}×${group.reps}×${pctText}`;
+    }).join(' + '));
+  }
+
+  const reasonParts = [];
+  if (prescription.regressionReason) {
+    reasonParts.push(
+      t.smartRegressionReason ||
+      'Recovery or missed work blocked normal progression.'
+    );
+  } else if (prescription.repeatVariationApplied) {
+    reasonParts.push(
+      t.smartEquivalentStimulusProgressed ||
+      'Progressed to avoid repeating the same stimulus.'
+    );
+  } else if ((prescription.role || liftBlock.role) === 'secondary') {
+    reasonParts.push(
+      t.smartSecondaryVolumeReason ||
+      'Lower volume for the secondary lift.'
+    );
+  } else if (
+    topSet &&
+    Number(topSet.pct ?? topSet.originalPct) >
+      Number(
+        prescription.topSetAnchorPct ||
+        prescription.progressionAnchorPct
+      )
+  ) {
+    reasonParts.push(
+      t.smartSafeProgressionReason ||
+      'Safe progression from the previous successful top set.'
+    );
+  } else {
+    reasonParts.push(
+      t.smartPrimarySelectionReason ||
+      'Primary work was selected from readiness and recent training.'
+    );
+  }
+
+  if (reasonParts.length > 0) {
+    parts.push(reasonParts.join(' '));
+  }
+
+  return {
+    label: `${liftBlock.lift} — ${t.smartPrescriptionPlan || 'Plan'}`,
+    value: parts.join(' · '),
+    kind: 'prescription',
+  };
+}
+
+export function getSmartPrescriptionDetailRows(workout = {}, t = {}) {
+  if (
+    workout?.smartDayType !== SMART_DAY_TYPES.TRAINING &&
+    workout?.smartDecisionSummary?.dayType !== SMART_DAY_TYPES.TRAINING
+  ) {
+    return [];
+  }
+
+  return (workout.lifts || [])
+    .map(liftBlock => getSmartLiftPrescriptionPlan(liftBlock, t))
+    .filter(row => row?.value);
+}
+
+export function buildSmartDiagnosticText(workout = {}, t = {}) {
+  const summary = workout?.smartDecisionSummary || {};
+  const readiness = summary.readiness || {};
+  const selection = workout?.smartTrainingSelectionSummary || {};
+  const cycle = Number(workout?.smartCurrentCycle) || 1;
+  const workoutNumber = Number(workout?.number) || 1;
+  const dayLabel = getSmartDayTypeDisplayLabel(
+    workout?.smartDayType || summary.dayType,
+    t
+  ) || summary.dayType || 'Unknown';
+  const detailRows = getSmartModalDetailRows(workout, t);
+  const lines = [
+    'Kelani SBD Smart diagnosis',
+    `App version: ${process.env.REACT_APP_VERSION || 'dev'}`,
+    `Prescription version: ${Number(workout?.smartGeneratedPrescriptionVersion) || 0}`,
+    `Workout: C${cycle}W${workoutNumber}`,
+    `Decision: ${dayLabel}`,
+  ];
+
+  detailRows.forEach(row => {
+    lines.push(`${row.label}: ${row.value}`);
+  });
+
+  if (selection.primaryLift || selection.secondaryLift) {
+    lines.push(
+      `Selection: primary=${selection.primaryLift || 'none'}, ` +
+      `secondary=${selection.secondaryLift || 'none'}`
+    );
+  }
+
+  if (Array.isArray(selection.reasonFlags) && selection.reasonFlags.length) {
+    lines.push(`Reason flags: ${selection.reasonFlags.join(', ')}`);
+  }
+
+  const exposureCounts =
+    selection.frequencyExposureCounts ||
+    selection.frequencyWeightedExposureCounts ||
+    null;
+  if (exposureCounts) {
+    lines.push(
+      `Recent frequency: ${LIFT_ORDER.map(lift =>
+        `${lift}=${Number(exposureCounts[lift]) || 0}`
+      ).join(', ')}`
+    );
+  }
+
+  if (Array.isArray(readiness.meetdayBlockers) && readiness.meetdayBlockers.length) {
+    lines.push(`Meet blockers: ${readiness.meetdayBlockers.join(', ')}`);
+  }
+
+  (workout.lifts || []).forEach(liftBlock => {
+    const prescription = liftBlock?.smartPrescription || {};
+    lines.push(
+      `${liftBlock.lift} technical: ` +
+      `role=${prescription.role || liftBlock.role || 'unknown'}, ` +
+      `topAnchor=${Number(prescription.topSetAnchorPct) || 0}, ` +
+      `volumeAnchor=${Number(prescription.volumeAnchorPct) || 0}, ` +
+      `plannedVolume=${Number(prescription.plannedVolumePct) || 0}, ` +
+      `repeatVariation=${Boolean(prescription.repeatVariationApplied)}, ` +
+      `regression=${prescription.regressionReason || 'none'}, ` +
+      `gridItems=${Number(prescription.gridItemCount) || 0}`
+    );
+  });
+
+  return lines.join('\n');
+}
+
+async function copySmartDiagnosticText(text = '') {
+  const value = String(text || '');
+  if (!value) throw new Error('Smart diagnosis is empty.');
+
+  if (
+    typeof navigator !== 'undefined' &&
+    navigator.clipboard?.writeText
+  ) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  if (typeof document === 'undefined') {
+    throw new Error('Clipboard is unavailable.');
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand?.('copy');
+  document.body.removeChild(textarea);
+
+  if (!copied) throw new Error('Clipboard copy failed.');
+}
+
 export function getSmartModalDetailRows(workout = {}, t = {}) {
   const summary = workout?.smartDecisionSummary || {};
   const readiness = summary.readiness || {};
@@ -9142,7 +9385,7 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
       : (t.smartMeetPlanNotReady || 'Meet plan not ready');
 
     rows.push({
-      label: t.smartMeetStatus || 'Meet status',
+      label: t.smartCurrentBlocker || 'Current blocker',
       value: statusText,
     });
 
@@ -9193,6 +9436,8 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
     }
   }
 
+  rows.push(...getSmartPrescriptionDetailRows(workout, t));
+
   const meetProjection = readiness.meetProjection || null;
   if (
     meetProjection &&
@@ -9212,7 +9457,7 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
         : (t.smartAttemptPhaseOpener || 'opener');
 
       rows.push({
-        label: t.smartLimitingLift || 'Limiting lift',
+        label: t.smartProjectedLimiter || 'Projected limiter',
         value: `${meetProjection.limitingLift} — ${limitingPhase}`,
       });
     }
@@ -9276,6 +9521,7 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
 
 function SmartDayTypeInline({ workout, t }) {
   const [showSmartInfo, setShowSmartInfo] = useState(false);
+  const [smartCopyStatus, setSmartCopyStatus] = useState(null);
   const label = getSmartDayTypeDisplayLabel(workout?.smartDayType, t);
   if (!label) return null;
 
@@ -9305,21 +9551,56 @@ function SmartDayTypeInline({ workout, t }) {
       label: t.smartReason || 'Reason',
       value: reasonText,
     } : null,
-    selectionText ? {
+    !usesStructuredSmartDetails && selectionText ? {
       label: limiterMatch ? 'e1RM limit' : (t.smartSelection || 'Selection'),
       value: limiterMatch ? limiterMatch[1] : selectionText,
     } : null,
   ].filter(Boolean);
   const decisionRow = infoRows.find(row => row.emphasis) || null;
-  const meetStatusLabel = t.smartMeetStatus || 'Meet status';
-  const statusRows = infoRows.filter(row => row.label === meetStatusLabel);
+  const currentBlockerLabel = t.smartCurrentBlocker || 'Current blocker';
+  const statusRows = infoRows.filter(
+    row => row.label === currentBlockerLabel
+  );
   const metricRows = infoRows.filter(row => row.kind === 'metric');
   const noteRows = infoRows.filter(row => row.kind === 'note');
   const otherRows = infoRows.filter(row =>
     !row.emphasis &&
-    row.label !== meetStatusLabel &&
+    row.label !== currentBlockerLabel &&
     !['metric', 'note'].includes(row.kind)
   );
+  const prescriptionRows = otherRows.filter(
+    row => row.kind === 'prescription'
+  );
+  const projectedMeetLabel =
+    t.smartProjectedMeet || 'Projected meet';
+  const projectedLimiterLabel =
+    t.smartProjectedLimiter || 'Projected limiter';
+  const projectionRows = otherRows.filter(row =>
+    [projectedMeetLabel, projectedLimiterLabel].includes(row.label)
+  );
+  const generalRows = otherRows.filter(row =>
+    row.kind !== 'prescription' &&
+    ![projectedMeetLabel, projectedLimiterLabel].includes(row.label)
+  );
+
+  function getPrescriptionPresentation(row = {}) {
+    const lift = String(row.label || '').split(' — ')[0] || row.label;
+    const parts = String(row.value || '')
+      .split(' · ')
+      .map(part => part.trim())
+      .filter(Boolean);
+    const reason = parts.length > 1 ? parts.at(-1) : '';
+    const plan = parts.length > 1
+      ? parts.slice(0, -1).join(' · ')
+      : parts[0] || '';
+    const color = ({
+      Squat: THEME.red,
+      Bench: THEME.primary,
+      Deadlift: THEME.yellow,
+    }[lift] || THEME.text);
+
+    return { lift, plan, reason, color };
+  }
 
   return (
     <>
@@ -9331,7 +9612,10 @@ function SmartDayTypeInline({ workout, t }) {
         <button
           type="button"
           aria-label={`Smart: ${label}. ${t.smartWorkoutInfo || 'Open workout information'}`}
-          onClick={() => setShowSmartInfo(true)}
+          onClick={() => {
+            setSmartCopyStatus(null);
+            setShowSmartInfo(true);
+          }}
           style={{
             appearance: 'none',
             display: 'inline-flex',
@@ -9398,234 +9682,367 @@ function SmartDayTypeInline({ workout, t }) {
             style={{
               width: '100%',
               maxWidth: 390,
-              background: THEME.card,
+              maxHeight: 'calc(100vh - 28px)',
+              overflow: 'hidden',
+              background: `linear-gradient(180deg, ${THEME.card} 0%, #0d0d0d 100%)`,
               border: `1px solid ${THEME.primary}`,
-              borderRadius: 16,
-              padding: 18,
+              borderRadius: 18,
               boxSizing: 'border-box',
-              boxShadow: '0 18px 50px rgba(0, 0, 0, 0.55)',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.62)',
             }}
           >
-            <h2 style={{
-              margin: '0 0 12px',
-              color: THEME.primary,
-              fontSize: 20,
-              fontWeight: 900,
-              textAlign: 'center',
-              lineHeight: 1.15,
-            }}>
-              Smart workout
-            </h2>
+            <div style={{
+              height: 3,
+              background: `linear-gradient(90deg, transparent, ${THEME.primary}, transparent)`,
+            }} />
 
-            {infoRows.length > 0 ? (
-              <div style={{
-                display: 'grid',
-                gap: 10,
-                marginBottom: 16,
-              }}>
-                {decisionRow && (
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '72px minmax(0, 1fr)',
-                    gap: 10,
-                    alignItems: 'center',
-                    minWidth: 0,
-                    padding: '9px 11px',
-                    borderRadius: 10,
-                    border: `1px solid ${THEME.border}`,
-                    background: `${THEME.primary}12`,
-                  }}>
-                    <div style={{
-                      color: THEME.muted,
-                      fontSize: 10,
-                      fontWeight: 900,
-                      lineHeight: 1.15,
-                      textTransform: 'uppercase',
-                      letterSpacing: 0.35,
-                    }}>
-                      {decisionRow.label}
-                    </div>
-                    <div style={{
-                      minWidth: 0,
-                      color: THEME.primary,
-                      fontSize: 14.5,
-                      fontWeight: 900,
-                      lineHeight: 1.25,
-                      overflowWrap: 'anywhere',
-                    }}>
-                      {decisionRow.value}
-                    </div>
-                  </div>
-                )}
-
-                {statusRows.map(row => (
-                  <div key={row.label} style={{
-                    minWidth: 0,
-                    padding: '10px 11px',
-                    borderRadius: 10,
-                    border: `1px solid ${THEME.border}`,
-                    background: 'rgba(255, 255, 255, 0.025)',
-                  }}>
-                    <div style={{
-                      marginBottom: 4,
-                      color: THEME.muted,
-                      fontSize: 9.5,
-                      fontWeight: 900,
-                      lineHeight: 1.15,
-                      textTransform: 'uppercase',
-                      letterSpacing: 0.35,
-                    }}>
-                      {row.label}
-                    </div>
-                    <div style={{
-                      color: THEME.text,
-                      fontSize: 15,
-                      fontWeight: 900,
-                      lineHeight: 1.3,
-                      overflowWrap: 'anywhere',
-                    }}>
-                      {row.value}
-                    </div>
-                  </div>
-                ))}
-
-                {metricRows.length > 0 && (
-                  <div
-                    data-testid="smartMeetMetricGrid"
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                      gap: 7,
-                      minWidth: 0,
-                    }}
-                  >
-                    {metricRows.map(row => (
-                      <div key={row.label} style={{
-                        minWidth: 0,
-                        padding: '10px 6px 9px',
-                        borderRadius: 10,
-                        border: `1px solid ${THEME.border}`,
-                        background: 'rgba(255, 255, 255, 0.035)',
-                        textAlign: 'center',
-                      }}>
-                        <div style={{
-                          color: THEME.text,
-                          fontSize: 15.5,
-                          fontWeight: 900,
-                          lineHeight: 1.15,
-                          whiteSpace: 'nowrap',
-                        }}>
-                          {row.value}
-                        </div>
-                        <div style={{
-                          marginTop: 5,
-                          color: THEME.muted,
-                          fontSize: 9,
-                          fontWeight: 900,
-                          lineHeight: 1.15,
-                          textTransform: 'uppercase',
-                          letterSpacing: 0.2,
-                          overflowWrap: 'anywhere',
-                        }}>
-                          {row.label}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {noteRows.map(row => (
-                  <div key={row.label} style={{
-                    minWidth: 0,
-                    padding: '10px 11px',
-                    borderRadius: 10,
-                    border: `1px solid ${THEME.border}`,
-                    background: 'rgba(255, 255, 255, 0.02)',
-                  }}>
-                    <div style={{
-                      marginBottom: 4,
-                      color: THEME.muted,
-                      fontSize: 9.5,
-                      fontWeight: 900,
-                      lineHeight: 1.15,
-                      textTransform: 'uppercase',
-                      letterSpacing: 0.35,
-                    }}>
-                      {row.label}
-                    </div>
-                    <div style={{
-                      color: THEME.text,
-                      fontSize: 12.5,
-                      fontWeight: 750,
-                      lineHeight: 1.4,
-                      overflowWrap: 'anywhere',
-                    }}>
-                      {row.value}
-                    </div>
-                  </div>
-                ))}
-
-                {otherRows.map(row => (
-                  <div key={row.label} style={{
-                    minWidth: 0,
-                    padding: '10px 11px',
-                    borderRadius: 10,
-                    border: `1px solid ${THEME.border}`,
-                    background: 'rgba(255, 255, 255, 0.025)',
-                  }}>
-                    <div style={{
-                      marginBottom: 4,
-                      color: THEME.muted,
-                      fontSize: 9.5,
-                      fontWeight: 900,
-                      lineHeight: 1.15,
-                      textTransform: 'uppercase',
-                      letterSpacing: 0.35,
-                    }}>
-                      {row.label}
-                    </div>
-                    <div style={{
-                      color: THEME.text,
-                      fontSize: 13.5,
-                      fontWeight: 850,
-                      lineHeight: 1.35,
-                      overflowWrap: 'anywhere',
-                    }}>
-                      {row.value}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p style={{
-                margin: '0 0 14px',
-                color: THEME.muted,
-                fontSize: 14,
-                fontWeight: 800,
-                lineHeight: 1.35,
+            <div style={{ padding: '15px 16px 14px' }}>
+              <header style={{
+                marginBottom: 12,
                 textAlign: 'center',
               }}>
-                {t.smartInfoUnavailable || 'No extra Smart details for this workout.'}
-              </p>
-            )}
+                <h2 style={{
+                  margin: 0,
+                  color: THEME.primary,
+                  fontSize: 21,
+                  fontWeight: 900,
+                  lineHeight: 1.1,
+                  letterSpacing: -0.25,
+                }}>
+                  {t.smartWorkoutTitle || 'Smart workout'}
+                </h2>
+                {decisionRow ? (
+                  <div style={{
+                    marginTop: 4,
+                    color: THEME.muted,
+                    fontSize: 10,
+                    fontWeight: 900,
+                    lineHeight: 1.1,
+                    letterSpacing: 0.8,
+                    textTransform: 'uppercase',
+                  }}>
+                    {decisionRow.value}
+                  </div>
+                ) : null}
+              </header>
 
-            <button
-              type="button"
-              onClick={() => setShowSmartInfo(false)}
-              style={{
-                width: '100%',
-                padding: 11,
-                borderRadius: 8,
-                border: `1px solid ${THEME.primary}`,
-                background: 'transparent',
-                color: THEME.text,
-                fontSize: 15,
-                fontWeight: 900,
-                cursor: 'pointer',
-              }}
-            >
-              {t.close || 'Close'}
-            </button>
+              {infoRows.length > 0 ? (
+                <div>
+                  {statusRows.map(row => (
+                    <section key={row.label} style={{
+                      padding: '0 0 11px',
+                      borderBottom: `1px solid ${THEME.border}`,
+                    }}>
+                      <div style={{
+                        marginBottom: 4,
+                        color: THEME.muted,
+                        fontSize: 9,
+                        fontWeight: 900,
+                        lineHeight: 1.1,
+                        letterSpacing: 0.55,
+                        textTransform: 'uppercase',
+                      }}>
+                        {row.label}
+                      </div>
+                      <div style={{
+                        color: THEME.text,
+                        fontSize: 15,
+                        fontWeight: 900,
+                        lineHeight: 1.22,
+                        overflowWrap: 'anywhere',
+                      }}>
+                        {row.value}
+                      </div>
+                    </section>
+                  ))}
+
+                  {metricRows.length > 0 && (
+                    <div
+                      data-testid="smartMeetMetricGrid"
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                        minWidth: 0,
+                        margin: '0 -4px',
+                        padding: '8px 0',
+                        borderBottom: `1px solid ${THEME.border}`,
+                      }}
+                    >
+                      {metricRows.map((row, index) => (
+                        <div key={row.label} style={{
+                          minWidth: 0,
+                          padding: '5px 5px',
+                          textAlign: 'center',
+                          borderRight:
+                            index % 3 !== 2
+                              ? `1px solid ${THEME.border}`
+                              : 'none',
+                          borderBottom:
+                            index < 3 && metricRows.length > 3
+                              ? `1px solid ${THEME.border}`
+                              : 'none',
+                        }}>
+                          <div style={{
+                            color: THEME.text,
+                            fontSize: 15,
+                            fontWeight: 900,
+                            lineHeight: 1.05,
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {row.value}
+                          </div>
+                          <div style={{
+                            marginTop: 4,
+                            color: THEME.muted,
+                            fontSize: 8.25,
+                            fontWeight: 900,
+                            lineHeight: 1.1,
+                            letterSpacing: 0.25,
+                            textTransform: 'uppercase',
+                            overflowWrap: 'anywhere',
+                          }}>
+                            {row.label}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {prescriptionRows.length > 0 && (
+                    <div style={{
+                      padding: '8px 0 7px',
+                      borderBottom: `1px solid ${THEME.border}`,
+                    }}>
+                      {prescriptionRows.map((row, index) => {
+                        const presentation = getPrescriptionPresentation(row);
+
+                        return (
+                          <section
+                            key={row.label}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '68px minmax(0, 1fr)',
+                              gap: 10,
+                              minWidth: 0,
+                              padding: index === 0 ? '2px 0 8px' : '8px 0 2px',
+                              borderTop:
+                                index > 0
+                                  ? `1px solid ${THEME.border}`
+                                  : 'none',
+                            }}
+                          >
+                            <div style={{
+                              color: presentation.color,
+                              fontSize: 11,
+                              fontWeight: 900,
+                              lineHeight: 1.15,
+                              letterSpacing: 0.25,
+                              textTransform: 'uppercase',
+                            }}>
+                              {presentation.lift}
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{
+                                color: THEME.text,
+                                fontSize: 13,
+                                fontWeight: 900,
+                                lineHeight: 1.25,
+                                overflowWrap: 'anywhere',
+                              }}>
+                                {presentation.plan}
+                              </div>
+                              {presentation.reason ? (
+                                <div style={{
+                                  marginTop: 3,
+                                  color: THEME.muted,
+                                  fontSize: 10.5,
+                                  fontWeight: 750,
+                                  lineHeight: 1.25,
+                                  overflowWrap: 'anywhere',
+                                }}>
+                                  {presentation.reason}
+                                </div>
+                              ) : null}
+                            </div>
+                          </section>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {projectionRows.length > 0 && (
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        projectionRows.length > 1
+                          ? 'repeat(2, minmax(0, 1fr))'
+                          : 'minmax(0, 1fr)',
+                      gap: 12,
+                      minWidth: 0,
+                      padding: '9px 0',
+                      borderBottom:
+                        generalRows.length > 0 || noteRows.length > 0
+                          ? `1px solid ${THEME.border}`
+                          : 'none',
+                    }}>
+                      {projectionRows.map(row => (
+                        <div key={row.label} style={{ minWidth: 0 }}>
+                          <div style={{
+                            marginBottom: 4,
+                            color: THEME.muted,
+                            fontSize: 8.5,
+                            fontWeight: 900,
+                            lineHeight: 1.1,
+                            letterSpacing: 0.4,
+                            textTransform: 'uppercase',
+                          }}>
+                            {row.label}
+                          </div>
+                          <div style={{
+                            color: THEME.text,
+                            fontSize: 13.5,
+                            fontWeight: 900,
+                            lineHeight: 1.2,
+                            overflowWrap: 'anywhere',
+                          }}>
+                            {row.value}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {generalRows.map((row, index) => (
+                    <div key={row.label} style={{
+                      display: 'grid',
+                      gridTemplateColumns: '100px minmax(0, 1fr)',
+                      gap: 10,
+                      minWidth: 0,
+                      padding: '7px 0',
+                      borderBottom:
+                        index < generalRows.length - 1 || noteRows.length > 0
+                          ? `1px solid ${THEME.border}`
+                          : 'none',
+                    }}>
+                      <div style={{
+                        color: THEME.muted,
+                        fontSize: 8.5,
+                        fontWeight: 900,
+                        lineHeight: 1.15,
+                        letterSpacing: 0.35,
+                        textTransform: 'uppercase',
+                      }}>
+                        {row.label}
+                      </div>
+                      <div style={{
+                        minWidth: 0,
+                        color: THEME.text,
+                        fontSize: 12,
+                        fontWeight: 800,
+                        lineHeight: 1.25,
+                        overflowWrap: 'anywhere',
+                      }}>
+                        {row.value}
+                      </div>
+                    </div>
+                  ))}
+
+                  {noteRows.length > 0 && (
+                    <div style={{
+                      padding: '8px 0 2px',
+                      color: THEME.muted,
+                      fontSize: 9.5,
+                      fontWeight: 700,
+                      lineHeight: 1.35,
+                    }}>
+                      {noteRows.map((row, index) => (
+                        <div key={row.label} style={{
+                          marginTop: index > 0 ? 3 : 0,
+                        }}>
+                          <strong style={{
+                            color: THEME.text,
+                            fontWeight: 850,
+                          }}>
+                            {row.label}:
+                          </strong>{' '}
+                          {row.value}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p style={{
+                  margin: '0 0 14px',
+                  color: THEME.muted,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  lineHeight: 1.35,
+                  textAlign: 'center',
+                }}>
+                  {t.smartInfoUnavailable || 'No extra Smart details for this workout.'}
+                </p>
+              )}
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+                gap: 8,
+                marginTop: 12,
+              }}>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await copySmartDiagnosticText(
+                        buildSmartDiagnosticText(workout, t)
+                      );
+                      setSmartCopyStatus('copied');
+                    } catch {
+                      setSmartCopyStatus('failed');
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: 9,
+                    borderRadius: 9,
+                    border: `1px solid ${THEME.primary}`,
+                    background: `${THEME.primary}18`,
+                    color: THEME.primary,
+                    fontSize: 13,
+                    fontWeight: 900,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {smartCopyStatus === 'copied'
+                    ? (t.smartDiagnosisCopied || 'Copied')
+                    : smartCopyStatus === 'failed'
+                      ? (t.smartCopyFailed || 'Copy failed')
+                      : (t.smartCopyDiagnosis || 'Copy diagnosis')}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSmartCopyStatus(null);
+                    setShowSmartInfo(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: 9,
+                    borderRadius: 9,
+                    border: `1px solid ${THEME.primary}`,
+                    background: 'transparent',
+                    color: THEME.text,
+                    fontSize: 13,
+                    fontWeight: 900,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t.close || 'Close'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
