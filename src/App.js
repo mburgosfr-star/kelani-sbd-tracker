@@ -1080,7 +1080,7 @@ const SMART_DELOAD = {
   MIN_PCT: 0.5,
 };
 
-const SMART_PRESCRIPTION_VERSION = 8;
+const SMART_PRESCRIPTION_VERSION = 9;
 
 const SMART_GENERATED_FLAGS = {
   RECOVERY: 'smartGeneratedRecovery',
@@ -2741,7 +2741,7 @@ function getSmartTrainingPrescriptionSignature(workout = {}) {
       });
     });
 
-    return parts.sort().join('|');
+    return [...new Set(parts)].sort().join('|');
   }).filter(Boolean);
 
   return [...new Set(snapshotSignatures)].sort().join('||');
@@ -2781,17 +2781,31 @@ function getSmartPrimaryLiftPrescriptionSignature(
   return [...new Set(signatures)].sort().join('||');
 }
 
+
+function normalizeSmartTrainingPrescriptionSignature(signature = '') {
+  return String(signature || '')
+    .split('||')
+    .map(snapshot => [...new Set(
+      snapshot.split('|').filter(Boolean)
+    )].sort().join('|'))
+    .filter(Boolean)
+    .sort()
+    .join('||');
+}
+
 function hasSameSmartTrainingPrescriptionAsLastWorkout(candidate = {}, readiness = {}) {
   const primaryLift =
     candidate?.lifts?.find(block => block?.role === 'primary')?.lift ||
     candidate?.lifts?.[0]?.lift ||
     candidate?.lift;
-  const primarySignature =
-    getSmartPrimaryLiftPrescriptionSignature(candidate, primaryLift);
-  const recentPrimarySignatures =
+  const primarySignature = normalizeSmartTrainingPrescriptionSignature(
+    getSmartPrimaryLiftPrescriptionSignature(candidate, primaryLift)
+  );
+  const recentPrimarySignatures = (
     readiness.recentPrimaryLiftPrescriptionSignaturesByLift?.[
       primaryLift
-    ] || [];
+    ] || []
+  ).map(normalizeSmartTrainingPrescriptionSignature);
 
   if (
     primarySignature &&
@@ -2800,12 +2814,14 @@ function hasSameSmartTrainingPrescriptionAsLastWorkout(candidate = {}, readiness
     return true;
   }
 
-  const candidateSignature =
-    getSmartTrainingPrescriptionSignature(candidate);
-  const recentSignatures =
+  const candidateSignature = normalizeSmartTrainingPrescriptionSignature(
+    getSmartTrainingPrescriptionSignature(candidate)
+  );
+  const recentSignatures = (
     Array.isArray(readiness.recentTrainingPrescriptionSignatures)
       ? readiness.recentTrainingPrescriptionSignatures
-      : [readiness.lastWorkoutPrescriptionSignature].filter(Boolean);
+      : [readiness.lastWorkoutPrescriptionSignature].filter(Boolean)
+  ).map(normalizeSmartTrainingPrescriptionSignature);
 
   return Boolean(
     candidateSignature &&
@@ -4829,6 +4845,78 @@ function getProjectedSmartLiftEligibility({
   };
 }
 
+export function completeSmartLiftGrid({
+  sets = [],
+  warmups = [],
+  preferMoreVolume = false,
+} = {}) {
+  const completedSets = (sets || []).map(set => ({ ...set }));
+  const warmupCount = Array.isArray(warmups) ? warmups.length : 0;
+  const remainder = (warmupCount + completedSets.length) % 3;
+
+  if (remainder === 0) return completedSets;
+
+  const isVolumeSet = set => {
+    const label = String(set?.labelKey || '').toLowerCase();
+    return label === 'backoff' || label === 'worksets';
+  };
+  const volumeIndexes = completedSets
+    .map((set, index) => isVolumeSet(set) ? index : -1)
+    .filter(index => index >= 0);
+
+  if (volumeIndexes.length === 0) {
+    throw new Error(
+      'Smart lift grid cannot be completed without volume sets.'
+    );
+  }
+
+  const addCount = (3 - remainder) % 3;
+  const removeCount = remainder;
+  const minimumVolumeSets = 2;
+  const maximumVolumeSets = 6;
+  const canAdd =
+    addCount > 0 &&
+    volumeIndexes.length + addCount <= maximumVolumeSets;
+  const canRemove =
+    removeCount > 0 &&
+    volumeIndexes.length - removeCount >= minimumVolumeSets;
+  const shouldAdd = canAdd && (preferMoreVolume || !canRemove);
+
+  if (shouldAdd || (!canRemove && canAdd)) {
+    const template = completedSets[volumeIndexes.at(-1)];
+
+    for (let index = 0; index < addCount; index += 1) {
+      completedSets.push({
+        ...template,
+        done: false,
+        failed: false,
+        skipped: false,
+      });
+    }
+  } else if (canRemove) {
+    const removeIndexes = new Set(volumeIndexes.slice(-removeCount));
+    const reducedSets = completedSets.filter(
+      (_, index) => !removeIndexes.has(index)
+    );
+
+    if ((warmupCount + reducedSets.length) % 3 !== 0) {
+      throw new Error('Smart lift grid reduction invariant failed.');
+    }
+
+    return reducedSets;
+  } else {
+    throw new Error(
+      'Smart lift grid cannot be completed within safe volume limits.'
+    );
+  }
+
+  if ((warmupCount + completedSets.length) % 3 !== 0) {
+    throw new Error('Smart lift grid completion invariant failed.');
+  }
+
+  return completedSets;
+}
+
 function buildGeneratedSmartTrainingWorkout({
   sourceWorkout = {},
   programProfile = 'kelaniSbd',
@@ -5007,14 +5095,36 @@ function buildGeneratedSmartTrainingWorkout({
       );
     }
 
+    const initialWarmups = generateWarmups(
+      prescription.sets,
+      selection.lift
+    );
+    const completedSets = completeSmartLiftGrid({
+      sets: prescription.sets,
+      warmups: initialWarmups,
+      preferMoreVolume:
+        selection.role === 'primary' &&
+        !prescription.regressionReason &&
+        Number(readiness.recentFatigueScore) <
+          SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE &&
+        Number(readiness.recentFailedOrSkippedSetCount) === 0,
+    });
+    const completedWarmups = generateWarmups(
+      completedSets,
+      selection.lift
+    );
+
+    if ((completedWarmups.length + completedSets.length) % 3 !== 0) {
+      throw new Error(
+        `Incomplete Smart lift grid for ${selection.lift}.`
+      );
+    }
+
     const liftBlock = {
       lift: selection.lift,
       role: selection.role,
-      sets: prescription.sets,
-      warmups: generateWarmups(
-        prescription.sets,
-        selection.lift
-      ),
+      sets: completedSets,
+      warmups: completedWarmups,
       prepItems: [],
       smartPrescription: {
         role: selection.role,
@@ -5033,6 +5143,9 @@ function buildGeneratedSmartTrainingWorkout({
           Boolean(prescription.repeatVariationApplied),
         regressionReason:
           prescription.regressionReason || null,
+        completeGrid: true,
+        gridItemCount:
+          completedSets.length + completedWarmups.length,
       },
     };
 

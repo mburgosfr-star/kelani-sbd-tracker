@@ -357,11 +357,27 @@ test('replaces a stale pre-generated next workout immediately after completion',
   ]);
   expect(
     refreshedWorkouts[10].smartGeneratedPrescriptionVersion
-  ).toBe(8);
+  ).toBe(9);
+  const refreshedPrimaryLift = refreshedWorkouts[10].lifts[0];
   expect(
-    refreshedWorkouts[10].lifts[0].sets.slice(1)
-  ).toHaveLength(3);
+    (refreshedPrimaryLift.warmups || []).length +
+      (refreshedPrimaryLift.sets || []).length
+  ).toBeGreaterThan(0);
   expect(
-    refreshedWorkouts[10].lifts[1].sets
-  ).toHaveLength(3);
+    (
+      (refreshedPrimaryLift.warmups || []).length +
+      (refreshedPrimaryLift.sets || []).length
+    ) % 3
+  ).toBe(0);
+  const refreshedSecondaryLift = refreshedWorkouts[10].lifts[1];
+  expect(
+    (refreshedSecondaryLift.warmups || []).length +
+      (refreshedSecondaryLift.sets || []).length
+  ).toBeGreaterThan(0);
+  expect(
+    (
+      (refreshedSecondaryLift.warmups || []).length +
+      (refreshedSecondaryLift.sets || []).length
+    ) % 3
+  ).toBe(0);
 });
