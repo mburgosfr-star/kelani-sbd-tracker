@@ -1,0 +1,6 @@
+Improve Smart workout scheduling and executable loading.
+
+- Use 5 kg increments for generated training weights.
+- Balance Squat, Bench, and Deadlift frequency over seven workouts.
+- Improve mixed Bench and Deadlift prescriptions and diagnostics.
+- Use 5 kg increments for planned and initial meet attempts.

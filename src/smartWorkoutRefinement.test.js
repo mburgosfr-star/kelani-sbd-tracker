@@ -84,9 +84,9 @@ test('generates Ana Deadlift 80/70 prescription consistently from a 60 kg max', 
     labelKey: 'topDouble',
     reps: 2,
     pct: 0.8,
-    weight: 47.5,
+    weight: 50,
     originalPct: 0.8,
-    originalWeight: 47.5,
+    originalWeight: 50,
   });
 
   deadlift.sets.slice(1).forEach(set => {
@@ -94,9 +94,9 @@ test('generates Ana Deadlift 80/70 prescription consistently from a 60 kg max', 
       labelKey: 'backoff',
       reps: 4,
       pct: 0.7,
-      weight: 42.5,
+      weight: 40,
       originalPct: 0.7,
-      originalWeight: 42.5,
+      originalWeight: 40,
     });
   });
 });
@@ -256,7 +256,7 @@ test('gives Ultra Bench Strength three Deadlift work sets', () => {
       labelKey: 'workSets',
       reps: 3,
       pct: 0.625,
-      weight: 112.5,
+      weight: 115,
     });
   });
 });

@@ -212,9 +212,9 @@ test('names the cycle estimate and opener separately in the Smart modal', () => 
     { label: 'Openers', value: '0/3', kind: 'metric' },
     { label: '2nd attempts', value: '0/3', kind: 'metric' },
     { label: '3rd potential', value: '0/3', kind: 'metric' },
-    { label: 'Cycle e1RM', value: '116.2 kg', kind: 'metric' },
+    { label: 'Cycle e1RM', value: '115 kg', kind: 'metric' },
     { label: 'Meet opener', value: '130 kg', kind: 'metric' },
-    { label: 'Gap', value: '13.8 kg', kind: 'metric' },
+    { label: 'Gap', value: '15 kg', kind: 'metric' },
     { label: 'Projected meet', value: 'C3W27–C3W29' },
     { label: 'Projected limiter', value: 'Squat — opener' },
     {

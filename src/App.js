@@ -1,3 +1,4 @@
+import { constrainSmartWorkoutByFrequency, roundBarbellWeight } from './smartFrequencyPolicy';
 import {
   buildSmartLiftPrescription,
   buildSmartLiftStates,
@@ -1048,6 +1049,8 @@ const SMART_DECISION_REASONS = {
   FAILED_SET_DELOAD: 'failed-set-deload',
   MEETDAY_READY: 'meetday-ready',
   POST_MEET_RECOVERY: 'post-meet-recovery',
+
+  FREQUENCY_RECOVERY: 'frequency-recovery',
 };
 
 const SMART_OVERRIDES = {
@@ -1724,7 +1727,7 @@ export function generateWarmups(workPlan, lift = '') {
 }
 
 function roundMeetWeight(weight) {
-  return Math.round((Number(weight) || 0) / 2.5) * 2.5;
+  return roundBarbellWeight(weight, 'nearest', 0.5);
 }
 
 
@@ -2302,8 +2305,8 @@ export function regenerateSmartWorkoutsAfterCompletion({
 
 function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly', programOverride = null) {
   function round25(w) {
-    return Math.round(w / 2.5) * 2.5;
-  }
+  return roundBarbellWeight(w);
+}
 
   const oneRMs = {
     Squat: s,
@@ -5937,7 +5940,7 @@ function generateSmartWorkouts({
   });
 }
 
-export function generateWorkoutsForTrainingModel(model, args = {}) {
+export function generateWorkoutsForTrainingModelUnconstrained(model, args = {}) {
   const workoutArgs = {
     programProfile: normalizeProgramProfile(args.programProfile),
     squat: args.squat,
@@ -5974,6 +5977,193 @@ export function generateWorkoutsForTrainingModel(model, args = {}) {
     workoutArgs.cooldownMode
   );
 }
+
+function getSmartFrequencyCurrentIndex(workouts, options = {}) {
+  const explicitCandidates = [
+    options.currentIndex,
+    options.selectedIndex,
+    options.inProgress?.selectedIndex,
+  ];
+
+  for (const candidate of explicitCandidates) {
+    const numericCandidate = Number(candidate);
+    if (Number.isInteger(numericCandidate) && numericCandidate >= 0 && numericCandidate < workouts.length) {
+      return numericCandidate;
+    }
+  }
+
+  const history = options.history || options.data?.history || [];
+  const currentCycle = Number(options.currentCycle || options.data?.currentCycle) || 1;
+  const completedWorkoutNumbers = getCompletedWorkoutNumbers(history, currentCycle);
+  const firstIncompleteIndex = workouts.findIndex(
+    workout => !completedWorkoutNumbers.has(Number(workout?.number)),
+  );
+
+  return firstIncompleteIndex >= 0 ? firstIncompleteIndex : Math.max(0, workouts.length - 1);
+}
+
+function normalizeGeneratedMeetSet(set = {}) {
+  const currentWeight = Number(set.weight) || 0;
+  if (currentWeight <= 0) return set;
+
+  const roundedWeight = roundBarbellWeight(
+    currentWeight,
+    'nearest',
+    5,
+  );
+  const originalWeight =
+    Number(set.originalWeight ?? set.weight) || currentWeight;
+
+  return {
+    ...set,
+    weight: roundedWeight,
+    originalWeight: roundBarbellWeight(
+      originalWeight,
+      'nearest',
+      5,
+    ),
+  };
+}
+
+export function normalizeSmartMeetWorkoutWeights(workouts = []) {
+  return (Array.isArray(workouts) ? workouts : []).map((workout) => {
+    const isMeetWorkout = (
+      workout?.type === 'meet'
+      || workout?.smartDayType === SMART_DAY_TYPES.MEET
+      || workout?.smartDecisionSummary?.dayType === SMART_DAY_TYPES.MEET
+    );
+
+    if (!isMeetWorkout) return workout;
+
+    const lifts = (workout.lifts || []).map((liftBlock) => ({
+      ...liftBlock,
+      sets: (liftBlock.sets || []).map(normalizeGeneratedMeetSet),
+    }));
+
+    return {
+      ...workout,
+      lifts,
+      sets: (workout.sets || []).map(normalizeGeneratedMeetSet),
+    };
+  });
+}
+
+export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
+  const generatedWorkouts = generateWorkoutsForTrainingModelUnconstrained(
+    trainingModel,
+    options,
+  );
+
+  if (
+    !isSmartTrainingModel(trainingModel)
+    || !Array.isArray(generatedWorkouts)
+    || generatedWorkouts.length === 0
+  ) {
+    return generatedWorkouts;
+  }
+
+  const workouts = normalizeSmartMeetWorkoutWeights(generatedWorkouts);
+  const currentIndex = getSmartFrequencyCurrentIndex(workouts, options);
+  const candidateWorkout = workouts[currentIndex];
+
+  if (!candidateWorkout || candidateWorkout.type !== 'training') {
+    return workouts;
+  }
+
+  const history = options.history || options.data?.history || [];
+  const currentCycle = Number(
+    options.currentCycle || options.data?.currentCycle || candidateWorkout.cycle,
+  ) || 1;
+  const constrained = constrainSmartWorkoutByFrequency({
+    history,
+    currentCycle,
+    workoutNumber: candidateWorkout.number || (currentIndex + 1),
+    candidateWorkout,
+    availableWorkouts: workouts,
+    currentIndex,
+  });
+
+  if (!constrained.changed) {
+    return workouts;
+  }
+
+  const nextWorkouts = [...workouts];
+  const previousReasonFlags =
+    candidateWorkout?.smartTrainingSelectionSummary?.reasonFlags || [];
+  const selectedLifts =
+    (constrained.workout.lifts || []).map(({ lift }) => lift);
+  const primaryLift = selectedLifts[0] || null;
+  const secondaryLift = selectedLifts[1] || null;
+  const policyReasonFlags = [
+    constrained.workout.type === 'rest'
+      ? 'frequency-policy-recovery'
+      : 'frequency-policy-filtered',
+    ...(constrained.summary.supplementedLifts || []).length > 0
+      ? ['frequency-policy-supplemented']
+      : [],
+    constrained.summary.singleLiftVolumeExpanded
+      ? 'frequency-policy-full-single-lift-volume'
+      : null,
+  ].filter(Boolean);
+
+  let nextWorkout = {
+    ...constrained.workout,
+    smartDecisionSummary: {
+      ...(
+        constrained.workout.smartDecisionSummary
+        || candidateWorkout.smartDecisionSummary
+        || {}
+      ),
+      primaryLift,
+      secondaryLift,
+      frequencyPolicySelection: {
+        primary: primaryLift,
+        secondary: secondaryLift,
+      },
+      frequencyPolicy: constrained.summary,
+    },
+    smartTrainingSelectionSummary: {
+      ...(
+        constrained.workout.smartTrainingSelectionSummary
+        || candidateWorkout.smartTrainingSelectionSummary
+        || {}
+      ),
+      primaryLift,
+      secondaryLift,
+      selectedPrimaryLift: primaryLift,
+      selectedSecondaryLift: secondaryLift,
+      frequencyPolicySelection: {
+        primary: primaryLift,
+        secondary: secondaryLift,
+      },
+      frequencyPolicy: constrained.summary,
+      reasonFlags: [
+        ...new Set([
+          ...previousReasonFlags,
+          ...policyReasonFlags,
+        ]),
+      ],
+    },
+  };
+
+  if (constrained.workout.type === 'rest') {
+    nextWorkout = {
+      ...nextWorkout,
+      smartDayType: SMART_DAY_TYPES.RECOVERY,
+      smartOverride: SMART_DECISION_REASONS.FREQUENCY_RECOVERY,
+      [SMART_GENERATED_FLAGS.RECOVERY]: true,
+      [SMART_GENERATED_FLAGS.TRAINING]: false,
+      smartDecisionSummary: {
+        ...nextWorkout.smartDecisionSummary,
+        reason: SMART_DECISION_REASONS.FREQUENCY_RECOVERY,
+      },
+    };
+  }
+
+  nextWorkouts[currentIndex] = nextWorkout;
+  return nextWorkouts;
+}
+
 
 
 function RestTimer({ seconds, endTime, onDismiss, t }) {
@@ -9016,6 +9206,10 @@ function getSmartDecisionReasonDisplayText(summary, t = {}) {
     return t.smartReasonFatigueRecovery || `${meetPlanText}${getSmartFatigueFailedDisplayText(readiness)} → recovery day.`;
   }
 
+  if (summary.reason === SMART_DECISION_REASONS.FREQUENCY_RECOVERY) {
+    return 'Rolling 7-workout frequency leaves no safe lift combination, so recovery was selected.';
+  }
+
   if (summary.reason === SMART_DECISION_REASONS.TRAINING_STREAK_RECOVERY) {
     const completedTrainingWorkouts = Math.min(
       activeBlockCount,
@@ -9226,6 +9420,57 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}) {
   };
 }
 
+function getFrequencySupplementedLiftPrescriptionPlan(
+  liftBlock = {},
+  t = {},
+) {
+  const prescription = liftBlock?.smartPrescription || {};
+
+  const sets = Array.isArray(liftBlock.sets) ? liftBlock.sets : [];
+  const topSingle = sets.find(set => (
+    Number(set?.reps) === 1
+    && Number(set?.pct) > 0
+  ));
+  const volumeSets = sets.filter(set => (
+    set !== topSingle
+    && Number(set?.reps) >= 4
+    && Number(set?.pct) > 0
+  ));
+
+  if (!topSingle || volumeSets.length === 0) {
+    return null;
+  }
+
+  const formatPct = pct => `${formatDecimalDisplay(
+    Number(pct) * 100,
+    {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 1,
+    },
+  )}%`;
+  const volumeReps = Number(volumeSets[0]?.reps) || 0;
+  const volumePct = Number(
+    prescription.plannedVolumePct
+    || prescription.volumeAnchorPct
+    || volumeSets[0]?.pct
+  ) || 0;
+  const planParts = [
+    `${t.smartTopSingle || 'Top single'}: ${formatPct(topSingle.pct)}`,
+    `${volumeSets.length}×${volumeReps}×${formatPct(volumePct)}`,
+  ];
+
+  planParts.push(
+    t.smartPrimarySelectionReason
+    || 'Primary work was selected from readiness and recent training.',
+  );
+
+  return {
+    label: `${liftBlock.lift} — ${t.smartPrescriptionPlan || 'Plan'}`,
+    value: planParts.join(' · '),
+    kind: 'prescription',
+  };
+}
+
 export function getSmartPrescriptionDetailRows(workout = {}, t = {}) {
   if (
     workout?.smartDayType !== SMART_DAY_TYPES.TRAINING &&
@@ -9235,7 +9480,10 @@ export function getSmartPrescriptionDetailRows(workout = {}, t = {}) {
   }
 
   return (workout.lifts || [])
-    .map(liftBlock => getSmartLiftPrescriptionPlan(liftBlock, t))
+    .map(liftBlock => (
+      getFrequencySupplementedLiftPrescriptionPlan(liftBlock, t)
+      || getSmartLiftPrescriptionPlan(liftBlock, t)
+    ))
     .filter(row => row?.value);
 }
 
@@ -9367,12 +9615,24 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
       weakestReadiness.readinessTargetAttempt ??
       readiness.meetPlanWeakestTarget
     ) || 0;
-    const readinessGap = cycleEstimate > 0 && readinessTarget > 0
-      ? Math.max(readinessTarget - cycleEstimate, 0)
-      : 0;
+    const displayCycleEstimate = roundBarbellWeight(
+      cycleEstimate,
+      'nearest',
+      5,
+    );
+    const displayReadinessTarget = weakestPhase === 'second-attempt'
+      ? readinessTarget
+      : roundBarbellWeight(readinessTarget, 'nearest', 5);
+    const readinessGap =
+      displayCycleEstimate > 0 && displayReadinessTarget > 0
+        ? Math.max(
+          displayReadinessTarget - displayCycleEstimate,
+          0,
+        )
+        : 0;
     const formatEstimate = value =>
       `${formatDecimalDisplay(value, {
-        minimumFractionDigits: 1,
+        minimumFractionDigits: 0,
         maximumFractionDigits: 1,
       })} kg`;
     const targetLabel = weakestPhase === 'second-attempt'
@@ -9417,14 +9677,17 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
       rows.push(
         {
           label: t.smartCycleEstimateShort || 'Cycle e1RM',
-          value: formatEstimate(cycleEstimate),
+          value: formatEstimate(displayCycleEstimate),
           kind: 'metric',
         },
         {
           label: targetLabel,
           value: weakestPhase === 'second-attempt'
-            ? formatEstimate(readinessTarget)
-            : formatWeightFromKg(readinessTarget, WEIGHT_UNITS.KG),
+            ? formatEstimate(displayReadinessTarget)
+            : formatWeightFromKg(
+              displayReadinessTarget,
+              WEIGHT_UNITS.KG,
+            ),
           kind: 'metric',
         },
         {
@@ -11279,12 +11542,12 @@ function chartMetricLabel(key) {
 }
 
 function roundAttempt(weight) {
-  return Math.round((Number(weight) || 0) / 2.5) * 2.5;
+  return Math.round((Number(weight) || 0) / 5) * 5;
 }
 
 
 function ensureStrictMeetAttempts(attempts) {
-  const minStep = 2.5;
+  const minStep = 5;
   const opener = Number(attempts.opener) || 0;
   let second = Number(attempts.second) || 0;
   let third = Number(attempts.third) || 0;
