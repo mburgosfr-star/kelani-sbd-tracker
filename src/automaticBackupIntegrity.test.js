@@ -1,12 +1,26 @@
 import {
+  AUTO_BACKUP_PATH,
   buildBackupPayload,
   formatAutomaticBackupTimestamp,
   isVerifiedAutomaticBackupStatus,
+  isShareCancellation,
   removeLegacyBrowserAutomaticBackup,
   shouldRetryAutomaticBackup,
   validateBackupPayload,
   validateImportedBackup,
 } from './App';
+
+test('uses a v2-specific automatic backup filename that cannot collide with the legacy app', () => {
+  expect(AUTO_BACKUP_PATH).toBe(
+    'Kelani SBD Tracker/Automatic Backups/kelani-sbd-tracker-v2-autosave.json'
+  );
+});
+
+test('recognizes only the explicit native share cancellation result', () => {
+  expect(isShareCancellation(new Error('Share canceled'))).toBe(true);
+  expect(isShareCancellation(new Error('Unsupported url'))).toBe(false);
+  expect(isShareCancellation(null)).toBe(false);
+});
 
 test('removes the obsolete full browser backup mirror before canonical persistence', () => {
   const storage = {

@@ -110,7 +110,7 @@ const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
 // 'tooMuch' is deliberately excluded here - it's never a manual choice, only
 // an automatic outcome of failing/skipping a set (see completeWorkout).
 const WORKOUT_EFFORT_OPTIONS = ['easy', 'good', 'hard'];
-const AUTO_BACKUP_PATH = 'Kelani SBD Tracker/Automatic Backups/kelani-sbd-tracker-autosave.json';
+export const AUTO_BACKUP_PATH = 'Kelani SBD Tracker/Automatic Backups/kelani-sbd-tracker-v2-autosave.json';
 const AUTO_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-auto-backup-status';
 const LEGACY_BROWSER_AUTO_BACKUP_KEY = 'kelani-sbd-tracker-autosave';
 const REST_TIMER_NOTIFICATION_ID = 1208;
@@ -360,6 +360,10 @@ export function validateImportedBackup(backup) {
   }
 
   return true;
+}
+
+export function isShareCancellation(error) {
+  return error?.message === 'Share canceled';
 }
 
 export function isVerifiedAutomaticBackupStatus(status) {
@@ -1934,6 +1938,8 @@ function DataSection({ t, importOnly = false }) {
   };
 
   const exportData = async () => {
+    setNotice('');
+
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
 
@@ -1977,6 +1983,7 @@ function DataSection({ t, importOnly = false }) {
 
       setNotice(t.exportDataSuccess);
     } catch (e) {
+      if (isShareCancellation(e)) return;
       setNotice(t.exportDataError);
     }
   };
