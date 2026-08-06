@@ -1,0 +1,5 @@
+Improved Adjust Program with a step-by-step setup flow.
+Added upper-back cooldown massage alongside rhomboid stretch.
+Improved accessory intensity suggestions.
+Removed hip adduction from active friendly/lower accessory templates.
+Improved short-screen sizing and splash behavior.

@@ -1,0 +1,7 @@
+Added body composition tracking.
+
+You can now track optional body data such as body fat, body water, visceral fat, physique rating and bone mass.
+
+The app now shows body composition summaries on the Dashboard and extra body charts in Progress. Lean mass and BMR are estimated automatically.
+
+Onboarding and Settings now include profile/body data support, and app reset now asks for confirmation.

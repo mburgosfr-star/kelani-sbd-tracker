@@ -1,0 +1,8 @@
+- Made date of birth and sex optional in onboarding.
+- Improved onboarding explanations for strength, profile and body data.
+- Added clearer empty states when no body data is available.
+- Fixed workout focus for grouped replacement exercises.
+- Preserved set effort feedback when changing accessory settings.
+- Clarified per-side exercise display.
+- Improved Stats chart spacing and axis labels.
+- Added Show all workouts near the bottom of the compact Program view.

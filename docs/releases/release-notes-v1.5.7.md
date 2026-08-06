@@ -1,0 +1,9 @@
+## What's new
+
+- Fixed a real training failure case: a secondary lift's volume could quietly creep above its own intended intensity ceiling when it inherited its "last successful weight" from a heavier session on a different day.
+- A deload that couldn't schedule its intended lift now correctly falls back to a genuine rest day instead of swapping in an unrelated full-intensity lift — and that rest day now shows up properly in your program list.
+- Smarter heavy-day selection: a lift that already had its one heavy session this week is no longer forced heavy again just because it's next in line, and a lift already at its full weekly session count can no longer sneak back in just because another lift's slot was blocked for an unrelated reason. If no lift actually needs a heavy exposure, the whole day is now built light instead of repeating a near-identical session.
+- Fixed a secondary lift's volume work sometimes collapsing down to a single set, and warm-ups for light training days are now simpler and don't repeat a work set's own rep count.
+- Workout effort is now a simple Easy/Good/Hard choice — if you fail or skip a set, the workout is automatically marked Too Much instead of asking.
+- The Smart-workout info panel now shows full readiness detail on every day type (not just normal training days), lists every lift still short of full meet readiness instead of just one, and explains light and rest days more plainly.
+- Fixed a stuck-progress case where a meet-specific top set could round back down to the exact same weight you already lifted, cycle after cycle, even after fully successful training — this could permanently cap your third-attempt readiness just short of the real target and keep pushing your projected meet date back indefinitely. A top set that's due to progress is now guaranteed to be a real increment heavier than last time, not just "not lighter."

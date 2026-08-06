@@ -1,0 +1,41 @@
+Kelani SBD Tracker is een rustige, offline-first powerlifting-tracker voor gestructureerde Squat-, Bench Press- en Deadlift-training.
+
+De app helpt je SBD-workouts plannen, bijhouden en voltooien zonder accounts, advertenties, abonnementen, analytics of cloud-afhankelijkheid. Je trainingsdata blijft op je toestel, tenzij je zelf kiest om te exporteren.
+
+Smart Training:
+
+Smart Training stelt elke volgende workout samen op basis van je werkelijke trainingsgeschiedenis, in plaats van een vast programma.
+
+- Kiest primaire en secundaire lifts op basis van recente trainingsfrequentie en meetgereedheid
+- Stelt warming-ups, topwerk, backoffs en accessoires samen
+- Past zich aan op basis van succesvolle sets, ervaren inspanning, vermoeidheid, gemiste sets en overgeslagen sets
+- Houdt bij of je geplande meetopeners al zijn aangetoond in training
+- Balanceert de frequentie van Squat, Bench Press en Deadlift, in plaats van steeds dezelfde lift te herhalen
+- Alle Smart-berekeningen gebeuren lokaal op je toestel
+
+Functies:
+
+- Gestructureerde trainingscycli voor Squat, Bench Press en Deadlift
+- Workouts bijhouden met warming-ups, hoofdwerk, backoffs en optionele accessoires
+- Automatische progressie op basis van voltooide training
+- Rusttimer met geluidssignalen
+- Wedstrijdplanner voor pogingkeuze bij Squat, Bench Press en Deadlift
+- Checklist voor wedstrijddag-voorbereiding
+- Lichaamsgewicht en lichaamssamenstelling bijhouden
+- 1RM, geschatte 1RM en krachtstatistieken
+- Ervaren inspanning bijhouden per set en per voltooide workout
+- Oefeningalternatieven voor periodes met minder belasting
+- Lokale data-export en -import
+- Interface in het Engels, Catalaans en Nederlands
+
+Privacy en onafhankelijkheid:
+
+- Geen account nodig
+- Geen advertenties
+- Geen analytics
+- Geen tracking
+- Geen abonnement
+- Geen betaalmuur
+- Volledig offline te gebruiken
+
+Kelani is gemaakt voor praktische, langdurige krachtvooruitgang, niet voor sociale media-engagement.

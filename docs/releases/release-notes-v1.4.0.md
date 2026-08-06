@@ -1,0 +1,7 @@
+## What's new
+
+- Added a plate calculator directly to workout sets, warm-ups and supported accessories.
+- Shows the required plates per side using standard IPF plates.
+- Supports both 20 kg and 15 kg barbells.
+- Improved Smart progression after successful hard sessions with sufficient training and recovery between exposures.
+- Prevented successful Bench training from repeating the same prescription indefinitely without a valid readiness reason.

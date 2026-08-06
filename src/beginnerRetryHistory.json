@@ -1,0 +1,1932 @@
+[
+  {
+    "completionOnly": false,
+    "workoutNumber": 10,
+    "cycle": 1,
+    "smartDayType": "training",
+    "failedOrSkippedSetCount": 0,
+    "lift": "Bench",
+    "topWeight": 22.5,
+    "topReps": 3,
+    "e1rm": 24.750000000000004,
+    "workoutEffort": "good",
+    "workoutSnapshot": {
+      "number": 10,
+      "type": "training",
+      "lift": "Bench",
+      "completed": true,
+      "smartDayType": "training",
+      "smartCurrentCycle": 1,
+      "smartSourceWorkoutNumber": null,
+      "workoutEffort": "good",
+      "smartGeneratedDeload": false,
+      "smartGeneratedRecovery": false,
+      "smartGeneratedTraining": true,
+      "smartGeneratedPrescription": true,
+      "smartGeneratedPrescriptionVersion": 3,
+      "smartVisible": true,
+      "smartSelectable": true,
+      "lifts": [
+        {
+          "lift": "Bench",
+          "role": "primary",
+          "sets": [
+            {
+              "lift": "Bench",
+              "labelKey": "topTriple",
+              "groupKey": "Bench-top",
+              "reps": 3,
+              "pct": 0.7,
+              "weight": 22.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 6,
+              "pct": 0.6,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 6,
+              "pct": 0.6,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 6,
+              "pct": 0.6,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 6,
+              "pct": 0.6,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 6,
+              "pct": 0.6,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 6,
+              "pct": 0.6,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            }
+          ]
+        }
+      ],
+      "sets": [
+        {
+          "lift": "Bench",
+          "labelKey": "topTriple",
+          "groupKey": "Bench-top",
+          "reps": 3,
+          "pct": 0.7,
+          "weight": 22.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 6,
+          "pct": 0.6,
+          "weight": 20,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 6,
+          "pct": 0.6,
+          "weight": 20,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 6,
+          "pct": 0.6,
+          "weight": 20,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 6,
+          "pct": 0.6,
+          "weight": 20,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 6,
+          "pct": 0.6,
+          "weight": 20,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 6,
+          "pct": 0.6,
+          "weight": 20,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        }
+      ],
+      "completedSummary": {
+        "type": "multiTraining",
+        "lift": "Bench",
+        "oneRMToday": 22.5,
+        "e1RMToday": 24.750000000000004,
+        "previousBest1RM": 32.5,
+        "previousBestE1RM": 32.5,
+        "best1RM": 32.5,
+        "bestE1RM": 32.5,
+        "results": [
+          {
+            "lift": "Bench",
+            "trackStrength": true,
+            "oneRMToday": 22.5,
+            "e1RMToday": 24.750000000000004,
+            "previousBest1RM": 32.5,
+            "previousBestE1RM": 32.5,
+            "best1RM": 32.5,
+            "bestE1RM": 32.5
+          }
+        ]
+      }
+    }
+  },
+  {
+    "completionOnly": false,
+    "workoutNumber": 11,
+    "cycle": 1,
+    "smartDayType": "training",
+    "failedOrSkippedSetCount": 0,
+    "lift": "Squat",
+    "topWeight": 32.5,
+    "topReps": 3,
+    "e1rm": 35.75,
+    "workoutEffort": "hard",
+    "workoutSnapshot": {
+      "number": 11,
+      "type": "training",
+      "lift": "Squat",
+      "completed": true,
+      "smartDayType": "training",
+      "smartCurrentCycle": 1,
+      "smartSourceWorkoutNumber": null,
+      "workoutEffort": "hard",
+      "smartGeneratedDeload": false,
+      "smartGeneratedRecovery": false,
+      "smartGeneratedTraining": true,
+      "smartGeneratedPrescription": true,
+      "smartGeneratedPrescriptionVersion": 3,
+      "smartVisible": true,
+      "smartSelectable": true,
+      "lifts": [
+        {
+          "lift": "Squat",
+          "role": "primary",
+          "sets": [
+            {
+              "lift": "Squat",
+              "labelKey": "topTriple",
+              "groupKey": "Squat-top",
+              "reps": 3,
+              "pct": 0.75,
+              "weight": 32.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Squat",
+              "labelKey": "backoff",
+              "groupKey": "Squat-backoff",
+              "reps": 5,
+              "pct": 0.65,
+              "weight": 27.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Squat",
+              "labelKey": "backoff",
+              "groupKey": "Squat-backoff",
+              "reps": 5,
+              "pct": 0.65,
+              "weight": 27.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Squat",
+              "labelKey": "backoff",
+              "groupKey": "Squat-backoff",
+              "reps": 5,
+              "pct": 0.65,
+              "weight": 27.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Squat",
+              "labelKey": "backoff",
+              "groupKey": "Squat-backoff",
+              "reps": 5,
+              "pct": 0.65,
+              "weight": 27.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            }
+          ]
+        },
+        {
+          "lift": "Bench",
+          "role": "secondary",
+          "sets": [
+            {
+              "lift": "Bench",
+              "labelKey": "workSets",
+              "groupKey": "Bench-worksets",
+              "reps": 6,
+              "pct": 0.625,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "workSets",
+              "groupKey": "Bench-worksets",
+              "reps": 6,
+              "pct": 0.625,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "workSets",
+              "groupKey": "Bench-worksets",
+              "reps": 6,
+              "pct": 0.625,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "workSets",
+              "groupKey": "Bench-worksets",
+              "reps": 6,
+              "pct": 0.625,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            }
+          ]
+        }
+      ],
+      "sets": [
+        {
+          "lift": "Squat",
+          "labelKey": "topTriple",
+          "groupKey": "Squat-top",
+          "reps": 3,
+          "pct": 0.75,
+          "weight": 32.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Squat",
+          "labelKey": "backoff",
+          "groupKey": "Squat-backoff",
+          "reps": 5,
+          "pct": 0.65,
+          "weight": 27.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Squat",
+          "labelKey": "backoff",
+          "groupKey": "Squat-backoff",
+          "reps": 5,
+          "pct": 0.65,
+          "weight": 27.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Squat",
+          "labelKey": "backoff",
+          "groupKey": "Squat-backoff",
+          "reps": 5,
+          "pct": 0.65,
+          "weight": 27.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Squat",
+          "labelKey": "backoff",
+          "groupKey": "Squat-backoff",
+          "reps": 5,
+          "pct": 0.65,
+          "weight": 27.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        }
+      ],
+      "completedSummary": {
+        "type": "multiTraining",
+        "lift": "Squat",
+        "oneRMToday": 32.5,
+        "e1RMToday": 35.75,
+        "previousBest1RM": 42.5,
+        "previousBestE1RM": 42.5,
+        "best1RM": 42.5,
+        "bestE1RM": 42.5,
+        "results": [
+          {
+            "lift": "Squat",
+            "trackStrength": true,
+            "oneRMToday": 32.5,
+            "e1RMToday": 35.75,
+            "previousBest1RM": 42.5,
+            "previousBestE1RM": 42.5,
+            "best1RM": 42.5,
+            "bestE1RM": 42.5
+          },
+          {
+            "lift": "Bench",
+            "trackStrength": true,
+            "oneRMToday": 20,
+            "e1RMToday": 24,
+            "previousBest1RM": 32.5,
+            "previousBestE1RM": 32.5,
+            "best1RM": 32.5,
+            "bestE1RM": 32.5
+          }
+        ]
+      }
+    }
+  },
+  {
+    "completionOnly": false,
+    "workoutNumber": 11,
+    "cycle": 1,
+    "smartDayType": "training",
+    "failedOrSkippedSetCount": 0,
+    "lift": "Bench",
+    "topWeight": 20,
+    "topReps": 6,
+    "e1rm": 24,
+    "workoutEffort": "hard",
+    "workoutSnapshot": {
+      "number": 11,
+      "type": "training",
+      "lift": "Squat",
+      "completed": true,
+      "smartDayType": "training",
+      "smartCurrentCycle": 1,
+      "smartSourceWorkoutNumber": null,
+      "workoutEffort": "hard",
+      "smartGeneratedDeload": false,
+      "smartGeneratedRecovery": false,
+      "smartGeneratedTraining": true,
+      "smartGeneratedPrescription": true,
+      "smartGeneratedPrescriptionVersion": 3,
+      "smartVisible": true,
+      "smartSelectable": true,
+      "lifts": [
+        {
+          "lift": "Squat",
+          "role": "primary",
+          "sets": [
+            {
+              "lift": "Squat",
+              "labelKey": "topTriple",
+              "groupKey": "Squat-top",
+              "reps": 3,
+              "pct": 0.75,
+              "weight": 32.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Squat",
+              "labelKey": "backoff",
+              "groupKey": "Squat-backoff",
+              "reps": 5,
+              "pct": 0.65,
+              "weight": 27.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Squat",
+              "labelKey": "backoff",
+              "groupKey": "Squat-backoff",
+              "reps": 5,
+              "pct": 0.65,
+              "weight": 27.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Squat",
+              "labelKey": "backoff",
+              "groupKey": "Squat-backoff",
+              "reps": 5,
+              "pct": 0.65,
+              "weight": 27.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Squat",
+              "labelKey": "backoff",
+              "groupKey": "Squat-backoff",
+              "reps": 5,
+              "pct": 0.65,
+              "weight": 27.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            }
+          ]
+        },
+        {
+          "lift": "Bench",
+          "role": "secondary",
+          "sets": [
+            {
+              "lift": "Bench",
+              "labelKey": "workSets",
+              "groupKey": "Bench-worksets",
+              "reps": 6,
+              "pct": 0.625,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "workSets",
+              "groupKey": "Bench-worksets",
+              "reps": 6,
+              "pct": 0.625,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "workSets",
+              "groupKey": "Bench-worksets",
+              "reps": 6,
+              "pct": 0.625,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "workSets",
+              "groupKey": "Bench-worksets",
+              "reps": 6,
+              "pct": 0.625,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            }
+          ]
+        }
+      ],
+      "sets": [
+        {
+          "lift": "Squat",
+          "labelKey": "topTriple",
+          "groupKey": "Squat-top",
+          "reps": 3,
+          "pct": 0.75,
+          "weight": 32.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Squat",
+          "labelKey": "backoff",
+          "groupKey": "Squat-backoff",
+          "reps": 5,
+          "pct": 0.65,
+          "weight": 27.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Squat",
+          "labelKey": "backoff",
+          "groupKey": "Squat-backoff",
+          "reps": 5,
+          "pct": 0.65,
+          "weight": 27.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Squat",
+          "labelKey": "backoff",
+          "groupKey": "Squat-backoff",
+          "reps": 5,
+          "pct": 0.65,
+          "weight": 27.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Squat",
+          "labelKey": "backoff",
+          "groupKey": "Squat-backoff",
+          "reps": 5,
+          "pct": 0.65,
+          "weight": 27.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        }
+      ],
+      "completedSummary": {
+        "type": "multiTraining",
+        "lift": "Squat",
+        "oneRMToday": 32.5,
+        "e1RMToday": 35.75,
+        "previousBest1RM": 42.5,
+        "previousBestE1RM": 42.5,
+        "best1RM": 42.5,
+        "bestE1RM": 42.5,
+        "results": [
+          {
+            "lift": "Squat",
+            "trackStrength": true,
+            "oneRMToday": 32.5,
+            "e1RMToday": 35.75,
+            "previousBest1RM": 42.5,
+            "previousBestE1RM": 42.5,
+            "best1RM": 42.5,
+            "bestE1RM": 42.5
+          },
+          {
+            "lift": "Bench",
+            "trackStrength": true,
+            "oneRMToday": 20,
+            "e1RMToday": 24,
+            "previousBest1RM": 32.5,
+            "previousBestE1RM": 32.5,
+            "best1RM": 32.5,
+            "bestE1RM": 32.5
+          }
+        ]
+      }
+    }
+  },
+  {
+    "completionOnly": true,
+    "workoutNumber": 12,
+    "cycle": 1,
+    "smartDayType": "recovery",
+    "restDay": true,
+    "failedOrSkippedSetCount": 0,
+    "workoutEffort": "easy",
+    "workoutSnapshot": {
+      "number": 12,
+      "type": "rest",
+      "lift": null,
+      "completed": true,
+      "smartDayType": "recovery",
+      "smartCurrentCycle": 1,
+      "smartSourceWorkoutNumber": null,
+      "workoutEffort": "easy",
+      "smartGeneratedDeload": false,
+      "smartGeneratedRecovery": true,
+      "smartGeneratedTraining": false,
+      "smartVisible": true,
+      "smartSelectable": true,
+      "lifts": [],
+      "sets": [],
+      "completedSummary": {
+        "type": "rest"
+      }
+    }
+  },
+  {
+    "completionOnly": false,
+    "workoutNumber": 13,
+    "cycle": 1,
+    "smartDayType": "training",
+    "failedOrSkippedSetCount": 0,
+    "lift": "Bench",
+    "topWeight": 25,
+    "topReps": 3,
+    "e1rm": 27.500000000000004,
+    "workoutEffort": "hard",
+    "workoutSnapshot": {
+      "number": 13,
+      "type": "training",
+      "lift": "Bench",
+      "completed": true,
+      "smartDayType": "training",
+      "smartCurrentCycle": 1,
+      "smartSourceWorkoutNumber": null,
+      "workoutEffort": "hard",
+      "smartGeneratedDeload": false,
+      "smartGeneratedRecovery": false,
+      "smartGeneratedTraining": true,
+      "smartGeneratedPrescription": true,
+      "smartGeneratedPrescriptionVersion": 6,
+      "smartVisible": true,
+      "smartSelectable": true,
+      "lifts": [
+        {
+          "lift": "Bench",
+          "role": "primary",
+          "sets": [
+            {
+              "lift": "Bench",
+              "labelKey": "topTriple",
+              "groupKey": "Bench-top",
+              "reps": 3,
+              "pct": 0.75,
+              "weight": 25,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 6,
+              "pct": 0.65,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 6,
+              "pct": 0.65,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 6,
+              "pct": 0.65,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 6,
+              "pct": 0.65,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 6,
+              "pct": 0.65,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 6,
+              "pct": 0.65,
+              "weight": 20,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            }
+          ]
+        }
+      ],
+      "sets": [
+        {
+          "lift": "Bench",
+          "labelKey": "topTriple",
+          "groupKey": "Bench-top",
+          "reps": 3,
+          "pct": 0.75,
+          "weight": 25,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 6,
+          "pct": 0.65,
+          "weight": 20,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 6,
+          "pct": 0.65,
+          "weight": 20,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 6,
+          "pct": 0.65,
+          "weight": 20,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 6,
+          "pct": 0.65,
+          "weight": 20,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 6,
+          "pct": 0.65,
+          "weight": 20,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 6,
+          "pct": 0.65,
+          "weight": 20,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        }
+      ],
+      "completedSummary": {
+        "type": "multiTraining",
+        "lift": "Bench",
+        "oneRMToday": 25,
+        "e1RMToday": 27.500000000000004,
+        "previousBest1RM": 32.5,
+        "previousBestE1RM": 32.5,
+        "best1RM": 32.5,
+        "bestE1RM": 32.5,
+        "results": [
+          {
+            "lift": "Bench",
+            "trackStrength": true,
+            "oneRMToday": 25,
+            "e1RMToday": 27.500000000000004,
+            "previousBest1RM": 32.5,
+            "previousBestE1RM": 32.5,
+            "best1RM": 32.5,
+            "bestE1RM": 32.5
+          }
+        ]
+      }
+    }
+  },
+  {
+    "completionOnly": false,
+    "workoutNumber": 14,
+    "cycle": 1,
+    "smartDayType": "training",
+    "failedOrSkippedSetCount": 0,
+    "lift": "Deadlift",
+    "topWeight": 47.5,
+    "topReps": 2,
+    "e1rm": 50.666666666666664,
+    "workoutEffort": "good",
+    "workoutSnapshot": {
+      "number": 14,
+      "type": "training",
+      "lift": "Deadlift",
+      "completed": true,
+      "smartDayType": "training",
+      "smartCurrentCycle": 1,
+      "smartSourceWorkoutNumber": null,
+      "workoutEffort": "good",
+      "smartGeneratedDeload": false,
+      "smartGeneratedRecovery": false,
+      "smartGeneratedTraining": true,
+      "smartGeneratedPrescription": true,
+      "smartGeneratedPrescriptionVersion": 8,
+      "smartVisible": true,
+      "smartSelectable": true,
+      "lifts": [
+        {
+          "lift": "Deadlift",
+          "role": "primary",
+          "sets": [
+            {
+              "lift": "Deadlift",
+              "labelKey": "topDouble",
+              "groupKey": "Deadlift-top",
+              "reps": 2,
+              "pct": 0.8,
+              "weight": 47.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Deadlift",
+              "labelKey": "backoff",
+              "groupKey": "Deadlift-backoff",
+              "reps": 4,
+              "pct": 0.7,
+              "weight": 42.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Deadlift",
+              "labelKey": "backoff",
+              "groupKey": "Deadlift-backoff",
+              "reps": 4,
+              "pct": 0.7,
+              "weight": 42.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Deadlift",
+              "labelKey": "backoff",
+              "groupKey": "Deadlift-backoff",
+              "reps": 4,
+              "pct": 0.7,
+              "weight": 42.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Deadlift",
+              "labelKey": "backoff",
+              "groupKey": "Deadlift-backoff",
+              "reps": 4,
+              "pct": 0.7,
+              "weight": 42.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Deadlift",
+              "labelKey": "backoff",
+              "groupKey": "Deadlift-backoff",
+              "reps": 4,
+              "pct": 0.7,
+              "weight": 42.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            }
+          ]
+        }
+      ],
+      "sets": [
+        {
+          "lift": "Deadlift",
+          "labelKey": "topDouble",
+          "groupKey": "Deadlift-top",
+          "reps": 2,
+          "pct": 0.8,
+          "weight": 47.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Deadlift",
+          "labelKey": "backoff",
+          "groupKey": "Deadlift-backoff",
+          "reps": 4,
+          "pct": 0.7,
+          "weight": 42.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Deadlift",
+          "labelKey": "backoff",
+          "groupKey": "Deadlift-backoff",
+          "reps": 4,
+          "pct": 0.7,
+          "weight": 42.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Deadlift",
+          "labelKey": "backoff",
+          "groupKey": "Deadlift-backoff",
+          "reps": 4,
+          "pct": 0.7,
+          "weight": 42.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Deadlift",
+          "labelKey": "backoff",
+          "groupKey": "Deadlift-backoff",
+          "reps": 4,
+          "pct": 0.7,
+          "weight": 42.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Deadlift",
+          "labelKey": "backoff",
+          "groupKey": "Deadlift-backoff",
+          "reps": 4,
+          "pct": 0.7,
+          "weight": 42.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        }
+      ],
+      "completedSummary": {
+        "type": "multiTraining",
+        "lift": "Deadlift",
+        "oneRMToday": 47.5,
+        "e1RMToday": 50.666666666666664,
+        "previousBest1RM": 60,
+        "previousBestE1RM": 60,
+        "best1RM": 60,
+        "bestE1RM": 60,
+        "results": [
+          {
+            "lift": "Deadlift",
+            "trackStrength": true,
+            "oneRMToday": 47.5,
+            "e1RMToday": 50.666666666666664,
+            "previousBest1RM": 60,
+            "previousBestE1RM": 60,
+            "best1RM": 60,
+            "bestE1RM": 60
+          }
+        ]
+      }
+    }
+  },
+  {
+    "completionOnly": false,
+    "workoutNumber": 15,
+    "cycle": 1,
+    "smartDayType": "training",
+    "failedOrSkippedSetCount": 0,
+    "lift": "Squat",
+    "topWeight": 32.5,
+    "topReps": 3,
+    "e1rm": 35.75,
+    "workoutEffort": "good",
+    "workoutSnapshot": {
+      "number": 15,
+      "type": "training",
+      "lift": "Squat",
+      "completed": true,
+      "smartDayType": "training",
+      "smartCurrentCycle": 1,
+      "smartSourceWorkoutNumber": null,
+      "workoutEffort": "good",
+      "smartGeneratedDeload": false,
+      "smartGeneratedRecovery": false,
+      "smartGeneratedTraining": true,
+      "smartGeneratedPrescription": true,
+      "smartGeneratedPrescriptionVersion": 10,
+      "smartVisible": true,
+      "smartSelectable": true,
+      "lifts": [
+        {
+          "lift": "Squat",
+          "role": "primary",
+          "sets": [
+            {
+              "lift": "Squat",
+              "labelKey": "topTriple",
+              "groupKey": "Squat-top",
+              "reps": 3,
+              "pct": 0.775,
+              "weight": 32.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Squat",
+              "labelKey": "backoff",
+              "groupKey": "Squat-backoff",
+              "reps": 5,
+              "pct": 0.65,
+              "weight": 27.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Squat",
+              "labelKey": "backoff",
+              "groupKey": "Squat-backoff",
+              "reps": 5,
+              "pct": 0.65,
+              "weight": 27.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Squat",
+              "labelKey": "backoff",
+              "groupKey": "Squat-backoff",
+              "reps": 5,
+              "pct": 0.65,
+              "weight": 27.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Squat",
+              "labelKey": "backoff",
+              "groupKey": "Squat-backoff",
+              "reps": 5,
+              "pct": 0.65,
+              "weight": 27.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            }
+          ]
+        }
+      ],
+      "sets": [
+        {
+          "lift": "Squat",
+          "labelKey": "topTriple",
+          "groupKey": "Squat-top",
+          "reps": 3,
+          "pct": 0.775,
+          "weight": 32.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Squat",
+          "labelKey": "backoff",
+          "groupKey": "Squat-backoff",
+          "reps": 5,
+          "pct": 0.65,
+          "weight": 27.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Squat",
+          "labelKey": "backoff",
+          "groupKey": "Squat-backoff",
+          "reps": 5,
+          "pct": 0.65,
+          "weight": 27.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Squat",
+          "labelKey": "backoff",
+          "groupKey": "Squat-backoff",
+          "reps": 5,
+          "pct": 0.65,
+          "weight": 27.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Squat",
+          "labelKey": "backoff",
+          "groupKey": "Squat-backoff",
+          "reps": 5,
+          "pct": 0.65,
+          "weight": 27.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        }
+      ],
+      "completedSummary": {
+        "type": "multiTraining",
+        "lift": "Squat",
+        "oneRMToday": 32.5,
+        "e1RMToday": 35.75,
+        "previousBest1RM": 42.5,
+        "previousBestE1RM": 42.5,
+        "best1RM": 42.5,
+        "bestE1RM": 42.5,
+        "results": [
+          {
+            "lift": "Squat",
+            "trackStrength": true,
+            "oneRMToday": 32.5,
+            "e1RMToday": 35.75,
+            "previousBest1RM": 42.5,
+            "previousBestE1RM": 42.5,
+            "best1RM": 42.5,
+            "bestE1RM": 42.5
+          }
+        ]
+      }
+    }
+  },
+  {
+    "completionOnly": true,
+    "workoutNumber": 16,
+    "cycle": 1,
+    "smartDayType": "recovery",
+    "restDay": true,
+    "failedOrSkippedSetCount": 0,
+    "workoutEffort": "easy",
+    "workoutSnapshot": {
+      "number": 16,
+      "type": "rest",
+      "lift": null,
+      "completed": true,
+      "smartDayType": "recovery",
+      "smartCurrentCycle": 1,
+      "smartSourceWorkoutNumber": null,
+      "workoutEffort": "easy",
+      "smartGeneratedDeload": false,
+      "smartGeneratedRecovery": true,
+      "smartGeneratedTraining": false,
+      "smartVisible": true,
+      "smartSelectable": true,
+      "lifts": [],
+      "sets": [],
+      "completedSummary": {
+        "type": "rest"
+      }
+    }
+  },
+  {
+    "completionOnly": false,
+    "workoutNumber": 17,
+    "cycle": 1,
+    "smartDayType": "training",
+    "failedOrSkippedSetCount": 0,
+    "lift": "Bench",
+    "topWeight": 25,
+    "topReps": 3,
+    "e1rm": 27.500000000000004,
+    "workoutEffort": "hard",
+    "workoutSnapshot": {
+      "number": 17,
+      "type": "training",
+      "lift": "Bench",
+      "completed": true,
+      "smartDayType": "training",
+      "smartCurrentCycle": 1,
+      "smartSourceWorkoutNumber": null,
+      "workoutEffort": "hard",
+      "smartGeneratedDeload": false,
+      "smartGeneratedRecovery": false,
+      "smartGeneratedTraining": true,
+      "smartGeneratedPrescription": true,
+      "smartGeneratedPrescriptionVersion": 10,
+      "smartVisible": true,
+      "smartSelectable": true,
+      "lifts": [
+        {
+          "lift": "Bench",
+          "role": "primary",
+          "sets": [
+            {
+              "lift": "Bench",
+              "labelKey": "topTriple",
+              "groupKey": "Bench-top",
+              "reps": 3,
+              "pct": 0.775,
+              "weight": 25,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 5,
+              "pct": 0.675,
+              "weight": 22.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 5,
+              "pct": 0.675,
+              "weight": 22.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 5,
+              "pct": 0.675,
+              "weight": 22.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 5,
+              "pct": 0.675,
+              "weight": 22.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 5,
+              "pct": 0.675,
+              "weight": 22.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            }
+          ]
+        },
+        {
+          "lift": "Deadlift",
+          "role": "secondary",
+          "sets": [
+            {
+              "lift": "Deadlift",
+              "labelKey": "workSets",
+              "groupKey": "Deadlift-worksets",
+              "reps": 4,
+              "pct": 0.725,
+              "weight": 42.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Deadlift",
+              "labelKey": "workSets",
+              "groupKey": "Deadlift-worksets",
+              "reps": 4,
+              "pct": 0.725,
+              "weight": 42.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Deadlift",
+              "labelKey": "workSets",
+              "groupKey": "Deadlift-worksets",
+              "reps": 4,
+              "pct": 0.725,
+              "weight": 42.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Deadlift",
+              "labelKey": "workSets",
+              "groupKey": "Deadlift-worksets",
+              "reps": 4,
+              "pct": 0.725,
+              "weight": 42.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            }
+          ]
+        }
+      ],
+      "sets": [
+        {
+          "lift": "Bench",
+          "labelKey": "topTriple",
+          "groupKey": "Bench-top",
+          "reps": 3,
+          "pct": 0.775,
+          "weight": 25,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 5,
+          "pct": 0.675,
+          "weight": 22.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 5,
+          "pct": 0.675,
+          "weight": 22.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 5,
+          "pct": 0.675,
+          "weight": 22.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 5,
+          "pct": 0.675,
+          "weight": 22.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 5,
+          "pct": 0.675,
+          "weight": 22.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        }
+      ],
+      "completedSummary": {
+        "type": "multiTraining",
+        "lift": "Bench",
+        "oneRMToday": 25,
+        "e1RMToday": 27.500000000000004,
+        "previousBest1RM": 32.5,
+        "previousBestE1RM": 32.5,
+        "best1RM": 32.5,
+        "bestE1RM": 32.5,
+        "results": [
+          {
+            "lift": "Bench",
+            "trackStrength": true,
+            "oneRMToday": 25,
+            "e1RMToday": 27.500000000000004,
+            "previousBest1RM": 32.5,
+            "previousBestE1RM": 32.5,
+            "best1RM": 32.5,
+            "bestE1RM": 32.5
+          },
+          {
+            "lift": "Deadlift",
+            "trackStrength": true,
+            "oneRMToday": 42.5,
+            "e1RMToday": 48.166666666666664,
+            "previousBest1RM": 60,
+            "previousBestE1RM": 60,
+            "best1RM": 60,
+            "bestE1RM": 60
+          }
+        ]
+      }
+    }
+  },
+  {
+    "completionOnly": false,
+    "workoutNumber": 17,
+    "cycle": 1,
+    "smartDayType": "training",
+    "failedOrSkippedSetCount": 0,
+    "lift": "Deadlift",
+    "topWeight": 42.5,
+    "topReps": 4,
+    "e1rm": 48.166666666666664,
+    "workoutEffort": "hard",
+    "workoutSnapshot": {
+      "number": 17,
+      "type": "training",
+      "lift": "Bench",
+      "completed": true,
+      "smartDayType": "training",
+      "smartCurrentCycle": 1,
+      "smartSourceWorkoutNumber": null,
+      "workoutEffort": "hard",
+      "smartGeneratedDeload": false,
+      "smartGeneratedRecovery": false,
+      "smartGeneratedTraining": true,
+      "smartGeneratedPrescription": true,
+      "smartGeneratedPrescriptionVersion": 10,
+      "smartVisible": true,
+      "smartSelectable": true,
+      "lifts": [
+        {
+          "lift": "Bench",
+          "role": "primary",
+          "sets": [
+            {
+              "lift": "Bench",
+              "labelKey": "topTriple",
+              "groupKey": "Bench-top",
+              "reps": 3,
+              "pct": 0.775,
+              "weight": 25,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 5,
+              "pct": 0.675,
+              "weight": 22.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 5,
+              "pct": 0.675,
+              "weight": 22.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 5,
+              "pct": 0.675,
+              "weight": 22.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 5,
+              "pct": 0.675,
+              "weight": 22.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Bench",
+              "labelKey": "backoff",
+              "groupKey": "Bench-backoff",
+              "reps": 5,
+              "pct": 0.675,
+              "weight": 22.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            }
+          ]
+        },
+        {
+          "lift": "Deadlift",
+          "role": "secondary",
+          "sets": [
+            {
+              "lift": "Deadlift",
+              "labelKey": "workSets",
+              "groupKey": "Deadlift-worksets",
+              "reps": 4,
+              "pct": 0.725,
+              "weight": 42.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Deadlift",
+              "labelKey": "workSets",
+              "groupKey": "Deadlift-worksets",
+              "reps": 4,
+              "pct": 0.725,
+              "weight": 42.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Deadlift",
+              "labelKey": "workSets",
+              "groupKey": "Deadlift-worksets",
+              "reps": 4,
+              "pct": 0.725,
+              "weight": 42.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            },
+            {
+              "lift": "Deadlift",
+              "labelKey": "workSets",
+              "groupKey": "Deadlift-worksets",
+              "reps": 4,
+              "pct": 0.725,
+              "weight": 42.5,
+              "done": true,
+              "failed": false,
+              "skipped": false,
+              "smartGeneratedPrescription": true
+            }
+          ]
+        }
+      ],
+      "sets": [
+        {
+          "lift": "Bench",
+          "labelKey": "topTriple",
+          "groupKey": "Bench-top",
+          "reps": 3,
+          "pct": 0.775,
+          "weight": 25,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 5,
+          "pct": 0.675,
+          "weight": 22.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 5,
+          "pct": 0.675,
+          "weight": 22.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 5,
+          "pct": 0.675,
+          "weight": 22.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 5,
+          "pct": 0.675,
+          "weight": 22.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        },
+        {
+          "lift": "Bench",
+          "labelKey": "backoff",
+          "groupKey": "Bench-backoff",
+          "reps": 5,
+          "pct": 0.675,
+          "weight": 22.5,
+          "done": true,
+          "failed": false,
+          "skipped": false,
+          "smartGeneratedPrescription": true
+        }
+      ],
+      "completedSummary": {
+        "type": "multiTraining",
+        "lift": "Bench",
+        "oneRMToday": 25,
+        "e1RMToday": 27.500000000000004,
+        "previousBest1RM": 32.5,
+        "previousBestE1RM": 32.5,
+        "best1RM": 32.5,
+        "bestE1RM": 32.5,
+        "results": [
+          {
+            "lift": "Bench",
+            "trackStrength": true,
+            "oneRMToday": 25,
+            "e1RMToday": 27.500000000000004,
+            "previousBest1RM": 32.5,
+            "previousBestE1RM": 32.5,
+            "best1RM": 32.5,
+            "bestE1RM": 32.5
+          },
+          {
+            "lift": "Deadlift",
+            "trackStrength": true,
+            "oneRMToday": 42.5,
+            "e1RMToday": 48.166666666666664,
+            "previousBest1RM": 60,
+            "previousBestE1RM": 60,
+            "best1RM": 60,
+            "bestE1RM": 60
+          }
+        ]
+      }
+    }
+  }
+]

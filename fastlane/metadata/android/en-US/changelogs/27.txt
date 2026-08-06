@@ -1,0 +1,3 @@
+Improved Program screen navigation.
+
+The Program screen now automatically focuses the current workout, so you land around the active workout instead of always starting at the top.

@@ -1,0 +1,10 @@
+Kelani SBD Tracker v1.2.2
+
+- Added Landmine as a Bench Press alternative.
+- Improved onboarding with a clearer multi-step setup flow.
+- Improved Support section and linked it to the Kelani website.
+- Added Kelani feedback after completed workouts and meet day attempts.
+- Improved W22-W24 attempt-practice feedback.
+- Added W28 meet-day feedback, including failed attempt feedback.
+- Fixed meet-day e1RM so only successful attempts count.
+- Fixed completed/skipped workout status in Program view.

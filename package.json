@@ -1,0 +1,72 @@
+{
+  "name": "kel-powerlifting",
+  "version": "2.0.0",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/cli": "^8.3.1",
+    "@capacitor/core": "^8.3.1",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/local-notifications": "^8.2.0",
+    "@capacitor/share": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^13.5.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-scripts": "5.0.1",
+    "recharts": "^3.8.1",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "GENERATE_SOURCEMAP=false REACT_APP_VERSION=$npm_package_version react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "android:release-apk": "node scripts/build-release-apk.js",
+    "github:release": "npm run release:publish",
+    "android:izzy-test": "node scripts/test-izzy-build.js",
+    "android:install-apk": "node scripts/install-apk.js",
+    "android:release-gate": "npm run release:preflight && npm run release:check",
+    "android:guarded-release": "npm run release:finish",
+    "android:apk-hygiene": "node scripts/check-release-apk-hygiene.js",
+    "android:apk-metadata": "node scripts/check-release-apk-metadata.js",
+    "android:build-manifest": "node scripts/check-release-build-manifest.js",
+    "release:build": "node scripts/build-release-apk.js",
+    "release:install": "node scripts/install-apk.js",
+    "release:web-tested": "node scripts/mark-web-tested.js",
+    "release:prepare": "node scripts/prepare-release.js",
+    "release:phone-tested": "node scripts/mark-phone-tested.js",
+    "release:preflight": "node scripts/release-preflight.js",
+    "release:check": "node scripts/guarded-release.js --check",
+    "release:publish": "node scripts/guarded-release.js --release",
+    "release:finish": "npm run release:preflight && npm run release:publish",
+    "release:self-check": "node scripts/check-release-automation.js"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "workbox-cli": "^7.4.0",
+    "workbox-webpack-plugin": "^7.4.0"
+  }
+}

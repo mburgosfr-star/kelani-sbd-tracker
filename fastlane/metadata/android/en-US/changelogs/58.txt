@@ -1,0 +1,8 @@
+Kelani SBD Tracker v1.2.9
+
+- Added embedded exercise guide videos for Squat, Bench Press and Deadlift.
+- Added a Kelani launch splash screen.
+- Replaced Safe program profiles with Kelani SBD Lower and Kelani SBD Lower Plus.
+- Added Good Morning as the Lower profile Bench replacement and Hip Thrust as the Deadlift replacement.
+- Improved rest timer background notifications with Kelani sound.
+- Removed deprecated thoracic rotation prep item.

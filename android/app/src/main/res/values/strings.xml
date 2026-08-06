@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kelani SBD Tracker</string>
+    <string name="title_activity_main">Kelani SBD Tracker</string>
+    <string name="package_name">com.kelani.sbdtracker</string>
+    <string name="custom_url_scheme">com.kelani.sbdtracker</string>
+</resources>

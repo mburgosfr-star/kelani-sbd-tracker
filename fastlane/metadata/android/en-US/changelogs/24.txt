@@ -1,0 +1,6 @@
+- Scrolls to top on screen navigation
+- Shows current cycle and workout progress on Dashboard
+- Shows current cycle and workout progress on Program
+- Shows current cycle, workout progress and workout type on Workout screen
+- Adds workout type labels such as Heavy, Practice, Volume, Pre-meet and Meet Day
+- Updated translations

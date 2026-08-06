@@ -1,0 +1,9 @@
+v0.9.13
+
+- Added an option to activate future workouts instead of only previewing them.
+- Improved workout tap targets and action buttons.
+- Grouped secondary-lift work sets in multi-lift workouts.
+- Show preparation only for the primary lift, except on meet day.
+- Improved meet-day completed screen with achieved total.
+- Added a small optional cooldown block.
+- Fixed several wording and layout polish issues.

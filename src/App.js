@@ -1,0 +1,13843 @@
+import { roundBarbellWeight } from './smartFrequencyPolicy';
+import { roundPercent } from './smartPrescriptionEngine';
+import PlateCalculator from './PlateCalculator';
+import {
+  TRAINING_MODELS,
+  SMART_DAY_TYPES,
+  SMART_DECISION_REASONS,
+  SMART_THRESHOLDS,
+} from './smartTrainingConstants';
+import {
+  WEIGHT_UNITS,
+  normalizeWeightUnit,
+  kgToDisplayWeight,
+  displayWeightToKg,
+  decimalLocale,
+  formatWeightValue,
+  formatDecimalDisplay,
+  formatWeightFromKg,
+} from './workoutUnits';
+import {
+  LIFT_ORDER,
+  DEFAULT_REST_TIME_SECONDS,
+  toOptionalNumber,
+  calculateLeanMassEstimate,
+  normalizeCooldownMode,
+  normalizeAccessoryMode,
+  normalizeRestTimeSeconds,
+  epley,
+  roundE1RM,
+  getRecommendedRestTimeSeconds,
+  isTopSetLabel,
+  isAttemptSetLabel,
+  getHistoryMaxCandidates,
+  calculateBestMaxesFromHistory,
+  calculatePrsFromHistory,
+  mergeHigherPrs,
+  getEntryCycle,
+  getEntryWorkoutNumber,
+  getAbsoluteWorkoutIndex,
+  getWorkoutLabel,
+  formatCycleWorkoutSubtitle,
+  formatSetPercentDisplay,
+  isCompletedHistoryEntry,
+  getCompletedWorkoutCount,
+  getCompletedWorkoutNumbers,
+  getRestorableSelectedIndex,
+  normalizeBodyWeights,
+  ATHLETE_LEVEL_THRESHOLDS,
+  getAthleteLevel,
+} from './workoutHistoryStats';
+import {
+  liftLabel,
+  normalizeBenchPressVariant,
+  normalizeSquatVariant,
+  normalizeDeadliftVariant,
+  normalizeProgramProfile,
+  settingsForProgramProfile,
+  normalizeTrainingModel,
+  getNewUserTrainingModel,
+  isSmartTrainingModel,
+  getProgramProfileTitle,
+  getProgramProfileDescription,
+  summarizeProgramWorkouts,
+  detectProgramProfile,
+  workoutLiftLabel,
+  workoutLiftBlockLabel,
+  workoutDisplayWeightKg,
+  workoutInputWeightKg,
+  formatWorkoutWeightFromKg,
+  shouldTrackWorkoutStrength,
+  isSquatBeltAlternativeLiftBlock,
+  isDeadliftAlternativeLiftBlock,
+  isBenchMachineAlternativeLiftBlock,
+  shouldTrackLiftBlockStrength,
+  normalizePreparationMode,
+} from './programProfiles';
+import {
+  mergeGeneratedWorkoutStructure,
+  hydrateWorkoutsWithHistory,
+} from './workoutStateMerge';
+import {
+  removeDeprecatedPrepItemsFromWorkouts,
+  roundMeetWeight,
+  getSetPctForWeight,
+  isGroupedWorkoutSet,
+  getWorkoutSetGroupEntries,
+  getWorkoutSetGroupLabel,
+} from './warmupAndPrepGeneration';
+import { applyAccessoryPlanToWorkouts } from './accessoryGeneration';
+import { generateCooldownItems } from './classicProgramTemplates';
+import {
+  regenerateSmartWorkoutsAfterCompletion,
+  generateWorkoutsForTrainingModel,
+  isSmartMeetdayReady,
+  getSmartMeetCompletedTrainingDays,
+  isSmartCycleCompleteAfterHistory,
+  countFailedOrSkippedSetsFromSnapshot,
+} from './smartTrainingEngine';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { translations } from './translations';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+import { LocalNotifications } from '@capacitor/local-notifications';
+
+const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
+// 'tooMuch' is deliberately excluded here - it's never a manual choice, only
+// an automatic outcome of failing/skipping a set (see completeWorkout).
+const WORKOUT_EFFORT_OPTIONS = ['easy', 'good', 'hard'];
+const AUTO_BACKUP_PATH = 'Kelani SBD Tracker/Automatic Backups/kelani-sbd-tracker-autosave.json';
+const AUTO_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-auto-backup-status';
+const LEGACY_BROWSER_AUTO_BACKUP_KEY = 'kelani-sbd-tracker-autosave';
+const REST_TIMER_NOTIFICATION_ID = 1208;
+const REST_TIMER_NOTIFICATION_CHANNEL_ID = 'kelani_rest_timer_v4';
+const REST_TIMER_NOTIFICATION_SOUND = 'kelani_rest_timer_quiet.wav';
+
+export function buildBackupSummary(data) {
+  const currentCycle = data?.currentCycle || 1;
+  const totalWorkouts = data?.inProgress?.workouts?.length || 28;
+  const selectedIndex = data?.inProgress?.selectedIndex;
+  const completedWorkoutCount = getCompletedWorkoutCount(data?.history || [], currentCycle);
+  const currentWorkout = Math.min((selectedIndex ?? completedWorkoutCount) + 1, totalWorkouts);
+
+  return {
+    backupVersion: 1,
+    programVersion: data?.inProgress?.programVersion || null,
+    currentCycle,
+    currentWorkout,
+    totalWorkouts,
+    historyEntries: Array.isArray(data?.history) ? data.history.length : 0,
+    bodyDataEntries: Array.isArray(data?.bodyWeights) ? data.bodyWeights.length : 0,
+  };
+}
+
+export function getDashboardE1RMPrGain(e1RM, oneRM) {
+  return Math.max(0, (Number(e1RM) || 0) - (Number(oneRM) || 0));
+}
+
+export function shouldShowAutomaticBackupStatus(isNativePlatform) {
+  return Boolean(isNativePlatform);
+}
+
+export function capRunningBestChart(data = [], key, maximum) {
+  const numericMaximum = Number(maximum);
+  if (!Array.isArray(data) || !Number.isFinite(numericMaximum)) return data;
+
+  return data.map(point => {
+    const value = Number(point?.[key]);
+    return Number.isFinite(value)
+      ? { ...point, [key]: Math.min(value, numericMaximum) }
+      : point;
+  });
+}
+
+export function replaceCurrentChartEndpoint(data = [], updates = {}) {
+  if (!Array.isArray(data) || data.length === 0) return data;
+
+  const earlierPoints = data.slice(0, -1);
+  const monotonicUpdates = Object.entries(updates).reduce((next, [key, value]) => {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+      next[key] = value;
+      return next;
+    }
+
+    const previousMaximum = earlierPoints.reduce((maximum, point) => {
+      const candidate = Number(point?.[key]);
+      return Number.isFinite(candidate) ? Math.max(maximum, candidate) : maximum;
+    }, -Infinity);
+
+    next[key] = Number.isFinite(previousMaximum)
+      ? Math.max(previousMaximum, numericValue)
+      : numericValue;
+    return next;
+  }, {});
+
+  return [
+    ...earlierPoints,
+    { ...data[data.length - 1], ...monotonicUpdates },
+  ];
+}
+
+export function removeLegacyBrowserAutomaticBackup(
+  storage,
+  isNativePlatform = Capacitor.isNativePlatform()
+) {
+  if (isNativePlatform || !storage) return false;
+  const hasMirror = storage.getItem(LEGACY_BROWSER_AUTO_BACKUP_KEY) !== null;
+  const hasObsoleteStatus = storage.getItem(AUTO_BACKUP_STATUS_KEY) !== null;
+  if (!hasMirror && !hasObsoleteStatus) return false;
+
+  storage.removeItem(LEGACY_BROWSER_AUTO_BACKUP_KEY);
+  storage.removeItem(AUTO_BACKUP_STATUS_KEY);
+  return true;
+}
+
+export function buildBackupPayload(data) {
+  const exportedAt = new Date().toISOString();
+
+  return {
+    app: 'Kelani SBD Tracker',
+    backupVersion: 1,
+    appVersion: process.env.REACT_APP_VERSION ?? 'dev',
+    exportedAt,
+    storageKey: STORAGE_KEY,
+    summary: buildBackupSummary(data),
+    data,
+  };
+}
+
+async function cancelRestTimerNotification() {
+  if (!Capacitor.isNativePlatform()) return;
+
+  try {
+    await LocalNotifications.cancel({
+      notifications: [{ id: REST_TIMER_NOTIFICATION_ID }],
+    });
+  } catch (e) {}
+}
+
+async function ensureRestTimerNotificationChannel() {
+  if (!Capacitor.isNativePlatform()) return;
+
+  try {
+    await LocalNotifications.createChannel({
+      id: REST_TIMER_NOTIFICATION_CHANNEL_ID,
+      name: 'Kelani rest timer',
+      description: 'Rest timer alerts',
+      importance: 5,
+      visibility: 1,
+      sound: REST_TIMER_NOTIFICATION_SOUND,
+      vibration: true,
+    });
+  } catch (e) {}
+}
+
+async function checkRestTimerAlertReadiness() {
+  if (!Capacitor.isNativePlatform()) {
+    return {
+      native: false,
+      display: 'web',
+      exactAlarm: 'web',
+      message: 'Rest timer alerts are only needed on the installed Android app.',
+    };
+  }
+
+  try {
+    let permissions = await LocalNotifications.checkPermissions();
+
+    if (permissions.display !== 'granted') {
+      permissions = await LocalNotifications.requestPermissions();
+    }
+
+    let exactAlarm = 'unknown';
+
+    if (typeof LocalNotifications.checkExactNotificationSetting === 'function') {
+      try {
+        const exactStatus = await LocalNotifications.checkExactNotificationSetting();
+        exactAlarm = exactStatus?.exact_alarm || exactStatus?.exactAlarm || 'unknown';
+
+        if (exactAlarm !== 'granted' && typeof LocalNotifications.changeExactNotificationSetting === 'function') {
+          const changedStatus = await LocalNotifications.changeExactNotificationSetting();
+          exactAlarm = changedStatus?.exact_alarm || changedStatus?.exactAlarm || exactAlarm;
+        }
+      } catch (e) {
+        exactAlarm = 'unknown';
+      }
+    }
+
+    return {
+      native: true,
+      display: permissions.display,
+      exactAlarm,
+      message: permissions.display === 'granted'
+        ? 'Notification permission is allowed. For screen-off alerts, also allow lock screen notifications and unrestricted battery use in Android settings.'
+        : 'Notification permission is not allowed yet. Rest timer alerts may be blocked.',
+    };
+  } catch (e) {
+    return {
+      native: true,
+      display: 'unknown',
+      exactAlarm: 'unknown',
+      message: 'Could not check notification settings. Please allow notifications, lock screen notifications and unrestricted battery use in Android settings.',
+    };
+  }
+}
+
+async function scheduleRestTimerNotification(
+  endTime,
+  doneTitle = 'Rest finished',
+  doneText = 'Your next set is ready.'
+) {
+  if (!Capacitor.isNativePlatform() || !endTime) return;
+
+  try {
+    const permissions = await LocalNotifications.checkPermissions();
+    if (permissions.display !== 'granted') {
+      const requested = await LocalNotifications.requestPermissions();
+      if (requested.display !== 'granted') return;
+    }
+
+    await cancelRestTimerNotification();
+    await ensureRestTimerNotificationChannel();
+
+    await LocalNotifications.schedule({
+      notifications: [{
+        id: REST_TIMER_NOTIFICATION_ID,
+        title: doneTitle,
+        body: doneText,
+        channelId: REST_TIMER_NOTIFICATION_CHANNEL_ID,
+        sound: REST_TIMER_NOTIFICATION_SOUND,
+        schedule: {
+          at: new Date(endTime),
+          allowWhileIdle: true,
+        },
+      }],
+    });
+  } catch (e) {}
+}
+
+export function validateBackupPayload(backup, expectedData) {
+  if (!backup || backup.storageKey !== STORAGE_KEY) return false;
+  if (!backup.data || typeof backup.data !== 'object') return false;
+  if (!backup.summary || typeof backup.summary !== 'object') return false;
+
+  return (
+    JSON.stringify(backup.data) === JSON.stringify(expectedData) &&
+    JSON.stringify(backup.summary) === JSON.stringify(buildBackupSummary(expectedData))
+  );
+}
+
+export function isVerifiedAutomaticBackupStatus(status) {
+  return Boolean(
+    status?.ok === true &&
+    status?.source === 'automatic' &&
+    status?.verified === true &&
+    status?.exportedAt
+  );
+}
+
+export function shouldRetryAutomaticBackup(status, expectedPath = AUTO_BACKUP_PATH) {
+  return !isVerifiedAutomaticBackupStatus(status) || status?.path !== expectedPath;
+}
+
+export function formatAutomaticBackupTimestamp(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const pad = number => String(number).padStart(2, '0');
+
+  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function recordAutomaticBackupFailure(error) {
+  const attemptedAt = new Date().toISOString();
+  let previousStatus = null;
+
+  try {
+    previousStatus = JSON.parse(localStorage.getItem(AUTO_BACKUP_STATUS_KEY) || 'null');
+  } catch (e) {}
+
+  const lastSuccessfulAt = isVerifiedAutomaticBackupStatus(previousStatus)
+    ? previousStatus.exportedAt
+    : previousStatus?.lastSuccessfulAt || null;
+
+  localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
+    ok: false,
+    source: 'automatic',
+    verified: false,
+    attemptedAt,
+    lastSuccessfulAt,
+    error: error?.message || String(error || 'Automatic backup failed'),
+  }));
+}
+
+async function writeAutomaticBackup(data) {
+  const backup = buildBackupPayload(data);
+  const json = JSON.stringify(backup, null, 2);
+
+  try {
+    let storedJson = null;
+    let uri = null;
+
+    if (Capacitor.isNativePlatform()) {
+      const writeResult = await Filesystem.writeFile({
+        path: AUTO_BACKUP_PATH,
+        data: json,
+        directory: Directory.Documents,
+        encoding: Encoding.UTF8,
+        recursive: true,
+      });
+
+      uri = writeResult?.uri || null;
+
+      const readResult = await Filesystem.readFile({
+        path: AUTO_BACKUP_PATH,
+        directory: Directory.Documents,
+        encoding: Encoding.UTF8,
+      });
+
+      storedJson = typeof readResult?.data === 'string'
+        ? readResult.data
+        : String(readResult?.data || '');
+    } else {
+      localStorage.setItem(LEGACY_BROWSER_AUTO_BACKUP_KEY, json);
+      storedJson = localStorage.getItem(LEGACY_BROWSER_AUTO_BACKUP_KEY);
+    }
+
+    const verifiedBackup = JSON.parse(storedJson || 'null');
+
+    if (!validateBackupPayload(verifiedBackup, data)) {
+      throw new Error('Automatic backup verification failed');
+    }
+
+    localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
+      ok: true,
+      source: 'automatic',
+      verified: true,
+      exportedAt: verifiedBackup.exportedAt,
+      path: AUTO_BACKUP_PATH,
+      uri,
+      summary: verifiedBackup.summary,
+    }));
+
+    return verifiedBackup;
+  } catch (error) {
+    recordAutomaticBackupFailure(error);
+    throw error;
+  }
+}
+
+
+const THEME = {
+  bg: '#000000',
+  card: '#101010',
+  border: '#3a1f1f',
+  text: '#fff4e6',
+  muted: '#fff4e6',
+
+  primary: '#ff8a3d',
+  red: '#ff5c45',
+  yellow: '#ffd166',
+  meet: '#c62828',
+  green: '#2ecc71',
+  brown: '#a67c52'
+
+};
+
+// // const APP_TOP_BAR_HEIGHT = 50; // unused // unused after local black statusbar patch
+
+
+const WORKOUT_CIRCLE_SIZE = 44;
+const WORKOUT_CIRCLE_FONT_SIZE = 18;
+const WORKOUT_SECTION_TITLE_FONT_SIZE = 18;
+const WORKOUT_TEXT_FONT_SIZE = 15;
+const WORKOUT_CHECKLIST_COLUMN_GAP = 12;
+const WORKOUT_WORK_ROW_PADDING_X = 12;
+const WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE = 'repeat(2, minmax(0, 1fr))';
+const WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE = 'repeat(4, minmax(0, 1fr))';
+const WORKOUT_CIRCLE_ITEM_GAP = 8;
+const WORKOUT_LABEL_CIRCLE_GAP = 6;
+const WORKOUT_SMART_LABEL_FONT_SIZE = 15;
+const WORKOUT_LIFT_HEADER_FONT_SIZE = 20;
+const WORKOUT_INFO_ICON_SIZE = 14;
+const WORKOUT_INTERACTIVE_HEADER_MIN_HEIGHT = 32;
+
+
+
+
+
+
+
+
+
+
+
+
+function RestTimer({ seconds, endTime, onDismiss, t }) {
+  const [remaining, setRemaining] = useState(() => Math.max(0, Math.ceil(((endTime || Date.now() + seconds * 1000) - Date.now()) / 1000)));
+  const intervalRef = useRef(null);
+  const timeoutRef = useRef(null);
+  const hasBeepedRef = useRef(false);
+  const wasHiddenRef = useRef(false);
+  useEffect(() => {
+    const clearTick = () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+
+    const clearFinishTimeout = () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+
+    const finishTimer = () => {
+      clearTick();
+      setRemaining(0);
+
+      if (document.hidden) {
+        hasBeepedRef.current = true;
+        return;
+      }
+
+      cancelRestTimerNotification();
+
+      if (!hasBeepedRef.current) {
+        hasBeepedRef.current = true;
+        playBeep();
+      }
+    };
+
+    const updateRemaining = () => {
+      const nextRemaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+      setRemaining(nextRemaining);
+
+      if (nextRemaining <= 0) {
+        finishTimer();
+      }
+    };
+
+    const startVisibleTick = () => {
+      clearTick();
+
+      if (document.hidden) {
+        wasHiddenRef.current = true;
+        updateRemaining();
+        return;
+      }
+
+      if (wasHiddenRef.current && Date.now() >= endTime) {
+        hasBeepedRef.current = true;
+        setRemaining(0);
+        cancelRestTimerNotification();
+        return;
+      }
+
+      updateRemaining();
+
+      if (Date.now() < endTime) {
+        intervalRef.current = setInterval(updateRemaining, 1000);
+      }
+    };
+
+    hasBeepedRef.current = false;
+    wasHiddenRef.current = document.hidden;
+    setRemaining(seconds);
+
+    clearFinishTimeout();
+    timeoutRef.current = setTimeout(finishTimer, seconds * 1000);
+
+
+    startVisibleTick();
+    document.addEventListener('visibilitychange', startVisibleTick);
+
+    return () => {
+      clearTick();
+      clearFinishTimeout();
+      document.removeEventListener('visibilitychange', startVisibleTick);
+    };
+  }, [
+    seconds,
+    endTime,
+  ]);
+
+  function playBeep() {
+    try {
+
+
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(0.9, ctx.currentTime);
+      master.connect(ctx.destination);
+
+      const beep = (delay, frequency, duration = 0.22) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(frequency, ctx.currentTime + delay);
+
+        gain.gain.setValueAtTime(0.001, ctx.currentTime + delay);
+        gain.gain.exponentialRampToValueAtTime(0.85, ctx.currentTime + delay + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration);
+
+        osc.connect(gain);
+        gain.connect(master);
+
+        osc.start(ctx.currentTime + delay);
+        osc.stop(ctx.currentTime + delay + duration);
+      };
+
+      [
+        [0, 1200],
+        [0.22, 1600],
+        [0.55, 1200],
+        [0.77, 1600],
+        [1.1, 1800],
+      ].forEach(([delay, frequency]) => beep(delay, frequency));
+
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+
+      setTimeout(() => {
+        ctx.close().catch(() => {});
+      }, 1800);
+    } catch (e) {}
+  }
+
+  const mins = Math.floor(remaining / 60);
+  const secs = remaining % 60;
+  const pct = remaining / seconds;
+  const isDone = remaining <= 0;
+
+  if (isDone) {
+    return (
+      <div style={{
+        background: THEME.bg,
+        padding: '16px',
+        textAlign: 'center',
+        color: THEME.primary,
+        fontSize: 20,
+        fontWeight: 800
+      }}>
+        {t.readyNextSet}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      background: THEME.bg,
+      padding: '12px 16px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 14,
+      color: '#ffffff'
+    }}>
+      <svg width="54" height="54" style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx="27" cy="27" r="24" fill="none" stroke={THEME.border} strokeWidth="5" />
+        <circle
+          cx="27"
+          cy="27"
+          r="24"
+          fill="none"
+          stroke={THEME.primary}
+          strokeWidth="5"
+          strokeDasharray={`${2 * Math.PI * 24} ${2 * Math.PI * 24}`}
+          strokeDashoffset={(2 * Math.PI * 24) * (1 - pct)}
+          style={{ transition: 'stroke-dashoffset 1s linear' }}
+        />
+      </svg>
+
+      <div>
+        <div style={{
+          fontSize: 28,
+          fontWeight: 700,
+          color: '#ffffff',
+          fontFamily: 'monospace'
+        }}>
+          {mins}:{String(secs).padStart(2, '0')}
+        </div>
+
+        <div style={{ fontSize: 12, color: '#ffffff', opacity: 0.85 }}>
+          {t.restTime}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatPrepPrescription(item, t) {
+  return item.perSide ? `${item.prescription} / ${t.side}` : item.prescription;
+}
+
+function WorkoutCircle({
+  done = false,
+  active = false,
+  skipped = false,
+  disabled = false,
+  onClick,
+  label,
+  accentColor = THEME.primary,
+  reps = null,
+}) {
+  const isActiveOpen = active && !done && !skipped;
+  const isOpen = !done && !skipped;
+  const numericReps = Number(reps);
+  const hasReps = Number.isFinite(numericReps) && numericReps > 0;
+
+  const borderColor = skipped ? '#e74c3c' : accentColor;
+  const background = skipped
+    ? '#e74c3c'
+    : done
+      ? accentColor
+      : `${accentColor}14`;
+  const color = skipped || done ? THEME.bg : THEME.text;
+
+  return (
+    <>
+      {isActiveOpen && (
+        <style>{`
+          @keyframes kelaniActiveWorkoutCirclePulse {
+            0% {
+              box-shadow:
+                0 0 0 2px rgba(255, 138, 61, 0.34),
+                0 0 0 0 rgba(255, 138, 61, 0.56);
+              transform: scale(1);
+            }
+            50% {
+              box-shadow:
+                0 0 0 4px rgba(255, 138, 61, 0.28),
+                0 0 0 11px rgba(255, 138, 61, 0.00);
+              transform: scale(1.12);
+            }
+            100% {
+              box-shadow:
+                0 0 0 2px rgba(255, 138, 61, 0.34),
+                0 0 0 0 rgba(255, 138, 61, 0.00);
+              transform: scale(1);
+            }
+          }
+        `}</style>
+      )}
+
+      <button
+        type="button"
+        aria-label={label}
+        title={label}
+        onClick={event => {
+          event.stopPropagation();
+          if (!disabled && onClick) onClick(event);
+        }}
+        disabled={disabled}
+        style={{
+          position: 'relative',
+          width: WORKOUT_CIRCLE_SIZE,
+          height: WORKOUT_CIRCLE_SIZE,
+          minWidth: WORKOUT_CIRCLE_SIZE,
+          flex: `0 0 ${WORKOUT_CIRCLE_SIZE}px`,
+          borderRadius: '50%',
+          border: `${isActiveOpen ? 3 : 2}px solid ${borderColor}`,
+          background,
+          color,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          fontWeight: 900,
+          fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+          lineHeight: 1,
+          padding: 0,
+          opacity: disabled && isOpen ? 0.8 : 1,
+          boxShadow: isActiveOpen
+            ? '0 0 0 4px rgba(255, 138, 61, 0.30)'
+            : isOpen
+              ? '0 0 0 1px rgba(255, 138, 61, 0.08)'
+              : 'none',
+          animation: isActiveOpen ? 'kelaniActiveWorkoutCirclePulse 1.05s ease-in-out infinite' : 'none',
+        }}
+      >
+        {hasReps ? (
+          <>
+            <span data-testid="workout-circle-reps">{numericReps}</span>
+            {(done || skipped) && (
+              <span
+                data-testid="workout-circle-status"
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  top: -5,
+                  right: -5,
+                  width: 16,
+                  height: 16,
+                  borderRadius: '50%',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxSizing: 'border-box',
+                  border: `1px solid ${borderColor}`,
+                  background: THEME.bg,
+                  color: borderColor,
+                  fontSize: 10,
+                  fontWeight: 900,
+                  lineHeight: 1,
+                  pointerEvents: 'none',
+                }}
+              >
+                {skipped ? '✕' : '✓'}
+              </span>
+            )}
+          </>
+        ) : (
+          skipped ? '✕' : done ? '✓' : ''
+        )}
+      </button>
+    </>
+  );
+}
+
+
+function WorkoutWeightPercentLabel({
+  weightText,
+  percentText = null,
+  color = THEME.muted,
+}) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color,
+        lineHeight: 1.08,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span>{weightText}</span>
+      {percentText ? (
+        <span
+          style={{
+            marginTop: 2,
+            fontSize: '0.82em',
+            fontWeight: 700,
+            opacity: 0.9,
+          }}
+        >
+          {percentText}%
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function formatWarmupPercentDisplay(warmupWeight, referenceSets = []) {
+  const referenceSet = (referenceSets || [])
+    .filter(set =>
+      Number.isFinite(Number(set?.weight)) &&
+      Number(set.weight) > 0 &&
+      Number.isFinite(Number(set?.pct)) &&
+      Number(set.pct) > 0
+    )
+    .sort((a, b) =>
+      (Number(b.pct) - Number(a.pct)) ||
+      (Number(b.weight) - Number(a.weight))
+    )[0];
+
+  if (!referenceSet) return null;
+
+  const estimatedMax = Number(referenceSet.weight) / Number(referenceSet.pct);
+  const percentage = estimatedMax > 0
+    ? (Number(warmupWeight) / estimatedMax) * 100
+    : 0;
+
+  if (!Number.isFinite(percentage) || percentage <= 0) return null;
+  return Math.max(5, Math.round(percentage / 5) * 5);
+}
+
+
+function WorkoutCircleItem({
+  label,
+  children,
+  footer = null,
+  testId,
+  fullWidth = false,
+  containerRef = null,
+}) {
+  return (
+    <div
+      ref={containerRef}
+      data-testid={testId}
+      data-workout-circle-item="true"
+      style={{
+        display: 'grid',
+        gridTemplateRows: 'auto auto auto',
+        justifyItems: 'center',
+        alignContent: 'start',
+        rowGap: WORKOUT_LABEL_CIRCLE_GAP,
+        minWidth: 0,
+        gridColumn: fullWidth ? '1 / -1' : undefined,
+      }}
+    >
+      <div style={{
+        width: '100%',
+        minWidth: 0,
+        color: THEME.text,
+        fontSize: WORKOUT_TEXT_FONT_SIZE,
+        fontWeight: 800,
+        lineHeight: 1.15,
+        textAlign: 'center',
+      }}>
+        {label}
+      </div>
+
+      {children}
+      {footer}
+    </div>
+  );
+}
+
+function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
+  const label = t[item.labelKey];
+  const prescription = formatPrepPrescription(item, t);
+
+  return (
+    <WorkoutCircleItem
+      label={(
+        <div>
+          <div
+            title={label}
+            style={{
+              fontSize: WORKOUT_TEXT_FONT_SIZE - 1,
+              fontWeight: 800,
+              lineHeight: 1.05,
+            }}
+          >
+            {label}
+          </div>
+          <div
+            title={prescription}
+            style={{
+              color: THEME.muted,
+              fontSize: WORKOUT_TEXT_FONT_SIZE - 1,
+              fontWeight: 700,
+              marginTop: 1,
+              lineHeight: 1.05,
+            }}
+          >
+            {prescription}
+          </div>
+        </div>
+      )}
+    >
+      <WorkoutCircle
+        done={item.done}
+        active={isActive}
+        disabled={isReadOnly}
+        onClick={onToggle}
+        label={label}
+      />
+    </WorkoutCircleItem>
+  );
+}
+
+
+export function WorkoutLiftGrid({ children, testId = 'workout-lift-grid' }) {
+  return (
+    <div
+      data-testid={testId}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+        justifyContent: 'start',
+        gap: WORKOUT_CIRCLE_ITEM_GAP,
+        padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`,
+        marginBottom: 10,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, compactGrid = false, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard', onShowPlateCalculator }) {
+  if (!warmups.length) return null;
+
+  return (
+    <div
+      data-testid="workout-warmup-grid"
+      style={compactGrid ? {
+        display: 'contents',
+      } : {
+        display: 'grid',
+        gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+        justifyContent: 'start',
+        gap: WORKOUT_CIRCLE_ITEM_GAP,
+        padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`,
+      }}
+    >
+      {warmups.map((warmup, index) => {
+        const warmupPct = formatWarmupPercentDisplay(warmup.weight, referenceSets);
+        const warmupWeight = formatWorkoutWeightFromKg(
+          warmup.weight,
+          weightUnit,
+          t,
+          lift,
+          benchPressVariant
+        );
+        const warmupDescription = (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+            }}
+          >
+            <WorkoutWeightPercentLabel
+              weightText={warmupWeight}
+              percentText={warmupPct}
+            />
+            {onShowPlateCalculator && (
+              <button
+                type="button"
+                title={t.plateCalculatorTitle || 'Plate calculator'}
+                aria-label={t.plateCalculatorTitle || 'Plate calculator'}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onShowPlateCalculator(warmup.weight);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 24,
+                  height: 24,
+                  border: 'none',
+                  borderRadius: '50%',
+                  background: `${THEME.primary}20`,
+                  color: THEME.primary,
+                  padding: 4,
+                  cursor: 'pointer',
+                }}
+              >
+                <PlateIcon size={16} />
+              </button>
+            )}
+          </span>
+        );
+        const warmupAriaLabel = `${warmup.reps} × ${warmupWeight}${warmupPct ? `, ${warmupPct}%` : ''}`;
+        const isActive = index === activeIndex;
+        const isDone = !!warmup.done;
+
+        return (
+          <React.Fragment key={index}>
+            <WorkoutCircleItem
+              testId={`warmup-row-${index}`}
+              label={warmupDescription}
+            >
+              <WorkoutCircle
+                done={isDone}
+                active={isActive}
+                disabled={isReadOnly}
+                onClick={() => onToggle(index)}
+                label={warmupAriaLabel}
+                accentColor={getLiftThemeColor(lift)}
+                reps={warmup.reps}
+              />
+            </WorkoutCircleItem>
+
+            {renderTimer?.(index) && (
+              <div style={{
+                gridColumn: '1 / -1',
+                order: compactGrid ? 1 : undefined,
+              }}>
+                {renderTimer(index)}
+              </div>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function CooldownBlock({ items = [], onToggleItem = () => {}, t, isReadOnly = false, activeEnabled = true }) {
+  const cooldownItems = items.length > 0 ? items : generateCooldownItems('upperBackFriendly');
+  const firstIncompleteIndex = cooldownItems.findIndex(item => !item.done);
+
+  return (
+    <div style={{
+      background: 'transparent',
+      border: 'none',
+      borderRadius: 8,
+      overflow: 'hidden',
+      marginBottom: 10
+    }}>
+      <div style={{
+        padding: '5px 10px',
+        fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+        fontWeight: 900,
+        color: THEME.meet,
+        textAlign: 'center',
+      }}>
+        {t.cooldownTitle}
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+        gap: 10,
+        padding: '6px 10px'
+      }}>
+        {cooldownItems.map((item, index) => (
+          <div
+            key={index}
+            style={{
+              minWidth: 0,
+              background: 'transparent',
+              border: 'none',
+              padding: 0
+            }}
+          >
+            <PrepRow
+              item={item}
+              isActive={!isReadOnly && activeEnabled && index === firstIncompleteIndex}
+              isReadOnly={isReadOnly}
+              onToggle={() => onToggleItem(index)}
+              t={t}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function getFailedSetFeedbackMessage(set, t) {
+  if (!set?.failed && !set?.skipped) return null;
+
+  if (isAttemptSetLabel(set?.labelKey)) {
+    if (set.labelKey === 'opener') {
+      return t.failedOpenerFeedback || 'Opener was missed. The attempt is skipped; use this as feedback for attempt selection.';
+    }
+
+    if (set.labelKey === 'secondAttempt') {
+      return t.failedSecondAttemptFeedback || 'Second attempt was missed. The attempt is skipped; use this as feedback for the next attempt.';
+    }
+
+    if (set.labelKey === 'thirdAttempt') {
+      return t.failedThirdAttemptFeedback || 'Third attempt was missed. Use this as useful attempt-planning data for next time.';
+    }
+  }
+
+  if (set.skipped) {
+    return t.failedSetSkippedFeedback || 'Set missed and skipped. Continue with the next appropriate work.';
+  }
+
+  return t.failedSetFeedback || 'Set missed. Use the adjusted weight as feedback and continue with controlled technique.';
+}
+
+function getSetEffortLabel(effort, t) {
+  if (!effort) return null;
+
+  return {
+    easy: t.setEffortEasy,
+    good: t.setEffortGood,
+    hard: t.setEffortHard,
+    max: t.setEffortMax,
+  }[effort] || null;
+}
+
+function getWorkoutEffortLabel(effort, t) {
+  if (!effort) return null;
+
+  return {
+    easy: t.workoutEffortEasy,
+    good: t.workoutEffortGood,
+    hard: t.workoutEffortHard,
+    tooMuch: t.workoutEffortTooMuch,
+  }[effort] || null;
+}
+
+function getWorkoutEffortText(effort, t) {
+  const label = getWorkoutEffortLabel(effort, t);
+  if (!label) return null;
+
+  return t.workoutEffortFelt
+    ? t.workoutEffortFelt.replace('{effort}', label)
+    : label;
+}
+
+function getCompletedFailedSetFeedbackMessage(set, t) {
+  if (!set?.failed && !set?.skipped) return null;
+
+  if (set.labelKey === 'opener') {
+    return t.completedFailedOpenerFeedback || 'Opener was missed. Use this as attempt-selection feedback for next time.';
+  }
+
+  if (set.labelKey === 'secondAttempt') {
+    return t.completedFailedSecondAttemptFeedback || 'Second attempt was missed. Review the jump from opener to second attempt.';
+  }
+
+  if (set.labelKey === 'thirdAttempt') {
+    return t.completedFailedThirdAttemptFeedback || 'Third attempt was missed. Useful limit data for future attempt planning.';
+  }
+
+  if (isTopSetLabel(set.labelKey)) {
+    return t.completedFailedTopSetFeedback || 'Top set was missed. Treat this as load and readiness feedback for today.';
+  }
+
+  return null;
+}
+
+function getCompletedWorkoutSuggestions(workout, t, benchPressVariant = 'standard') {
+  if (!workout) return [];
+
+  const suggestions = [];
+  const lifts = (workout.lifts || []).length
+    ? workout.lifts
+    : [{ lift: workout.lift, sets: workout.sets || [] }];
+
+  function isAttemptSet(set) {
+    return ['opener', 'secondAttempt', 'thirdAttempt'].includes(set?.labelKey);
+  }
+
+  function setSubject(liftName, set, index) {
+    const setLabel = set?.labelKey ? t[set.labelKey] : set?.label || `${t.set} ${index + 1}`;
+    return `${liftName} ${String(setLabel).toLowerCase()}`;
+  }
+
+  function pushTrainingSetSuggestion(subject, effort, attemptSet) {
+    if (effort === 'max') {
+      suggestions.push(
+        (attemptSet
+          ? t.attemptEffortReviewHigh || '{set} felt maximal. Your attempt plan may be too aggressive; review Meet Planner or your attempt choices.'
+          : t.setEffortReviewMaxesHigh || '{set} felt maximal. This is useful max/readiness feedback for future training.'
+        ).replace('{set}', subject)
+      );
+      return;
+    }
+
+    if (effort === 'easy') {
+      suggestions.push(
+        (attemptSet
+          ? t.attemptEffortReviewLow || '{set} felt easy. Your attempt plan may be conservative; review Meet Planner or your attempt choices.'
+          : t.setEffortReviewMaxesLow || '{set} felt easy. This may indicate your e1RM is ready to rise through training.'
+        ).replace('{set}', subject)
+      );
+      return;
+    }
+
+    if (effort === 'hard') {
+      suggestions.push(
+        (attemptSet
+          ? t.attemptEffortReviewHard || '{set} felt hard but manageable. That can be appropriate for attempt practice.'
+          : t.setEffortReviewHard || '{set} felt hard but manageable. Keep the plan, and pay attention to technique and recovery.'
+        ).replace('{set}', subject)
+      );
+      return;
+    }
+
+    if (effort === 'good') {
+      suggestions.push(
+        (attemptSet
+          ? t.attemptEffortReviewGood || '{set} looked appropriate. Keep the attempt plan.'
+          : t.setEffortReviewGood || '{set} feedback looks good. Keep following the plan.'
+        ).replace('{set}', subject)
+      );
+    }
+  }
+
+  function pushMeetSetSuggestion(subject, set) {
+    if (set.failed) {
+      if (set.labelKey === 'opener') {
+        suggestions.push((t.meetAttemptFailedOpener || '{set} was missed. The opener may have been too aggressive, or execution on meet day was off. Review opener selection for your next meet.').replace('{set}', subject));
+        return;
+      }
+
+      if (set.labelKey === 'secondAttempt') {
+        suggestions.push((t.meetAttemptFailedSecond || '{set} was missed. Review the jump from opener to second attempt for future meets.').replace('{set}', subject));
+        return;
+      }
+
+      if (set.labelKey === 'thirdAttempt') {
+        suggestions.push((t.meetAttemptFailedThird || '{set} was missed. This is useful limit data, but it may have been beyond today’s capacity.').replace('{set}', subject));
+        return;
+      }
+
+      suggestions.push((t.meetAttemptFailedGeneric || '{set} was missed. Review attempt selection and execution for the next meet.').replace('{set}', subject));
+      return;
+    }
+
+    if (set.effort === 'easy') {
+      suggestions.push((t.meetAttemptEasy || '{set} looked conservative. That can be a good opener or safe attempt choice.').replace('{set}', subject));
+      return;
+    }
+
+    if (set.effort === 'good') {
+      suggestions.push((t.meetAttemptGood || '{set} looked well chosen. Keep this as useful attempt-planning data.').replace('{set}', subject));
+      return;
+    }
+
+    if (set.effort === 'hard') {
+      suggestions.push((t.meetAttemptHard || '{set} was hard but successful. Good information for future meet attempt jumps.').replace('{set}', subject));
+      return;
+    }
+
+    if (set.effort === 'max') {
+      suggestions.push((t.meetAttemptMax || '{set} was near your limit. Be careful using this as a future jump reference.').replace('{set}', subject));
+    }
+  }
+
+  lifts.forEach(liftBlock => {
+    const liftName = workoutLiftBlockLabel(liftBlock, t, benchPressVariant);
+    const completedSets = (liftBlock.sets || [])
+      .map((set, index) => ({ set, index }))
+      .filter(({ set }) =>
+        workout.type === 'meet'
+          ? (set.done || set.failed) && isAttemptSet(set)
+          : (set.done || set.failed || set.skipped)
+      );
+
+    if (!completedSets.length) return;
+
+    if (workout.type === 'meet') {
+      completedSets
+        .filter(({ set }) => isAttemptSet(set))
+        .forEach(({ set, index }) => pushMeetSetSuggestion(setSubject(liftName, set, index), set));
+      return;
+    }
+
+    if (workout.type !== 'training') return;
+
+    const attemptSets = completedSets.filter(({ set }) =>
+      isAttemptSet(set) && (set.failed || set.skipped || set.effort)
+    );
+
+    if (attemptSets.length > 0) {
+      attemptSets.forEach(({ set, index }) => {
+        if (set.failed || set.skipped) {
+          const message = getCompletedFailedSetFeedbackMessage(set, t);
+          if (message) suggestions.push(`${setSubject(liftName, set, index)}: ${message}`);
+          return;
+        }
+
+        pushTrainingSetSuggestion(setSubject(liftName, set, index), set.effort, true);
+      });
+      return;
+    }
+
+    completedSets
+      .filter(({ set }) =>
+        (set.failed || set.skipped) &&
+        isTopSetLabel(set.labelKey)
+      )
+      .forEach(({ set, index }) => {
+        const message = getCompletedFailedSetFeedbackMessage(set, t);
+        if (message) suggestions.push(`${setSubject(liftName, set, index)}: ${message}`);
+      });
+
+    const effortSets = completedSets.filter(({ set }) => set.effort);
+
+    const priority =
+      effortSets.find(({ set }) => set.effort === 'max') ||
+      effortSets.find(({ set }) => set.effort === 'easy') ||
+      effortSets.find(({ set }) => set.effort === 'hard') ||
+      effortSets.find(({ set }) => set.effort === 'good');
+
+    if (!priority) return;
+
+    pushTrainingSetSuggestion(
+      setSubject(liftName, priority.set, priority.index),
+      priority.set.effort,
+      false
+    );
+  });
+
+  if (workout.type === 'meet') {
+    if (workout.workoutEffort === 'easy') {
+      suggestions.push(t.meetWorkoutEffortEasy || 'The whole meet felt easy. Your attempt selection may have been too conservative for today.');
+    }
+
+    if (workout.workoutEffort === 'good') {
+      suggestions.push(t.meetWorkoutEffortGood || 'The whole meet felt good. Solid execution; review whether there was room for a slightly bigger total.');
+    }
+
+    if (workout.workoutEffort === 'hard') {
+      suggestions.push(t.meetWorkoutEffortHard || 'The whole meet felt hard. That is normal for meet day; use the attempts as useful planning data.');
+    }
+
+    if (workout.workoutEffort === 'tooMuch') {
+      suggestions.push(t.meetWorkoutEffortTooMuch || 'The whole meet felt too much. That can happen on meet day; review attempt jumps, recovery and execution.');
+    }
+
+    return suggestions;
+  }
+
+  if (workout.type === 'training') {
+    if (workout.workoutEffort === 'easy') {
+      suggestions.push(t.workoutEffortRecoveryEasy || 'The whole workout felt easy. Keep the plan; if this happens often, review rest time or training frequency.');
+    }
+
+    if (workout.workoutEffort === 'good') {
+      suggestions.push(t.workoutEffortRecoveryGood || 'The whole workout felt good. This is the target: keep following the plan.');
+    }
+
+    if (workout.workoutEffort === 'hard') {
+      suggestions.push(t.workoutEffortRecoveryHard || 'The whole workout felt hard. That can be okay; keep the plan, but pay attention to recovery.');
+    }
+
+    if (workout.workoutEffort === 'tooMuch') {
+      suggestions.push(t.workoutEffortRecoveryTooMuch || 'The whole workout felt too much. Consider more rest between sets or more recovery between workouts.');
+    }
+  }
+
+  return suggestions;
+}
+
+function SetActionButton({ title, onClick, borderColor, disabled = false, children }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        width: WORKOUT_CIRCLE_SIZE,
+        height: WORKOUT_CIRCLE_SIZE,
+        minWidth: WORKOUT_CIRCLE_SIZE,
+        borderRadius: '50%',
+        border: `2px solid ${borderColor}`,
+        background: 'transparent',
+        color: '#ffffff',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+        fontWeight: 900,
+        lineHeight: 1,
+        padding: 0,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.45 : 1,
+        flexShrink: 0
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function formatWorkoutSetPercentDisplay(set = {}) {
+  return isAttemptSetLabel(set.labelKey)
+    ? formatDecimalDisplay((Number(set.pct) || 0) * 100, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 1,
+    })
+    : formatSetPercentDisplay(set.pct);
+}
+
+export function SetRow({ set, index, label, isWarmup = false, compactGrid = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator }) {
+  const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
+  const displayPct = formatWorkoutSetPercentDisplay(set);
+  const effortLabel = getSetEffortLabel(set.effort, t);
+  const [editing, setEditing] = useState(false);
+  const [inputVal, setInputVal] = useState(String(set.weight));
+  const rowRef = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) inputRef.current.focus();
+  }, [editing]);
+
+  useEffect(() => {
+    if (isActive && rowRef.current && !rowRef.current.dataset.scrolled) {
+      rowRef.current.dataset.scrolled = 'true';
+      rowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [isActive]);
+
+  function handleEditClick(e) {
+    e.stopPropagation();
+    setInputVal(formatWeightValue(kgToDisplayWeight(workoutDisplayWeightKg(set.weight, lift, benchPressVariant), weightUnit), weightUnit));
+    setEditing(true);
+  }
+
+  function handleConfirm() {
+    const val = parseFloat(inputVal);
+
+    if (!isNaN(val) && val > 0) {
+      onWeightChange(workoutInputWeightKg(val, weightUnit, lift, benchPressVariant));
+    } else {
+      setInputVal(formatWeightValue(kgToDisplayWeight(workoutDisplayWeightKg(set.weight, lift, benchPressVariant), weightUnit), weightUnit));
+    }
+
+    setEditing(false);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter') handleConfirm();
+    if (e.key === 'Escape') setEditing(false);
+  }
+
+  const isSetComplete = !!set.done || !!set.skipped;
+
+  const detail = (
+    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+      <WorkoutWeightPercentLabel
+        weightText={`${formatWorkoutWeightFromKg(
+          set.weight,
+          weightUnit,
+          t,
+          lift,
+          benchPressVariant
+        )}${set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}`}
+        percentText={displayPct}
+        color={isAdjusted ? '#f39c12' : THEME.muted}
+      />
+      {onShowPlateCalculator && !set.perSide && (
+        <button
+          type="button"
+          title={t.plateCalculatorTitle || 'Plate calculator'}
+          aria-label={t.plateCalculatorTitle || 'Plate calculator'}
+          onClick={(e) => {
+            e.stopPropagation();
+            onShowPlateCalculator(set.weight);
+          }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 24,
+            height: 24,
+            border: 'none',
+            borderRadius: '50%',
+            background: `${THEME.primary}20`,
+            color: THEME.primary,
+            padding: 4,
+            cursor: 'pointer',
+          }}
+        >
+          <PlateIcon size={16} />
+        </button>
+      )}
+    </span>
+  );
+
+  const meta = effortLabel ? (
+    <div style={{
+      display: 'inline-flex',
+      marginTop: 0,
+      padding: '2px 7px',
+      borderRadius: 999,
+      border: `1px solid ${THEME.primary}`,
+      color: THEME.primary,
+      fontSize: WORKOUT_TEXT_FONT_SIZE - 2,
+      fontWeight: 800,
+      lineHeight: 1.15,
+    }}>
+      {effortLabel}
+    </div>
+  ) : null;
+
+  const actions = !isActive || isWarmup || isSetComplete || isReadOnly ? null : editing ? (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+      gap: 8,
+      gridColumn: compactGrid ? '1 / -1' : undefined,
+      order: compactGrid ? 1 : undefined,
+    }}>
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="decimal"
+        value={inputVal}
+        onChange={e => setInputVal(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={handleConfirm}
+        style={{
+          width: 96,
+          boxSizing: 'border-box',
+          padding: '4px 8px',
+          fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+          fontWeight: 700,
+          borderRadius: 4,
+          border: '2px solid #e74c3c',
+          textAlign: 'right',
+        }}
+      />
+      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>{normalizeWeightUnit(weightUnit)}</span>
+    </div>
+  ) : (
+    <div
+      data-testid="workout-set-action-grid"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+        alignItems: 'center',
+        justifyItems: 'center',
+        gap: WORKOUT_CIRCLE_ITEM_GAP,
+        marginTop: 8,
+        gridColumn: compactGrid ? '1 / -1' : undefined,
+      order: compactGrid ? 1 : undefined,
+      }}
+    >
+      {!isWarmup && (
+        <SetActionButton
+          title={t.edit}
+          borderColor={THEME.primary}
+          onClick={handleEditClick}
+        >
+          ✎
+        </SetActionButton>
+      )}
+
+      {onRestoreWeight && !isWarmup && (
+        <SetActionButton
+          title={t.restoreOriginalWeight}
+          borderColor="#f39c12"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRestoreWeight();
+          }}
+        >
+          ↺
+        </SetActionButton>
+      )}
+
+      {onMarkFailed && !set.done && !isReadOnly && (
+        <SetActionButton
+          title={t.markSetFailed}
+          borderColor="#e74c3c"
+          onClick={(e) => {
+            e.stopPropagation();
+            onMarkFailed();
+          }}
+        >
+          ✕
+        </SetActionButton>
+      )}
+    </div>
+  );
+
+  const circleLabel = detail;
+
+  return (
+    <div
+      ref={compactGrid ? null : rowRef}
+      data-testid="workout-set-row"
+      style={compactGrid ? {
+        display: 'contents',
+      } : {
+        padding: `4px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+        marginBottom: 4,
+      }}
+    >
+      <div
+        data-testid="workout-set-row-grid"
+        style={compactGrid ? {
+          display: 'contents',
+        } : {
+          display: 'grid',
+          gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+          gap: WORKOUT_CIRCLE_ITEM_GAP,
+        }}
+      >
+        <WorkoutCircleItem
+          testId="workout-set-circle-item"
+          label={circleLabel}
+          fullWidth={!compactGrid}
+          containerRef={compactGrid ? rowRef : null}
+          footer={meta ? (
+            <div
+              data-testid="workout-set-effort-label"
+              style={{
+                width: WORKOUT_CIRCLE_SIZE,
+                display: 'flex',
+                justifyContent: 'center',
+              }}
+            >
+              {meta}
+            </div>
+          ) : null}
+        >
+          <WorkoutCircle
+            done={set.done}
+            active={isActive}
+            skipped={set.skipped}
+            disabled={isReadOnly}
+            onClick={onToggle}
+            label={label}
+            accentColor={getLiftThemeColor(lift)}
+            reps={set.reps}
+          />
+        </WorkoutCircleItem>
+      </div>
+
+      {actions}
+    </div>
+  );
+}
+
+function SettingsListRow({ label, description, value, valueColor = THEME.text, actionLabel, onAction, actionContent, danger = false, compact = false, valueNowrap = false, valueFontSize = 15 }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) minmax(180px, 190px)',
+      alignItems: 'center',
+      gap: 10,
+      padding: compact ? '4px 0' : '7px 0',
+      borderBottom: 'none'
+    }}>
+      <div style={{
+        minWidth: 0
+      }}>
+        <div style={{
+          color: danger ? THEME.red : THEME.text,
+          fontSize: 16,
+          fontWeight: 800,
+          lineHeight: 1.2
+        }}>
+          {label}
+        </div>
+
+        {description && (
+          <div style={{
+            color: THEME.muted,
+            fontSize: 13,
+            fontWeight: 700,
+            lineHeight: 1.25,
+            marginTop: 3
+          }}>
+            {description}
+          </div>
+        )}
+      </div>
+
+      <div style={{
+        color: valueColor,
+        fontSize: valueFontSize,
+        fontWeight: 800,
+        textAlign: 'center',
+        width: '100%'
+      }}>
+        {actionContent || (
+          actionLabel ? (
+            <button
+              type="button"
+              onClick={onAction}
+              style={{
+                width: '100%',
+                padding: '7px 9px',
+                fontSize: 14,
+                fontWeight: 800,
+                background: danger ? '#8b1e1e' : THEME.card,
+                color: '#ffffff',
+                border: `1px solid ${danger ? THEME.red : THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              {actionLabel}
+            </button>
+          ) : (
+            <span style={{ whiteSpace: valueNowrap ? 'nowrap' : 'normal' }}>
+              {value || '—'}
+            </span>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SettingsModal({ title, onClose, children }) {
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0,0,0,0.65)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 650,
+      padding: 16
+    }}>
+      <div style={{
+        background: THEME.card,
+        border: `1px solid ${THEME.primary}`,
+        borderRadius: 12,
+        padding: 18,
+        maxWidth: 420,
+        width: '100%',
+        maxHeight: '88vh',
+        overflowY: 'auto',
+        color: THEME.text
+      }}>
+        <h3 style={{ margin: '0 0 16px', textAlign: 'center' }}>{title}</h3>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function modalInputStyle() {
+  return {
+    width: '100%',
+    padding: 10,
+    fontSize: 16,
+    borderRadius: 4,
+    background: THEME.bg,
+    color: THEME.text,
+    border: `1px solid ${THEME.primary}`,
+    boxSizing: 'border-box'
+  };
+}
+
+function modalActionRowStyle() {
+  return {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: 8,
+    marginTop: 14
+  };
+}
+
+function modalActionButtonStyle(variant = 'secondary') {
+  const isDanger = variant === 'danger';
+  const isPrimary = variant === 'primary';
+
+  return {
+    width: '100%',
+    minHeight: 42,
+    padding: '10px 12px',
+    fontSize: 14,
+    fontWeight: 800,
+    background: isDanger ? THEME.red : isPrimary ? THEME.card : 'transparent',
+    color: THEME.text,
+    border: `1px solid ${isDanger ? THEME.red : THEME.primary}`,
+    borderRadius: 8,
+    cursor: 'pointer',
+    boxSizing: 'border-box'
+  };
+}
+
+function Toast({ message }) {
+  if (!message) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 18,
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: 700,
+      background: THEME.card,
+      border: `1px solid ${THEME.primary}`,
+      borderRadius: 999,
+      padding: '10px 16px',
+      color: THEME.text,
+      fontWeight: 800,
+      boxShadow: '0 8px 24px rgba(0,0,0,0.35)'
+    }}>
+      {message}
+    </div>
+  );
+}
+
+
+function DataSection({ t, importOnly = false }) {
+  const [notice, setNotice] = useState('');
+  const [pendingImport, setPendingImport] = useState(null);
+  const importInputRef = useRef(null);
+
+  const downloadJson = (filename, json) => {
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const buildDataSectionBackupSummary = data => {
+    const currentCycle = data?.currentCycle || 1;
+    const totalWorkouts = data?.inProgress?.workouts?.length || 28;
+    const selectedIndex = data?.inProgress?.selectedIndex;
+    const completedWorkoutCount = getCompletedWorkoutCount(data?.history || [], currentCycle);
+    const currentWorkout = Math.min((selectedIndex ?? completedWorkoutCount) + 1, totalWorkouts);
+
+    return {
+      backupVersion: 1,
+      programVersion: data?.inProgress?.programVersion || null,
+      currentCycle,
+      currentWorkout,
+      totalWorkouts,
+      historyEntries: Array.isArray(data?.history) ? data.history.length : 0,
+      bodyDataEntries: Array.isArray(data?.bodyWeights) ? data.bodyWeights.length : 0,
+    };
+  };
+
+  const exportData = async () => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+
+      if (!saved) {
+        setNotice(t.exportDataNoData);
+        return;
+      }
+
+      const exportedAt = new Date().toISOString();
+      const timestamp = exportedAt.slice(0, 16).replace('T', '-').replace(':', '');
+      const filename = `kelani-sbd-tracker-backup-${timestamp}.json`;
+      const data = JSON.parse(saved);
+      const backup = {
+        app: t.appName,
+        backupVersion: 1,
+        appVersion: process.env.REACT_APP_VERSION ?? 'dev',
+        exportedAt,
+        storageKey: STORAGE_KEY,
+        summary: buildBackupSummary(data),
+        data,
+      };
+      const json = JSON.stringify(backup, null, 2);
+
+      if (Capacitor.isNativePlatform()) {
+        const result = await Filesystem.writeFile({
+          path: filename,
+          data: json,
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8,
+        });
+
+        await Share.share({
+          title: t.exportData,
+          text: t.exportDataDescription,
+          files: [result.uri],
+          dialogTitle: t.exportData,
+        });
+      } else {
+        downloadJson(filename, json);
+      }
+
+      setNotice(t.exportDataSuccess);
+    } catch (e) {
+      setNotice(t.exportDataError);
+    }
+  };
+
+  const importData = async event => {
+    try {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+
+      if (!file) return;
+
+      const text = await file.text();
+      const backup = JSON.parse(text);
+
+      if (
+        backup?.storageKey !== STORAGE_KEY ||
+        !backup?.data ||
+        typeof backup.data !== 'object' ||
+        !backup.data.prs ||
+        !backup.data.history
+      ) {
+        setNotice(t.importDataInvalid);
+        return;
+      }
+
+      setPendingImport({
+        data: backup.data,
+        appVersion: backup.appVersion || '—',
+        exportedAt: backup.exportedAt || '—',
+        summary: backup.summary || buildDataSectionBackupSummary(backup.data),
+      });
+    } catch (e) {
+      setNotice(t.importDataError);
+    }
+  };
+
+  const confirmImport = () => {
+    if (!pendingImport) return;
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingImport.data));
+    setNotice(t.importDataSuccess);
+    setPendingImport(null);
+    window.window.location.reload();
+  };
+
+  const importSummary = pendingImport?.summary;
+
+  const autoBackupStatus = (() => {
+    try {
+      return JSON.parse(localStorage.getItem(AUTO_BACKUP_STATUS_KEY) || 'null');
+    } catch {
+      return null;
+    }
+  })();
+
+  const autoBackupVerified = isVerifiedAutomaticBackupStatus(autoBackupStatus);
+  const autoBackupFailed = autoBackupStatus?.source === 'automatic' && autoBackupStatus?.ok === false;
+  const autoBackupDate = autoBackupVerified
+    ? formatAutomaticBackupTimestamp(autoBackupStatus.exportedAt)
+    : null;
+  const autoBackupFailureDate = autoBackupFailed && autoBackupStatus?.attemptedAt
+    ? formatAutomaticBackupTimestamp(autoBackupStatus.attemptedAt)
+    : null;
+  const autoBackupProgress = autoBackupVerified && autoBackupStatus?.summary
+    ? `C${autoBackupStatus.summary.currentCycle || 1}W${autoBackupStatus.summary.currentWorkout || 1}`
+    : null;
+  const autoBackupDisplayVerified = autoBackupVerified && Boolean(autoBackupDate);
+  const autoBackupValue = autoBackupDisplayVerified
+    ? `${autoBackupDate}${autoBackupProgress ? ` · ${autoBackupProgress}` : ''}`
+    : autoBackupFailed
+      ? `✕ ${autoBackupFailureDate || t.exportDataError}`
+      : t.noAutomaticBackupYet;
+
+  return (
+    <>
+      <SettingsListRow
+        label={importOnly ? t.migrationImportBackup : t.dataManagement}
+        compact={true}
+        actionContent={(
+          <div style={{
+            display: 'grid',
+            gap: 6,
+            justifyItems: 'stretch',
+            width: '100%'
+          }}>
+            {!importOnly && (
+              <button
+                type="button"
+                onClick={exportData}
+                style={{
+                  width: '100%',
+                  padding: '7px 9px',
+                  fontSize: 14,
+                  fontWeight: 800,
+                  background: THEME.card,
+                  color: THEME.text,
+                  border: `1px solid ${THEME.primary}`,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+              >
+                {t.exportDataShort || t.exportData}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              style={{
+                width: '100%',
+                padding: '7px 9px',
+                fontSize: 14,
+                fontWeight: 800,
+                background: THEME.card,
+                color: THEME.text,
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              {t.importDataShort || t.importData}
+            </button>
+          </div>
+        )}
+      />
+
+      {!importOnly && shouldShowAutomaticBackupStatus(Capacitor.isNativePlatform()) && (
+        <SettingsListRow
+          label={t.lastAutomaticBackup}
+          value={autoBackupValue}
+          valueColor={autoBackupDisplayVerified ? THEME.primary : autoBackupFailed ? THEME.red : THEME.muted}
+          compact={true}
+          valueNowrap={true}
+          valueFontSize={13}
+        />
+      )}
+
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json,.json"
+        onChange={importData}
+        style={{ display: 'none' }}
+      />
+
+      {notice && (
+        <div style={{
+          padding: '7px 0',
+          color: THEME.primary,
+          fontSize: 13,
+          fontWeight: 700,
+          textAlign: 'center',
+        }}>
+          {notice}
+        </div>
+      )}
+
+      {pendingImport && (
+        <SettingsModal
+          title={t.importData}
+          onClose={() => setPendingImport(null)}
+        >
+          <p style={{
+            margin: '0 0 16px',
+            color: THEME.text,
+            fontSize: 14,
+            lineHeight: 1.4,
+            textAlign: 'center'
+          }}>
+            {t.importDataConfirm}
+          </p>
+
+          <div style={{
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 14,
+            display: 'grid',
+            gap: 8,
+            fontSize: 13
+          }}>
+            <h4 style={{
+              margin: '0 0 4px',
+              color: THEME.text,
+              fontSize: 14,
+              textAlign: 'center'
+            }}>
+              {t.importPreviewTitle}
+            </h4>
+
+            {[
+              [t.importPreviewVersion, pendingImport.appVersion],
+              [
+                t.importPreviewExportedAt,
+                pendingImport.exportedAt && pendingImport.exportedAt !== '—'
+                  ? new Date(pendingImport.exportedAt).toLocaleString()
+                  : '—'
+              ],
+              [
+                t.importPreviewProgress,
+                `${t.cycle} ${importSummary?.currentCycle || 1} · ${t.workoutProgress} ${importSummary?.currentWorkout || 1} / ${importSummary?.totalWorkouts || 28}`
+              ],
+              [t.importPreviewBodyData, importSummary?.bodyDataEntries ?? 0],
+            ].map(([label, value]) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <span style={{ color: THEME.muted, fontWeight: 700 }}>{label}</span>
+                <strong style={{ color: THEME.text, textAlign: 'right' }}>{value}</strong>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gap: 4 }}>
+            <button
+              onClick={confirmImport}
+              style={{
+                width: '100%',
+                padding: 12,
+                fontSize: 14,
+                fontWeight: 800,
+                background: THEME.card,
+                color: '#ffffff',
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.importData}
+            </button>
+
+            <button
+              onClick={() => setPendingImport(null)}
+              style={{
+                width: '100%',
+                padding: 10,
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'transparent',
+                color: THEME.text,
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.cancel}
+            </button>
+          </div>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+function SupportActionButton({ children, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '9px 11px',
+        fontSize: 15,
+        fontWeight: 800,
+        background: THEME.card,
+        color: '#ffffff',
+        border: `1px solid ${THEME.primary}`,
+        borderRadius: 8,
+        cursor: 'pointer',
+        minHeight: 42,
+        width: '100%',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis'
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SupportSection({ t }) {
+  const links = [
+    {
+      label: t.supportKelani || 'Support Kelani',
+      url: 'https://github.com/sponsors/mburgosfr-star',
+    },
+    {
+      label: t.reportIssueShort || t.reportBug,
+      url: 'https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=bug_report.md',
+    },
+    {
+      label: t.sourceCode || 'Source code',
+      url: 'https://github.com/mburgosfr-star/kelani-sbd-tracker',
+    },
+  ];
+
+  function openLink(url) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  return (
+    <SettingsListRow
+      label={t.support}
+      actionContent={(
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr',
+          gap: 8,
+          width: '100%'
+        }}>
+          {links.map(item => (
+            <SupportActionButton
+              key={item.label}
+              onClick={() => openLink(item.url)}
+            >
+              {item.label}
+            </SupportActionButton>
+          ))}
+        </div>
+      )}
+    />
+  );
+}
+
+function ProfileSection({ userProfile, onSave, weightUnit, setWeightUnit, t }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [birthDate, setBirthDate] = useState(userProfile?.birthDate || '');
+  const [sex, setSex] = useState(userProfile?.sex || '');
+  const [profileWeightUnit, setProfileWeightUnit] = useState(normalizeWeightUnit(weightUnit));
+  const [notice, setNotice] = useState(null);
+
+  useEffect(() => {
+    setBirthDate(userProfile?.birthDate || '');
+    setSex(userProfile?.sex || '');
+    setProfileWeightUnit(normalizeWeightUnit(weightUnit));
+  }, [userProfile?.birthDate, userProfile?.sex, weightUnit]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const id = window.setTimeout(() => setNotice(null), 5000);
+    return () => window.clearTimeout(id);
+  }, [notice]);
+
+  function openEdit() {
+    setBirthDate(userProfile?.birthDate || '');
+    setSex(userProfile?.sex || '');
+    setProfileWeightUnit(normalizeWeightUnit(weightUnit));
+    setIsEditing(true);
+  }
+
+  function handleSave() {
+    onSave({ birthDate, sex });
+    setWeightUnit(normalizeWeightUnit(profileWeightUnit));
+    setIsEditing(false);
+    setNotice(t.profileSaved);
+  }
+
+  return (
+    <>
+      <Toast message={notice} />
+
+      <SettingsListRow label={t.profile} actionLabel={t.editProfile || t.edit} onAction={openEdit} />
+
+      {isEditing && (
+        <SettingsModal
+          title={t.profile}
+          onClose={() => setIsEditing(false)}
+        >
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', marginBottom: 12, fontWeight: 700, fontSize: 14 }}>{t.birthDate}</label>
+            <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} style={modalInputStyle()} />
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.sex}</label>
+            <select value={sex} onChange={e => setSex(e.target.value)} style={modalInputStyle()}>
+              <option value="">{t.selectSex}</option>
+              <option value="male">{t.male}</option>
+              <option value="female">{t.female}</option>
+              <option value="other">{t.other}</option>
+            </select>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.weightUnit}</label>
+            <select value={profileWeightUnit} onChange={e => setProfileWeightUnit(normalizeWeightUnit(e.target.value))} style={modalInputStyle()}>
+              <option value={WEIGHT_UNITS.KG}>{t.weightUnitKg}</option>
+              <option value={WEIGHT_UNITS.LB}>{t.weightUnitLb}</option>
+            </select>
+          </div>
+
+          <div style={modalActionRowStyle()}>
+            <button onClick={() => setIsEditing(false)} style={modalActionButtonStyle('secondary')}>
+              {t.cancel}
+            </button>
+
+            <button onClick={handleSave} style={modalActionButtonStyle('primary')}>
+              {t.save}
+            </button>
+          </div>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
+
+
+
+function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) {
+  const previous = bodyData || {};
+  const [isEditing, setIsEditing] = useState(false);
+  const [saveNotice, setSaveNotice] = useState(null);
+  const [form, setForm] = useState({
+    bodyWeight: '',
+    bodyFat: '',
+    bodyWater: '',
+    visceralFat: '',
+    physiqueRating: '',
+  });
+
+  useEffect(() => {
+    if (!saveNotice) return;
+    const id = window.setTimeout(() => setSaveNotice(null), 1800);
+    return () => window.clearTimeout(id);
+  }, [saveNotice]);
+
+  function openEdit() {
+    setForm({
+      bodyWeight: '',
+      bodyFat: '',
+      bodyWater: '',
+      visceralFat: '',
+      physiqueRating: '',
+      boneMass: '',
+    });
+    setIsEditing(true);
+  }
+
+  function updateField(field, value) {
+    setForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  function isWeightMassField(field) {
+    return field === 'bodyWeight';
+  }
+
+  function enteredValue(field) {
+    const entered = toOptionalNumber(form[field]);
+    if (entered === null) return null;
+
+    return isWeightMassField(field)
+      ? displayWeightToKg(entered, weightUnit)
+      : entered;
+  }
+
+  function placeholderValue(field) {
+    const previousValue = previous[field];
+    if (!previousValue) return '';
+
+    return isWeightMassField(field)
+      ? formatWeightValue(kgToDisplayWeight(previousValue, weightUnit), weightUnit, { body: true })
+      : String(previousValue);
+  }
+
+  function finalValue(field) {
+    const entered = enteredValue(field);
+    if (entered !== null) return entered;
+    return previous[field] || null;
+  }
+
+  function handleSave() {
+    const bodyWeight = finalValue('bodyWeight');
+    const bodyFat = finalValue('bodyFat');
+    const leanMass = calculateLeanMassEstimate(bodyWeight, bodyFat) || previous.leanMass || null;
+
+    const nextData = {
+      bodyWeight,
+      bodyFat,
+      bodyWater: finalValue('bodyWater'),
+      visceralFat: finalValue('visceralFat'),
+      leanMass,
+      physiqueRating: finalValue('physiqueRating'),
+    };
+
+    const hasAnyValue = Object.values(nextData).some(value => value !== null);
+    if (!hasAnyValue) return;
+
+    onSave(nextData);
+    setIsEditing(false);
+    setSaveNotice(t.bodyDataUpdated);
+  }
+
+  const fields = [
+    { key: 'bodyWeight', label: t.bodyweight, unit: normalizeWeightUnit(weightUnit) },
+    { key: 'bodyFat', label: t.bodyFatPercent, unit: '%' },
+    { key: 'bodyWater', label: t.bodyWaterPercent, unit: '%' },
+    { key: 'visceralFat', label: t.visceralFatRating },
+    { key: 'physiqueRating', label: t.physiqueRating },
+  ];
+
+  return (
+    <>
+      <Toast message={saveNotice} />
+
+      <SettingsListRow label={t.updateBodyData} actionLabel={t.editBodyData || t.edit} onAction={openEdit} />
+
+      {isEditing && (
+        <SettingsModal
+          title={t.updateBodyData}
+          onClose={() => setIsEditing(false)}
+        >
+          {fields.map(field => (
+            <div
+              key={field.key}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(130px, 42%) minmax(0, 1fr)',
+                gap: 10,
+                alignItems: 'center',
+                marginBottom: 10
+              }}
+            >
+              <label style={{ fontWeight: 800, fontSize: 14, lineHeight: 1.25 }}>
+                {field.label}
+              </label>
+
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="number"
+                  value={form[field.key]}
+                  onChange={e => updateField(field.key, e.target.value)}
+                  placeholder={placeholderValue(field.key)}
+                  style={{
+                    ...modalInputStyle(),
+                    paddingRight: field.unit ? 48 : 10
+                  }}
+                />
+                {field.unit && (
+                  <span style={{
+                    position: 'absolute',
+                    right: 12,
+                    top: '50%',
+                    color: THEME.text,
+                    fontSize: 15,
+                    pointerEvents: 'none'
+                  }}>
+                    {field.unit}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+
+          <div style={modalActionRowStyle()}>
+            <button onClick={() => setIsEditing(false)} style={modalActionButtonStyle('secondary')}>
+              {t.cancel}
+            </button>
+
+            <button onClick={handleSave} style={modalActionButtonStyle('primary')}>
+              {t.save}
+            </button>
+          </div>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+function RestTimeSection({ t }) {
+  const [showAlertHelp, setShowAlertHelp] = useState(false);
+  const [alertStatus, setAlertStatus] = useState(null);
+
+  async function handleCheckAlerts() {
+    const status = await checkRestTimerAlertReadiness();
+    setAlertStatus(status);
+    setShowAlertHelp(true);
+  }
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.restTimerAlerts || 'Rest timer alerts'}
+        actionLabel={t.check || 'Check'}
+        onAction={handleCheckAlerts}
+      />
+
+      {showAlertHelp && (
+        <SettingsModal
+          title={t.restTimerAlerts || 'Rest timer alerts'}
+          onClose={() => setShowAlertHelp(false)}
+        >
+          <div style={{
+            color: THEME.text,
+            fontSize: 13,
+            fontWeight: 700,
+            lineHeight: 1.35,
+            marginBottom: 4
+          }}>
+            Rest times are chosen automatically by set type. For reliable screen-off alerts, allow notifications, lock screen notifications, unrestricted battery use, and exact alarms if Android asks.
+          </div>
+
+          <div style={{
+            color: THEME.muted,
+            fontSize: 12,
+            fontWeight: 700,
+            lineHeight: 1.3,
+            marginBottom: alertStatus ? 10 : 12
+          }}>
+            Xiaomi/HyperOS may also require lock screen notifications and no battery restrictions.
+          </div>
+
+          {alertStatus?.native === true && (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              gap: '4px 10px',
+              color: THEME.muted,
+              fontSize: 12,
+              fontWeight: 800,
+              marginBottom: 12
+            }}>
+              <span>Notifications</span>
+              <strong style={{ color: alertStatus.display === 'granted' ? THEME.primary : THEME.red }}>
+                {alertStatus.display}
+              </strong>
+              <span>Exact alarms</span>
+              <strong style={{ color: alertStatus.exactAlarm === 'granted' ? THEME.primary : THEME.muted }}>
+                {alertStatus.exactAlarm}
+              </strong>
+            </div>
+          )}
+
+          {alertStatus?.native === false && (
+            <div style={{
+              padding: 8,
+              borderRadius: 8,
+              border: `1px solid ${THEME.border}`,
+              color: THEME.muted,
+              fontSize: 12,
+              fontWeight: 800,
+              lineHeight: 1.3,
+              marginBottom: 12
+            }}>
+              Open the installed Android app to check device alert settings.
+            </div>
+          )}
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: 8
+          }}>
+            <button
+              onClick={handleCheckAlerts}
+              style={{
+                width: '100%',
+                padding: 10,
+                fontSize: 14,
+                fontWeight: 800,
+                borderRadius: 8,
+                border: `1px solid ${THEME.primary}`,
+                background: THEME.card,
+                color: THEME.text,
+                cursor: 'pointer'
+              }}
+            >
+              {t.check || 'Check'}
+            </button>
+
+            <button
+              onClick={() => setShowAlertHelp(false)}
+              style={{
+                width: '100%',
+                padding: 10,
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'transparent',
+                color: THEME.text,
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.close || 'Close'}
+            </button>
+          </div>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
+
+function selectionModalButtonStyle(active) {
+  return {
+    width: '100%',
+    padding: 12,
+    fontSize: 15,
+    fontWeight: 700,
+    background: active ? THEME.primary : THEME.card,
+    color: '#ffffff',
+    border: `1px solid ${THEME.primary}`,
+    borderRadius: 8,
+    cursor: 'pointer',
+    marginBottom: 6
+  };
+}
+
+function LanguageSection({ language, setLanguage, t }) {
+  const [isEditing, setIsEditing] = useState(false);
+
+  const languageNames = {
+    nl: t.languageDutch,
+    en: t.languageEnglish,
+    ca: t.languageCatalan,
+  };
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.language}
+        actionLabel={languageNames[language]}
+        onAction={() => setIsEditing(true)}
+      />
+
+      {isEditing && (
+        <SettingsModal
+          title={t.changeLanguage}
+          onClose={() => setIsEditing(false)}
+        >
+          {['ca', 'en', 'nl'].map(l => (
+            <button
+              type="button"
+              key={l}
+              onClick={() => {
+                setLanguage(l);
+                setIsEditing(false);
+              }}
+              style={selectionModalButtonStyle(language === l)}
+            >
+              {languageNames[l]}
+            </button>
+          ))}
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+function getTrainingModelShortLabel(model) {
+  return isSmartTrainingModel(model) ? 'Smart' : 'Classic';
+}
+
+function ModelSection({ trainingModel, setTrainingModel, t }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const currentModel = normalizeTrainingModel(trainingModel);
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.trainingModelLabel || 'Model'}
+        actionLabel={getTrainingModelShortLabel(currentModel)}
+        onAction={() => setIsEditing(true)}
+      />
+
+      {isEditing && (
+        <SettingsModal
+          title={t.trainingModelLabel || 'Model'}
+          onClose={() => setIsEditing(false)}
+        >
+          {[TRAINING_MODELS.CLASSIC, TRAINING_MODELS.SMART].map(model => (
+            <button
+              type="button"
+              key={model}
+              onClick={() => {
+                setTrainingModel(normalizeTrainingModel(model));
+                setIsEditing(false);
+              }}
+              style={selectionModalButtonStyle(currentModel === model)}
+            >
+              {getTrainingModelShortLabel(model)}
+            </button>
+          ))}
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+function NewCycleModal({ prs, onStart, t, weightUnit = WEIGHT_UNITS.KG }) {
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 200,
+      padding: 16
+    }}>
+      <div style={{
+        background: THEME.card,
+        borderRadius: 12,
+        padding: 24,
+        maxWidth: 340,
+        width: '90%'
+      }}>
+        <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 10 }}>
+          🏆
+        </div>
+
+        <h3 style={{ margin: '0 0 8px', textAlign: 'center' }}>
+          {t.cycleCompleted}
+        </h3>
+
+        <p style={{ color: THEME.muted, fontSize: 14, margin: '0 0 20px', textAlign: 'center' }}>
+          {t.newCycleWeights}
+        </p>
+        <div style={{
+          background: THEME.card,
+          border: `1px solid ${THEME.border}`,
+          color: THEME.text,
+          borderRadius: 8,
+          padding: 12,
+          marginBottom: 20
+        }}>
+          {LIFT_ORDER.map(lift => (
+            <div
+              key={lift}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                padding: '4px 0',
+                fontSize: 14
+              }}
+            >
+              <span style={{ color: THEME.text, fontWeight: 700 }}>
+                {liftLabel(lift, t)} {t.e1RM}
+              </span>
+              <span style={{ fontWeight: 700 }}>{prs[lift] ? formatWeightFromKg(prs[lift], weightUnit) : '—'}</span>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={onStart}
+          style={{
+            width: '100%',
+            padding: 14,
+            fontSize: 16,
+            background: THEME.card,
+            color: '#ffffff',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 4,
+            cursor: 'pointer',
+            fontWeight: 600
+          }}
+        >
+          {t.startNewCycle} 🚀
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function getSkippedSetMessage(set, t, isLastSet = false) {
+  if (set?.labelKey === 'opener') {
+    return t.openerSkippedWithLoweredPlan || 'Opener missed. This attempt is skipped; the next attempts are lowered.';
+  }
+
+  if (set?.labelKey === 'secondAttempt') {
+    return t.secondAttemptSkippedWithLoweredPlan || 'Second attempt missed. This attempt is skipped; the third attempt is lowered.';
+  }
+
+  if (set?.labelKey === 'thirdAttempt') {
+    return t.thirdAttemptSkipped || 'Third attempt missed. This attempt is skipped. Continue with the back-off sets.';
+  }
+
+  // There is no "next set" to continue with when this is the very last set
+  // of the whole workout - saying so anyway read as a contradiction right
+  // before the athlete taps "Complete workout".
+  if (isLastSet) {
+    return t.lastSetSkipped || 'Set skipped.';
+  }
+
+  if (isTopSetLabel(set?.labelKey)) {
+    return t.topSetSkipped || 'Top set missed and skipped. Continue with the backoff work.';
+  }
+
+  return t.topSetSkipped || 'Set skipped. Continue with the next set.';
+}
+
+export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = false, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator, isLastGroupOfWorkout = false }) {
+  const [editing, setEditing] = useState(false);
+  const firstSet = entries?.[0]?.set || {};
+  const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
+  const latestActionEntry = [...(entries || [])]
+    .reverse()
+    .find(({ set }) => set.done || set.failed || set.skipped);
+  const failedEntry = latestActionEntry?.set?.failed || latestActionEntry?.set?.skipped
+    ? latestActionEntry
+    : null;
+  const isFeedbackOnLastSetOfWorkout = Boolean(
+    isLastGroupOfWorkout &&
+    failedEntry &&
+    entries[entries.length - 1]?.index === failedEntry.index
+  );
+  const [inputVal, setInputVal] = useState(String(firstSet.weight || ''));
+
+  useEffect(() => {
+    if (editing) {
+      setInputVal(formatWeightValue(kgToDisplayWeight(workoutDisplayWeightKg(firstSet.weight || '', lift, benchPressVariant), weightUnit), weightUnit));
+    }
+  }, [editing, firstSet.weight, weightUnit, lift, benchPressVariant]);
+
+  if (!entries?.length) return null;
+
+  function confirmEdit() {
+    const val = parseFloat(inputVal);
+
+    if (!Number.isNaN(val) && val > 0) {
+      onEditAll(workoutInputWeightKg(val, weightUnit, lift, benchPressVariant));
+    }
+
+    setEditing(false);
+  }
+
+  function handleEditClick(e) {
+    e.stopPropagation();
+    setInputVal(formatWeightValue(kgToDisplayWeight(workoutDisplayWeightKg(firstSet.weight || '', lift, benchPressVariant), weightUnit), weightUnit));
+    setEditing(true);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter') confirmEdit();
+    if (e.key === 'Escape') setEditing(false);
+  }
+
+  const timerNode = entries
+    .map(({ index }) => renderTimer?.(index))
+    .find(Boolean);
+
+  const isGroupComplete = entries.every(({ set }) => set.done || set.skipped);
+  const isActiveGroup = activeIndex >= 0;
+
+  const actions = !isActiveGroup || isGroupComplete || isReadOnly ? null : editing ? (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+      gap: 8,
+      marginTop: 8,
+      gridColumn: compactGrid ? '1 / -1' : undefined,
+      order: compactGrid ? 1 : undefined,
+    }}>
+      <input
+        type="number"
+        step={normalizeWeightUnit(weightUnit) === WEIGHT_UNITS.LB ? "5" : "2.5"}
+        value={inputVal}
+        autoFocus
+        onChange={e => setInputVal(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={confirmEdit}
+        style={{
+          width: 66,
+          padding: '4px 6px',
+          fontSize: 14,
+          fontWeight: 800,
+          borderRadius: 4,
+          border: `1px solid ${THEME.primary}`,
+          background: THEME.bg,
+          color: THEME.text,
+          textAlign: 'right',
+        }}
+      />
+      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>
+        {normalizeWeightUnit(weightUnit)}
+      </span>
+    </div>
+  ) : (
+    <div
+      data-testid="workout-set-group-action-grid"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+        alignItems: 'center',
+        justifyItems: 'center',
+        gap: WORKOUT_CIRCLE_ITEM_GAP,
+        marginTop: 8,
+        gridColumn: compactGrid ? '1 / -1' : undefined,
+      order: compactGrid ? 1 : undefined,
+      }}
+    >
+      <SetActionButton
+        title={t.edit}
+        disabled={isReadOnly}
+        borderColor={THEME.primary}
+        onClick={handleEditClick}
+      >
+        ✎
+      </SetActionButton>
+
+      <SetActionButton
+        title={t.restoreOriginalWeight}
+        disabled={isReadOnly}
+        borderColor="#f39c12"
+        onClick={e => {
+          e.stopPropagation();
+          onRestoreAll();
+        }}
+      >
+        ↺
+      </SetActionButton>
+
+      <SetActionButton
+        title={t.markSetFailed}
+        disabled={isReadOnly}
+        borderColor="#e74c3c"
+        onClick={e => {
+          e.stopPropagation();
+          if (firstOpenEntry) onMarkFailed(firstOpenEntry.index);
+        }}
+      >
+        ✕
+      </SetActionButton>
+    </div>
+  );
+
+  const feedback = failedEntry ? (
+    <div style={{
+      marginTop: 8,
+      padding: '7px 9px',
+      gridColumn: compactGrid ? '1 / -1' : undefined,
+      order: compactGrid ? 1 : undefined,
+      border: '1px solid #e74c3c',
+      borderRadius: 8,
+      color: '#ffffff',
+      background: 'rgba(231, 76, 60, 0.16)',
+      fontSize: 12,
+      fontWeight: 800,
+      lineHeight: 1.3,
+      textAlign: 'center',
+    }}>
+      {failedEntry.set.skipped
+        ? getSkippedSetMessage(failedEntry.set, t, isFeedbackOnLastSetOfWorkout)
+        : getFailedSetFeedbackMessage(failedEntry.set, t) || 'Set missed and skipped. Continue with the next set.'}
+    </div>
+  ) : null;
+
+  return (
+    <div
+      data-testid="workout-set-group"
+      style={compactGrid ? {
+        display: 'contents',
+      } : {
+        padding: `4px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+        marginBottom: 4,
+      }}
+    >
+      <div
+        data-testid="workout-set-group-grid"
+        style={compactGrid ? {
+          display: 'contents',
+        } : {
+          display: 'grid',
+          gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+          gap: WORKOUT_CIRCLE_ITEM_GAP,
+          marginTop: 0,
+        }}
+      >
+        {entries.map(({ set, index }) => {
+          const setDisplayPct = formatSetPercentDisplay(set.pct);
+          const setIsAdjusted =
+            Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed) ||
+            Number(set.weight) !== Number(set.originalWeight ?? set.weight);
+          const setDescription = (
+            <span style={{ fontSize: WORKOUT_TEXT_FONT_SIZE, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <WorkoutWeightPercentLabel
+                weightText={`${formatWorkoutWeightFromKg(
+                  set.weight,
+                  weightUnit,
+                  t,
+                  lift,
+                  benchPressVariant
+                )}${set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}`}
+                percentText={setDisplayPct}
+                color={setIsAdjusted ? '#f39c12' : THEME.muted}
+              />
+              {onShowPlateCalculator && !set.perSide && (
+                <button
+                  type="button"
+                  title={t.plateCalculatorTitle || 'Plate calculator'}
+                  aria-label={t.plateCalculatorTitle || 'Plate calculator'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onShowPlateCalculator(set.weight);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 24,
+                    height: 24,
+                    border: 'none',
+                    borderRadius: '50%',
+                    background: `${THEME.primary}20`,
+                    color: THEME.primary,
+                    padding: 4,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <PlateIcon size={16} />
+                </button>
+              )}
+            </span>
+          );
+
+          return (
+            <WorkoutCircleItem
+              key={index}
+              testId={`workout-set-group-item-${index}`}
+              label={setDescription}
+            >
+              <WorkoutCircle
+                done={set.done}
+                active={index === activeIndex}
+                skipped={set.skipped}
+                disabled={isReadOnly}
+                onClick={() => onToggle(index)}
+                label={`${t.set} ${index + 1}`}
+                accentColor={getLiftThemeColor(lift)}
+                reps={set.reps}
+              />
+            </WorkoutCircleItem>
+          );
+        })}
+      </div>
+
+      {actions}
+      {compactGrid && timerNode ? (
+        <div style={{ gridColumn: '1 / -1', order: 1 }}>
+          {timerNode}
+        </div>
+      ) : timerNode}
+      {feedback}
+    </div>
+  );
+}
+
+export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMoreAccessoryWork, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, onShowPlateCalculator }) {
+  const [editing, setEditing] = useState(false);
+  const firstWeight = acc.weights?.[0] || 0;
+  const firstOpenIndex = (acc.done || []).findIndex(done => !done);
+  const [inputVal, setInputVal] = useState(String(firstWeight || ''));
+
+  useEffect(() => {
+    if (editing) {
+      setInputVal(formatWeightValue(kgToDisplayWeight(firstWeight || '', weightUnit), weightUnit));
+    }
+  }, [editing, firstWeight, weightUnit]);
+
+  function confirmEdit() {
+    const val = parseFloat(inputVal);
+
+    if (!Number.isNaN(val) && val > 0) {
+      onEditAll(displayWeightToKg(val, weightUnit));
+    }
+
+    setEditing(false);
+  }
+
+  function handleEditClick(e) {
+    e.stopPropagation();
+    setInputVal(formatWeightValue(kgToDisplayWeight(firstWeight || '', weightUnit), weightUnit));
+    setEditing(true);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter') confirmEdit();
+    if (e.key === 'Escape') setEditing(false);
+  }
+
+  const timerNode = (acc.done || [])
+    .map((_, index) => renderTimer?.(index))
+    .find(Boolean);
+
+  const accessoryLabel = acc.nameKey ? t[acc.nameKey] : acc.name;
+  const isAccessoryComplete = (acc.done || []).length > 0 && (acc.done || []).every(Boolean);
+
+  const actions = !isActiveGroup || isAccessoryComplete || isReadOnly ? null : editing ? (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginTop: 8 }}>
+      <input
+        type="number"
+        step={normalizeWeightUnit(weightUnit) === WEIGHT_UNITS.LB ? "5" : "2.5"}
+        value={inputVal}
+        autoFocus
+        onChange={e => setInputVal(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={confirmEdit}
+        style={{
+          width: 66,
+          padding: '4px 6px',
+          fontSize: 14,
+          fontWeight: 800,
+          borderRadius: 4,
+          border: `1px solid ${THEME.primary}`,
+          background: THEME.bg,
+          color: THEME.text,
+          textAlign: 'right',
+        }}
+      />
+      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>
+        {normalizeWeightUnit(weightUnit)}
+      </span>
+    </div>
+  ) : (
+    <div
+      data-testid="workout-accessory-action-grid"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+        alignItems: 'center',
+        justifyItems: 'center',
+        gap: WORKOUT_CIRCLE_ITEM_GAP,
+        marginTop: 8,
+      }}
+    >
+      <SetActionButton title={t.edit} disabled={isReadOnly} borderColor={THEME.primary} onClick={handleEditClick}>✎</SetActionButton>
+      <SetActionButton title={t.restoreOriginalWeight} disabled={isReadOnly} borderColor="#f39c12" onClick={e => { e.stopPropagation(); onRestoreAll(); }}>↺</SetActionButton>
+      <SetActionButton title={t.markSetFailed} disabled={isReadOnly || firstOpenIndex === -1} borderColor="#e74c3c" onClick={e => { e.stopPropagation(); if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex); }}>✕</SetActionButton>
+    </div>
+  );
+
+  return (
+    <div
+      data-testid="workout-accessory-group"
+      style={{
+        padding: `4px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+        marginBottom: 8,
+      }}
+    >
+      <div
+        data-testid="workout-accessory-label"
+        style={{
+          color: THEME.text,
+          fontSize: WORKOUT_TEXT_FONT_SIZE,
+          fontWeight: 800,
+          lineHeight: 1.25,
+          textAlign: 'center',
+          marginBottom: 0,
+        }}
+      >
+        {accessoryLabel}
+      </div>
+
+      <div
+        data-testid="workout-accessory-group-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+          justifyItems: 'center',
+          gap: WORKOUT_CIRCLE_ITEM_GAP,
+          marginTop: WORKOUT_LABEL_CIRCLE_GAP,
+        }}
+      >
+        {(acc.done || []).map((done, index) => {
+          const setWeight =
+            Number(acc.weights?.[index] ?? firstWeight) || 0;
+          const originalWeight =
+            Number(acc.originalWeights?.[index] ?? setWeight) ||
+            setWeight;
+          const isAdjusted =
+            Boolean(
+              acc.adjustedFromFailedSet?.[index] ||
+              acc.adjustedFromOriginal?.[index] ||
+              acc.failed?.[index]
+            ) ||
+            setWeight !== originalWeight;
+          const weightText =
+            `${formatWeightFromKg(setWeight, weightUnit)}` +
+            `${acc.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}`;
+
+          return (
+            <WorkoutCircleItem
+              key={index}
+              testId={`workout-accessory-set-item-${index}`}
+              label={(
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <span
+                    style={{
+                      color: isAdjusted ? '#f39c12' : THEME.text,
+                      fontSize: WORKOUT_TEXT_FONT_SIZE,
+                      fontWeight: 800,
+                    }}
+                  >
+                    {weightText}
+                  </span>
+                  {onShowPlateCalculator && !acc.perSide && (
+                    <button
+                      type="button"
+                      title={t.plateCalculatorTitle || 'Plate calculator'}
+                      aria-label={t.plateCalculatorTitle || 'Plate calculator'}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onShowPlateCalculator(setWeight);
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 24,
+                        height: 24,
+                        border: 'none',
+                        borderRadius: '50%',
+                        background: `${THEME.primary}20`,
+                        color: THEME.primary,
+                        padding: 4,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <PlateIcon size={16} />
+                    </button>
+                  )}
+                </span>
+              )}
+            >
+              <WorkoutCircle
+                done={done}
+                active={isActiveGroup && index === firstOpenIndex}
+                skipped={!!acc.skipped?.[index]}
+                disabled={isReadOnly}
+                onClick={() => onToggle(index)}
+                label={`${accessoryLabel} ${index + 1}: ${weightText}, ${acc.reps} reps`}
+                reps={acc.reps}
+              />
+            </WorkoutCircleItem>
+          );
+        })}
+      </div>
+
+      {actions}
+      {timerNode}
+    </div>
+  );
+}
+
+function getExerciseGuide(lift, t) {
+  const guides = {
+    Squat: {
+      title: t.squat,
+      videoSrc: `${process.env.PUBLIC_URL || ''}/videos/squat.mp4`,
+      steps: [
+        t.squatGuideStep1 || 'Set the bar on your upper back and grip it firmly.',
+        t.squatGuideStep2 || 'Step out, set your feet, breathe in and brace.',
+        t.squatGuideStep3 || 'Squat down with knees and hips moving together.',
+        t.squatGuideStep4 || 'Reach consistent depth, then drive back up with control.',
+      ],
+      safety: [
+        t.squatGuideSafety1 || 'Use safety arms or spotters when training heavy.',
+        t.squatGuideSafety2 || 'Do not cut depth by using more weight than you can control.',
+      ],
+    },
+    Bench: {
+      title: t.bench,
+      videoSrc: `${process.env.PUBLIC_URL || ''}/videos/bench.mp4`,
+      steps: [
+        t.benchGuideStep1 || 'Set your feet and pull your shoulder blades back and down.',
+        t.benchGuideStep2 || 'Grip the bar evenly and unrack with control.',
+        t.benchGuideStep3 || 'Lower the bar to your chest with a stable upper back.',
+        t.benchGuideStep4 || 'Press up to lockout without losing position.',
+      ],
+      safety: [
+        t.benchGuideSafety1 || 'Use safeties or a spotter when benching heavy.',
+        t.benchGuideSafety2 || 'Do not bounce the bar off your chest.',
+      ],
+    },
+    Deadlift: {
+      title: t.deadlift,
+      videoSrc: `${process.env.PUBLIC_URL || ''}/videos/deadlift.mp4`,
+      steps: [
+        t.deadliftGuideStep1 || 'Stand with the bar over the middle of your foot.',
+        t.deadliftGuideStep2 || 'Grip the bar, brace, and build tension before pulling.',
+        t.deadliftGuideStep3 || 'Push the floor away and keep the bar close.',
+        t.deadliftGuideStep4 || 'Stand tall at lockout, then lower the bar with control.',
+      ],
+      safety: [
+        t.deadliftGuideSafety1 || 'Do not jerk the bar from a loose position.',
+        t.deadliftGuideSafety2 || 'Stop the set if your position breaks down.',
+      ],
+    },
+  };
+
+  return guides[lift] || null;
+}
+
+function isExerciseGuideAvailableForLiftBlock(liftBlock, benchPressVariant = 'standard') {
+  if (!liftBlock || !['Squat', 'Bench', 'Deadlift'].includes(liftBlock.lift)) return false;
+  if (isSquatBeltAlternativeLiftBlock(liftBlock)) return false;
+  if (isDeadliftAlternativeLiftBlock(liftBlock)) return false;
+  if (isBenchMachineAlternativeLiftBlock(liftBlock)) return false;
+
+  if (liftBlock.lift === 'Bench') {
+    return normalizeBenchPressVariant(liftBlock.benchPressVariant || benchPressVariant) === 'standard';
+  }
+
+  return true;
+}
+
+function ExerciseGuideModal({ lift, t, onClose }) {
+  const guide = getExerciseGuide(lift, t);
+  if (!guide) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.68)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 950,
+      padding: 16
+    }}>
+      <div style={{
+        background: THEME.card,
+        border: `1px solid ${THEME.primary}`,
+        borderRadius: 14,
+        padding: 18,
+        maxWidth: 420,
+        width: '100%',
+        color: THEME.text
+      }}>
+        <h3 style={{
+          margin: '0 0 10px',
+          textAlign: 'center',
+          color: getLiftThemeColor(lift),
+          fontSize: 22,
+          fontWeight: 900
+        }}>
+          {guide.title}
+        </h3>
+
+        {guide.videoSrc ? (
+          <div style={{
+            position: 'relative',
+            width: '100%',
+            aspectRatio: '16 / 9',
+            marginBottom: 14,
+            borderRadius: 10,
+            overflow: 'hidden',
+            border: `1px solid ${THEME.primary}`,
+            background: '#000'
+          }}>
+            <video
+              src={guide.videoSrc}
+              controls
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              style={{
+                display: 'block',
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                background: '#000'
+              }}
+            />
+          </div>
+        ) : (
+          <div style={{
+            padding: 11,
+            marginBottom: 14,
+            borderRadius: 8,
+            border: `1px solid ${THEME.primary}`,
+            color: THEME.muted,
+            textAlign: 'center',
+            fontSize: 13,
+            fontWeight: 800
+          }}>
+            {t.videoComingSoon || 'Video coming soon'}
+          </div>
+        )}
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ color: THEME.primary, fontWeight: 900, marginBottom: 8 }}>
+            {t.howToPerform || 'How to perform'}
+          </div>
+          <ol style={{ margin: 0, paddingLeft: 20, color: THEME.text, lineHeight: 1.45, fontSize: 14 }}>
+            {guide.steps.map((step, index) => (
+              <li key={`step-${index}`} style={{ marginBottom: 6 }}>{step}</li>
+            ))}
+          </ol>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ color: THEME.primary, fontWeight: 900, marginBottom: 8 }}>
+            {t.safetyNotes || 'Safety notes'}
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 20, color: THEME.muted, lineHeight: 1.45, fontSize: 14 }}>
+            {guide.safety.map((note, index) => (
+              <li key={`safety-${index}`} style={{ marginBottom: 6 }}>{note}</li>
+            ))}
+          </ul>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            width: '100%',
+            padding: 11,
+            borderRadius: 8,
+            border: `1px solid ${THEME.primary}`,
+            background: 'transparent',
+            color: THEME.text,
+            fontWeight: 800,
+            cursor: 'pointer'
+          }}
+        >
+          {t.close || 'Close'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function getSmartDayTypeDisplayLabel(dayType, t = {}) {
+  if (dayType === SMART_DAY_TYPES.DELOAD) return t.deload || 'Deload';
+  if (dayType === SMART_DAY_TYPES.RECOVERY) return t.restAndRecovery || 'Recovery';
+  if (dayType === SMART_DAY_TYPES.MEET) return t.sbdMeetDay || t.meetDay || 'Meet day';
+  if (dayType === SMART_DAY_TYPES.TRAINING) return t.training || 'Training';
+  return null;
+}
+
+export function getSmartMeetdayBlockerDisplayLabels(blockers = [], t = {}, readiness = {}) {
+  const fatigueScore = Number(readiness.recentFatigueScore) || 0;
+  const lastEffort = String(readiness.lastWorkoutEffort || '').trim().toUpperCase();
+  const fatigueCause = lastEffort
+    ? `previous workout ${lastEffort}`
+    : null;
+  const fatigueLabel = fatigueScore > 0
+    ? `fatigue ${fatigueScore}/${SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE}${fatigueCause ? ` (${fatigueCause})` : ''}`
+    : (t.smartBlockerFatigue || 'fatigue');
+
+  const labels = {
+    'active-block-too-short': t.smartBlockerActiveBlock || 'block too short',
+    fatigue: fatigueLabel,
+    'failed-skipped': t.smartBlockerFailedSkipped || 'failed/skipped',
+    'missing-lift-exposure': t.smartBlockerMissingLiftExposure || 'lift exposure',
+    'opener-readiness': t.smartBlockerOpenerReadiness || 'opener readiness',
+    'second-attempt-readiness':
+      t.smartBlockerSecondAttemptReadiness || 'second-attempt readiness',
+    'meet-plan-not-ready': t.smartBlockerMeetPlanNotReady || 'meet plan',
+    'last-workout-hard': t.smartBlockerLastWorkoutHard || 'last workout hard',
+    'after-recovery-intervention': t.smartBlockerAfterRecovery || 'after recovery',
+    'post-meet-training-cooldown': t.smartBlockerPostMeetCooldown || 'post-meet rebuild',
+    'post-failed-meet-training-cooldown': t.smartBlockerPostFailedMeetCooldown || 'post-failed meet rebuild',
+  };
+
+  return (blockers || [])
+    .map(blocker => labels[blocker] || blocker)
+    .filter(Boolean);
+}
+
+export function getSmartAttemptPhaseLabel(phase, t = {}) {
+  if (phase === 'third-attempt') {
+    return t.smartAttemptPhaseThird || '3rd attempt';
+  }
+  if (phase === 'second-attempt') {
+    return t.smartAttemptPhaseSecond || '2nd attempt';
+  }
+  return t.smartAttemptPhaseOpener || 'opener';
+}
+
+function canMentionSmartMeetPlanReady(readiness = {}) {
+  const blockers = Array.isArray(readiness.meetdayBlockers) ? readiness.meetdayBlockers : [];
+  return Boolean(readiness.meetPlanReady)
+    && isSmartMeetdayReady(readiness)
+    && blockers.length === 0;
+}
+
+function hasSmartFatigueEvidence(readiness = {}) {
+  const explicitEvidenceCount = [
+    readiness.recentFeedbackCount,
+    readiness.recentWorkoutFeedbackCount,
+    readiness.recentWorkoutEffortCount,
+    readiness.recentRatedWorkoutCount,
+    readiness.fatigueEvidenceCount,
+  ]
+    .map(Number)
+    .find(value => Number.isFinite(value));
+
+  if (explicitEvidenceCount !== undefined) return explicitEvidenceCount > 0;
+  if (readiness.hasRecentFatigueData === true) return true;
+  if (readiness.hasRecentWorkoutFeedback === true) return true;
+  if (readiness.lastWorkoutEffort) return true;
+
+  return Number(readiness.recentFailedOrSkippedSetCount) > 0 || Number(readiness.recentFatigueScore) > 0;
+}
+
+function getSmartFatigueFailedDisplayText(readiness = {}) {
+  const failedCount = Number(readiness.recentFailedOrSkippedSetCount) || 0;
+  const failedText = `failed/skipped ${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT}`;
+  if (!hasSmartFatigueEvidence(readiness)) return failedText;
+  const fatigueScore = Number(readiness.recentFatigueScore) || 0;
+  return `fatigue ${fatigueScore}/${SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE}, ${failedText}`;
+}
+
+function getKelaniTrainingStructureIssues(workout = {}) {
+  if (!workout || workout.type !== 'training') return [];
+  const liftBlocks = (workout.lifts || []).length > 0
+    ? workout.lifts
+    : [{ lift: workout.lift, sets: workout.sets || [] }];
+
+  return liftBlocks.flatMap(liftBlock => {
+    const sets = liftBlock.sets || [];
+    const hasTopSingle = sets.some(set => isTopSetLabel(set.labelKey) && Number(set.reps) === 1);
+    const hasBackoffOrWorkSets = sets.some(set => ['backoff', 'workSets'].includes(set.labelKey) || set.groupKey);
+    if (hasTopSingle && !hasBackoffOrWorkSets) {
+      return [`${liftBlock.lift || 'lift'} top-single-only`];
+    }
+    return [];
+  });
+}
+
+function getKelaniWarmupJumpIssues(workout = {}) {
+  const liftBlocks = (workout.lifts || []).length > 0
+    ? workout.lifts
+    : [{ lift: workout.lift, warmups: workout.warmups || [], sets: workout.sets || [] }];
+
+  return liftBlocks.flatMap(liftBlock => {
+    if (!['Squat', 'Deadlift'].includes(liftBlock.lift)) return [];
+    const warmups = liftBlock.warmups || [];
+    const firstWorkWeight = (liftBlock.sets || [])
+      .map(set => Number(set.weight) || 0)
+      .filter(Boolean)
+      .sort((a, b) => a - b)[0];
+    const weights = [
+      ...warmups.map(warmup => Number(warmup.weight) || 0),
+      firstWorkWeight || 0,
+    ].filter(Boolean);
+
+    return weights
+      .slice(1)
+      .map((weight, index) => ({ from: weights[index], to: weight, jump: weight - weights[index] }))
+      .filter(step => step.jump > 50)
+      .map(step => `${liftBlock.lift} ${step.from}->${step.to}kg`);
+  });
+}
+
+function getSmartDecisionReasonDisplayText(summary, t = {}) {
+  if (!summary?.reason) return null;
+
+  const readiness = summary.readiness || {};
+  const activeBlockCount = Number(readiness.activeBlockCompletedCount) || 0;
+  const meetReadyDays = Math.min(
+    getSmartMeetCompletedTrainingDays(readiness),
+    SMART_THRESHOLDS.MEETDAY_MIN_ACTIVE_BLOCK_DAYS
+  );
+
+  if (summary.reason === SMART_DECISION_REASONS.FAILED_SET_DELOAD) {
+    const failedByLift = readiness.recentFailedOrSkippedSetCountsByLift || {};
+    const failedLiftText = LIFT_ORDER
+      .filter(lift => Number(failedByLift[lift]) > 0)
+      .map(lift => `${lift} ${Number(failedByLift[lift])}`)
+      .join(', ');
+
+    if (failedLiftText) {
+      return t.smartReasonFailedSetDeload || `${failedLiftText} failed/skipped → lighter deload day.`;
+    }
+
+    return t.smartReasonFailedSetDeload || `${getSmartFatigueFailedDisplayText(readiness)} → lighter deload day.`;
+  }
+
+  if (summary.reason === SMART_DECISION_REASONS.FATIGUE_RECOVERY) {
+    const meetPlanText = canMentionSmartMeetPlanReady(readiness)
+      ? 'Meet plan ready, but '
+      : '';
+
+    return t.smartReasonFatigueRecovery || `${meetPlanText}${getSmartFatigueFailedDisplayText(readiness)} → recovery day.`;
+  }
+
+  if (summary.reason === SMART_DECISION_REASONS.FREQUENCY_RECOVERY) {
+    return 'Rolling 7-workout frequency leaves no safe lift combination, so recovery was selected.';
+  }
+
+  if (summary.reason === SMART_DECISION_REASONS.TRAINING_STREAK_RECOVERY) {
+    const completedTrainingWorkouts = Math.min(
+      activeBlockCount,
+      SMART_THRESHOLDS.TRAINING_STREAK_RECOVERY_DAYS
+    );
+
+    return `Planned recovery after ${completedTrainingWorkouts}/${SMART_THRESHOLDS.TRAINING_STREAK_RECOVERY_DAYS} training workouts.`;
+  }
+
+  if (summary.reason === SMART_DECISION_REASONS.TRAINING_FALLBACK) {
+    if (activeBlockCount === 0 && Number(readiness.completedCount) === 0) {
+      return t.smartReasonTrainingFallback || `New cycle. Build readiness toward meet plan → training day.`;
+    }
+
+    if (readiness.lastWasRecoveryIntervention) {
+      if (canMentionSmartMeetPlanReady(readiness)) {
+        return t.smartReasonTrainingFallback || `Meet plan ready, but fresh after recovery → training day.`;
+      }
+
+      return t.smartReasonTrainingFallback || `Fresh after recovery. ${getSmartFatigueFailedDisplayText(readiness)} → training day.`;
+    }
+
+    const blockers = getSmartMeetdayBlockerDisplayLabels(
+      readiness.meetdayBlockers || [],
+      t,
+      readiness
+    ).slice(0, 3);
+
+    if (blockers.length > 0) {
+      if (canMentionSmartMeetPlanReady(readiness)) {
+        return t.smartReasonTrainingFallback || `Meet plan ready, but ${blockers.slice(0, 3).join(', ')} → training day.`;
+      }
+
+      const weakestLift = readiness.meetPlanWeakestLift;
+      const weakestBest = Number(readiness.meetPlanWeakestBestE1RM) || 0;
+      const weakestTarget = Number(readiness.meetPlanWeakestTarget) || 0;
+      const weakestText = weakestLift && weakestBest > 0 && weakestTarget > 0
+        ? `${weakestLift} e1RM ${formatWeightValue(weakestBest, WEIGHT_UNITS.KG)} / target ${formatWeightValue(weakestTarget, WEIGHT_UNITS.KG)}`
+        : null;
+
+      return t.smartReasonTrainingFallback || `Meet not ready: ${[
+        weakestText,
+        ...blockers,
+      ].filter(Boolean).slice(0, 3).join(', ')} → training day.`;
+    }
+
+    return t.smartReasonTrainingFallback || `Meet readiness ${meetReadyDays}/${SMART_THRESHOLDS.MEETDAY_MIN_ACTIVE_BLOCK_DAYS}; ${getSmartFatigueFailedDisplayText(readiness)} → training day.`;
+  }
+
+  if (summary.reason === SMART_DECISION_REASONS.MEETDAY_READY) {
+    if (canMentionSmartMeetPlanReady(readiness) && readiness.lastWasRecoveryIntervention) {
+      return t.smartReasonMeetdayReady || `Meet plan ready, fresh after recovery → meet day.`;
+    }
+
+    if (canMentionSmartMeetPlanReady(readiness)) {
+      return t.smartReasonMeetdayReady || `Meet plan ready, ${getSmartFatigueFailedDisplayText(readiness)} → meet day.`;
+    }
+
+    return t.smartReasonMeetdayReady || `Meet readiness ${SMART_THRESHOLDS.MEETDAY_MIN_ACTIVE_BLOCK_DAYS}/${SMART_THRESHOLDS.MEETDAY_MIN_ACTIVE_BLOCK_DAYS}, ${getSmartFatigueFailedDisplayText(readiness)} → meet day.`;
+  }
+
+  if (summary.reason === SMART_DECISION_REASONS.POST_MEET_RECOVERY) {
+    const target = Number(readiness.postMeetRecoveryTarget) || 0;
+    const completed = Number(readiness.postMeetRecoveryDaysCompleted) || 0;
+    return t.smartReasonPostMeetRecovery || `Post-meet recovery ${Math.min(completed + 1, target)}/${target} → rest day.`;
+  }
+
+  return null;
+}
+
+function getSmartTrainingSelectionDisplayText(workout, t = {}) {
+  // Meet-readiness numbers are presented as explicitly named detail rows.
+  // The old combined “e1RM limiter / target” sentence was ambiguous.
+  return null;
+}
+
+function getSmartSetDisplayLabel(set = {}, t = {}) {
+  const labelKey = String(set?.labelKey || '').trim();
+  const fallbackLabels = {
+    topTriple: 'Top triple',
+    topDouble: 'Top double',
+    topSingle: 'Top single',
+    heavySingle: 'Heavy single',
+    opener: 'Opener',
+    workSets: 'Work sets',
+    backoff: 'Backoff',
+  };
+
+  return t[labelKey] || fallbackLabels[labelKey] || labelKey || 'Top set';
+}
+
+function formatSmartPrescriptionPercent(pct) {
+  const formatted = formatSetPercentDisplay(pct);
+  return formatted ? `${formatted}%` : null;
+}
+
+function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkout = false, noLiftIsHeavyToday = false) {
+  const prescription = liftBlock?.smartPrescription || null;
+  if (!prescription) return null;
+
+  const sets = (liftBlock.sets || []).filter(
+    set => !set?.warmup && !set?.isWarmup
+  );
+  if (!sets.length) return null;
+
+  const volumeSets = sets.filter(set =>
+    ['backoff', 'workSets'].includes(set?.labelKey)
+  );
+  const topSet = sets.find(set =>
+    isTopSetLabel(set?.labelKey)
+  ) || sets.find(set =>
+    !['backoff', 'workSets'].includes(set?.labelKey)
+  ) || null;
+  const parts = [];
+
+  if (topSet) {
+    const currentPct = Number(
+      topSet.precisePct ?? topSet.pct ?? topSet.originalPct
+    ) || 0;
+    const previousPct = roundPercent(
+      Number(
+        prescription.topSetAnchorPct ||
+        prescription.progressionAnchorPct
+      ) || 0
+    );
+    const currentText = formatSmartPrescriptionPercent(currentPct);
+    const previousText = formatSmartPrescriptionPercent(previousPct);
+    const topLabel = getSmartSetDisplayLabel(topSet, t);
+
+    if (previousText && currentText) {
+      parts.push(`${topLabel}: ${previousText} → ${currentText}`);
+    } else if (currentText) {
+      parts.push(`${topLabel}: ${currentText}`);
+    }
+  }
+
+  if (volumeSets.length > 0) {
+    const grouped = [];
+    volumeSets.forEach(set => {
+      const pct = Number(set?.pct ?? set?.originalPct) || 0;
+      const reps = Number(set?.reps) || 0;
+      const key = `${reps}:${pct}`;
+      const existing = grouped.find(item => item.key === key);
+
+      if (existing) {
+        existing.count += 1;
+      } else {
+        grouped.push({ key, count: 1, reps, pct });
+      }
+    });
+
+    parts.push(grouped.map(group => {
+      const pctText = formatSmartPrescriptionPercent(group.pct) || '—';
+      return `${group.count}×${group.reps}×${pctText}`;
+    }).join(' + '));
+  }
+
+  const reasonParts = [];
+  if (prescription.regressionReason) {
+    reasonParts.push(
+      t.smartRegressionReason ||
+      'Recovery or missed work blocked normal progression.'
+    );
+  } else if (prescription.repeatVariationApplied) {
+    reasonParts.push(
+      t.smartEquivalentStimulusProgressed ||
+      'Progressed to avoid repeating the same stimulus.'
+    );
+  } else if (
+    ['secondary', 'tertiary'].includes(prescription.role || liftBlock.role) &&
+    isSingleLiftWorkout
+  ) {
+    // A single-lift day can still carry a non-primary role when it was
+    // forced light because this lift's heavy weekly slot is already used
+    // (see the forced-secondary retry in generateSmartWorkouts) - there is
+    // no other lift in the workout to be "secondary" to, so the normal
+    // two-lift-day copy below would be misleading here.
+    reasonParts.push(
+      t.smartFrequencyLightSoloReason ||
+      "This lift's heavy slot is already used this week, so it's intentionally lighter today."
+    );
+  } else if (
+    ['secondary', 'tertiary'].includes(prescription.role || liftBlock.role) &&
+    noLiftIsHeavyToday
+  ) {
+    // Every lift in today's workout is light, not just this one relative to
+    // some other heavy lift - "lower volume for the secondary lift" implied
+    // a heavy day was happening elsewhere today, which was misleading once
+    // no lift still needed its heavy exposure this week (C3W36 regression:
+    // both Squat and Bench showed this same copy, each seemingly
+    // pointing at the other as "the heavy one").
+    reasonParts.push(
+      t.smartAllLiftsLightReason ||
+      'Light intensity day.'
+    );
+  } else if (['secondary', 'tertiary'].includes(prescription.role || liftBlock.role)) {
+    reasonParts.push(
+      t.smartSecondaryVolumeReason ||
+      'Lower volume for the secondary lift.'
+    );
+  } else if (
+    topSet &&
+    Number(topSet.precisePct ?? topSet.pct ?? topSet.originalPct) >
+      Number(
+        prescription.topSetAnchorPct ||
+        prescription.progressionAnchorPct
+      )
+  ) {
+    reasonParts.push(
+      t.smartSafeProgressionReason ||
+      'Safe progression from the previous successful top set.'
+    );
+  } else {
+    reasonParts.push(
+      t.smartPrimarySelectionReason ||
+      'Primary work was selected from readiness and recent training.'
+    );
+  }
+
+  if (reasonParts.length > 0) {
+    parts.push(reasonParts.join(' '));
+  }
+
+  return {
+    label: `${liftBlock.lift} — ${t.smartPrescriptionPlan || 'Plan'}`,
+    value: parts.join(' · '),
+    kind: 'prescription',
+  };
+}
+
+function getFrequencySupplementedLiftPrescriptionPlan(
+  liftBlock = {},
+  t = {},
+) {
+  const prescription = liftBlock?.smartPrescription || {};
+
+  const sets = Array.isArray(liftBlock.sets) ? liftBlock.sets : [];
+  const topSingle = sets.find(set => (
+    Number(set?.reps) === 1
+    && Number(set?.pct) > 0
+  ));
+  const volumeSets = sets.filter(set => (
+    set !== topSingle
+    && Number(set?.reps) >= 4
+    && Number(set?.pct) > 0
+  ));
+
+  if (!topSingle || volumeSets.length === 0) {
+    return null;
+  }
+
+  const formatPct = pct => `${Math.round(roundPercent(Number(pct)) * 100)}%`;
+  const volumeReps = Number(volumeSets[0]?.reps) || 0;
+  const volumePct = Number(
+    prescription.plannedVolumePct
+    || prescription.volumeAnchorPct
+    || volumeSets[0]?.pct
+  ) || 0;
+  const planParts = [
+    `${t.smartTopSingle || 'Top single'}: ${formatPct(topSingle.pct)}`,
+    `${volumeSets.length}×${volumeReps}×${formatPct(volumePct)}`,
+  ];
+
+  planParts.push(
+    t.smartPrimarySelectionReason
+    || 'Primary work was selected from readiness and recent training.',
+  );
+
+  return {
+    label: `${liftBlock.lift} — ${t.smartPrescriptionPlan || 'Plan'}`,
+    value: planParts.join(' · '),
+    kind: 'prescription',
+  };
+}
+
+export function getSmartPrescriptionDetailRows(workout = {}, t = {}) {
+  if (
+    workout?.smartDayType !== SMART_DAY_TYPES.TRAINING &&
+    workout?.smartDecisionSummary?.dayType !== SMART_DAY_TYPES.TRAINING
+  ) {
+    return [];
+  }
+
+  const isSingleLiftWorkout = (workout.lifts || []).length === 1;
+  const noLiftIsHeavyToday = (workout.lifts || []).every(
+    liftBlock => (liftBlock?.smartPrescription?.role || liftBlock?.role) !== 'primary'
+  );
+
+  return (workout.lifts || [])
+    .map(liftBlock => (
+      getFrequencySupplementedLiftPrescriptionPlan(liftBlock, t)
+      || getSmartLiftPrescriptionPlan(liftBlock, t, isSingleLiftWorkout, noLiftIsHeavyToday)
+    ))
+    .filter(row => row?.value);
+}
+
+export function buildSmartDiagnosticText(workout = {}, t = {}) {
+  const summary = workout?.smartDecisionSummary || {};
+  const readiness = summary.readiness || {};
+  const selection = workout?.smartTrainingSelectionSummary || {};
+  const cycle = Number(workout?.smartCurrentCycle) || 1;
+  const workoutNumber = Number(workout?.number) || 1;
+  const dayLabel = getSmartDayTypeDisplayLabel(
+    workout?.smartDayType || summary.dayType,
+    t
+  ) || summary.dayType || 'Unknown';
+  const detailRows = getSmartModalDetailRows(workout, t);
+  const lines = [
+    'Kelani SBD Smart diagnosis',
+    `App version: ${process.env.REACT_APP_VERSION || 'dev'}`,
+    `Prescription version: ${Number(workout?.smartGeneratedPrescriptionVersion) || 0}`,
+    `Workout: C${cycle}W${workoutNumber}`,
+    `Decision: ${dayLabel}`,
+  ];
+
+  detailRows.forEach(row => {
+    lines.push(`${row.label}: ${row.value}`);
+  });
+
+  if (selection.primaryLift || selection.secondaryLift) {
+    lines.push(
+      `Selection: primary=${selection.primaryLift || 'none'}, ` +
+      `secondary=${selection.secondaryLift || 'none'}`
+    );
+  }
+
+  if (Array.isArray(selection.reasonFlags) && selection.reasonFlags.length) {
+    lines.push(`Reason flags: ${selection.reasonFlags.join(', ')}`);
+  }
+
+  const exposureCounts =
+    selection.frequencyExposureCounts ||
+    selection.frequencyWeightedExposureCounts ||
+    null;
+  if (exposureCounts) {
+    lines.push(
+      `Recent frequency: ${LIFT_ORDER.map(lift =>
+        `${lift}=${Number(exposureCounts[lift]) || 0}`
+      ).join(', ')}`
+    );
+  }
+
+  if (Array.isArray(readiness.meetdayBlockers) && readiness.meetdayBlockers.length) {
+    lines.push(`Meet blockers: ${readiness.meetdayBlockers.join(', ')}`);
+  }
+
+  const formatDiagnosisPct = value => `${Math.round(roundPercent(value) * 100)}%`;
+
+  (workout.lifts || []).forEach(liftBlock => {
+    const prescription = liftBlock?.smartPrescription || {};
+    lines.push(
+      `${liftBlock.lift} technical: ` +
+      `role=${prescription.role || liftBlock.role || 'unknown'}, ` +
+      `topAnchor=${formatDiagnosisPct(prescription.topSetAnchorPct)}, ` +
+      `volumeAnchor=${formatDiagnosisPct(prescription.volumeAnchorPct)}, ` +
+      `plannedVolume=${formatDiagnosisPct(prescription.plannedVolumePct)}, ` +
+      `repeatVariation=${Boolean(prescription.repeatVariationApplied)}, ` +
+      `regression=${prescription.regressionReason || 'none'}, ` +
+      `gridItems=${Number(prescription.gridItemCount) || 0}`
+    );
+  });
+
+  return lines.join('\n');
+}
+
+async function copySmartDiagnosticText(text = '') {
+  const value = String(text || '');
+  if (!value) throw new Error('Smart diagnosis is empty.');
+
+  if (
+    typeof navigator !== 'undefined' &&
+    navigator.clipboard?.writeText
+  ) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  if (typeof document === 'undefined') {
+    throw new Error('Clipboard is unavailable.');
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand?.('copy');
+  document.body.removeChild(textarea);
+
+  if (!copied) throw new Error('Clipboard copy failed.');
+}
+
+export function getSmartModalDetailRows(workout = {}, t = {}) {
+  const summary = workout?.smartDecisionSummary || {};
+  const readiness = summary.readiness || {};
+  const rows = [];
+  const isMeetDay = workout?.type === 'meet' || summary.dayType === SMART_DAY_TYPES.MEET;
+
+  if (isMeetDay) {
+    return [
+      {
+        label: t.smartMeetDayReadyLabel || 'You are ready',
+        value: t.smartMeetDayReadyText || 'Trust your preparation. Stay calm and execute one attempt at a time.',
+        kind: 'meet-day',
+      },
+      {
+        label: t.smartMeetDayStrategyLabel || 'Attempt strategy',
+        value: t.smartMeetDayStrategyText || 'Secure the opener, build the total with the second, then commit to the third.',
+        kind: 'meet-day',
+      },
+    ];
+  }
+  const isFatigueRecovery =
+    summary.dayType === SMART_DAY_TYPES.RECOVERY &&
+    summary.reason === SMART_DECISION_REASONS.FATIGUE_RECOVERY;
+  const isTrainingFallback =
+    summary.dayType === SMART_DAY_TYPES.TRAINING &&
+    summary.reason === SMART_DECISION_REASONS.TRAINING_FALLBACK;
+  const hasMeetReadinessDetail = Boolean(
+    readiness.meetPlanWeakestLift ||
+    Object.keys(readiness.meetPlanReadiness || {}).length > 0
+  );
+
+  // The modal must show as much diagnostic detail
+  // as is available regardless of day type (deload/rest/recovery days were
+  // previously silently reduced to just "Projected meet" because this block
+  // was gated on isTrainingFallback). Gate on data availability instead -
+  // the meet plan is still ongoing on every non-meet day, so the blocker/
+  // readiness detail is just as meaningful on a deload or rest day as on a
+  // normal training-fallback day.
+  const showMeetReadinessDetail =
+    summary.dayType !== SMART_DAY_TYPES.MEET &&
+    (hasMeetReadinessDetail || isTrainingFallback);
+
+  if (showMeetReadinessDetail) {
+    const formatEstimate = value =>
+      `${formatDecimalDisplay(value, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1,
+      })} kg`;
+    const blockerPhaseText = phase => phase === 'third-attempt'
+      ? (t.smartThirdAttemptNotDemonstrated || 'third attempt not yet demonstrated')
+      : phase === 'second-attempt'
+        ? (t.smartSecondAttemptNotSupported || 'second attempt not yet supported')
+        : (t.smartOpenerNotDemonstrated || 'opener not yet demonstrated');
+    // List every lift still short of full meet demonstration, not just the
+    // single weakest one; it is confusing when e.g. Squat and
+    // Deadlift both had unmet 3rd-attempt potential but only Deadlift was
+    // named as "the" blocker. Grouped by phase (worst first) so two lifts
+    // sharing the same gap read as one line, not a wall of repeats.
+    const phaseSeverity = { opener: 0, 'second-attempt': 1, 'third-attempt': 2 };
+    const meetPlanReadinessByLift = readiness.meetPlanReadiness || {};
+    const blockingLifts = Object.keys(meetPlanReadinessByLift)
+      .filter(lift => {
+        const phase = meetPlanReadinessByLift[lift]?.readinessPhase;
+        return phase && phase !== 'ready';
+      })
+      .sort((a, b) =>
+        (phaseSeverity[meetPlanReadinessByLift[a]?.readinessPhase] ?? 99) -
+        (phaseSeverity[meetPlanReadinessByLift[b]?.readinessPhase] ?? 99)
+      );
+    const blockerGroups = [];
+    blockingLifts.forEach(lift => {
+      const phase = meetPlanReadinessByLift[lift]?.readinessPhase;
+      const group = blockerGroups.find(g => g.phase === phase);
+      if (group) group.lifts.push(lift);
+      else blockerGroups.push({ phase, lifts: [lift] });
+    });
+    const statusText = readiness.meetPlanFullyDemonstrated
+      ? (t.smartMeetFullyReadyTaper || 'Fully meet-ready — tapering and resting before the meet')
+      : blockerGroups.length > 0
+        ? blockerGroups
+          .map(group => `${group.lifts.join(', ')} — ${blockerPhaseText(group.phase)}`)
+          .join('; ')
+        : (t.smartMeetPlanNotReady || 'Meet plan not ready');
+
+    rows.push({
+      label: readiness.meetPlanFullyDemonstrated
+        ? (t.smartMeetStatus || 'Meet status')
+        : blockingLifts.length > 1
+          ? (t.smartCurrentBlockers || 'Current blockers')
+          : (t.smartCurrentBlocker || 'Current blocker'),
+      value: statusText,
+    });
+
+    if (
+      readiness.meetPlanOpenerReadyCount !== undefined &&
+      readiness.meetPlanSecondAttemptReadyCount !== undefined &&
+      readiness.meetPlanThirdAttemptPotentialCount !== undefined
+    ) {
+      rows.push(
+        {
+          label: t.smartOpenerReadiness || 'Openers',
+          value: `${Number(readiness.meetPlanOpenerReadyCount) || 0}/3`,
+          kind: 'metric',
+        },
+        {
+          label: t.smartSecondAttemptReadiness || '2nd attempts',
+          value: `${Number(readiness.meetPlanSecondAttemptReadyCount) || 0}/3`,
+          kind: 'metric',
+        },
+        {
+          label: t.smartThirdAttemptPotential || '3rd potential',
+          value: `${Number(readiness.meetPlanThirdAttemptPotentialCount) || 0}/3`,
+          kind: 'metric',
+        }
+      );
+    }
+
+    // One row per lift instead of just the single weakest one - the
+    // blockers row above can now name more than one lift (e.g. Squat AND
+    // Deadlift), and showing numbers for only one of them read as a
+    // contradiction. Show Cycle e1RM / target / Gap for all 3 lifts.
+    ['Squat', 'Bench', 'Deadlift'].forEach(lift => {
+      const liftReadiness = meetPlanReadinessByLift[lift];
+      if (!liftReadiness) return;
+
+      const liftPhase = liftReadiness.readinessPhase || 'opener';
+      const liftCycleEstimate = Number(liftReadiness.currentCycleBestE1RM) || 0;
+      const liftReadinessTarget = Number(liftReadiness.readinessTargetAttempt) || 0;
+
+      if (!(liftCycleEstimate > 0 && liftReadinessTarget > 0)) return;
+
+      const liftDisplayCycleEstimate = roundBarbellWeight(liftCycleEstimate, 'nearest', 5);
+      const liftDisplayReadinessTarget = roundBarbellWeight(liftReadinessTarget, 'nearest', 5);
+      // Same reasoning as the (now per-lift) blocker text above: the gap
+      // must be simple, visible arithmetic on the two numbers shown right
+      // above it, never a more "precise" number that doesn't add up against
+      // what's on screen.
+      const liftReadinessGap = Math.max(
+        liftDisplayReadinessTarget - liftDisplayCycleEstimate,
+        0
+      );
+      // 'ready' (fully demonstrated) still displays against its final
+      // (third-attempt) target, same label as an in-progress third attempt.
+      const liftTargetLabel = (liftPhase === 'third-attempt' || liftPhase === 'ready')
+        ? (t.smartThirdAttemptSupportShort || '3rd support')
+        : liftPhase === 'second-attempt'
+          ? (t.smartSecondAttemptSupportShort || '2nd support')
+          : (t.smartPlannedOpenerShort || 'Meet opener');
+
+      rows.push(
+        {
+          label: `${lift} — ${t.smartCycleEstimateShort || 'Cycle e1RM'}`,
+          value: formatEstimate(liftDisplayCycleEstimate),
+          kind: 'metric',
+        },
+        {
+          label: `${lift} — ${liftTargetLabel}`,
+          value: (liftPhase === 'second-attempt' || liftPhase === 'third-attempt' || liftPhase === 'ready')
+            ? formatEstimate(liftDisplayReadinessTarget)
+            : formatWeightFromKg(
+              liftDisplayReadinessTarget,
+              WEIGHT_UNITS.KG,
+            ),
+          kind: 'metric',
+        },
+        {
+          label: `${lift} — ${t.smartOpenerGapShort || 'Gap'}`,
+          value: formatEstimate(liftReadinessGap),
+          kind: 'metric',
+        }
+      );
+    });
+  }
+
+  rows.push(...getSmartPrescriptionDetailRows(workout, t));
+
+  const meetProjection = readiness.meetProjection || null;
+  if (
+    meetProjection &&
+    summary.dayType !== SMART_DAY_TYPES.MEET
+  ) {
+    rows.push({
+      label: t.smartProjectedMeet || 'Projected meet',
+      value: meetProjection.available
+        ? meetProjection.label
+        : (t.smartProjectionUnavailable ||
+          'Not enough active-cycle data for a reliable projection.'),
+    });
+
+    if (meetProjection.available && meetProjection.limitingLift) {
+      const limitingPhase = getSmartAttemptPhaseLabel(
+        meetProjection.limitingPhase,
+        t
+      );
+
+      rows.push({
+        label: t.smartProjectedLimiter || 'Projected limiter',
+        value: `${meetProjection.limitingLift} — ${limitingPhase}`,
+      });
+    }
+  }
+
+  if (showMeetReadinessDetail && hasMeetReadinessDetail) {
+    rows.push({
+      label: t.smartReadinessBasis || 'Readiness basis',
+      value: t.smartReadinessBasisText ||
+        'Only successful sets from the active cycle count.',
+      kind: 'note',
+    });
+
+    if (readiness.meetProjection?.available) {
+      rows.push({
+        label: t.smartProjectionAssumption || 'Projection assumption',
+        value: t.smartProjectionAssumptionText ||
+          'Assumes normal progress, successful workouts and unchanged meet attempts.',
+        kind: 'note',
+      });
+    }
+  }
+
+  // Same reasoning as showMeetReadinessDetail above: fatigue/recent-effort
+  // context is useful on any day type (a deload or rest day is often a
+  // direct consequence of it), so show it whenever the underlying fields
+  // are actually populated rather than only for fatigue-specific days.
+  const hasFatigueReadinessDetail =
+    readiness.recentFatigueScore !== undefined ||
+    readiness.recentFailedOrSkippedSetCount !== undefined;
+
+  if (
+    isFatigueRecovery ||
+    hasFatigueReadinessDetail ||
+    (readiness.meetdayBlockers || []).includes('fatigue')
+  ) {
+    const fatigueScore = Number(readiness.recentFatigueScore) || 0;
+    const fatigueThreshold = SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE;
+    const lastEffort = String(readiness.lastWorkoutEffort || '').trim().toUpperCase();
+    const failedCount = Number(readiness.recentFailedOrSkippedSetCount) || 0;
+
+    rows.push({
+      label: t.smartBlockerFatigue || 'Fatigue',
+      value: fatigueScore >= fatigueThreshold
+        ? `${fatigueScore} — recovery required`
+        : `${fatigueScore} — below recovery threshold`,
+    });
+
+    if (lastEffort) {
+      // A rest day's workoutEffort is always literally 'easy' (see
+      // completeWorkout's "Complete rest day" handler), which reads as a
+      // misleadingly specific claim about how a training session felt when
+      // there was no training at all - say it was a rest day instead.
+      rows.push({
+        label: t.smartCause || 'Cause',
+        value: readiness.lastWasRestDay
+          ? (t.smartCausePreviousRestDay || 'Previous workout was a rest day')
+          : `Previous workout ${lastEffort}`,
+      });
+    }
+
+    rows.push({
+      label: t.smartBlockerFailed || 'Failed',
+      value: failedCount >= SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT
+        ? `${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT} — deload required`
+        : `${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT} — below deload threshold`,
+    });
+  }
+
+  return rows;
+}
+
+function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
+  const [showSmartInfo, setShowSmartInfo] = useState(false);
+  const [smartCopyStatus, setSmartCopyStatus] = useState(null);
+  const label = getSmartDayTypeDisplayLabel(workout?.smartDayType, t);
+  if (!label) return null;
+
+  function formatSmartInfoText(value) {
+    if (!value) return null;
+
+    return String(value)
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/(^|[.!?]\s+)([a-z])/g, (_, prefix, letter) => `${prefix}${letter.toUpperCase()}`);
+  }
+
+  const reasonText = formatSmartInfoText(getSmartDecisionReasonDisplayText(workout?.smartDecisionSummary, t));
+  const selectionText = formatSmartInfoText(getSmartTrainingSelectionDisplayText(workout, t));
+  const meetDayProjectedTotal = workout?.type === 'meet'
+    ? (workout.lifts || []).reduce(
+      (total, liftBlock) => total + (Number(liftBlock.sets?.[2]?.weight) || 0),
+      0
+    )
+    : 0;
+  const detailRows = [
+    ...getSmartModalDetailRows(workout, t),
+    ...(meetDayProjectedTotal > 0 ? [{
+      label: t.projectedTotal,
+      value: formatWeightFromKg(meetDayProjectedTotal, weightUnit),
+      kind: 'meet-day',
+    }] : []),
+  ];
+  const usesStructuredSmartDetails = detailRows.length > 0;
+
+  const limiterMatch = selectionText?.match(/^e1RM limiter:\s*(.+)$/i);
+  const infoRows = [
+    {
+      label: t.smartDecision || 'Decision',
+      value: label,
+      emphasis: true,
+    },
+    ...detailRows,
+    !usesStructuredSmartDetails && reasonText ? {
+      label: t.smartReason || 'Reason',
+      value: reasonText,
+    } : null,
+    !usesStructuredSmartDetails && selectionText ? {
+      label: limiterMatch ? 'e1RM limit' : (t.smartSelection || 'Selection'),
+      value: limiterMatch ? limiterMatch[1] : selectionText,
+    } : null,
+  ].filter(Boolean);
+  const decisionRow = infoRows.find(row => row.emphasis) || null;
+  const currentBlockerLabel = t.smartCurrentBlocker || 'Current blocker';
+  const statusRows = infoRows.filter(
+    row => row.label === currentBlockerLabel
+  );
+  const metricRows = infoRows.filter(row => row.kind === 'metric');
+  const noteRows = infoRows.filter(row => row.kind === 'note');
+  const otherRows = infoRows.filter(row =>
+    !row.emphasis &&
+    row.label !== currentBlockerLabel &&
+    !['metric', 'note'].includes(row.kind)
+  );
+  const prescriptionRows = otherRows.filter(
+    row => row.kind === 'prescription'
+  );
+  const projectedMeetLabel =
+    t.smartProjectedMeet || 'Projected meet';
+  const projectedLimiterLabel =
+    t.smartProjectedLimiter || 'Projected limiter';
+  const projectionRows = otherRows.filter(row =>
+    [projectedMeetLabel, projectedLimiterLabel].includes(row.label)
+  );
+  const generalRows = otherRows.filter(row =>
+    row.kind !== 'prescription' &&
+    ![projectedMeetLabel, projectedLimiterLabel].includes(row.label)
+  );
+  const meetDayRows = generalRows.filter(row => row.kind === 'meet-day');
+  const ordinaryGeneralRows = generalRows.filter(row => row.kind !== 'meet-day');
+
+  function getPrescriptionPresentation(row = {}) {
+    const lift = String(row.label || '').split(' — ')[0] || row.label;
+    const parts = String(row.value || '')
+      .split(' · ')
+      .map(part => part.trim())
+      .filter(Boolean);
+    const reason = parts.length > 1 ? parts.at(-1) : '';
+    const plan = parts.length > 1
+      ? parts.slice(0, -1).join(' · ')
+      : parts[0] || '';
+    const color = ({
+      Squat: THEME.red,
+      Bench: THEME.primary,
+      Deadlift: THEME.yellow,
+    }[lift] || THEME.text);
+
+    return { lift, plan, reason, color };
+  }
+
+  // THEME.muted is identical to THEME.text (no dimming) - a genuinely
+  // dimmed tone is needed here so labels visually recede behind values
+  // instead of shouting at the same brightness as the content itself.
+  const smartModalMutedText = 'rgba(255, 244, 230, 0.52)';
+  const smartModalDividerStyle = {
+    height: 1,
+    background: 'rgba(255, 244, 230, 0.09)',
+    margin: '16px 0',
+  };
+  const smartModalSectionTitleStyle = {
+    color: THEME.primary,
+    fontSize: 11,
+    fontWeight: 900,
+    lineHeight: 1.2,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  };
+  const smartModalLabelStyle = {
+    color: smartModalMutedText,
+    fontSize: 10,
+    fontWeight: 700,
+    lineHeight: 1.2,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    overflowWrap: 'anywhere',
+  };
+
+  return (
+    <>
+      <div style={{
+        marginTop: 4,
+        marginBottom: 8,
+        textAlign: 'center',
+      }}>
+        <button
+          type="button"
+          aria-label={`Smart: ${label}. ${t.smartWorkoutInfo || 'Open workout information'}`}
+          onClick={() => {
+            setSmartCopyStatus(null);
+            setShowSmartInfo(true);
+          }}
+          style={{
+            appearance: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            minHeight: WORKOUT_INTERACTIVE_HEADER_MIN_HEIGHT,
+            padding: '4px 10px',
+            margin: 0,
+            border: 'none',
+            borderRadius: 8,
+            background: 'transparent',
+            color: THEME.meet,
+            fontSize: WORKOUT_SMART_LABEL_FONT_SIZE,
+            fontWeight: 900,
+            lineHeight: 1.2,
+            cursor: 'pointer',
+            textDecoration: 'none',
+          }}
+        >
+          <span>Smart: {label}</span>
+          <span
+            aria-hidden="true"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: WORKOUT_INFO_ICON_SIZE + 4,
+              height: WORKOUT_INFO_ICON_SIZE + 4,
+              flex: `0 0 ${WORKOUT_INFO_ICON_SIZE + 4}px`,
+              borderRadius: 999,
+              background: `${THEME.meet}26`,
+              border: `1px solid ${THEME.meet}`,
+              color: THEME.meet,
+              fontSize: 10,
+              fontWeight: 900,
+              lineHeight: 1,
+            }}
+          >
+            i
+          </span>
+        </button>
+      </div>
+
+      {showSmartInfo && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Smart workout info"
+          onClick={() => setShowSmartInfo(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2000,
+            background: 'rgba(0, 0, 0, 0.72)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 18,
+            boxSizing: 'border-box',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: 390,
+              maxHeight: 'calc(100vh - 28px)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              background: `linear-gradient(180deg, ${THEME.card} 0%, #0d0d0d 100%)`,
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 18,
+              boxSizing: 'border-box',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.62)',
+            }}
+          >
+            <div style={{
+              flex: '0 0 auto',
+              height: 3,
+              background: `linear-gradient(90deg, transparent, ${THEME.primary}, transparent)`,
+            }} />
+
+            <div style={{ padding: '16px 18px 16px', overflowY: 'auto', minHeight: 0 }}>
+              <header style={{
+                marginBottom: 16,
+                textAlign: 'center',
+              }}>
+                <h2 style={{
+                  margin: 0,
+                  color: THEME.primary,
+                  fontSize: 20,
+                  fontWeight: 900,
+                  lineHeight: 1.15,
+                  letterSpacing: -0.25,
+                }}>
+                  {t.smartWorkoutTitle || 'Smart workout'}
+                </h2>
+                {decisionRow ? (
+                  <div style={{
+                    marginTop: 5,
+                    color: smartModalMutedText,
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}>
+                    {decisionRow.value}
+                  </div>
+                ) : null}
+              </header>
+
+              {infoRows.length > 0 ? (
+                <div>
+                  {prescriptionRows.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {prescriptionRows.map(row => {
+                        const presentation = getPrescriptionPresentation(row);
+
+                        return (
+                          <section
+                            key={row.label}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '64px minmax(0, 1fr)',
+                              gap: 10,
+                              minWidth: 0,
+                            }}
+                          >
+                            <div style={{
+                              color: presentation.color,
+                              fontSize: 11,
+                              fontWeight: 900,
+                              lineHeight: 1.3,
+                              textTransform: 'uppercase',
+                            }}>
+                              {presentation.lift}
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{
+                                color: THEME.text,
+                                fontSize: 14,
+                                fontWeight: 800,
+                                lineHeight: 1.3,
+                                overflowWrap: 'anywhere',
+                              }}>
+                                {presentation.plan}
+                              </div>
+                              {presentation.reason ? (
+                                <div style={{
+                                  marginTop: 2,
+                                  color: smartModalMutedText,
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  lineHeight: 1.3,
+                                  overflowWrap: 'anywhere',
+                                }}>
+                                  {presentation.reason}
+                                </div>
+                              ) : null}
+                            </div>
+                          </section>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {(statusRows.length > 0 || metricRows.length > 0 || projectionRows.length > 0) && (
+                    <>
+                      {prescriptionRows.length > 0 && <div style={smartModalDividerStyle} />}
+                      <div>
+                        <div style={smartModalSectionTitleStyle}>
+                          {t.smartMeetReadinessTitle || 'Meet readiness'}
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                          {statusRows.map(row => (
+                            <section key={row.label}>
+                              <div style={smartModalLabelStyle}>
+                                {row.label}
+                              </div>
+                              <div style={{
+                                marginTop: 2,
+                                color: THEME.text,
+                                fontSize: 14,
+                                fontWeight: 800,
+                                lineHeight: 1.3,
+                                overflowWrap: 'anywhere',
+                              }}>
+                                {row.value}
+                              </div>
+                            </section>
+                          ))}
+
+                          {metricRows.length > 0 && (
+                            <div
+                              data-testid="smartMeetMetricGrid"
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                                minWidth: 0,
+                                rowGap: 12,
+                                columnGap: 8,
+                              }}
+                            >
+                              {metricRows.map((row, index) => (
+                                <div
+                                  key={row.label}
+                                  style={{
+                                    minWidth: 0,
+                                    textAlign: 'center',
+                                    paddingTop: index >= 3 ? 10 : 0,
+                                    borderTop: index >= 3 && index < 6
+                                      ? '1px solid rgba(255, 244, 230, 0.09)'
+                                      : 'none',
+                                  }}
+                                >
+                                  <div style={{
+                                    color: index >= 3 ? THEME.primary : THEME.text,
+                                    fontSize: 15,
+                                    fontWeight: 900,
+                                    lineHeight: 1.1,
+                                    whiteSpace: 'nowrap',
+                                  }}>
+                                    {row.value}
+                                  </div>
+                                  <div style={{ ...smartModalLabelStyle, marginTop: 3 }}>
+                                    {row.label}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {projectionRows.length > 0 && (
+                            <div style={{
+                              display: 'grid',
+                              gridTemplateColumns:
+                                projectionRows.length > 1
+                                  ? 'repeat(2, minmax(0, 1fr))'
+                                  : 'minmax(0, 1fr)',
+                              gap: 10,
+                              minWidth: 0,
+                            }}>
+                              {projectionRows.map(row => (
+                                <div key={row.label} style={{ minWidth: 0 }}>
+                                  <div style={smartModalLabelStyle}>
+                                    {row.label}
+                                  </div>
+                                  <div style={{
+                                    marginTop: 3,
+                                    color: THEME.text,
+                                    fontSize: 13,
+                                    fontWeight: 800,
+                                    lineHeight: 1.3,
+                                    overflowWrap: 'anywhere',
+                                  }}>
+                                    {row.value}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {meetDayRows.length > 0 && (
+                    <div>
+                      <div style={smartModalSectionTitleStyle}>
+                        {t.smartMeetDayFocusTitle || 'Meet day focus'}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {meetDayRows.map(row => (
+                          <section key={row.label}>
+                            <div style={smartModalLabelStyle}>{row.label}</div>
+                            <div style={{ marginTop: 3, color: THEME.text, fontSize: 14, fontWeight: 800, lineHeight: 1.35 }}>
+                              {row.value}
+                            </div>
+                          </section>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {ordinaryGeneralRows.length > 0 && (
+                    <>
+                      <div style={smartModalDividerStyle} />
+                      <div>
+                        <div style={smartModalSectionTitleStyle}>
+                          {t.smartDetailsTitle || 'Details'}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                          {ordinaryGeneralRows.map(row => (
+                            <div key={row.label} style={{
+                              display: 'grid',
+                              gridTemplateColumns: '96px minmax(0, 1fr)',
+                              gap: 10,
+                              minWidth: 0,
+                            }}>
+                              <div style={smartModalLabelStyle}>
+                                {row.label}
+                              </div>
+                              <div style={{
+                                minWidth: 0,
+                                color: THEME.text,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                lineHeight: 1.3,
+                                overflowWrap: 'anywhere',
+                              }}>
+                                {row.value}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {noteRows.length > 0 && (
+                    <div style={{
+                      marginTop: 16,
+                      color: smartModalMutedText,
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      lineHeight: 1.4,
+                    }}>
+                      {noteRows.map((row, index) => (
+                        <div key={row.label} style={{
+                          marginTop: index > 0 ? 4 : 0,
+                        }}>
+                          <strong style={{
+                            color: smartModalMutedText,
+                            fontWeight: 800,
+                          }}>
+                            {row.label}:
+                          </strong>{' '}
+                          {row.value}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p style={{
+                  margin: '0 0 14px',
+                  color: smartModalMutedText,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  lineHeight: 1.35,
+                  textAlign: 'center',
+                }}>
+                  {t.smartInfoUnavailable || 'No extra Smart details for this workout.'}
+                </p>
+              )}
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+                gap: 8,
+                marginTop: 18,
+              }}>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await copySmartDiagnosticText(
+                        buildSmartDiagnosticText(workout, t)
+                      );
+                      setSmartCopyStatus('copied');
+                    } catch {
+                      setSmartCopyStatus('failed');
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: 9,
+                    borderRadius: 9,
+                    border: `1px solid ${THEME.primary}`,
+                    background: `${THEME.primary}18`,
+                    color: THEME.primary,
+                    fontSize: 13,
+                    fontWeight: 900,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {smartCopyStatus === 'copied'
+                    ? (t.smartDiagnosisCopied || 'Copied')
+                    : smartCopyStatus === 'failed'
+                      ? (t.smartCopyFailed || 'Copy failed')
+                      : (t.smartCopyDiagnosis || 'Copy diagnosis')}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSmartCopyStatus(null);
+                    setShowSmartInfo(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: 9,
+                    borderRadius: 9,
+                    border: `1px solid ${THEME.primary}`,
+                    background: 'transparent',
+                    color: THEME.text,
+                    fontSize: 13,
+                    fontWeight: 900,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t.close || 'Close'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function CurrentWorkout({
+  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, latestBodyWeight }) {
+  const smartModel = isSmartTrainingModel(trainingModel);
+  const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
+  const [showActivateConfirm, setShowActivateConfirm] = useState(false);
+  const [selectedExerciseGuideLift, setSelectedExerciseGuideLift] = useState(null);
+
+  function isTimerFor(placement) {
+    if (!timer || !timer.placement) return false;
+    if (timer.placement.workoutNumber !== workout.number) return false;
+
+    return Object.keys(placement).every(key => timer.placement[key] === placement[key]);
+  }
+
+  function renderInlineTimer(placement) {
+    if (!isTimerFor(placement)) return null;
+
+    if (timer.endTime && Date.now() >= timer.endTime) {
+      return null;
+    }
+
+    return (
+      <RestTimer
+        key={timer.id}
+        seconds={timer.seconds}
+        endTime={timer.endTime}
+        onDismiss={() => {
+          cancelRestTimerNotification();
+          setTimer(null);
+        }}
+        t={t}
+      />
+    );
+  }
+
+
+  function renderActivateWorkoutCard() {
+    if (!isReadOnly) return null;
+
+    const workoutNumber = workout?.number || '—';
+    const confirmText = t.activateWorkoutConfirmText
+      .replaceAll('{workout}', workoutNumber);
+
+    return (
+      <div style={{
+        marginBottom: 10,
+        padding: '8px 0',
+        border: 'none',
+        borderRadius: 0,
+        background: 'transparent',
+        color: THEME.muted,
+        fontSize: 12,
+        fontWeight: 800,
+        textAlign: 'center'
+      }}>
+        <div>{t.preview}</div>
+
+        {!showActivateConfirm && onActivateWorkout && (
+          <button
+            type="button"
+            onClick={() => setShowActivateConfirm(true)}
+            style={{
+              marginTop: 8,
+              padding: '7px 11px',
+              borderRadius: 6,
+              border: `1px solid ${THEME.primary}`,
+              background: THEME.primary,
+              color: THEME.bg,
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
+            {t.activateWorkout}
+          </button>
+        )}
+
+        {showActivateConfirm && (
+          <div style={{
+            marginTop: 10,
+            padding: 10,
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 8,
+            background: THEME.bg,
+            color: THEME.text,
+            textAlign: 'left',
+            lineHeight: 1.35
+          }}>
+            <div style={{
+              color: THEME.text,
+              fontSize: 14,
+              fontWeight: 900,
+              marginBottom: 6,
+              textAlign: 'center'
+            }}>
+              {t.activateWorkoutConfirmTitle}
+            </div>
+
+            <div style={{
+              color: THEME.muted,
+              fontSize: 12,
+              fontWeight: 700,
+              marginBottom: 10,
+              textAlign: 'center'
+            }}>
+              {confirmText}
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 8
+            }}>
+              <button
+                type="button"
+                onClick={() => setShowActivateConfirm(false)}
+                style={{
+                  padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+                  borderRadius: 6,
+                  border: `1px solid ${THEME.primary}`,
+                  background: 'transparent',
+                  color: THEME.text,
+                  fontSize: 15,
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                {t.cancel}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowActivateConfirm(false);
+                  onActivateWorkout();
+                }}
+                style={{
+                  padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+                  borderRadius: 6,
+                  border: `1px solid ${THEME.primary}`,
+                  background: THEME.primary,
+                  color: THEME.bg,
+                  fontSize: 14,
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
+              >
+                {t.activateWorkout}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (workout.type === 'rest') {
+    return (
+      <div style={{
+        maxWidth: 500,
+        margin: '0 auto',
+        padding: '10px 14px 16px',
+        fontFamily: 'sans-serif'
+      }}>
+        <AppHeader
+          t={t}
+          title={t.restAndRecovery || t.deload}
+          subtitle={(
+            <>
+              {formatCycleWorkoutSubtitle({
+                t,
+                currentCycle,
+                workoutNumber: Math.min(Number(workout.number) || 1, totalWorkouts),
+                totalWorkouts,
+                smartModel,
+              })}
+              {smartModel && (
+                <AthleteLevelBadge
+                  athleteLevel={athleteLevel}
+                  eStrengthRatio={eStrengthRatio}
+                  latestBodyWeight={latestBodyWeight}
+                  t={t}
+                />
+              )}
+            </>
+          )}
+        />
+
+        {renderActivateWorkoutCard()}
+        <SmartDayTypeInline workout={workout} t={t} weightUnit={weightUnit} />
+
+        <div style={{
+          padding: '8px 0 10px',
+          marginBottom: 10,
+          background: 'transparent',
+          border: 'none',
+          color: THEME.text,
+          textAlign: 'center'
+        }}>
+          <div style={{
+            fontSize: 42,
+            lineHeight: 1,
+            marginBottom: 14
+          }}>
+            ✓
+          </div>
+
+          <h2 style={{
+            margin: '0 0 8px',
+            color: THEME.text,
+            fontSize: 22,
+            fontWeight: 900
+          }}>
+            {t.restAndRecovery || t.deload}
+            {!isReadOnly && (
+              <span style={{
+                fontSize: 11,
+                background: THEME.primary,
+                color: '#ffffff',
+                padding: '1px 6px',
+                borderRadius: 3,
+                marginLeft: 8,
+                verticalAlign: 'middle'
+              }}>
+                {t.now}
+              </span>
+            )}
+          </h2>
+
+          <p style={{
+            margin: '0 auto',
+            maxWidth: 360,
+            color: THEME.muted,
+            fontSize: 14,
+            fontWeight: 700,
+            lineHeight: 1.4
+          }}>
+            {t.restReadyNextWorkout || 'Rest and recover. No lifting today; complete this rest day when you are ready to continue.'}
+          </p>
+        </div>
+
+        {!isReadOnly && (
+          <button
+            type="button"
+            onClick={() => onComplete('easy')}
+            style={{
+              width: '100%',
+              padding: 10,
+              fontSize: 16,
+              background: THEME.card,
+              color: '#ffffff',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontWeight: 600
+            }}
+          >
+            {t.completeRestDay || 'Complete rest day'}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+    if (workout.type === 'meet' || (workout.type === 'training' && (workout.lifts || []).length > 0)) {
+
+    const isMeetDay = workout.type === 'meet';
+    const allMeetDone = (workout.lifts || []).every(liftBlock =>
+      (liftBlock.sets || []).every(s => s.done)
+    );
+    const allMainLiftSetsDone = allMeetDone;
+    const allAccessoriesDone = (workout.accessories || []).every(acc =>
+      (acc.done || []).every(Boolean)
+    );
+
+    const getVisiblePrepItems = (liftBlock, liftIndex) =>
+      liftBlock.prepItems || [];
+
+    const firstIncompleteLiftIndex = (workout.lifts || []).findIndex((liftBlock, liftIndex) =>
+      getVisiblePrepItems(liftBlock, liftIndex).some(item => !item.done) ||
+      (liftBlock.warmups || []).some(w => !w.done) ||
+      (liftBlock.sets || []).some(s => !s.done)
+    );
+
+    return (
+      <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
+        {selectedExerciseGuideLift && (
+          <ExerciseGuideModal
+            lift={selectedExerciseGuideLift}
+            t={t}
+            onClose={() => setSelectedExerciseGuideLift(null)}
+          />
+        )}
+
+        <AppHeader
+          t={t}
+          title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
+          subtitle={(
+            <>
+              {formatCycleWorkoutSubtitle({
+                t,
+                currentCycle,
+                workoutNumber: workout.number,
+                totalWorkouts,
+                smartModel,
+              })}
+              {smartModel && (
+                <AthleteLevelBadge
+                  athleteLevel={athleteLevel}
+                  eStrengthRatio={eStrengthRatio}
+                  latestBodyWeight={latestBodyWeight}
+                  t={t}
+                />
+              )}
+            </>
+          )}
+          titleStyle={{
+            textShadow: 'none',
+            fontSize: 30,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            color: isMeetDay ? THEME.meet : THEME.text
+          }}
+        />
+
+        {renderActivateWorkoutCard()}
+        <SmartDayTypeInline workout={workout} t={t} weightUnit={weightUnit} />
+
+        {(workout.lifts || []).map((liftBlock, li) => {
+          const visiblePrepItems = getVisiblePrepItems(liftBlock, li);
+          const firstIncompletePrepItem = visiblePrepItems.findIndex(item => !item.done);
+          const firstIncompleteWarmup = (liftBlock.warmups || []).findIndex(w => !w.done);
+          const firstIncompleteSet = (liftBlock.sets || []).findIndex(s => !s.done);
+          const allPrepDone = visiblePrepItems.every(item => item.done);
+          const allWarmupsDone = (liftBlock.warmups || []).every(w => w.done);
+
+          return (
+            <div
+              key={liftBlock.lift}
+              style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: 4 }}
+            >
+              <div style={{
+                padding: '2px 10px 4px',
+                textAlign: 'center',
+              }}>
+                {(() => {
+                  const guideAvailable = isExerciseGuideAvailableForLiftBlock(liftBlock, effectiveBenchPressVariant);
+                  const liftColor = ({
+                    Squat: THEME.red,
+                    Bench: THEME.primary,
+                    Deadlift: THEME.yellow,
+                  }[liftBlock.lift] || THEME.text);
+
+                  return (
+                    <button
+                      type="button"
+                      disabled={!guideAvailable}
+                      onClick={() => guideAvailable && setSelectedExerciseGuideLift(liftBlock.lift)}
+                      title={guideAvailable ? (t.exerciseGuide || 'Guide') : undefined}
+                      aria-label={guideAvailable
+                        ? `${workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)} — ${t.exerciseGuide || 'Guide'}`
+                        : workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 7,
+                        minHeight: WORKOUT_INTERACTIVE_HEADER_MIN_HEIGHT,
+                        padding: '4px 12px',
+                        border: 'none',
+                        borderRadius: 8,
+                        background: 'transparent',
+                        color: liftColor,
+                        fontSize: WORKOUT_LIFT_HEADER_FONT_SIZE,
+                        fontWeight: 900,
+                        lineHeight: 1.1,
+                        cursor: guideAvailable ? 'pointer' : 'default',
+                      }}
+                    >
+                      <span>{workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}</span>
+                      {guideAvailable && (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: WORKOUT_INFO_ICON_SIZE + 4,
+                          height: WORKOUT_INFO_ICON_SIZE + 4,
+                          flex: `0 0 ${WORKOUT_INFO_ICON_SIZE + 4}px`,
+                          borderRadius: 999,
+                          background: `${liftColor}26`,
+                          border: `1px solid ${liftColor}`,
+                          color: liftColor,
+                          fontSize: 10,
+                          fontWeight: 900,
+                          lineHeight: 1,
+                        }}>
+                          i
+                        </span>
+                      )}
+                    </button>
+                  );
+                })()}
+              </div>
+
+              {visiblePrepItems.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE,
+                    justifyContent: 'center',
+                    columnGap: WORKOUT_CHECKLIST_COLUMN_GAP,
+                    rowGap: 6,
+                    padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`
+                  }}>
+                    {visiblePrepItems.map((item, pi) => (
+                      <PrepRow
+                        key={`prep-${pi}`}
+                        item={item}
+                        isActive={
+                          !isReadOnly &&
+                          li === firstIncompleteLiftIndex &&
+                          pi === firstIncompletePrepItem
+                        }
+                        isReadOnly={isReadOnly}
+                        onToggle={() => handleToggle(() => onToggleMeetPrepItem(li, pi))}
+                        t={t}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <WorkoutLiftGrid testId={`workout-lift-grid-${li}`}>
+                <WarmupGrid
+                  compactGrid
+                  warmups={liftBlock.warmups || []}
+                  referenceSets={liftBlock.sets || []}
+                  onShowPlateCalculator={onShowPlateCalculator}
+                isReadOnly={isReadOnly}
+                activeIndex={
+                  !isReadOnly &&
+                  li === firstIncompleteLiftIndex &&
+                  allPrepDone
+                    ? firstIncompleteWarmup
+                    : -1
+                }
+                onToggle={wi => handleToggle(() => onToggleMeetWarmup(li, wi))}
+                renderTimer={wi => renderInlineTimer({ type: 'meetWarmup', liftIndex: li, index: wi })}
+                followsPrep={visiblePrepItems.length > 0}
+                t={t}
+                weightUnit={weightUnit}
+                lift={liftBlock.lift}
+                  benchPressVariant={effectiveBenchPressVariant}
+                />
+
+              {(liftBlock.sets || []).map((set, si) => {
+                const groupedSetEntries = getWorkoutSetGroupEntries(liftBlock.sets || [], set);
+                const groupedSetLabel = getWorkoutSetGroupLabel(set, liftBlock.sets || [], t);
+
+                const secondarySetEntries = (liftBlock.sets || [])
+                  .map((secondarySet, secondaryIndex) => ({ set: secondarySet, index: secondaryIndex }));
+
+                const isSecondaryTrainingLift =
+                  !isMeetDay &&
+                  li > 0 &&
+                  secondarySetEntries.length > 1 &&
+                  !secondarySetEntries.some(({ set }) => isGroupedWorkoutSet(set));
+
+                if (isSecondaryTrainingLift) {
+                  if (si !== 0) return null;
+
+                  const firstIncompleteSecondarySet = secondarySetEntries.find(({ set: secondarySet }) =>
+                    !secondarySet.done && !secondarySet.skipped
+                  )?.index ?? -1;
+
+                  return (
+                    <React.Fragment key={`secondary-set-group-${li}`}>
+                      <BackoffGroup
+                        compactGrid
+                        entries={secondarySetEntries}
+                        onShowPlateCalculator={onShowPlateCalculator}
+                        activeIndex={
+                          !isReadOnly &&
+                          li === firstIncompleteLiftIndex &&
+                          allPrepDone &&
+                          allWarmupsDone
+                            ? firstIncompleteSecondarySet
+                            : -1
+                        }
+                        isReadOnly={isReadOnly}
+                        onToggle={index => handleToggle(() => onToggleMeetSet(li, index))}
+                        onEditAll={val => secondarySetEntries.forEach(({ index }) => onMeetWeightChange(li, index, val))}
+                        onRestoreAll={() => secondarySetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
+                        onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
+                        renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
+                        label={groupedSetLabel}
+                        t={t}
+                        weightUnit={weightUnit}
+                        lift={liftBlock.lift}
+                        benchPressVariant={effectiveBenchPressVariant}
+                        isLastGroupOfWorkout={li === (workout.lifts || []).length - 1}
+                      />
+                    </React.Fragment>
+                  );
+                }
+
+                if (isGroupedWorkoutSet(set)) {
+                  if (groupedSetEntries[0]?.index !== si) return null;
+
+                  const firstIncompleteBackoff = groupedSetEntries.find(({ set: groupedSet }) => !groupedSet.done && !groupedSet.skipped)?.index ?? -1;
+                  const groupContainsNextSet = groupedSetEntries.some(({ index }) => index === firstIncompleteSet);
+
+                  return (
+                    <React.Fragment key={`set-group-${li}-${si}`}>
+                      <BackoffGroup
+                        compactGrid
+                        entries={groupedSetEntries}
+                        onShowPlateCalculator={onShowPlateCalculator}
+                        activeIndex={
+                          !isReadOnly &&
+                          li === firstIncompleteLiftIndex &&
+                          allPrepDone &&
+                          allWarmupsDone &&
+                          groupContainsNextSet
+                            ? firstIncompleteBackoff
+                            : -1
+                        }
+                        isReadOnly={isReadOnly}
+                        onToggle={index => handleToggle(() => onToggleMeetSet(li, index))}
+                        onEditAll={val => groupedSetEntries.forEach(({ index }) => onMeetWeightChange(li, index, val))}
+                        onRestoreAll={() => groupedSetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
+                        onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
+                        renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
+                        label={groupedSetLabel}
+                        t={t}
+                        weightUnit={weightUnit}
+                        lift={liftBlock.lift}
+                        benchPressVariant={effectiveBenchPressVariant}
+                        isLastGroupOfWorkout={
+                          li === (workout.lifts || []).length - 1 &&
+                          groupedSetEntries[groupedSetEntries.length - 1]?.index === (liftBlock.sets || []).length - 1
+                        }
+                      />
+                    </React.Fragment>
+                  );
+                }
+
+                const hasLaterMeetSetAction = (liftBlock.sets || []).some((laterSet, laterIndex) =>
+                  laterIndex > si && (laterSet.done || laterSet.failed || laterSet.skipped)
+                );
+
+                const hasLaterMeetLiftAction = (workout.lifts || []).some((laterLiftBlock, laterLiftIndex) =>
+                  laterLiftIndex > li &&
+                  (laterLiftBlock.sets || []).some(laterSet =>
+                    laterSet.done || laterSet.failed || laterSet.skipped
+                  )
+                );
+
+                const showMeetSetNotice =
+                  (set.failed || set.skipped) &&
+                  !hasLaterMeetSetAction &&
+                  !hasLaterMeetLiftAction;
+
+                return (
+                <React.Fragment key={`attempt-${si}`}>
+                  {false && showMeetSetNotice && (
+                    <div style={{
+                      margin: 0,
+                      padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+                      borderTop: '1px solid #e74c3c',
+                      borderBottom: '1px solid #e74c3c',
+                      color: '#ffffff',
+                      background: 'rgba(231, 76, 60, 0.16)',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      lineHeight: 1.3,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8
+                    }}>
+                      <span style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: '50%',
+                        background: '#e74c3c',
+                        color: THEME.bg,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        fontWeight: 900
+                      }}>
+                        !
+                      </span>
+                      <span>
+                        {set.skipped
+                          ? getSkippedSetMessage(set, t)
+                          : getFailedSetFeedbackMessage(set, t) || 'Set missed and skipped. Continue with the next set.'}
+                      </span>
+                    </div>
+                  )}
+
+                  <SetRow
+                    compactGrid
+                    set={set}
+                    index={si}
+                    label={set.labelKey ? t[set.labelKey] : `${t.set} ${si + 1}`}
+                    isWarmup={false}
+                    isActive={
+                      !isReadOnly &&
+                      li === firstIncompleteLiftIndex &&
+                      allPrepDone &&
+                      allWarmupsDone &&
+                      si === firstIncompleteSet
+                    }
+                    isReadOnly={isReadOnly}
+                    onToggle={() => handleToggle(() => onToggleMeetSet(li, si))}
+                    onMarkFailed={() => handleToggle(() => onMarkMeetSetFailed(li, si))}
+                    onRestoreWeight={() => handleToggle(() => onRestoreMeetSetWeight(li, si))}
+                    onWeightChange={val => onMeetWeightChange(li, si, val)}
+                    t={t}
+                    weightUnit={weightUnit}
+                    lift={liftBlock.lift}
+                    benchPressVariant={effectiveBenchPressVariant}
+
+              onShowPlateCalculator={onShowPlateCalculator}
+            />
+                  {(() => {
+                    const timerNode = renderInlineTimer({ type: 'meetSet', liftIndex: li, index: si });
+                    return timerNode ? (
+                      <div style={{ gridColumn: '1 / -1', order: 1 }}>
+                        {timerNode}
+                      </div>
+                    ) : null;
+                  })()}
+                </React.Fragment>
+                );
+              })}
+              </WorkoutLiftGrid>
+            </div>
+          );
+        })}
+
+        {!isMeetDay && (workout.accessories || []).length > 0 && (
+          <div style={{
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 8,
+            overflow: 'hidden',
+            marginBottom: 10
+          }}>
+            <div style={{
+              padding: '6px 10px',
+              fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+              fontWeight: 900,
+              color: THEME.meet,
+              textAlign: 'center',
+              }}>
+              {t.accessories}
+            </div>
+
+            {(workout.accessories || []).map((acc, ai) => {
+              const firstIncompleteAccessoryGroup = (workout.accessories || []).findIndex(a =>
+                (a.done || []).some(done => !done)
+              );
+              const hasMoreAccessoryWork = (acc.done || []).some((done, si) => si > -1 && !done) ||
+                (workout.accessories || []).some((nextAccessory, nextIndex) =>
+                  nextIndex > ai && (nextAccessory.done || []).some(done => !done)
+                );
+
+              return (
+                <AccessoryGroup
+                  key={ai}
+                  acc={acc}
+                  accIndex={ai}
+                  onShowPlateCalculator={onShowPlateCalculator}
+                  isActiveGroup={!isReadOnly && allMainLiftSetsDone && ai === firstIncompleteAccessoryGroup}
+                  isReadOnly={isReadOnly}
+                  hasMoreAccessoryWork={hasMoreAccessoryWork}
+                  onToggle={si => handleToggle(() => onToggleAccessorySet(ai, si))}
+                  onEditAll={val => (acc.done || []).forEach((_, si) => onAccessoryWeightChange(ai, si, val))}
+                  onRestoreAll={() => (acc.done || []).forEach((_, si) => onRestoreAccessoryWeight(ai, si))}
+                  onMarkFailed={si => handleToggle(() => onMarkAccessorySetFailed(ai, si))}
+                  renderTimer={si => renderInlineTimer({ type: 'accessory', accIndex: ai, index: si })}
+                  t={t}
+                  weightUnit={weightUnit}
+                  lift={workout.lift}
+                  benchPressVariant={effectiveBenchPressVariant}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {!isMeetDay && (workout.cooldownItems || []).length > 0 && (
+          <CooldownBlock
+            items={workout.cooldownItems}
+            onToggleItem={index => handleToggle(() => onToggleCooldownItem(index))}
+            t={t}
+            isReadOnly={isReadOnly}
+            activeEnabled={allMainLiftSetsDone && allAccessoriesDone}
+          />
+        )}
+
+        <button
+          onClick={() => {
+            if (isReadOnly) return;
+            onComplete();
+          }}
+          disabled={!allMeetDone || isReadOnly}
+          style={{
+            display: 'block',
+            width: 'auto',
+            padding: '10px 28px',
+            fontSize: 16,
+            fontWeight: 600,
+            background: THEME.card,
+            color: (allMeetDone && !isReadOnly) ? 'white' : '#666',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 8,
+            cursor: (allMeetDone && !isReadOnly) ? 'pointer' : 'not-allowed',
+            margin: '0 auto 10px',
+            opacity: 1
+          }}
+        >
+          {isReadOnly
+            ? t.previewNotCompletable
+            : allMeetDone
+            ? `${t.completeWorkout} ✓`
+            : t.completeWorkout}
+        </button>
+      </div>
+    );
+  }
+
+  const allDone = (workout.sets || []).every(s => s.done);
+  const allAccessoriesDone = (workout.accessories || []).every(acc =>
+    (acc.done || []).every(Boolean)
+  );
+  const allPrepDone = (workout.prepItems || []).every(item => item.done);
+
+  function handleToggle(fn) {
+    if (isReadOnly) return;
+    fn();
+  }
+
+  return (
+    <div style={{
+      maxWidth: 500,
+      margin: '0 auto',
+      padding: '8px 12px 12px',
+      paddingBottom: 16,
+      fontFamily: 'sans-serif'
+    }}>
+      <h2 style={{
+        margin: '12px 0 8px',
+        textAlign: 'center',
+        fontSize: 30,
+        fontWeight: 900,
+        lineHeight: 1.15,
+        color: ({
+          Squat: THEME.red,
+          Bench: THEME.primary,
+          Deadlift: THEME.yellow,
+        }[workout.lift] || THEME.meet)
+      }}>
+        {t.workout} {workout.number} — {workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant)}
+      </h2>
+
+      <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
+        {formatCycleWorkoutSubtitle({ t, currentCycle, workoutNumber: workout.number, totalWorkouts, smartModel })}
+      </div>
+
+      {renderActivateWorkoutCard()}
+        <SmartDayTypeInline workout={workout} t={t} weightUnit={weightUnit} />
+
+      {(workout.prepItems || []).length > 0 && (
+        <div style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
+          <div style={{
+            padding: '6px 10px',
+            fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+            fontWeight: 900,
+            color: THEME.brown,
+            textAlign: 'center'
+          }}>
+            {t.prepTitle}
+          </div>
+
+          <div style={{
+            display: 'grid',
+                    gridTemplateColumns: WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE,
+                    justifyContent: 'center',
+                    columnGap: WORKOUT_CHECKLIST_COLUMN_GAP,
+                    rowGap: 4,
+                    padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`
+          }}>
+            {workout.prepItems.map((item, i) => (
+              <PrepRow
+                key={i}
+                item={item}
+                isActive={!isReadOnly && i === workout.prepItems.findIndex(prep => !prep.done)}
+                isReadOnly={isReadOnly}
+                onToggle={() => handleToggle(() => onTogglePrepItem(i))}
+                t={t}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(workout.warmups || []).length > 0 && (
+        <div style={{
+          background: 'transparent',
+          border: 'none',
+          borderRadius: 8,
+          overflow: 'hidden',
+          marginBottom: 10
+        }}>
+          <WarmupGrid
+            warmups={workout.warmups || []}
+            referenceSets={workout.sets || []}
+            onShowPlateCalculator={onShowPlateCalculator}
+            isReadOnly={isReadOnly}
+            activeIndex={!isReadOnly && allPrepDone ? workout.warmups.findIndex(wu => !wu.done) : -1}
+            onToggle={i => handleToggle(() => onToggleWarmup(i))}
+            renderTimer={i => renderInlineTimer({ type: 'warmup', index: i })}
+            followsPrep={(workout.prepItems || []).length > 0}
+            t={t}
+            weightUnit={weightUnit}
+            lift={workout.lift}
+            benchPressVariant={effectiveBenchPressVariant}
+          />
+        </div>
+      )}
+
+      <div style={{
+        background: 'transparent',
+        border: 'none',
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginBottom: 10
+      }}>
+        <div style={{
+          padding: '6px 10px',
+          fontSize: 16,
+          fontWeight: 700,
+          color: THEME.text,
+          textAlign: 'center'
+        }}>
+          {workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant)}
+        </div>
+
+        {workout.sets.map((set, i) => {
+          const allWarmupsDone = allPrepDone && (workout.warmups || []).every(w => w.done);
+          const groupedSetEntries = getWorkoutSetGroupEntries(workout.sets || [], set);
+          const groupedSetLabel = getWorkoutSetGroupLabel(set, workout.sets || [], t);
+          const firstIncomplete = workout.sets.findIndex(s => !s.done);
+          const hasLaterSetAction = workout.sets.some((laterSet, laterIndex) =>
+            laterIndex > i && (laterSet.done || laterSet.failed || laterSet.skipped)
+          );
+          const showSetNotice = (set.failed || set.skipped) && !hasLaterSetAction;
+
+          if (isGroupedWorkoutSet(set)) {
+            if (groupedSetEntries[0]?.index !== i) return null;
+
+            const firstIncompleteBackoff = groupedSetEntries.find(({ set: groupedSet }) => !groupedSet.done && !groupedSet.skipped)?.index ?? -1;
+            const groupContainsNextSet = groupedSetEntries.some(({ index }) => index === firstIncomplete);
+
+            return (
+              <React.Fragment key={`set-group-${i}`}>
+                <BackoffGroup
+                  entries={groupedSetEntries}
+                  onShowPlateCalculator={onShowPlateCalculator}
+                  activeIndex={!isReadOnly && allWarmupsDone && groupContainsNextSet ? firstIncompleteBackoff : -1}
+                  isReadOnly={isReadOnly}
+                  onToggle={index => handleToggle(() => onToggleSet(index))}
+                  onEditAll={val => groupedSetEntries.forEach(({ index }) => onWeightChange('set', index, val))}
+                  onRestoreAll={() => groupedSetEntries.forEach(({ index }) => onRestoreSetWeight(index))}
+                  onMarkFailed={index => handleToggle(() => onMarkSetFailed(index))}
+                  renderTimer={index => renderInlineTimer({ type: 'main', index })}
+                  label={groupedSetLabel}
+                  t={t}
+                  weightUnit={weightUnit}
+                  lift={workout.lift}
+                  benchPressVariant={effectiveBenchPressVariant}
+                  isLastGroupOfWorkout={
+                    groupedSetEntries[groupedSetEntries.length - 1]?.index === workout.sets.length - 1
+                  }
+                />
+              </React.Fragment>
+            );
+          }
+
+          return (
+            <React.Fragment key={i}>
+              {false && showSetNotice && (
+                <div style={{
+                  margin: 0,
+                  padding: '10px 14px',
+                  borderTop: '1px solid #e74c3c',
+                  borderBottom: '1px solid #e74c3c',
+                  color: '#ffffff',
+                  background: 'rgba(231, 76, 60, 0.16)',
+                  fontSize: 13,
+                  fontWeight: 800,
+                  lineHeight: 1.35,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}>
+                  <span style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    background: '#e74c3c',
+                    color: THEME.bg,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    fontWeight: 900
+                  }}>
+                    !
+                  </span>
+                  <span>
+                    {set.skipped
+                      ? getSkippedSetMessage(set, t)
+                      : getFailedSetFeedbackMessage(set, t) || 'Set missed and skipped. Continue with the next set.'}
+                  </span>
+                </div>
+              )}
+              {set.failed && renderInlineTimer({ type: 'main', index: i })}
+              <SetRow
+                set={set}
+                index={i}
+                label={set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`}
+                isWarmup={false}
+                isActive={!isReadOnly && allWarmupsDone && i === firstIncomplete}
+                isReadOnly={isReadOnly}
+                onToggle={() => handleToggle(() => onToggleSet(i))}
+                onMarkFailed={() => handleToggle(() => onMarkSetFailed(i))}
+                onRestoreWeight={() => handleToggle(() => onRestoreSetWeight(i))}
+                onWeightChange={val => onWeightChange('set', i, val)}
+                t={t}
+                weightUnit={weightUnit}
+                lift={workout.lift}
+                benchPressVariant={effectiveBenchPressVariant}
+
+              onShowPlateCalculator={onShowPlateCalculator}
+            />
+              {!set.failed && renderInlineTimer({ type: 'main', index: i })}
+            </React.Fragment>
+          );
+        })}
+      </div>
+
+      {(workout.accessories || []).length > 0 && (
+        <div style={{
+          background: 'transparent',
+          border: 'none',
+          borderRadius: 8,
+          overflow: 'hidden',
+          marginBottom: 10
+        }}>
+          <div style={{
+            padding: '6px 10px',
+            fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+            fontWeight: 900,
+            color: THEME.meet,
+            textAlign: 'center',
+          }}>
+            {t.accessories}
+          </div>
+
+          {workout.accessories.map((acc, ai) => {
+            const allMainSetsDone = (workout.sets || []).every(s => s.done);
+            const firstIncompleteAccessoryGroup = (workout.accessories || []).findIndex(a =>
+              (a.done || []).some(done => !done)
+            );
+            const hasMoreAccessoryWork = (acc.done || []).some((done, si) => si > -1 && !done) ||
+              (workout.accessories || []).some((nextAccessory, nextIndex) =>
+                nextIndex > ai && (nextAccessory.done || []).some(done => !done)
+              );
+
+            return (
+              <AccessoryGroup
+                key={ai}
+                acc={acc}
+                accIndex={ai}
+                onShowPlateCalculator={onShowPlateCalculator}
+                isActiveGroup={!isReadOnly && allMainSetsDone && ai === firstIncompleteAccessoryGroup}
+                isReadOnly={isReadOnly}
+                hasMoreAccessoryWork={hasMoreAccessoryWork}
+                onToggle={si => handleToggle(() => onToggleAccessorySet(ai, si))}
+                onEditAll={val => (acc.done || []).forEach((_, si) => onAccessoryWeightChange(ai, si, val))}
+                onRestoreAll={() => (acc.done || []).forEach((_, si) => onRestoreAccessoryWeight(ai, si))}
+                onMarkFailed={si => handleToggle(() => onMarkAccessorySetFailed(ai, si))}
+                renderTimer={si => renderInlineTimer({ type: 'accessory', accIndex: ai, index: si })}
+                t={t}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {(workout.cooldownItems || []).length > 0 && (
+        <CooldownBlock
+          items={workout.cooldownItems}
+          onToggleItem={index => handleToggle(() => onToggleCooldownItem(index))}
+          t={t}
+          isReadOnly={isReadOnly}
+          activeEnabled={allDone && allAccessoriesDone}
+        />
+      )}
+
+
+      <button
+        onClick={() => {
+          if (isReadOnly) return;
+          onComplete();
+        }}
+        data-testid="complete-workout-button"
+        disabled={!allDone || isReadOnly}
+        style={{
+          display: 'block',
+          width: 'auto',
+          padding: '10px 28px',
+          fontSize: 16,
+          fontWeight: 700,
+          background: THEME.card,
+          color: (allDone && !isReadOnly) ? 'white' : '#666',
+          border: `1px solid ${THEME.primary}`,
+          borderRadius: 8,
+          cursor: (allDone && !isReadOnly) ? 'pointer' : 'not-allowed',
+          margin: '14px auto 10px',
+          opacity: 1,
+        }}
+      >
+        {isReadOnly
+          ? t.previewNotCompletable
+          : t.completeWorkout}
+      </button>
+
+      {showNewCycle && !smartModel && (
+        <NewCycleModal
+          prs={newCyclePRs}
+          onStart={onStartNewCycle}
+          t={t}
+          weightUnit={weightUnit}
+        />
+      )}
+    </div>
+  );
+}
+
+function roundAttempt(weight) {
+  return Math.round((Number(weight) || 0) / 5) * 5;
+}
+
+// Meet attempts round to the nearest 5kg like everything else in the app,
+// but at light training maxes (e.g. a Beginner's early cycles) two attempts
+// 7.5 percentage points apart can round to the same 5kg step. Forcing a
+// full 5kg bump to break that tie compounds across opener->second->third
+// and can push a "2nd attempt" past the lifter's actual tested max (see
+// Beginner Bench boundary: 32.5kg e1RM rounding to a 35kg 2nd attempt).
+// Competition
+// plates support 2.5kg jumps (unlike training, which stays on 5kg
+// increments for practical gym plate-loading), so the minimum step to
+// break a tie only needs to be 2.5kg here.
+export function ensureStrictMeetAttempts(attempts) {
+  const minStep = 2.5;
+  const opener = Number(attempts.opener) || 0;
+  let second = Number(attempts.second) || 0;
+  let third = Number(attempts.third) || 0;
+
+  if (opener > 0 && second <= opener) {
+    second = opener + minStep;
+  }
+
+  if (second > 0 && third <= second) {
+    third = second + minStep;
+  }
+
+  return {
+    ...attempts,
+    opener,
+    second,
+    third,
+  };
+}
+
+// Single source of truth for the suggested meet plan (opener/2nd/3rd
+// attempts + projected total), based on best REAL 1RM per lift (not the
+// estimated e1RM) - e1RM shifts every time a sub-maximal training set (e.g.
+// a top double) sets a new estimate, which made suggested attempts creep up
+// mid-cycle even though nothing about the athlete's actual proven max had
+// changed. A real 1RM only moves when the athlete genuinely lifts more,
+// which training deliberately avoids testing directly (see the third-
+// attempt phase's "never a literal near-meet single" design) - so this
+// stays stable through a cycle and only really moves after a genuine new
+// max, e.g. at the meet itself. Shared by the Stats "Meet" tab (legacy) and
+// the Dashboard's "route to meet" card so the two can never show different
+// numbers for the same lifter.
+export function buildSuggestedMeetPlan(bestStatsByLift = {}) {
+  const meetPlan = LIFT_ORDER.map(lift => {
+    const oneRM = bestStatsByLift[lift]?.oneRM || 0;
+
+    return ensureStrictMeetAttempts({
+      lift,
+      oneRM,
+      opener: roundAttempt(oneRM * 0.90),
+      second: roundAttempt(oneRM * 0.975),
+      third: roundAttempt(oneRM * 1.025),
+    });
+  });
+
+  const meetTotals = {
+    opener: meetPlan.reduce((sum, row) => sum + (Number(row.opener) || 0), 0),
+    second: meetPlan.reduce((sum, row) => sum + (Number(row.second) || 0), 0),
+    third: meetPlan.reduce((sum, row) => sum + (Number(row.third) || 0), 0),
+  };
+
+  return { meetPlan, meetTotals };
+}
+
+// Full per-lift meet-attempt breakdown, opened from the Dashboard's "route
+// to meet" card. Relocated from the old Stats "Meet" tab (verbatim content,
+// just re-homed into a modal) - the numbers themselves come from
+// buildSuggestedMeetPlan so this and the Dashboard summary can never drift
+// apart.
+function MeetPlanContent({ meetPlan, meetTotals, t, weightUnit = WEIGHT_UNITS.KG }) {
+  const statsWeightUnit = normalizeWeightUnit(weightUnit);
+
+  return (
+    <>
+      <p style={{ margin: '0 0 14px', color: THEME.muted, fontSize: 14, lineHeight: 1.4, textAlign: 'center' }}>
+        {t.basedOnBest1RM}
+      </p>
+
+      <div style={{ textAlign: 'center', marginBottom: 16 }}>
+        <div style={{ color: THEME.meet, fontSize: 12, fontWeight: 800, marginBottom: 4 }}>
+          {t.projectedTotal}
+        </div>
+        <div style={{ color: THEME.text, fontSize: 24, fontWeight: 900, lineHeight: 1 }}>
+          {meetTotals.third ? formatWeightFromKg(meetTotals.third, statsWeightUnit) : '—'}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gap: 10 }}>
+        {meetPlan.map(row => {
+          const color = getLiftThemeColor(row.lift);
+
+          return (
+            <div key={row.lift} style={{ padding: '8px 0 6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 9 }}>
+                <strong style={{ color, fontSize: 18 }}>
+                  {liftLabel(row.lift, t)}
+                </strong>
+                <span style={{ color: THEME.muted, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  {t.oneRM} {row.oneRM ? formatWeightFromKg(row.oneRM, statsWeightUnit) : '—'}
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
+                {[
+                  ['opener', t.opener, '90%', row.opener],
+                  ['second', t.secondAttempt, '97.5%', row.second],
+                  ['third', t.thirdAttempt, '102.5%', row.third],
+                ].map(([key, label, pct, value]) => (
+                  <div key={key} style={{ padding: '1px 3px', textAlign: 'center' }}>
+                    <div style={{ color: THEME.text, fontSize: 12, fontWeight: 800, lineHeight: 1.15, minHeight: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {label}
+                    </div>
+                    <div style={{ color: THEME.muted, fontSize: 11, fontWeight: 700, margin: '2px 0 4px' }}>
+                      {pct}
+                    </div>
+                    <div style={{ width: '100%', boxSizing: 'border-box', padding: '5px 4px', borderRadius: 6, border: `1px solid ${color}`, background: `${color}12`, color, textAlign: 'center', fontSize: 15, fontWeight: 800 }}>
+                      {value ? formatWeightFromKg(value, statsWeightUnit) : '—'}
+                    </div>
+                    <div style={{ color: THEME.muted, fontSize: 11, marginTop: 2 }}>
+                      {statsWeightUnit}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 6, marginBottom: 18, padding: '8px 0 0', display: 'grid', gap: 4, fontSize: 14 }}>
+        {[
+          [t.totalAfterOpener, meetTotals.opener],
+          [t.totalAfterSecond, meetTotals.second],
+          [t.totalAfterThird, meetTotals.third],
+        ].map(([label, value]) => (
+          <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+            <span style={{ color: THEME.meet, fontWeight: 800 }}>{label}</span>
+            <strong style={{ color: THEME.text }}>{value ? formatWeightFromKg(value, statsWeightUnit) : '—'}</strong>
+          </div>
+        ))}
+      </div>
+
+    </>
+  );
+}
+
+function MeetPlanModal({ meetPlan, meetTotals, t, weightUnit = WEIGHT_UNITS.KG, onClose }) {
+  return (
+    <SettingsModal title={t.meetPlanner} onClose={onClose}>
+      <MeetPlanContent
+        meetPlan={meetPlan}
+        meetTotals={meetTotals}
+        t={t}
+        weightUnit={weightUnit}
+      />
+
+      <button
+        type="button"
+        onClick={onClose}
+        style={modalActionButtonStyle('primary')}
+      >
+        {t.back || 'Back'}
+      </button>
+    </SettingsModal>
+  );
+}
+
+function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, trainingModel = TRAINING_MODELS.CLASSIC, t, weightUnit = WEIGHT_UNITS.KG, best1RMs = {}, bestE1RMs = {}, athleteLevel, eStrengthRatio, latestBodyWeight, activescreen = 'lifts', onChangeTab }) {
+  const setActivescreen = onChangeTab || (() => {});
+  const liftData = {};
+  const totalData = [];
+  const bodyData = [];
+  const strengthData = [];
+  const COLORS = {
+  Squat: THEME.red,
+  Bench: THEME.primary,
+  Deadlift: THEME.yellow
+};
+const neutralChartColor = THEME.brown;
+
+const statsWeightUnit = normalizeWeightUnit(weightUnit);
+
+function chartWeightFromKg(weightKg, options = {}) {
+  const displayWeight = kgToDisplayWeight(weightKg, statsWeightUnit);
+  if (displayWeight === '') return null;
+
+  const formatted = formatWeightValue(displayWeight, statsWeightUnit, options);
+  const value = Number(formatted);
+  return Number.isFinite(value) ? value : null;
+}
+
+function weightMetricTitle(label) {
+  return `${label} (${statsWeightUnit})`;
+}
+
+const bestStats = {
+  Squat: { oneRM: 0, e1rm: 0 },
+  Bench: { oneRM: 0, e1rm: 0 },
+  Deadlift: { oneRM: 0, e1rm: 0 },
+};
+
+const sortedHistory = [...history]
+  .filter(entry => entry && entry.lift)
+  .sort((a, b) => getAbsoluteWorkoutIndex(a) - getAbsoluteWorkoutIndex(b));
+
+const runningBestPerLift = {
+  Squat: { oneRM: 0, e1rm: 0 },
+  Bench: { oneRM: 0, e1rm: 0 },
+  Deadlift: { oneRM: 0, e1rm: 0 },
+};
+
+sortedHistory.forEach(entry => {
+  if (!entry.lift || !LIFT_ORDER.includes(entry.lift) || entry.completionOnly) return;
+
+  const candidates = getHistoryMaxCandidates(entry);
+
+  if (candidates.oneRM <= 0 && candidates.e1rm <= 0) return;
+
+  runningBestPerLift[entry.lift] = entry.manualMax
+    ? {
+        oneRM: candidates.oneRM,
+        e1rm: candidates.e1rm,
+      }
+    : {
+        oneRM: Math.max(runningBestPerLift[entry.lift].oneRM, candidates.oneRM),
+        e1rm: Math.max(runningBestPerLift[entry.lift].e1rm, candidates.e1rm),
+      };
+
+  bestStats[entry.lift] = { ...runningBestPerLift[entry.lift] };
+
+  if (!liftData[entry.lift]) liftData[entry.lift] = [];
+
+  if (getEntryWorkoutNumber(entry) > 0 || entry.seedMax || entry.manualMax) {
+    liftData[entry.lift].push({
+      label: getWorkoutLabel(entry),
+      absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
+      oneRM: chartWeightFromKg(runningBestPerLift[entry.lift].oneRM),
+      e1rm: chartWeightFromKg(runningBestPerLift[entry.lift].e1rm),
+    });
+  }
+
+  if ((getEntryWorkoutNumber(entry) > 0 || entry.seedMax || entry.manualMax) && runningBestPerLift.Squat.oneRM && runningBestPerLift.Bench.oneRM && runningBestPerLift.Deadlift.oneRM) {
+    totalData.push({
+      label: getWorkoutLabel(entry),
+      workoutNumber: getEntryWorkoutNumber(entry),
+      absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
+      date: entry.date,
+      oneRM:
+        runningBestPerLift.Squat.oneRM +
+        runningBestPerLift.Bench.oneRM +
+        runningBestPerLift.Deadlift.oneRM,
+      e1rm:
+        runningBestPerLift.Squat.e1rm +
+        runningBestPerLift.Bench.e1rm +
+        runningBestPerLift.Deadlift.e1rm,
+    });
+  }
+});
+
+LIFT_ORDER.forEach(lift => {
+  const currentOneRM = Number(best1RMs?.[lift]) || bestStats[lift].oneRM || 0;
+  const currentE1RM = Number(bestE1RMs?.[lift]) || bestStats[lift].e1rm || 0;
+
+  bestStats[lift] = {
+    oneRM: currentOneRM,
+    e1rm: currentE1RM,
+  };
+
+  // Keep every historical point exactly as stored, but make the live end
+  // point agree with Dashboard/SMART's canonical rounded current e1RM.
+  // This is a running-best chart, so an older raw maximum always floors the
+  // endpoint; rounding must never make a 1RM/e1RM line move downward.
+  // This also normalizes a just-completed legacy-shaped entry (e.g. W46
+  // Deadlift stored as 181.33 before the new 5kg save boundary) to 180.
+  const currentE1RMChartValue = chartWeightFromKg(currentE1RM);
+  liftData[lift] = capRunningBestChart(
+    liftData[lift],
+    'e1rm',
+    currentE1RMChartValue
+  );
+  liftData[lift] = replaceCurrentChartEndpoint(liftData[lift], {
+    oneRM: chartWeightFromKg(currentOneRM),
+    e1rm: currentE1RMChartValue,
+  });
+});
+
+if (totalData.length > 0) {
+  const currentTotalOneRM = LIFT_ORDER.reduce(
+    (sum, lift) => sum + (Number(best1RMs?.[lift]) || 0),
+    0
+  );
+  const currentTotalE1RM = LIFT_ORDER.reduce(
+    (sum, lift) => sum + (Number(bestE1RMs?.[lift]) || 0),
+    0
+  );
+  const cappedTotalData = capRunningBestChart(
+    totalData,
+    'e1rm',
+    currentTotalE1RM
+  );
+  const currentTotalPoint = replaceCurrentChartEndpoint(cappedTotalData, {
+    oneRM: currentTotalOneRM,
+    e1rm: currentTotalE1RM,
+  }).at(-1);
+
+  totalData.splice(0, totalData.length, ...cappedTotalData);
+  totalData[totalData.length - 1] = currentTotalPoint;
+}
+
+const bodyMetricData = {
+  bodyFat: [],
+  bodyWater: [],
+  leanMass: [],
+  visceralFat: [],
+  physiqueRating: [],
+};
+
+bodyWeights.forEach(entry => {
+  const workoutNumber = getEntryWorkoutNumber(entry);
+  const base = {
+    label: getWorkoutLabel(entry),
+    workoutNumber,
+    absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
+  };
+
+  if (entry.bodyWeight) {
+    bodyData.push({
+      ...base,
+      gewicht: chartWeightFromKg(entry.bodyWeight, { body: true }),
+    });
+  }
+
+  [
+    'bodyFat',
+    'bodyWater',
+    'leanMass',
+    'visceralFat',
+    'physiqueRating',
+  ].forEach(key => {
+    const value = Number(entry[key]);
+
+    if (!Number.isFinite(value) || value <= 0) return;
+
+    bodyMetricData[key].push({
+      ...base,
+      [key]: (key === 'leanMass' || key === 'boneMass')
+        ? chartWeightFromKg(value, { body: true })
+        : value,
+    });
+  });
+});
+
+const sortedBodyWeights = [...bodyWeights].sort(
+  (a, b) => getAbsoluteWorkoutIndex(a) - getAbsoluteWorkoutIndex(b)
+);
+
+function getBodyWeightForWorkoutIndex(absoluteWorkoutIndex) {
+  let latest = null;
+
+  sortedBodyWeights.forEach(entry => {
+    if (getAbsoluteWorkoutIndex(entry) <= absoluteWorkoutIndex && entry.bodyWeight) {
+      latest = entry;
+    }
+  });
+
+  if (!latest && absoluteWorkoutIndex <= 0) {
+    latest = sortedBodyWeights.find(entry => entry.bodyWeight) || null;
+  }
+
+  return latest?.bodyWeight || null;
+}
+
+totalData.forEach(entry => {
+  const bodyWeightForWorkout = getBodyWeightForWorkoutIndex(entry.absoluteWorkoutIndex);
+
+  if (!bodyWeightForWorkout) return;
+
+  strengthData.push({
+    label: entry.label,
+    absoluteWorkoutIndex: entry.absoluteWorkoutIndex,
+    strength: Math.round((entry.oneRM / bodyWeightForWorkout) * 100) / 100,
+    eStrength: Math.round((entry.e1rm / bodyWeightForWorkout) * 100) / 100,
+  });
+});
+
+function chartMetricLabel(key) {
+  if (key === 'oneRM') return weightMetricTitle('1RM');
+  if (key === 'e1rm') return weightMetricTitle(t.e1RM);
+  if (key === 'gewicht') return weightMetricTitle(t.bodyweight);
+  if (key === 'strength') return t.strength;
+  if (key === 'eStrength') return t.eStrength;
+  if (key === 'bodyFat') return `${t.bodyFatPercent} (%)`;
+  if (key === 'bodyWater') return `${t.bodyWaterPercent} (%)`;
+  if (key === 'leanMass') return weightMetricTitle(t.leanMassKg);
+  if (key === 'visceralFat') return `${t.visceralFatRating} rating`;
+  if (key === 'physiqueRating') return t.physiqueRating;
+
+  return key;
+}
+
+  function renderChart(data, dataKeys, colors, emptyMessage = t.noStatsData, chartHeight = 150) {
+    if (!data || data.length === 0) {
+      return (
+        <p style={{ color: THEME.text, textAlign: 'center', padding: 14 }}>
+          {emptyMessage}
+        </p>
+      );
+    }
+
+    const visibleSourceData = data.length <= 10
+      ? data
+      : Array.from({ length: 10 }, (_, index) => {
+          const sourceIndex = Math.round(index * (data.length - 1) / 9);
+          return data[sourceIndex];
+        });
+
+    const visibleData = visibleSourceData.map((item, index) => ({
+      ...item,
+      chartIndex: index + 1,
+    }));
+
+    const yValues = visibleData
+      .flatMap(item => dataKeys.map(key => Number(item[key])))
+      .filter(value => Number.isFinite(value));
+
+    let yDomain = ['auto', 'auto'];
+    let yTicks = undefined;
+
+    function midpointTicks(lower, upper) {
+      const midpoint = (lower + upper) / 2;
+      return [lower, midpoint, upper].map(value => {
+        const rounded = Math.round(value * 100) / 100;
+        return Object.is(rounded, -0) ? 0 : rounded;
+      });
+    }
+
+    function chooseDomainUnit(minY, maxY) {
+      const largest = Math.max(Math.abs(minY), Math.abs(maxY));
+
+      if (largest >= 1000) return 100;
+      if (largest >= 100) return 10;
+      if (largest >= 10) return 10;
+      if (largest >= 2) return 1;
+      return 0.1;
+    }
+
+    if (yValues.length > 0) {
+      const minY = Math.min(...yValues);
+      const maxY = Math.max(...yValues);
+      const unit = chooseDomainUnit(minY, maxY);
+
+      let lower = Math.floor(minY / unit) * unit;
+      let upper = Math.ceil(maxY / unit) * unit;
+
+      if (lower === upper) {
+        lower -= unit;
+        upper += unit;
+      }
+
+      if (minY <= lower) lower -= unit;
+      if (maxY >= upper) upper += unit;
+
+      lower = Math.round(lower * 100) / 100;
+      upper = Math.round(upper * 100) / 100;
+
+      yDomain = [lower, upper];
+
+      yTicks = midpointTicks(lower, upper);
+    }
+
+    const allXTicks = [...new Set(
+      visibleData
+        .map(item => Number(item.chartIndex))
+        .filter(value => Number.isFinite(value))
+    )];
+
+    const xTicks = allXTicks.length <= 4
+      ? allXTicks
+      : [
+          allXTicks[0],
+          allXTicks[Math.floor(allXTicks.length * 0.33)],
+          allXTicks[Math.floor(allXTicks.length * 0.66)],
+          allXTicks[allXTicks.length - 1],
+        ].filter((value, index, arr) => value !== undefined && arr.indexOf(value) === index);
+
+    const labelByX = visibleData.reduce((labels, item) => {
+      labels[item.chartIndex] = item.label;
+      return labels;
+    }, {});
+
+    const isStrengthChart = dataKeys.some(key => ['strength', 'eStrength'].includes(key));
+
+    function formatChartValue(value) {
+      const numericValue = Number(value);
+      if (!Number.isFinite(numericValue)) return value;
+
+      return formatDecimalDisplay(numericValue, {
+        maximumFractionDigits: isStrengthChart ? 2 : 1,
+      });
+    }
+
+    return (
+      <ResponsiveContainer width="100%" height={chartHeight}>
+        <LineChart data={visibleData} margin={{ top: 2, right: 12, left: 10, bottom: 0 }}>
+          <CartesianGrid stroke={THEME.border} vertical={false} />
+          <XAxis
+            dataKey="chartIndex"
+            type="number"
+            domain={[1, visibleData.length]}
+            ticks={xTicks}
+            tickFormatter={(value) => labelByX[value] || ''}
+            allowDecimals={false}
+            stroke={THEME.text}
+            tick={{ fontSize: 8 }}
+            interval={0}
+            minTickGap={0}
+          />
+          <YAxis
+            stroke={THEME.text}
+            width={58}
+            domain={yDomain}
+            ticks={yTicks}
+            tickFormatter={formatChartValue}
+            tickMargin={4}
+            allowDecimals={true}
+          />
+          <Tooltip
+  labelFormatter={(value, payload) => payload?.[0]?.payload?.label || labelByX[value] || value}
+  formatter={(value, name) => [formatChartValue(value), chartMetricLabel(name)]}
+  contentStyle={{
+    backgroundColor: THEME.card,
+    border: `1px solid ${THEME.border}`,
+    color: THEME.text
+  }}
+/>
+
+<Legend wrapperStyle={{ color: THEME.text }} />
+
+          {dataKeys.map((key, i) => (
+          <Line
+  key={key}
+  type="linear"
+  dataKey={key}
+  stroke={colors[i] || THEME.primary}
+  strokeWidth={3}
+  connectNulls={true}
+  isAnimationActive={false}
+  dot={{ r: 3, fill: colors[i] || THEME.primary, stroke: colors[i] || THEME.primary }}
+  activeDot={{ r: 5, fill: colors[i] || THEME.primary, stroke: '#ffffff' }}
+  name={chartMetricLabel(key)}
+/>
+))}
+        </LineChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  const statsTabs = [
+    { key: 'lifts', label: 'Lifts' },
+    { key: 'totaal', label: 'Total' },
+    { key: 'lichaam', label: 'Comp.' },
+    { key: 'scores', label: 'Health' },
+  ];
+
+  function renderMetricChartCards(charts) {
+    const visibleCharts = charts.filter(chart => chart.data.length > 0);
+
+    if (visibleCharts.length === 0) {
+      return (
+        <p style={{ color: THEME.text, textAlign: 'center', padding: 14 }}>
+          {t.noMetricData || t.noStatsData}
+        </p>
+      );
+    }
+
+    return (
+      <div>
+        {visibleCharts.map(chart => (
+          <div
+            key={chart.key}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              borderRadius: 10,
+              padding: 8,
+              marginBottom: 6
+            }}
+          >
+            <h3 style={{ margin: '0 0 4px', color: neutralChartColor }}>{chart.title}</h3>
+            {renderChart(chart.data, [chart.key], [chart.color])}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
+      <AppHeader
+        t={t}
+        title={t.stats}
+        subtitle={(
+          <>
+            {formatCycleWorkoutSubtitle({
+              t,
+              currentCycle,
+              workoutNumber: Math.min(currentIndex + 1, totalWorkouts),
+              totalWorkouts,
+              smartModel: isSmartTrainingModel(trainingModel),
+            })}
+            {isSmartTrainingModel(trainingModel) && (
+              <AthleteLevelBadge
+                athleteLevel={athleteLevel}
+                eStrengthRatio={eStrengthRatio}
+                latestBodyWeight={latestBodyWeight}
+                t={t}
+              />
+            )}
+          </>
+        )}
+      />
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${statsTabs.length}, minmax(0, 1fr))`,
+        gap: 6,
+        marginTop: 10,
+        marginBottom: 8
+      }}>
+        {statsTabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActivescreen(tab.key)}
+            style={{
+              width: '100%',
+              minHeight: 38,
+              padding: '8px 6px',
+              fontSize: 15,
+              lineHeight: 1.2,
+              background: THEME.card,
+              color: activescreen === tab.key ? THEME.primary : THEME.text,
+              border: `1px solid ${activescreen === tab.key ? THEME.primary : THEME.border}`,
+              borderRadius: 8,
+              cursor: 'pointer',
+              fontWeight: activescreen === tab.key ? 800 : 700,
+              textAlign: 'center'
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activescreen === 'lifts' && (
+  <div>
+    {LIFT_ORDER.map(lift => {
+  const liftLabel =
+    lift === 'Deadlift' ? t.deadlift :
+    lift === 'Bench' ? t.bench :
+    t.squat;
+
+  return (
+    <div
+      key={lift}
+      style={{
+        background: 'transparent',
+        border: 'none',
+        borderRadius: 10,
+        padding: 8,
+        marginBottom: 6
+      }}
+    >
+      <h3 style={{ margin: '0 0 4px', color: COLORS[lift] }}>
+        {liftLabel}
+      </h3>
+      {renderChart(
+        liftData[lift] || [],
+        ['oneRM', 'e1rm'],
+        [THEME.muted, COLORS[lift]],
+        t.noStatsData,
+        132
+      )}
+    </div>
+  );
+})}
+  </div>
+)}
+
+      {activescreen === 'totaal' && (
+        <div>
+          <div style={{
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 10,
+            padding: 10,
+            marginBottom: 8
+          }}>
+            <h3 style={{ margin: '0 0 6px', color: THEME.meet }}>{t.totalSBD}</h3>
+            {renderChart(totalData.map(entry => ({ ...entry, oneRM: chartWeightFromKg(entry.oneRM), e1rm: chartWeightFromKg(entry.e1rm) })), ['oneRM', 'e1rm'], [THEME.muted, THEME.meet])}
+          </div>
+
+          <div style={{
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 10,
+            padding: 8
+          }}>
+            <h3 style={{ margin: '0 0 4px', color: THEME.meet }}>{t.strengthTotalBodyweight}</h3>
+            {renderChart(strengthData, ['strength', 'eStrength'], [THEME.muted, THEME.meet], t.noMetricData || t.noStatsData)}
+          </div>
+        </div>
+      )}
+
+      {activescreen === 'lichaam' && renderMetricChartCards([
+        {
+          key: 'gewicht',
+          title: t.bodyweight,
+          data: bodyData,
+          color: THEME.primary,
+        },
+        {
+          key: 'bodyFat',
+          title: t.bodyFatPercent,
+          data: bodyMetricData.bodyFat,
+          color: THEME.primary,
+        },
+        {
+          key: 'leanMass',
+          title: t.leanMassKg,
+          data: bodyMetricData.leanMass,
+          color: THEME.primary,
+        },
+      ])}
+
+      {activescreen === 'scores' && renderMetricChartCards([
+        {
+          key: 'bodyWater',
+          title: t.bodyWaterPercent,
+          data: bodyMetricData.bodyWater,
+          color: THEME.primary,
+        },
+        {
+          key: 'visceralFat',
+          title: t.visceralFatRating,
+          data: bodyMetricData.visceralFat,
+          color: THEME.primary,
+        },
+        {
+          key: 'physiqueRating',
+          title: t.physiqueRating,
+          data: bodyMetricData.physiqueRating,
+          color: THEME.primary,
+        },
+      ])}
+
+
+    </div>
+  );
+}
+
+function programActionButtonStyle(accentColor = THEME.primary, margin = '0') {
+  return {
+    width: '100%',
+    margin,
+    padding: 12,
+    fontSize: 14,
+    fontWeight: 800,
+    background: THEME.card,
+    color: '#ffffff',
+    border: `1px solid ${accentColor}`,
+    borderRadius: 8,
+    cursor: 'pointer',
+  };
+}
+
+function ProgramProfileSection({
+  programProfile,
+  preparationMode = 'off',
+  accessoryMode = 'off',
+  cooldownMode = 'off',
+  benchPressVariant = 'standard',
+  deadliftVariant = 'standard',
+  onChangeProgramProfile,
+  onApplyProgramSettings,
+  t,
+}) {
+  const [showProgramOptions, setShowProgramOptions] = useState(false);
+  const [step, setStep] = useState(0);
+  const [draft, setDraft] = useState(null);
+
+  const normalizedProfile = normalizeProgramProfile(programProfile);
+  const currentFocus =
+    normalizedProfile === 'kelaniSbdUltra'
+      ? 'ultra'
+      : normalizedProfile === 'kelaniSbdLower' ||
+        normalizedProfile === 'kelaniSbdLowerPlus' ||
+        normalizeBenchPressVariant(benchPressVariant) === 'machineAlternative' ||
+        normalizeDeadliftVariant(deadliftVariant) === 'hipThrust'
+          ? 'lower'
+          : 'sbd';
+
+  function openWizard() {
+    setDraft({
+      focus: currentFocus,
+      preparationMode: normalizePreparationMode(preparationMode),
+      accessoryMode: normalizeAccessoryMode(accessoryMode),
+      cooldownMode: normalizeCooldownMode(cooldownMode),
+    });
+    setStep(0);
+    setShowProgramOptions(true);
+  }
+
+  function closeWizard() {
+    setShowProgramOptions(false);
+    setDraft(null);
+    setStep(0);
+  }
+
+  function updateDraft(key, value) {
+    setDraft(prev => ({ ...(prev || {}), [key]: value }));
+  }
+
+  function selectAndContinue(key, value) {
+    updateDraft(key, value);
+
+    if (step < 3) {
+      setStep(prev => prev + 1);
+      return;
+    }
+
+    const nextDraft = { ...(draft || {}), [key]: value };
+    const focus = nextDraft.focus || 'sbd';
+
+    const settings = {
+      programProfile: focus === 'ultra' ? 'kelaniSbdUltra' : focus === 'lower' ? 'kelaniSbdLower' : 'kelaniSbd',
+      preparationMode: normalizePreparationMode(nextDraft.preparationMode),
+      accessoryMode: normalizeAccessoryMode(nextDraft.accessoryMode),
+      cooldownMode: normalizeCooldownMode(nextDraft.cooldownMode),
+      squatVariant: 'standard',
+      benchPressVariant: focus === 'lower' ? 'machineAlternative' : 'standard',
+      deadliftVariant: focus === 'lower' ? 'hipThrust' : 'standard',
+    };
+
+    if (onApplyProgramSettings) {
+      onApplyProgramSettings(settings);
+    } else if (onChangeProgramProfile) {
+      onChangeProgramProfile(settings.programProfile);
+    }
+
+    closeWizard();
+  }
+
+  function optionButton({ value, title, text, selected, onClick }) {
+    const active = selected === value;
+
+    return (
+      <button
+        key={value}
+        type="button"
+        onClick={onClick}
+        autoFocus={active}
+        style={{
+          width: '100%',
+          padding: 12,
+          fontSize: 15,
+          fontWeight: 800,
+          textAlign: 'left',
+          borderRadius: 8,
+          border: `1px solid ${THEME.primary}`,
+          background: active ? THEME.primary : THEME.card,
+          color: active ? THEME.bg : THEME.text,
+          cursor: 'pointer'
+        }}
+      >
+        <div style={{ fontWeight: 900 }}>{title}</div>
+        {text && (
+          <div style={{
+            marginTop: 4,
+            color: active ? THEME.bg : THEME.muted,
+            fontSize: 12,
+            fontWeight: 700,
+            lineHeight: 1.35
+          }}>
+            {text}
+          </div>
+        )}
+      </button>
+    );
+  }
+
+  const friendlyAccessoryMode = draft?.focus === 'lower' ? 'lowerBodyFriendly' : 'upperBackFriendly';
+
+  const steps = [
+    {
+      title: t.programStepFocusTitle || 'Choose program',
+      key: 'focus',
+      selected: draft?.focus,
+      options: [
+        {
+          value: 'sbd',
+          title: t.programFocusSbd || 'Kelani SBD',
+          text: t.programFocusSbdText || 'Squat, Bench Press and Deadlift.',
+        },
+        {
+          value: 'lower',
+          title: t.programFocusLower || 'Kelani Adapt',
+          text: t.programFocusLowerText || 'Squat, Chest Press and Hip Thrust. No upper-body main lifts.',
+        },
+        {
+          value: 'ultra',
+          title: t.programFocusSbdUltra || t.programProfileKelaniSbdUltra || 'Kelani SBD Ultra',
+          text: t.programFocusSbdUltraText || t.programProfileKelaniSbdUltraText || 'High-frequency SBD meet prep with more Squat, Bench Press and Deadlift exposure.',
+        },
+      ],
+    },
+    {
+      title: t.programStepPreparationTitle || 'Choose preparation',
+      key: 'preparationMode',
+      selected: draft?.preparationMode,
+      options: [
+        {
+          value: 'off',
+          title: t.programOptionOff || 'Off',
+          text: t.programPreparationOffText || 'No preparation block.',
+        },
+        {
+          value: 'basicFirst',
+          title: t.programPreparationGeneral || 'General',
+          text: t.programPreparationGeneralText || 'General preparation for the first main lift.',
+        },
+        {
+          value: 'shoulderThoracic',
+          title: t.programPreparationUpperBackFriendly || 'Upper-body friendly',
+          text: t.programPreparationUpperBackFriendlyText || 'Upper-body friendly shoulder, scapula and thoracic preparation.',
+        },
+      ],
+    },
+    {
+      title: t.programStepAccessoriesTitle || 'Choose accessories',
+      key: 'accessoryMode',
+      selected: draft?.accessoryMode,
+      options: [
+        {
+          value: 'off',
+          title: t.programOptionOff || 'Off',
+          text: t.programAccessoriesOffText || 'No accessories after the main work.',
+        },
+        {
+          value: 'standard',
+          title: t.programAccessoriesGeneral || 'General',
+          text: t.programAccessoriesGeneralText || 'General accessories based on the main lift.',
+        },
+        {
+          value: friendlyAccessoryMode,
+          title: t.programAccessoriesUpperBackFriendly || 'Upper-body friendly',
+          text: t.programAccessoriesUpperBackFriendlyText || 'Accessories selected to reduce upper-body stress.',
+        },
+      ],
+    },
+    {
+      title: t.programStepCooldownTitle || 'Choose cool-down',
+      key: 'cooldownMode',
+      selected: draft?.cooldownMode,
+      options: [
+        {
+          value: 'off',
+          title: t.programOptionOff || 'Off',
+          text: t.programCooldownOffText || 'No cool-down block.',
+        },
+        {
+          value: 'upperBackFriendly',
+          title: t.programCooldownUpperBackFriendly || 'Upper-body friendly',
+          text: t.programCooldownUpperBackFriendlyText || 'Rhomboid stretch and upper-back massage.',
+        },
+      ],
+    },
+  ];
+
+  const currentStep = steps[step] || steps[0];
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={openWizard}
+        style={programActionButtonStyle(THEME.primary, '6px 0 0')}
+      >
+        {t.adjustProgram || 'Adjust program'}
+      </button>
+
+      {showProgramOptions && draft && (
+        <SettingsModal
+          title={currentStep.title}
+          onClose={closeWizard}
+        >
+          <div style={{
+            marginBottom: 10,
+            color: THEME.muted,
+            fontSize: 12,
+            fontWeight: 800,
+            textAlign: 'center'
+          }}>
+            {step + 1} / {steps.length}
+          </div>
+
+          <div style={{ display: 'grid', gap: 8 }}>
+            {currentStep.options.map(option => optionButton({
+              ...option,
+              selected: currentStep.selected,
+              onClick: () => selectAndContinue(currentStep.key, option.value),
+            }))}
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: step > 0 ? '1fr 1fr' : '1fr',
+            gap: 8,
+            marginTop: 14
+          }}>
+            {step > 0 && (
+              <button
+                type="button"
+                onClick={() => setStep(prev => Math.max(0, prev - 1))}
+                style={programActionButtonStyle(THEME.primary)}
+              >
+                {t.back || 'Back'}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={closeWizard}
+              style={programActionButtonStyle(THEME.primary)}
+            >
+              {t.cancel || 'Cancel'}
+            </button>
+          </div>
+
+          <div style={{
+            marginTop: 20,
+            color: THEME.muted,
+            fontSize: 12,
+            fontWeight: 700,
+            lineHeight: 1.35,
+            textAlign: 'center'
+          }}>
+            {t.programProfileChangeNote || 'Program changes apply to current and future workouts. Completed workouts stay unchanged.'}
+          </div>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
+function StartNewCycleSection({ onStartNewCycle, t }) {
+  const [showStartCycleConfirm, setShowStartCycleConfirm] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    if (!notice) return;
+    const id = window.setTimeout(() => setNotice(''), 1800);
+    return () => window.clearTimeout(id);
+  }, [notice]);
+
+  return (
+    <>
+      <Toast message={notice} />
+      <button
+        onClick={() => setShowStartCycleConfirm(true)}
+        style={programActionButtonStyle(THEME.primary, '6px 0 0')}
+      >
+        {t.startNewCycle}
+      </button>
+
+      {showStartCycleConfirm && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 800,
+          padding: 16
+        }}>
+          <div style={{
+            background: THEME.card,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 12,
+            padding: 18,
+            maxWidth: 420,
+            width: '100%',
+            color: THEME.text
+          }}>
+            <h3 style={{ margin: '0 0 10px', textAlign: 'center', color: THEME.brown }}>
+              {t.startNewCycleConfirmTitle}
+            </h3>
+
+            <p style={{
+              color: THEME.muted,
+              fontSize: 14,
+              lineHeight: 1.4,
+              margin: '0 0 16px',
+              textAlign: 'center'
+            }}>
+              {t.startNewCycleConfirmText}
+            </p>
+
+            <button
+              onClick={() => {
+                setShowStartCycleConfirm(false);
+                setNotice(t.startNewCycleStarted);
+                onStartNewCycle();
+
+                window.setTimeout(() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }, 0);
+              }}
+              style={{
+                width: '100%',
+                padding: 12,
+                fontSize: 15,
+                fontWeight: 800,
+                background: THEME.card,
+                color: '#ffffff',
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.startNewCycle}
+            </button>
+
+            <button
+              onClick={() => setShowStartCycleConfirm(false)}
+              style={{
+                width: '100%',
+                marginTop: 8,
+                padding: 10,
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'transparent',
+                color: THEME.text,
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.cancel}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function getLiftThemeColor(lift) {
+  return ({
+    Squat: THEME.red,
+    Bench: THEME.primary,
+    Deadlift: THEME.yellow,
+    SBD: THEME.meet,
+    Meet: THEME.meet,
+  }[lift] || THEME.text);
+}
+
+function WorkoutTitle({ workout, t, benchPressVariant = 'standard' }) {
+  const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
+
+  if (!workout) return t.deload;
+  if (workout.type === 'rest') return t.restAndRecovery || t.deload;
+  if (workout.type === 'meet') return t.sbdMeetDay || t.meetDay;
+
+  const liftBlocks = (workout.lifts || []).length > 0
+    ? workout.lifts
+    : [{ lift: workout.lift }];
+
+  if (liftBlocks.length >= 3) {
+    // Three full lift names ("Deadlift + Bench Press + Squat") overflow the
+    // title on the Workout screen and push the Dashboard's next-workout
+    // card taller than it needs to be. Powerlifters already read S/B/D
+    // shorthand (SBD/DBS/BSD/...) as a standard term regardless of UI
+    // language, so use it here instead of spelling out every lift name -
+    // letters stay in selection order (primary first) and keep their
+    // per-lift color for quick scanning.
+    const letterForLift = lift => (
+      { Squat: 'S', Bench: 'B', Deadlift: 'D' }[lift] || String(lift || '?').charAt(0)
+    );
+
+    return (
+      <>
+        {liftBlocks.map((liftBlock, index) => (
+          <span
+            key={`workout-title-letter-${liftBlock.lift}-${index}`}
+            style={{ color: getLiftThemeColor(liftBlock.lift) }}
+          >
+            {letterForLift(liftBlock.lift)}
+          </span>
+        ))}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {liftBlocks.map((liftBlock, index) => (
+        <React.Fragment key={`workout-title-${liftBlock.lift}-${index}`}>
+          {index > 0 && (
+            <span style={{ color: THEME.text }}> + </span>
+          )}
+          <span style={{ color: getLiftThemeColor(liftBlock.lift) }}>
+            {workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}
+          </span>
+        </React.Fragment>
+      ))}
+    </>
+  );
+}
+
+function ensureProgramPlanLineLift(line, workout, t, benchPressVariant = 'standard') {
+  const text = String(line || '').trim();
+
+  if (/^(Squat|Bench Press|Bench|Deadlift)\b/i.test(text)) {
+    return text;
+  }
+
+  const liftBlocks = Array.isArray(workout?.lifts) && workout.lifts.length > 0
+    ? workout.lifts
+    : workout?.lift
+      ? [{ lift: workout.lift }]
+      : [];
+
+  if (liftBlocks.length !== 1) {
+    return text;
+  }
+
+  const lift = liftBlocks[0]?.lift;
+  if (!lift) return text;
+
+  return `${workoutLiftBlockLabel(liftBlocks[0], t, benchPressVariant)} · ${text}`;
+}
+
+function ProgramWorkoutTitleRows({ workout, t, benchPressVariant = 'standard' }) {
+  const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
+
+  if (!workout) return t.deload;
+  if (workout.type === 'rest') return t.restAndRecovery || t.deload;
+  if (workout.type === 'meet') return t.sbdMeetDay || t.meetDay;
+
+  const liftBlocks = (workout.lifts || []).length > 0
+    ? workout.lifts
+    : [{ lift: workout.lift }];
+
+  return (
+    <>
+      {liftBlocks.map((liftBlock, index) => (
+        <div
+          key={`program-workout-title-${liftBlock.lift}-${index}`}
+          style={{
+            color: getLiftThemeColor(liftBlock.lift),
+            lineHeight: 1.15,
+          }}
+        >
+          {workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}
+        </div>
+      ))}
+    </>
+  );
+}
+
+function compactProgramPlanLine(line) {
+  return String(line || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function compactWorkoutPlanLines(planLines = []) {
+  return (planLines || [])
+    .map(compactProgramPlanLine)
+    .filter(Boolean);
+}
+
+function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard') {
+  const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
+  if (!workout || workout.type === 'rest') return [];
+
+  const liftBlocks = (workout.lifts || []).length > 0
+    ? workout.lifts
+    : [{ lift: workout.lift, sets: workout.sets || [] }];
+  const showLiftName = liftBlocks.length > 1;
+
+  return liftBlocks.flatMap(liftBlock => {
+    const groups = [];
+
+    (liftBlock.sets || []).forEach(set => {
+      const reps = Number(set.reps) || 0;
+      const weight = Number(set.weight) || 0;
+      const pct = Number(set.pct) || 0;
+      const last = groups[groups.length - 1];
+
+      if (
+        last &&
+        last.reps === reps &&
+        last.weight === weight &&
+        last.pct === pct
+      ) {
+        last.count += 1;
+        return;
+      }
+
+      groups.push({
+        reps,
+        weight,
+        pct,
+        count: 1,
+      });
+    });
+
+    const liftName = workoutLiftBlockLabel(
+      liftBlock,
+      t,
+      effectiveBenchPressVariant
+    );
+
+    return groups.map(group => {
+      const weightText = formatWorkoutWeightFromKg(
+        group.weight,
+        weightUnit,
+        t,
+        liftBlock.lift,
+        liftBlock.benchPressVariant || effectiveBenchPressVariant
+      );
+      const pctText = formatSetPercentDisplay(group.pct);
+      const prescription = `${group.count}×${group.reps}×${weightText}${pctText ? ` (${pctText}%)` : ''}`;
+
+      return showLiftName
+        ? `${liftName}: ${prescription}`
+        : prescription;
+    });
+  });
+}
+
+function isCompletedWorkoutNewCycleBoundary(workout) {
+  if (!workout) return false;
+
+  const smartDayTypes = typeof SMART_DAY_TYPES !== 'undefined' ? SMART_DAY_TYPES : {};
+  const smartDecisionReasons = typeof SMART_DECISION_REASONS !== 'undefined' ? SMART_DECISION_REASONS : {};
+
+  const meetDayType = smartDayTypes.MEET || 'meet';
+  const recoveryDayType = smartDayTypes.RECOVERY || 'recovery';
+  const postMeetRecoveryReason = smartDecisionReasons.POST_MEET_RECOVERY || 'postMeetRecovery';
+
+  if (workout.type === 'meet' || workout.smartDayType === meetDayType) {
+    return true;
+  }
+
+  return Boolean(
+    workout.type === 'rest' &&
+    workout.smartDayType === recoveryDayType &&
+    workout.smartDecisionSummary?.reason === postMeetRecoveryReason
+  );
+}
+
+export function getDashboardMeetState(workout) {
+  const isMeetDay = Boolean(
+    workout && (
+      workout.type === 'meet' ||
+      workout.smartDayType === (SMART_DAY_TYPES.MEET || 'meet')
+    )
+  );
+
+  return {
+    isMeetDay,
+    hideRouteToMeet: isCompletedWorkoutNewCycleBoundary(workout),
+  };
+}
+
+function AppTopBar() {
+  return null;
+}
+
+function AppHeader({ title, subtitle, meta, children, titleStyle = {} }) {
+  const versionLabel = process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev';
+
+  return (
+    <div
+      style={{
+        textAlign: 'center',
+        marginTop: 0,
+        marginBottom: 0,
+        paddingTop: 'var(--kelani-native-top-offset, 0px)',
+        background: '#000000'
+      }}
+    >
+      <AppTopBar />
+
+      <h2
+        style={{
+          margin: '4px 0 0',
+          color: THEME.meet,
+          textShadow: '0 0 10px rgba(255,45,45,0.45)',
+          fontSize: 30,
+          fontWeight: 900,
+          lineHeight: 1.1,
+          letterSpacing: -0.4,
+          ...titleStyle,
+        }}
+      >
+        {title}
+      </h2>
+
+      <div
+        style={{
+          color: THEME.muted,
+          fontSize: 10,
+          fontWeight: 800,
+          lineHeight: 1,
+          marginTop: 3,
+        }}
+      >
+        {versionLabel}
+      </div>
+
+      {subtitle && (
+        <div
+          style={{
+            color: THEME.text,
+            fontSize: 15,
+            fontWeight: 700,
+            lineHeight: 1.35,
+            marginTop: 16,
+          }}
+        >
+          {subtitle}
+        </div>
+      )}
+
+      {meta && (
+        <div
+          style={{
+            color: THEME.muted,
+            fontSize: 13,
+            fontWeight: 800,
+            lineHeight: 1.35,
+            marginTop: 8,
+          }}
+        >
+          {meta}
+        </div>
+      )}
+
+      {children}
+    </div>
+  );
+}
+
+const ATHLETE_LEVEL_LABEL_KEYS = {
+  beginner: 'athleteLevelBeginner',
+  intermediate: 'athleteLevelIntermediate',
+  advanced: 'athleteLevelAdvanced',
+  elite: 'athleteLevelElite',
+};
+
+const ATHLETE_LEVEL_NEXT = {
+  beginner: 'intermediate',
+  intermediate: 'advanced',
+  advanced: 'elite',
+  elite: null,
+};
+
+// Small static "i" marker for text labels that open a modal with more
+// detail (athlete level, route to meet). Deliberately not animated - the
+// icon's own presence is the affordance; reserving animation for the one
+// or two truly current/active elements per screen keeps it meaningful.
+function TapInfoIcon({ color = THEME.primary, size = 13 }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: size,
+        height: size,
+        flex: `0 0 ${size}px`,
+        borderRadius: 999,
+        background: `${color}26`,
+        border: `1px solid ${color}`,
+        color,
+        fontSize: Math.max(size - 6, 7),
+        fontWeight: 900,
+        lineHeight: 1,
+        textTransform: 'none',
+      }}
+    >
+      i
+    </span>
+  );
+}
+
+function AthleteLevelBadge({ athleteLevel, eStrengthRatio, latestBodyWeight, t }) {
+  const [showModal, setShowModal] = useState(false);
+
+  const levelLabel = t[ATHLETE_LEVEL_LABEL_KEYS[athleteLevel]] || athleteLevel;
+  const tier = ATHLETE_LEVEL_THRESHOLDS[athleteLevel] || ATHLETE_LEVEL_THRESHOLDS.beginner;
+  const nextLevel = ATHLETE_LEVEL_NEXT[athleteLevel];
+  const nextLevelLabel = nextLevel ? (t[ATHLETE_LEVEL_LABEL_KEYS[nextLevel]] || nextLevel) : null;
+  const ratio = Number(eStrengthRatio) || 0;
+  const ratioToNext = nextLevel ? Math.max(tier.max - ratio, 0) : 0;
+  const kgToNext = nextLevel && latestBodyWeight ? Math.round(ratioToNext * latestBodyWeight) : null;
+
+  const modalMutedText = 'rgba(255, 244, 230, 0.52)';
+  const modalDividerStyle = { height: 1, background: 'rgba(255, 244, 230, 0.09)', margin: '14px 0' };
+  const modalLabelStyle = {
+    color: modalMutedText,
+    fontSize: 10,
+    fontWeight: 700,
+    lineHeight: 1.2,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  };
+  const modalValueStyle = { color: THEME.text, fontSize: 16, fontWeight: 800, lineHeight: 1.3 };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setShowModal(true)}
+        aria-label={`${t.athleteLevelBadgeLabel || 'Experience level'}: ${levelLabel}`}
+        style={{
+          appearance: 'none',
+          display: 'inline',
+          marginLeft: 6,
+          padding: 0,
+          border: 'none',
+          background: 'transparent',
+          color: THEME.primary,
+          fontSize: 'inherit',
+          fontWeight: 'inherit',
+          fontFamily: 'inherit',
+          lineHeight: 'inherit',
+          cursor: 'pointer',
+        }}
+      >
+        · {levelLabel} <TapInfoIcon color={THEME.primary} />
+      </button>
+
+      {showModal && (
+        <SettingsModal title={t.athleteLevelModalTitle || 'Your experience level'} onClose={() => setShowModal(false)}>
+          <div style={{ textAlign: 'center', marginBottom: 4 }}>
+            <div style={{ color: THEME.primary, fontSize: 22, fontWeight: 900, letterSpacing: 0.3 }}>
+              {levelLabel}
+            </div>
+          </div>
+
+          <div style={modalDividerStyle} />
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+            <div>
+              <div style={modalLabelStyle}>{t.athleteLevelRatioLabel || 'eStrength ratio'}</div>
+              <div style={modalValueStyle}>{ratio.toFixed(2)}x</div>
+            </div>
+            <div>
+              <div style={modalLabelStyle}>{t.athleteLevelRangeLabel || 'Tier range'}</div>
+              <div style={modalValueStyle}>
+                {tier.min}x&nbsp;–&nbsp;{tier.max === Infinity ? '∞' : `${tier.max}x`}
+              </div>
+            </div>
+          </div>
+
+          <div style={modalDividerStyle} />
+
+          {nextLevel ? (
+            <div>
+              <div style={modalLabelStyle}>{t.athleteLevelProgressLabel || 'Progress to next level'}</div>
+              <div style={modalValueStyle}>
+                {kgToNext !== null
+                  ? `≈ ${kgToNext} kg → ${nextLevelLabel}`
+                  : `${ratioToNext.toFixed(2)}x → ${nextLevelLabel}`}
+              </div>
+            </div>
+          ) : (
+            <div style={modalValueStyle}>{t.athleteLevelTopTier || "You've reached the highest level."}</div>
+          )}
+
+          <div style={modalDividerStyle} />
+
+          <div style={{ color: modalMutedText, fontSize: 12, fontWeight: 600, lineHeight: 1.4 }}>
+            {t.athleteLevelExplanation || 'This level determines how often Smart Training schedules each lift per week.'}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowModal(false)}
+            style={{ ...modalActionButtonStyle('primary'), marginTop: 16 }}
+          >
+            {t.back || 'Back'}
+          </button>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
+
+function applyCompletedHistorySnapshotsToWorkouts(workouts = [], history = [], currentCycle) {
+  const completedSnapshotsByWorkoutNumber = new Map();
+
+  (history || []).forEach(entry => {
+    if (
+      Number(getEntryCycle(entry)) === Number(currentCycle) &&
+      Number.isFinite(Number(entry?.workoutNumber)) &&
+      entry?.workoutSnapshot &&
+      isCompletedHistoryEntry(entry)
+    ) {
+      completedSnapshotsByWorkoutNumber.set(Number(entry.workoutNumber), {
+        ...entry.workoutSnapshot,
+        completed: true,
+        completedAt: entry.workoutSnapshot.completedAt || entry.completedAt || null,
+        completedDate: entry.workoutSnapshot.completedDate || entry.date || null,
+      });
+    }
+  });
+
+  if (!completedSnapshotsByWorkoutNumber.size) return workouts;
+
+  let changed = false;
+
+  const nextWorkouts = (workouts || []).map(workout => {
+    const snapshot = completedSnapshotsByWorkoutNumber.get(Number(workout?.number));
+    if (!snapshot) return workout;
+
+    if (
+      workout?.completed &&
+      workout?.completedAt === snapshot.completedAt
+    ) {
+      return workout;
+    }
+
+    changed = true;
+    return snapshot;
+  });
+
+  return changed ? nextWorkouts : workouts;
+}
+
+function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], currentCycle, onSelect, onStartNewCycle, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, latestBodyWeight }) {
+  const currentWorkoutRef = useRef(null);
+  const [showAllWorkouts, setShowAllWorkouts] = useState(false);
+  const [showProgramInfo, setShowProgramInfo] = useState(false);
+  const smartModel = isSmartTrainingModel(trainingModel);
+  const completedWorkoutNumberSet = new Set(completedWorkoutNumbers.map(Number));
+  const programSummary = summarizeProgramWorkouts(workouts);
+
+  const hasSmartVisibilityMetadata = smartModel && workouts.some(workout =>
+    Object.prototype.hasOwnProperty.call(workout || {}, 'smartVisible')
+  );
+
+  const smartAllowedCurrentIndex = Math.max(Number(currentIndex) || 0, 0);
+  const allowedWorkoutEntries = smartModel
+    ? workouts
+      .map((workout, idx) => ({ workout, idx }))
+      .filter(({ workout, idx }) => {
+        if (idx > smartAllowedCurrentIndex) return false;
+        if (!hasSmartVisibilityMetadata) return true;
+
+        return workout.smartVisible !== false;
+      })
+    : workouts.map((workout, idx) => ({ workout, idx }));
+  const visibleCurrentIndex = Math.min(
+    Math.max(currentIndex, 0),
+    Math.max(allowedWorkoutEntries.length - 1, 0)
+  );
+  const compactVisibleCount = 7;
+  const preferredVisibleStart = Math.max(
+    0,
+    visibleCurrentIndex - Math.floor(compactVisibleCount / 2)
+  );
+  const visibleEnd = Math.min(
+    allowedWorkoutEntries.length,
+    preferredVisibleStart + compactVisibleCount
+  );
+  const visibleStart = Math.max(0, visibleEnd - compactVisibleCount);
+  const visibleWorkoutEntries = showAllWorkouts
+    ? allowedWorkoutEntries
+    : allowedWorkoutEntries.slice(visibleStart, visibleEnd);
+  const hasHiddenWorkouts = allowedWorkoutEntries.length > (visibleEnd - visibleStart);
+  const headerWorkoutNumber = Math.max(Number(currentIndex) + 1 || 1, 1);
+  const headerSubtitle = formatCycleWorkoutSubtitle({
+    t,
+    currentCycle,
+    workoutNumber: headerWorkoutNumber,
+    totalWorkouts: workouts.length,
+    smartModel,
+  });
+
+  function formatCompletedAt(value, fallbackDate = null) {
+    if (!value && fallbackDate) return fallbackDate;
+    if (!value) return null;
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return fallbackDate;
+
+    return date.toLocaleString(decimalLocale(), {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  useEffect(() => {
+    if (!currentWorkoutRef.current) return;
+
+    const id = window.setTimeout(() => {
+      currentWorkoutRef.current?.scrollIntoView({
+        behavior: 'auto',
+        block: 'center',
+      });
+    }, 0);
+
+    return () => window.clearTimeout(id);
+  }, [currentIndex, workouts.length, showAllWorkouts]);
+
+  function renderWorkoutListToggleButton(position = 'top') {
+    if (!hasHiddenWorkouts) return null;
+    return (
+      <button
+        type="button"
+        onClick={() => setShowAllWorkouts(value => !value)}
+        style={programActionButtonStyle(THEME.primary, position === 'top' ? '14px 0 10px' : '6px 0 0')}
+      >
+        {showAllWorkouts ? t.showFewerWorkouts : t.showAllWorkouts}
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
+      <AppHeader
+        t={t}
+        title={
+          smartModel
+            ? (t.trainingModelSmart || 'Kelani SBD Smart')
+            : (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                flexWrap: 'wrap'
+              }}>
+                <span>{getProgramProfileTitle(programProfile, t)}</span>
+                <button
+                  type="button"
+                  aria-label={t.programTrainingFactors || 'Training factors'}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setShowProgramInfo(true);
+                  }}
+                  style={{
+                    width: 14,
+                    height: 14,
+                    minWidth: 14,
+                    padding: 0,
+                    borderRadius: 999,
+                    border: `1px solid ${THEME.primary}`,
+                    background: 'transparent',
+                    color: THEME.primary,
+                    fontSize: 9,
+                    fontWeight: 900,
+                    lineHeight: '12px',
+                    cursor: 'pointer',
+                    transform: 'translateY(-6px)'
+                  }}
+                >
+                  i
+                </button>
+              </span>
+            )
+        }
+        subtitle={(
+          <>
+            {headerSubtitle}
+            {smartModel && (
+              <AthleteLevelBadge
+                athleteLevel={athleteLevel}
+                eStrengthRatio={eStrengthRatio}
+                latestBodyWeight={latestBodyWeight}
+                t={t}
+              />
+            )}
+          </>
+        )}
+      />
+
+      {!smartModel && showProgramInfo && (
+        <SettingsModal
+          title={getProgramProfileTitle(programProfile, t)}
+          onClose={() => setShowProgramInfo(false)}
+        >
+          <div style={{
+            color: THEME.muted,
+            fontSize: 13,
+            fontWeight: 800,
+            lineHeight: 1.45,
+            marginBottom: 12,
+            textAlign: 'center'
+          }}>
+            {getProgramProfileDescription(programProfile, t)}
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1.15fr repeat(3, 1fr)',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 10,
+            overflow: 'hidden',
+            fontSize: 12,
+            fontWeight: 800,
+            lineHeight: 1.25,
+            background: THEME.card
+          }}>
+            <div style={{ padding: 8, color: THEME.primary, borderBottom: `1px solid ${THEME.border}` }}>
+              {t.programTrainingFactors || 'Training factors'}
+            </div>
+            {LIFT_ORDER.map(lift => (
+              <div
+                key={`program-info-head-${lift}`}
+                style={{
+                  padding: 8,
+                  color: getLiftThemeColor(lift),
+                  textAlign: 'center',
+                  borderBottom: `1px solid ${THEME.border}`,
+                  borderLeft: `1px solid ${THEME.border}`
+                }}
+              >
+                {lift}
+              </div>
+            ))}
+
+            <div style={{ padding: 8, color: THEME.muted }}>
+              {t.programFrequency || 'Frequency'}
+            </div>
+            {LIFT_ORDER.map(lift => (
+              <div key={`program-info-frequency-${lift}`} style={{ padding: 8, textAlign: 'center', borderLeft: `1px solid ${THEME.border}` }}>
+                {programSummary.byLift[lift].exposures}×
+              </div>
+            ))}
+
+            <div style={{ padding: 8, color: THEME.muted, borderTop: `1px solid ${THEME.border}` }}>
+              {t.programVolume || 'Volume'}
+            </div>
+            {LIFT_ORDER.map(lift => (
+              <div key={`program-info-volume-${lift}`} style={{ padding: 8, textAlign: 'center', borderTop: `1px solid ${THEME.border}`, borderLeft: `1px solid ${THEME.border}` }}>
+                {programSummary.byLift[lift].reps}
+              </div>
+            ))}
+
+            <div style={{ padding: 8, color: THEME.muted, borderTop: `1px solid ${THEME.border}` }}>
+              {t.programIntensity || 'Intensity'}
+            </div>
+            {LIFT_ORDER.map(lift => (
+              <div key={`program-info-intensity-${lift}`} style={{ padding: 8, textAlign: 'center', borderTop: `1px solid ${THEME.border}`, borderLeft: `1px solid ${THEME.border}` }}>
+                {programSummary.byLift[lift].avgIntensity}%
+              </div>
+            ))}
+          </div>
+
+          <div style={{
+            marginTop: 10,
+            color: THEME.muted,
+            fontSize: 12,
+            fontWeight: 800,
+            lineHeight: 1.35,
+            textAlign: 'center'
+          }}>
+            {programSummary.trainingDays} {t.programTrainingDays || 'training days'} · {programSummary.restDays} {t.programRestDays || 'rest days'}
+          </div>
+
+          <div style={{
+            marginTop: 6,
+            color: THEME.muted,
+            fontSize: 11,
+            fontWeight: 700,
+            lineHeight: 1.35,
+            textAlign: 'center'
+          }}>
+            {t.programIntensityNote || 'Intensity is the average planned percentage of max, weighted by reps.'}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowProgramInfo(false)}
+            style={programActionButtonStyle(THEME.primary, '12px 0 0')}
+          >
+            {t.back || 'Back'}
+          </button>
+        </SettingsModal>
+      )}
+
+      {renderWorkoutListToggleButton('top')}
+
+      <div data-kelani-program-list-spacer style={{ marginTop: 14 }}>
+{visibleWorkoutEntries.map(({ workout, idx }) => {
+        const isCurrent = idx === currentIndex;
+        const isDone = completedWorkoutNumberSet.has(Number(workout.number)) || Boolean(workout.completed);
+        const completedAtLabel = isDone ? formatCompletedAt(workout.completedAt, workout.completedDate || workout.date) : null;
+        const focusColor = workout.type === 'meet'
+          ? THEME.meet
+          : workout.type === 'rest'
+            ? THEME.primary
+            : getLiftThemeColor(workout.lift);
+        const titleColor = workout.type === 'meet' ? THEME.meet : THEME.text;
+        const rawPlanLines = workout.type === 'meet'
+          ? []
+          : getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant)
+            .map(line => ensureProgramPlanLineLift(line, workout, t, benchPressVariant));
+        const planLines = compactWorkoutPlanLines(rawPlanLines);
+
+        return (
+          <div
+            key={workout.number}
+            ref={isCurrent ? currentWorkoutRef : null}
+            onClick={() => {
+              onSelect(idx);
+              window.scrollTo({ top: 0, behavior: 'auto' });
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              padding: '9px 12px',
+              marginBottom: 6,
+              borderRadius: 8,
+              border: isCurrent ? `2px solid ${focusColor}` : 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              opacity: 1,
+              ...(isCurrent ? {
+                '--kelani-pulse-color': `${focusColor}52`,
+                animation: 'kelaniRowGlow 2s ease-in-out infinite',
+              } : null),
+            }}
+          >
+            <div style={{
+              width: 38,
+              height: 38,
+              borderRadius: 8,
+              background: '#000000',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              fontWeight: 700,
+              fontSize: 16,
+              marginRight: 10,
+              flexShrink: 0
+            }}>
+              {workout.number}
+            </div>
+
+            <div style={{ flex: 1 }}>
+              <div style={{
+                fontWeight: isCurrent ? 800 : 700,
+                color: titleColor,
+                ...(workout.type === 'meet' ? {
+                  display: 'flex',
+                  alignItems: 'center',
+                  flexWrap: 'nowrap',
+                  whiteSpace: 'nowrap',
+                } : null),
+              }}>
+                <ProgramWorkoutTitleRows workout={workout} t={t} benchPressVariant={benchPressVariant} />
+                {isCurrent && (
+                  <span style={{
+                    fontSize: 11,
+                    background: focusColor,
+                    color: '#ffffff',
+                    padding: '1px 6px',
+                    borderRadius: 3,
+                    marginLeft: 8
+                  }}>
+                    {t.now}
+                  </span>
+                )}
+              </div>
+
+              {completedAtLabel && (
+                <div style={{
+                  fontSize: 11,
+                  color: THEME.muted,
+                  fontWeight: 700,
+                  marginTop: 3
+                }}>
+                  ✓ {completedAtLabel}
+                </div>
+              )}
+            </div>
+
+            {planLines.length > 0 && (
+              <div style={{
+                marginLeft: 10,
+                display: 'grid',
+                gap: 2,
+                color: THEME.text,
+                fontSize: 11,
+                lineHeight: 1.2,
+                textAlign: 'right',
+                maxWidth: 210,
+                flexShrink: 0
+              }}>
+                {planLines.map((line, lineIndex) => {
+                  const text = String(line);
+                  const match =
+                    text.startsWith('Bench Press') ? { lift: 'Bench', label: 'Bench Press' } :
+              text.startsWith('Bench') ? { lift: 'Bench', label: 'Bench' } :
+                    text.startsWith('Deadlift') ? { lift: 'Deadlift', label: 'Deadlift' } :
+                    text.startsWith('Squat') ? { lift: 'Squat', label: 'Squat' } :
+                    null;
+
+                  return (
+                    <div
+                      key={lineIndex}
+                      style={{
+                        whiteSpace: 'nowrap',
+                        overflow: 'visible',
+                        textOverflow: 'clip'
+                      }}
+                    >
+                      {match ? (
+                        <>
+                          <span style={{ color: getLiftThemeColor(match.lift) }}>{match.label}</span>
+                          <span style={{ color: THEME.text }}>{text.slice(match.label.length)}</span>
+                        </>
+                      ) : (
+                        text
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {isDone && !completedAtLabel && <span style={{ color: THEME.primary, fontSize: 18, marginLeft: 8 }}>✅</span>}
+          </div>
+        );
+      })}
+
+      </div>
+
+
+      {renderWorkoutListToggleButton('bottom')}
+
+      {!smartModel && (
+        <>
+          <StartNewCycleSection
+            onStartNewCycle={onStartNewCycle}
+            t={t}
+          />
+
+          <ProgramProfileSection
+            programProfile={programProfile}
+            preparationMode={preparationMode}
+            accessoryMode={accessoryMode}
+            cooldownMode={cooldownMode}
+            squatVariant={squatVariant}
+            benchPressVariant={benchPressVariant}
+            deadliftVariant={deadliftVariant}
+            onChangeProgramProfile={onChangeProgramProfile}
+            onApplyProgramSettings={onApplyProgramSettings}
+            t={t}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+function Onboarding({ onStart, t }) {
+  const [onboardingStep, setOnboardingStep] = useState(1);
+  const [onboardingError, setOnboardingError] = useState('');
+  const [onboardingWeightUnit, setOnboardingWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
+  const [onboardingTrainingModel, setOnboardingTrainingModel] = useState(() =>
+    getNewUserTrainingModel(localStorage.getItem('trainingModel'))
+  );
+  const [squat, setSquat] = useState('');
+  const [bench, setBench] = useState('');
+  const [deadlift, setDeadlift] = useState('');
+  const [onboardingCalculators, setOnboardingCalculators] = useState({
+    Squat: { weight: '', reps: '' },
+    Bench: { weight: '', reps: '' },
+    Deadlift: { weight: '', reps: '' },
+  });
+  const [birthDate, setBirthDate] = useState('');
+  const [sex, setSex] = useState('');
+  const [bodyForm, setBodyForm] = useState({
+    bodyWeight: '',
+    bodyFat: '',
+    bodyWater: '',
+    visceralFat: '',
+    physiqueRating: '',
+  });
+
+  function updateBodyField(field, value) {
+    setBodyForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  function updateOnboardingCalculator(lift, field, value) {
+    setOnboardingCalculators(prev => ({
+      ...prev,
+      [lift]: {
+        ...(prev[lift] || {}),
+        [field]: value,
+      },
+    }));
+  }
+
+  function calculateOnboardingE1RM(lift, setter) {
+    const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
+    const calculator = onboardingCalculators[lift] || {};
+    const weightKg = displayWeightToKg(parseFloat(calculator.weight), selectedWeightUnit);
+    const reps = parseInt(calculator.reps, 10);
+
+    if (!Number(weightKg) || !Number.isFinite(reps) || reps < 1) return;
+
+    const estimatedE1RM = roundE1RM(weightKg * (1 + reps / 30));
+    const displayValue = kgToDisplayWeight(estimatedE1RM, selectedWeightUnit);
+
+    if (displayValue === '') return;
+
+    setter(formatWeightValue(displayValue, selectedWeightUnit));
+  }
+
+  function buildInitialBodyData() {
+    const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
+    const bodyWeightInput = toOptionalNumber(bodyForm.bodyWeight);
+    const bodyFat = toOptionalNumber(bodyForm.bodyFat);
+    const bodyWater = toOptionalNumber(bodyForm.bodyWater);
+    const visceralFat = toOptionalNumber(bodyForm.visceralFat);
+    const physiqueRating = toOptionalNumber(bodyForm.physiqueRating);
+    const bodyWeight = bodyWeightInput !== null ? displayWeightToKg(bodyWeightInput, selectedWeightUnit) : null;
+    const leanMass = calculateLeanMassEstimate(bodyWeight, bodyFat);
+
+    const bodyData = {
+      bodyWeight,
+      bodyFat,
+      bodyWater,
+      visceralFat,
+      leanMass,
+      physiqueRating,
+    };
+
+    return Object.values(bodyData).some(value => value !== null) ? bodyData : null;
+  }
+
+  function parseBirthDateInput(value) {
+    const trimmed = value.trim();
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) return trimmed;
+
+    const match = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (!match) return '';
+
+    const [, dayRaw, monthRaw, yearRaw] = match;
+    const day = Number(dayRaw);
+    const month = Number(monthRaw);
+    const year = Number(yearRaw);
+    const date = new Date(year, month - 1, day);
+
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return '';
+    }
+
+    return `${yearRaw}-${monthRaw.padStart(2, '0')}-${dayRaw.padStart(2, '0')}`;
+  }
+
+  function hasRequiredTrainingDetails() {
+    const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
+    const squatKg = displayWeightToKg(parseFloat(squat), selectedWeightUnit);
+    const benchKg = displayWeightToKg(parseFloat(bench), selectedWeightUnit);
+    const deadliftKg = displayWeightToKg(parseFloat(deadlift), selectedWeightUnit);
+
+    return Boolean(squatKg && benchKg && deadliftKg);
+  }
+
+  function goToNextOnboardingStep() {
+    if (onboardingStep === 3 && !hasRequiredTrainingDetails()) {
+      setOnboardingError(t.fillRequiredFields);
+      return;
+    }
+
+    setOnboardingError('');
+    setOnboardingStep(step => Math.min(5, step + 1));
+  }
+
+  function handleStart() {
+    const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
+    const s = displayWeightToKg(parseFloat(squat), selectedWeightUnit);
+    const b = displayWeightToKg(parseFloat(bench), selectedWeightUnit);
+    const d = displayWeightToKg(parseFloat(deadlift), selectedWeightUnit);
+
+    const normalizedBirthDate = birthDate ? parseBirthDateInput(birthDate) : '';
+
+    if (!s || !b || !d || (birthDate && !normalizedBirthDate)) {
+      setOnboardingError(t.fillRequiredFields);
+      return;
+    }
+
+    setOnboardingError('');
+    onStart(s, b, d, {
+      birthDate: normalizedBirthDate,
+      sex,
+      weightUnit: selectedWeightUnit,
+      trainingModel: normalizeTrainingModel(onboardingTrainingModel),
+    }, buildInitialBodyData());
+  }
+
+  const bodyFields = [
+    { key: 'bodyWeight', label: `${t.bodyweight} (${t.optional})`, unit: onboardingWeightUnit },
+    { key: 'bodyFat', label: `${t.bodyFatPercent} (${t.optional})`, unit: '%' },
+    { key: 'bodyWater', label: `${t.bodyWaterPercent} (${t.optional})`, unit: '%' },
+    { key: 'visceralFat', label: `${t.visceralFatRating} (${t.optional})` },
+    { key: 'physiqueRating', label: `${t.physiqueRating} (${t.optional})` },
+  ];
+
+  return (
+    <div style={{
+      minHeight: '100dvh',
+      background: '#000000',
+      color: THEME.text,
+      overflowX: 'hidden'
+    }}>
+      <div style={{
+        maxWidth: 500,
+        margin: '0 auto',
+        padding: 24,
+        paddingTop: 24,
+        boxSizing: 'border-box',
+        minHeight: '100dvh',
+        fontFamily: 'sans-serif',
+        background: '#000000',
+        color: THEME.text,
+        overflowX: 'hidden'
+      }}>
+      <div style={{ textAlign: 'center', marginBottom: 14 }}>
+        <img
+          src="/kelani-banner.png"
+          alt={t.appName}
+          style={{
+            width: 'min(360px, 92vw)',
+            height: 'auto',
+            display: 'block',
+            margin: '0 auto 4px'
+          }}
+        />
+        <div style={{
+          color: THEME.muted,
+          fontSize: 11,
+          fontWeight: 800,
+          lineHeight: 1
+        }}>
+          {process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev'}
+        </div>
+      </div>
+
+      <div style={{
+        padding: 0
+      }}>
+        {onboardingStep !== 1 && (
+          <h2 style={{ marginTop: 0, marginBottom: 8, color: THEME.text, textAlign: 'center' }}>
+            {onboardingStep === 2
+              ? t.onboardingModelTitle || 'Choose training model'
+              : onboardingStep === 3
+              ? t.onboardingTrainingTitle
+              : onboardingStep === 4
+              ? t.onboardingProfileTitle
+              : t.onboardingBodyTitle}
+          </h2>
+        )}
+
+        {onboardingStep !== 1 && (
+          <p style={{
+            margin: '0 0 14px',
+            color: THEME.muted,
+            fontSize: 14,
+            fontWeight: 700,
+            lineHeight: 1.4,
+            textAlign: 'center'
+          }}>
+            {onboardingStep === 2
+              ? t.onboardingModelHelp || 'Choose Classic for fixed programs or Smart for one-workout-at-a-time coaching.'
+              : onboardingStep === 3
+              ? t.onboardingMaxHelp
+              : onboardingStep === 4
+              ? t.onboardingProfileHelp
+              : t.onboardingBodyHelp}
+          </p>
+        )}
+
+
+        {onboardingError && (
+          <div style={{
+            margin: '0 0 16px',
+            padding: '10px 12px',
+            borderRadius: 8,
+            border: `1px solid ${THEME.red}`,
+            background: 'rgba(231, 76, 60, 0.12)',
+            color: THEME.text,
+            fontSize: 14,
+            fontWeight: 800,
+            lineHeight: 1.35,
+            textAlign: 'center'
+          }}>
+            {onboardingError}
+          </div>
+        )}
+
+        {onboardingStep === 1 && (
+          <div style={{ marginBottom: 26, textAlign: 'left' }}>
+            <h3 style={{
+              margin: '0 0 10px',
+              color: THEME.red,
+              fontSize: 30,
+              fontWeight: 900,
+              lineHeight: 1.15,
+              textAlign: 'left'
+            }}>
+              {t.onboardingHeroTitle}
+            </h3>
+
+            <p style={{
+              margin: '0 0 22px',
+              maxWidth: 'none',
+              color: THEME.text,
+              fontSize: 18,
+              fontWeight: 800,
+              lineHeight: 1.55
+            }}>
+              {t.onboardingHeroText}
+            </p>
+
+            <div style={{
+              display: 'grid',
+              gap: 8,
+              margin: '0 0 22px',
+              maxWidth: 'none',
+              textAlign: 'left'
+            }}>
+              {[t.onboardingBenefitWorkouts, t.onboardingBenefitProgress, t.onboardingBenefitMeetDay].map(item => (
+                <div key={item} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  color: THEME.text,
+                  fontSize: 15,
+                  fontWeight: 800
+                }}>
+                  <span style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    background: THEME.primary,
+                    color: THEME.bg,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 12,
+                    fontWeight: 900,
+                    flexShrink: 0
+                  }}>✓</span>
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+
+            <p style={{
+              margin: 0,
+              maxWidth: 'none',
+              color: THEME.muted,
+              fontSize: 13,
+              fontWeight: 700,
+              lineHeight: 1.55
+            }}>
+              {t.onboardingResponsibilityText}
+            </p>
+
+            <div style={{
+              marginTop: 20,
+              padding: '12px 14px',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 10,
+              background: THEME.card,
+            }}>
+              <strong style={{ display: 'block', marginBottom: 6, color: THEME.text }}>
+                {t.migrationRestoreTitle}
+              </strong>
+              <p style={{
+                margin: '0 0 10px',
+                color: THEME.muted,
+                fontSize: 13,
+                fontWeight: 700,
+                lineHeight: 1.45,
+              }}>
+                {t.migrationRestoreDescription}
+              </p>
+              <DataSection t={t} importOnly={true} />
+            </div>
+          </div>
+        )}
+
+        {onboardingStep === 2 && (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {[
+              {
+                value: TRAINING_MODELS.CLASSIC,
+                title: t.trainingModelClassic || 'Kelani SBD Classic',
+                text: t.trainingModelClassicText || 'Choose a fixed program and follow the plan.',
+              },
+              {
+                value: TRAINING_MODELS.SMART,
+                title: t.trainingModelSmart || 'Kelani SBD Smart',
+                text: t.trainingModelSmartText || 'The app chooses one next workout at a time from your history.',
+              },
+            ].map(option => {
+              const active = normalizeTrainingModel(onboardingTrainingModel) === option.value;
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setOnboardingTrainingModel(option.value)}
+                  style={{
+                    width: '100%',
+                    padding: 12,
+                    fontSize: 15,
+                    fontWeight: 800,
+                    textAlign: 'left',
+                    borderRadius: 8,
+                    border: `1px solid ${THEME.primary}`,
+                    background: active ? THEME.primary : THEME.bg,
+                    color: active ? THEME.bg : THEME.text,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ fontWeight: 900 }}>{option.title}</div>
+                  <div style={{
+                    marginTop: 4,
+                    color: active ? THEME.bg : THEME.muted,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    lineHeight: 1.35
+                  }}>
+                    {option.text}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {onboardingStep === 3 && (
+          <>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
+            {t.weightUnit}
+          </label>
+
+          <select
+            value={onboardingWeightUnit}
+            onChange={e => setOnboardingWeightUnit(normalizeWeightUnit(e.target.value))}
+            style={{
+              width: '100%',
+              padding: 10,
+              fontSize: 16,
+              borderRadius: 4,
+              border: `1px solid ${THEME.primary}`,
+              boxSizing: 'border-box',
+              background: THEME.bg,
+              color: THEME.text
+            }}
+          >
+            <option value={WEIGHT_UNITS.KG}>{t.weightUnitKg}</option>
+            <option value={WEIGHT_UNITS.LB}>{t.weightUnitLb}</option>
+          </select>
+        </div>
+
+        {[
+          ['Squat', t.squat1RM, squat, setSquat],
+          ['Bench', t.bench1RM, bench, setBench],
+          ['Deadlift', t.deadlift1RM, deadlift, setDeadlift],
+        ].map(([lift, label, val, setter]) => {
+          const liftColor = lift === 'Squat'
+            ? THEME.red
+            : lift === 'Deadlift'
+              ? THEME.yellow
+              : THEME.primary;
+
+          return (
+          <div
+            key={lift}
+            style={{
+              marginBottom: 16,
+              padding: 10,
+              borderRadius: 10,
+              border: `1px solid ${liftColor}`,
+              background: THEME.bg
+            }}
+          >
+            <label style={{ display: 'block', marginBottom: 10, fontWeight: 800, color: liftColor }}>
+              {label}
+            </label>
+
+            <div style={{ position: 'relative', marginBottom: 10 }}>
+              <input
+                type="number"
+                min="0"
+                step={onboardingWeightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"}
+                value={val}
+                onChange={e => setter(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 42px 10px 10px',
+                  fontSize: 16,
+                  borderRadius: 4,
+                  border: `1px solid ${liftColor}`,
+                  boxSizing: 'border-box',
+                  background: THEME.bg,
+                  color: THEME.text
+                }}
+              />
+              <span style={{
+                position: 'absolute',
+                right: 12,
+                top: '50%',
+                color: THEME.text,
+                fontSize: 16,
+                pointerEvents: 'none'
+              }}>
+                {onboardingWeightUnit}
+              </span>
+            </div>
+
+            <div style={{ background: THEME.bg, border: `1px solid ${liftColor}`, borderRadius: 8, padding: 10 }}>
+              <div style={{ fontWeight: 800, fontSize: 13, color: liftColor, marginBottom: 8 }}>
+                {t.estimateE1RM}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <input
+                  type="number"
+                  min="0"
+                  step={onboardingWeightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"}
+                  value={onboardingCalculators[lift]?.weight || ''}
+                  onChange={e => updateOnboardingCalculator(lift, 'weight', e.target.value)}
+                  placeholder={t.submaxWeight}
+                  style={{
+                    width: '100%',
+                    padding: 10,
+                    fontSize: 15,
+                    borderRadius: 4,
+                    border: `1px solid ${liftColor}`,
+                    boxSizing: 'border-box',
+                    background: THEME.bg,
+                    color: THEME.text
+                  }}
+                />
+
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={onboardingCalculators[lift]?.reps || ''}
+                  onChange={e => updateOnboardingCalculator(lift, 'reps', e.target.value)}
+                  placeholder={t.submaxReps}
+                  style={{
+                    width: '100%',
+                    padding: 10,
+                    fontSize: 15,
+                    borderRadius: 4,
+                    border: `1px solid ${liftColor}`,
+                    boxSizing: 'border-box',
+                    background: THEME.bg,
+                    color: THEME.text
+                  }}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => calculateOnboardingE1RM(lift, setter)}
+                style={{
+                  width: '100%',
+                  padding: 9,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  background: 'transparent',
+                  color: THEME.text,
+                  border: `1px solid ${liftColor}`,
+                  borderRadius: 6,
+                  cursor: 'pointer'
+                }}
+              >
+                {t.calculateE1RM}
+              </button>
+            </div>
+          </div>
+          );
+        })}
+          </>
+        )}
+
+        {onboardingStep === 4 && (
+          <>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
+            {t.birthDate}
+          </label>
+
+          <div
+            onClick={e => {
+              const input = e.currentTarget.querySelector('input[type="date"]');
+              if (input?.showPicker) {
+                input.showPicker();
+              } else {
+                input?.focus();
+                input?.click();
+              }
+            }}
+            style={{
+              position: 'relative',
+              width: '100%',
+              height: 42,
+              borderRadius: 4,
+              border: `1px solid ${THEME.primary}`,
+              boxSizing: 'border-box',
+              background: THEME.bg,
+              cursor: 'pointer'
+            }}
+          >
+            <div style={{
+              padding: '10px 42px 10px 10px',
+              fontSize: 16,
+              color: birthDate ? THEME.text : 'transparent',
+              boxSizing: 'border-box'
+            }}>
+              {birthDate || ' '}
+            </div>
+
+            <span style={{
+              position: 'absolute',
+              right: 12,
+              top: '50%',
+              color: THEME.text,
+              fontSize: 16,
+              pointerEvents: 'none'
+            }}>
+              📅
+            </span>
+
+            <input
+              type="date"
+              value={birthDate}
+              onChange={e => setBirthDate(e.target.value)}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                opacity: 0,
+                pointerEvents: 'none'
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
+            {t.sex}
+          </label>
+
+          <select
+            value={sex}
+            onChange={e => setSex(e.target.value)}
+            style={{
+              width: '100%',
+              padding: 10,
+              fontSize: 16,
+              borderRadius: 4,
+              border: `1px solid ${THEME.primary}`,
+              boxSizing: 'border-box',
+              background: THEME.bg,
+              color: THEME.text
+            }}
+          >
+            <option value="">{t.selectSex}</option>
+            <option value="male">{t.male}</option>
+            <option value="female">{t.female}</option>
+            <option value="other">{t.other}</option>
+          </select>
+        </div>
+          </>
+        )}
+
+        {onboardingStep === 5 && (
+          <>
+        {bodyFields.map(field => (
+          <div key={field.key} style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
+              {field.label}
+            </label>
+
+            <div style={{ position: 'relative' }}>
+              <input
+                type="number"
+                value={bodyForm[field.key]}
+                onChange={e => updateBodyField(field.key, e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: field.unit ? '10px 48px 10px 10px' : 10,
+                  fontSize: 16,
+                  borderRadius: 4,
+                  border: `1px solid ${THEME.primary}`,
+                  boxSizing: 'border-box',
+                  background: THEME.bg,
+                  color: THEME.text
+                }}
+              />
+              {field.unit && (
+                <span style={{
+                  position: 'absolute',
+                  right: 12,
+                  top: '50%',
+                  color: THEME.text,
+                  fontSize: 16,
+                  pointerEvents: 'none'
+                }}>
+                  {field.unit}
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+          </>
+        )}
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: onboardingStep === 1 ? '1fr' : '1fr 1fr',
+          gap: 8,
+          marginTop: 8
+        }}>
+          {onboardingStep > 1 && (
+            <button
+              type="button"
+              onClick={() => { setOnboardingError(''); setOnboardingStep(step => Math.max(1, step - 1)); }}
+              style={{
+                width: '100%',
+                padding: 14,
+                fontSize: 16,
+                background: 'transparent',
+                color: THEME.text,
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 4,
+                cursor: 'pointer',
+                fontWeight: 700
+              }}
+            >
+              {t.onboardingBack}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onboardingStep < 5 ? goToNextOnboardingStep : handleStart}
+            style={{
+              width: '100%',
+              padding: 14,
+              fontSize: 16,
+              background: THEME.primary,
+              color: '#ffffff',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontWeight: 700
+            }}
+          >
+            {onboardingStep === 1 ? t.onboardingStartSetup : onboardingStep < 5 ? t.onboardingNext : t.startProgram}
+          </button>
+        </div>
+      </div>
+      </div>
+    </div>
+  );
+}
+
+function PlateIcon({ size = 14 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      style={{ flex: `0 0 ${size}px` }}
+    >
+      <circle cx="12" cy="12" r="9.5" stroke="currentColor" strokeWidth="2.25" />
+      <circle cx="12" cy="12" r="3" fill="currentColor" />
+    </svg>
+  );
+}
+
+function NavIcon({ type }) {
+  const common = {
+    width: 26,
+    height: 26,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2.4,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  };
+
+  if (type === 'dashboard') {
+    return (
+      <svg {...common}>
+        <path d="M5 15a7 7 0 0 1 14 0" />
+        <path d="M12 15l4-5" />
+        <path d="M5 19h14" />
+      </svg>
+    );
+  }
+
+  if (type === 'program') {
+    return (
+      <svg {...common}>
+        <line x1="8" y1="6" x2="20" y2="6" />
+        <line x1="8" y1="12" x2="20" y2="12" />
+        <line x1="8" y1="18" x2="20" y2="18" />
+        <circle cx="4" cy="6" r="1" />
+        <circle cx="4" cy="12" r="1" />
+        <circle cx="4" cy="18" r="1" />
+      </svg>
+    );
+  }
+
+  if (type === 'workout') {
+    return (
+      <svg {...common}>
+        <line x1="4" y1="12" x2="20" y2="12" />
+        <line x1="3" y1="8" x2="3" y2="16" />
+        <line x1="6" y1="7" x2="6" y2="17" />
+        <line x1="18" y1="7" x2="18" y2="17" />
+        <line x1="21" y1="8" x2="21" y2="16" />
+      </svg>
+    );
+  }
+
+  if (type === 'stats') {
+    return (
+      <svg {...common}>
+        <polyline points="4 17 9 12 13 15 20 7" />
+        <line x1="4" y1="20" x2="20" y2="20" />
+        <line x1="4" y1="4" x2="4" y2="20" />
+      </svg>
+    );
+  }
+
+  return (
+    <span aria-hidden="true" style={{ fontSize: 25, lineHeight: 1 }}>
+      ⚙
+    </span>
+  );
+}
+
+function BottomNav({ screen, onChange, t }) {
+  const items = [
+    { key: 'dashboard', label: t.dashboard, icon: 'dashboard' },
+    { key: 'all', label: t.program, icon: 'program' },
+    { key: 'current', label: t.workout, icon: 'workout' },
+    { key: 'stats', label: t.stats, icon: 'stats' },
+    { key: 'settings', label: t.settings, icon: 'settings' },
+  ];
+
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      display: 'flex',
+      zIndex: 100,
+      background: THEME.bg,
+    }}>
+      {items.map(item => (
+        <button
+          key={item.key}
+          aria-label={item.label}
+          title={item.label}
+          onClick={() => {
+            onChange(item.key);
+            window.scrollTo({ top: 0, behavior: 'auto' });
+          }}
+          style={{
+            flex: 1,
+            padding: '11px 0',
+            background: 'none',
+            border: 'none',
+            color: screen === item.key ? THEME.primary : '#ffffff',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <NavIcon type={item.icon} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+
+export default
+function App() {
+  const [showLaunchSplash, setShowLaunchSplash] = useState(true);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setShowLaunchSplash(false), 1800);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  const [language, setLanguage] = useState(() => {
+    const savedLanguage = localStorage.getItem('language');
+    const supportedLanguages = ['ca', 'en', 'nl'];
+
+    if (supportedLanguages.includes(savedLanguage)) {
+      return savedLanguage;
+    }
+
+    const systemLanguage = (navigator.language || navigator.userLanguage || '').toLowerCase();
+
+    if (systemLanguage.startsWith('ca')) return 'ca';
+    if (systemLanguage.startsWith('nl')) return 'nl';
+    if (systemLanguage.startsWith('en')) return 'en';
+
+    return 'en';
+  });
+
+  const [timer, setTimer] = useState(null);
+  const [restTimeSeconds, setRestTimeSeconds] = useState(DEFAULT_REST_TIME_SECONDS);
+  const [programProfile, setProgramProfile] = useState(() =>
+    normalizeProgramProfile(localStorage.getItem('programProfile'))
+  );
+  const [trainingModel, setTrainingModel] = useState(() =>
+    normalizeTrainingModel(localStorage.getItem('trainingModel'))
+  );
+  const [accessoryMode, setAccessoryMode] = useState('off');
+  const [preparationMode, setPreparationMode] = useState('basicFirst');
+  const [cooldownMode, setCooldownMode] = useState(() =>
+    normalizeCooldownMode(localStorage.getItem('cooldownMode'))
+  );
+  const [squatVariant, setSquatVariant] = useState(() =>
+    normalizeSquatVariant(localStorage.getItem('squatVariant'))
+  );
+  const [benchPressVariant, setBenchPressVariant] = useState(() =>
+    normalizeBenchPressVariant(localStorage.getItem('benchPressVariant'))
+  );
+  const [deadliftVariant, setDeadliftVariant] = useState(() =>
+    normalizeDeadliftVariant(localStorage.getItem('deadliftVariant'))
+  );
+  const [weightUnit, setWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
+  const [hasLoadedData, setHasLoadedData] = useState(false);
+
+  function startTimer(seconds, placement = null) {
+    const effectiveSeconds = getRecommendedRestTimeSeconds({
+      workouts,
+      placement,
+      fallbackSeconds: seconds,
+    });
+    const endTime = Date.now() + effectiveSeconds * 1000;
+    const currentTranslations = translations[language] || translations.en || {};
+    const doneTitle = currentTranslations.restTimerDone || 'Rest finished';
+    const doneMessage = currentTranslations.restTimerDoneMessage || 'Your next set is ready.';
+
+    setTimer({
+      id: Date.now(),
+      seconds: effectiveSeconds,
+      endTime,
+      placement,
+    });
+
+    scheduleRestTimerNotification(endTime, doneTitle, doneMessage);
+  }
+
+  function stopTimer() {
+    cancelRestTimerNotification();
+    setTimer(null);
+  }
+
+  useEffect(() => {
+    localStorage.setItem('language', language);
+  }, [language]);
+
+  useEffect(() => {
+    localStorage.setItem('weightUnit', normalizeWeightUnit(weightUnit));
+  }, [weightUnit]);
+
+  useEffect(() => {
+    if (!hasLoadedData) return;
+    localStorage.setItem('programProfile', normalizeProgramProfile(programProfile));
+  }, [hasLoadedData, programProfile]);
+
+  useEffect(() => {
+    if (!hasLoadedData) return;
+    localStorage.setItem('trainingModel', normalizeTrainingModel(trainingModel));
+  }, [hasLoadedData, trainingModel]);
+
+  useEffect(() => {
+    if (!hasLoadedData) return;
+    localStorage.setItem('cooldownMode', normalizeCooldownMode(cooldownMode));
+  }, [hasLoadedData, cooldownMode]);
+
+  useEffect(() => {
+    if (!hasLoadedData) return;
+    localStorage.setItem('squatVariant', normalizeSquatVariant(squatVariant));
+  }, [hasLoadedData, squatVariant]);
+
+  useEffect(() => {
+    if (!hasLoadedData) return;
+    localStorage.setItem('benchPressVariant', normalizeBenchPressVariant(benchPressVariant));
+  }, [hasLoadedData, benchPressVariant]);
+
+  useEffect(() => {
+    if (!hasLoadedData) return;
+    localStorage.setItem('deadliftVariant', normalizeDeadliftVariant(deadliftVariant));
+  }, [hasLoadedData, deadliftVariant]);
+
+  const t = translations[language];
+  const [screen, setScreen] = useState(null);
+  const [workouts, setWorkouts] = useState([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [currentWorkoutIndex, setCurrentWorkoutIndex] = useState(0);
+  const [history, setHistory] = useState([]);
+  const [prs, setPrs] = useState({});
+  const [accessoryPRs, setAccessoryPRs] = useState({});
+  const [showNewCycle, setShowNewCycle] = useState(false);
+  const [showMeetPlanModal, setShowMeetPlanModal] = useState(false);
+  const [statsTab, setStatsTab] = useState('lifts');
+  const [completedWorkout, setCompletedWorkout] = useState(null);
+  const [completedWorkoutIndex, setCompletedWorkoutIndex] = useState(null);
+  const [completedSummary, setCompletedSummary] = useState(null);
+  const [showWorkoutEffortPrompt, setShowWorkoutEffortPrompt] = useState(false);
+  const [currentCycle, setCurrentCycle] = useState(1);
+  const [bodyWeights, setBodyWeights] = useState([]);
+  const athleteLevel = getAthleteLevel({ prs, history, bodyWeights });
+  const [userProfile, setUserProfile] = useState({});
+  const [meetPlannerAttempts, setMeetPlannerAttempts] = useState({});
+  const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [plateCalcWeightKg, setPlateCalcWeightKg] = useState(null);
+  const automaticBackupKeyRef = useRef(null);
+  const automaticBackupStartupAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    if (!workouts.length) return;
+
+    setWorkouts(prev => applyCompletedHistorySnapshotsToWorkouts(prev, history, currentCycle));
+  }, [history, currentCycle, workouts.length]);
+
+  const completedWorkoutCount = getCompletedWorkoutCount(history, currentCycle);
+  const completedWorkoutNumbers = Array.from(new Set(
+    (history || [])
+      .filter(entry =>
+        Number(getEntryCycle(entry)) === Number(currentCycle) &&
+        isCompletedHistoryEntry(entry)
+      )
+      .map(entry => Number(entry.workoutNumber))
+      .filter(Number.isFinite)
+  ));
+  const currentIndex = Math.max(completedWorkoutCount, currentWorkoutIndex);
+  const PROGRAM_VERSION = 'kelani-program-profiles-v5';
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [screen, selectedIndex]);
+
+  useEffect(() => {
+    const setupBackButton = async () => {
+      const listener = await CapacitorApp.addListener('backButton', () => {
+        if (screen === 'current') {
+          setScreen('all');
+          return;
+        }
+
+        if (screen === 'all') {
+          setScreen('dashboard');
+          return;
+        }
+
+        if (screen === 'stats') {
+          setScreen('all');
+          return;
+        }
+
+        if (screen === 'settings') {
+          setScreen('dashboard');
+          return;
+        }
+
+        if (screen === 'completed') {
+          if (completedWorkoutIndex !== null) {
+            setSelectedIndex(completedWorkoutIndex);
+          }
+          setScreen('current');
+          return;
+        }
+
+        CapacitorApp.exitApp();
+      });
+
+      return listener;
+    };
+
+    let listener;
+
+    setupBackButton().then(l => {
+      listener = l;
+    });
+
+    return () => {
+      if (listener) listener.remove();
+    };
+  }, [screen, completedWorkoutIndex]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+
+    if (!saved) {
+      setScreen('onboarding');
+      setHasLoadedData(true);
+      return;
+    }
+
+    try {
+      const data = JSON.parse(saved);
+
+      const savedPrs = data.prs || {};
+      const squat = savedPrs.Squat || 0;
+      const bench = savedPrs.Bench || 0;
+      const deadlift = savedPrs.Deadlift || 0;
+
+      if (!squat || !bench || !deadlift) {
+        setScreen('onboarding');
+        setHasLoadedData(true);
+        return;
+      }
+
+      const savedHistory = data.history || [];
+      const restoredPrs = mergeHigherPrs(savedPrs, calculatePrsFromHistory(savedHistory));
+      const savedCycle = data.currentCycle || 1;
+      const savedTrainingModel = normalizeTrainingModel(
+        data.trainingModel || localStorage.getItem('trainingModel')
+      );
+      const hasSavedProgramProfile = Boolean(data.programProfile);
+      const savedProgramProfile = hasSavedProgramProfile
+        ? normalizeProgramProfile(data.programProfile)
+        : detectProgramProfile({
+            preparationMode: data.preparationMode,
+            accessoryMode: data.accessoryMode,
+            squatVariant: data.squatVariant || localStorage.getItem('squatVariant'),
+            benchPressVariant: data.benchPressVariant || localStorage.getItem('benchPressVariant'),
+            deadliftVariant: data.deadliftVariant,
+          });
+      const profileSettings = settingsForProgramProfile(savedProgramProfile);
+      const savedAccessoryMode = normalizeAccessoryMode(
+        data.accessoryMode ?? profileSettings.accessoryMode
+      );
+      const savedPreparationMode = normalizePreparationMode(
+        data.preparationMode ?? profileSettings.preparationMode
+      );
+      const savedAthleteLevel = getAthleteLevel({
+        prs: restoredPrs,
+        history: savedHistory,
+        bodyWeights: normalizeBodyWeights(data),
+      });
+      const savedSquatVariant = normalizeSquatVariant(
+        data.squatVariant ?? profileSettings.squatVariant ?? localStorage.getItem('squatVariant')
+      );
+      const savedDeadliftVariant = normalizeDeadliftVariant(
+        data.deadliftVariant ?? profileSettings.deadliftVariant
+      );
+      const savedBenchPressVariant = normalizeBenchPressVariant(
+        data.benchPressVariant ?? profileSettings.benchPressVariant ?? localStorage.getItem('benchPressVariant')
+      );
+      const savedCooldownMode = normalizeCooldownMode(
+        data.cooldownMode ?? profileSettings.cooldownMode ?? profileSettings.includeCooldown
+      );
+      const completedWorkoutCount = getCompletedWorkoutCount(savedHistory, savedCycle);
+      const generatedWorkouts = generateWorkoutsForTrainingModel(savedTrainingModel, {
+        programProfile: savedProgramProfile,
+        squat: restoredPrs.Squat,
+        bench: restoredPrs.Bench,
+        deadlift: restoredPrs.Deadlift,
+        accessoryMode: savedAccessoryMode,
+        accessoryPRs: data.accessoryPRs || {},
+        preparationMode: savedPreparationMode,
+        athleteLevel: savedAthleteLevel,
+        deadliftVariant: savedDeadliftVariant,
+        benchPressVariant: savedBenchPressVariant,
+        squatVariant: savedSquatVariant,
+        cooldownMode: savedCooldownMode,
+        history: savedHistory,
+        currentIndex: data.inProgress?.currentIndex ?? completedWorkoutCount,
+        currentCycle: savedCycle,
+      });
+      const savedInProgress = data.inProgress || null;
+      const savedMeetPrepChecklist = data.meetPrepChecklist || {};
+
+      const canRestoreInProgress =
+        savedInProgress &&
+        savedInProgress.programVersion === PROGRAM_VERSION &&
+        savedInProgress.currentCycle === savedCycle &&
+        Array.isArray(savedInProgress.workouts) &&
+        savedInProgress.workouts.length === generatedWorkouts.length;
+
+      const restoredWorkouts = canRestoreInProgress
+        ? savedInProgress.workouts
+        : hydrateWorkoutsWithHistory(generatedWorkouts, savedHistory, savedCycle);
+
+      const normalizedWorkouts = mergeGeneratedWorkoutStructure(
+        restoredWorkouts,
+        generatedWorkouts,
+        savedHistory,
+        savedCycle
+      );
+
+      const cleanedWorkouts = removeDeprecatedPrepItemsFromWorkouts(normalizedWorkouts);
+
+      setWorkouts(cleanedWorkouts);
+      setHistory(savedHistory);
+      setPrs(restoredPrs);
+      setAccessoryPRs(data.accessoryPRs || {});
+      setCurrentCycle(savedCycle);
+      setBodyWeights(normalizeBodyWeights(data));
+      setUserProfile(data.userProfile || {});
+      setMeetPlannerAttempts({});
+      setMeetPrepChecklist(savedMeetPrepChecklist);
+      setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
+      setTrainingModel(savedTrainingModel);
+      setProgramProfile(savedProgramProfile);
+      setAccessoryMode(savedAccessoryMode);
+      setPreparationMode(savedPreparationMode);
+      setCooldownMode(savedCooldownMode);
+      setSquatVariant(savedSquatVariant);
+      setDeadliftVariant(savedDeadliftVariant);
+      setBenchPressVariant(savedBenchPressVariant);
+
+      const restorableSelectedIndex = getRestorableSelectedIndex(
+        savedInProgress,
+        savedCycle,
+        generatedWorkouts.length
+      );
+      const restorableCurrentIndex = getRestorableSelectedIndex(
+        {
+          ...savedInProgress,
+          selectedIndex: savedInProgress?.currentIndex ?? savedInProgress?.selectedIndex,
+        },
+        savedCycle,
+        generatedWorkouts.length
+      );
+      const restoredCurrentIndex = Math.max(
+        completedWorkoutCount,
+        restorableCurrentIndex ?? completedWorkoutCount
+      );
+
+      setCurrentWorkoutIndex(restoredCurrentIndex);
+      setSelectedIndex(
+        isSmartTrainingModel(savedTrainingModel)
+          ? restoredCurrentIndex
+          : Math.max(restoredCurrentIndex, restorableSelectedIndex ?? restoredCurrentIndex)
+      );
+
+      setShowNewCycle(
+        isSmartTrainingModel(savedTrainingModel)
+          ? isSmartCycleCompleteAfterHistory(savedHistory, savedCycle)
+          : false
+      );
+      setScreen('dashboard');
+      setHasLoadedData(true);
+    } catch (e) {
+      console.error('Kon opgeslagen user data niet laden', e);
+      setScreen('onboarding');
+      setHasLoadedData(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
+
+    const storedData = {
+      version: 1,
+      history,
+      prs,
+      accessoryPRs,
+      currentCycle,
+      bodyWeights,
+      userProfile,
+      meetPlannerAttempts,
+      meetPrepChecklist,
+      restTimeSeconds,
+      trainingModel,
+      programProfile,
+      accessoryMode,
+      preparationMode,
+      cooldownMode,
+      squatVariant,
+      deadliftVariant,
+      benchPressVariant,
+      inProgress: {
+        programVersion: PROGRAM_VERSION,
+        currentCycle,
+        currentIndex,
+        selectedIndex,
+        workouts,
+      },
+    };
+
+    // Older web builds duplicated the complete backup in localStorage. That
+    // mirror can consume several megabytes alongside the canonical record
+    // and make an otherwise valid workout completion exceed the browser
+    // quota. Browser persistence already is the canonical local record;
+    // automatic backup files are a native-only feature.
+    removeLegacyBrowserAutomaticBackup(localStorage);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(storedData));
+
+    if (Capacitor.isNativePlatform() && !automaticBackupStartupAttemptedRef.current) {
+      automaticBackupStartupAttemptedRef.current = true;
+
+      let savedAutomaticBackupStatus = null;
+
+      try {
+        savedAutomaticBackupStatus = JSON.parse(
+          localStorage.getItem(AUTO_BACKUP_STATUS_KEY) || 'null'
+        );
+      } catch (e) {}
+
+      if (shouldRetryAutomaticBackup(savedAutomaticBackupStatus)) {
+        writeAutomaticBackup(storedData).catch(error => {
+          console.error('Automatic backup retry failed', error);
+        });
+      }
+    }
+
+    if (Capacitor.isNativePlatform() && screen === 'completed' && completedWorkout) {
+      const backupKey = completedWorkout.completedAt ||
+        `${currentCycle}:${completedWorkout.number || completedWorkoutIndex || currentIndex}:${history.length}`;
+
+      if (automaticBackupKeyRef.current !== backupKey) {
+        automaticBackupKeyRef.current = backupKey;
+
+        writeAutomaticBackup(storedData).catch(error => {
+          console.error('Automatic backup failed', error);
+
+          if (automaticBackupKeyRef.current === backupKey) {
+            automaticBackupKeyRef.current = null;
+          }
+        });
+      }
+    }
+  }, [hasLoadedData, history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
+
+  useEffect(() => {
+    if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
+
+    const generatedWorkouts = generateWorkoutsForTrainingModel(trainingModel, {
+      programProfile,
+      squat: prs.Squat,
+      bench: prs.Bench,
+      deadlift: prs.Deadlift,
+      accessoryMode,
+      accessoryPRs,
+      preparationMode,
+      athleteLevel,
+      deadliftVariant,
+      benchPressVariant,
+      squatVariant,
+      cooldownMode,
+      history,
+      currentIndex,
+      currentCycle,
+      meetPlannerAttempts,
+    });
+
+    setWorkouts(prev => {
+      const baseWorkouts = isSmartTrainingModel(trainingModel) && generatedWorkouts.length > prev.length
+        ? generatedWorkouts.map((generatedWorkout, index) => prev[index] || generatedWorkout)
+        : prev;
+
+      return removeDeprecatedPrepItemsFromWorkouts(applyAccessoryPlanToWorkouts(
+        baseWorkouts,
+        generatedWorkouts,
+        getCompletedWorkoutNumbers(history, currentCycle),
+        Number(currentIndex) + 1
+      ));
+    });
+  }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, athleteLevel, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, bodyWeights, currentIndex, currentCycle, meetPlannerAttempts]);
+
+  useEffect(() => {
+    if (!hasLoadedData || !isSmartTrainingModel(trainingModel)) return;
+    if (selectedIndex <= currentIndex) return;
+
+    setSelectedIndex(currentIndex);
+  }, [hasLoadedData, trainingModel, selectedIndex, currentIndex]);
+
+  function handleStart(s, b, d, profile = {}, initialBodyData = null) {
+    const today = new Date().toLocaleDateString('nl-NL');
+
+    localStorage.removeItem('kel-powerlifting');
+    localStorage.removeItem('app_version');
+
+    const selectedWeightUnit = normalizeWeightUnit(profile.weightUnit || weightUnit);
+    const defaultTrainingModel = getNewUserTrainingModel(profile.trainingModel);
+    const defaultProgramProfile = 'kelaniSbd';
+    const defaultSettings = settingsForProgramProfile(defaultProgramProfile);
+    const defaultAccessoryMode = defaultSettings.accessoryMode;
+    const defaultPreparationMode = defaultSettings.preparationMode;
+    const defaultSquatVariant = defaultSettings.squatVariant;
+    const defaultBenchPressVariant = defaultSettings.benchPressVariant;
+    const defaultDeadliftVariant = defaultSettings.deadliftVariant;
+    const defaultCooldownMode = normalizeCooldownMode(defaultSettings.cooldownMode ?? defaultSettings.includeCooldown);
+
+    setWeightUnit(selectedWeightUnit);
+    localStorage.setItem('weightUnit', selectedWeightUnit);
+    localStorage.setItem('trainingModel', defaultTrainingModel);
+    localStorage.setItem('programProfile', defaultProgramProfile);
+    localStorage.setItem('squatVariant', defaultSquatVariant);
+    localStorage.setItem('benchPressVariant', defaultBenchPressVariant);
+    localStorage.setItem('deadliftVariant', defaultDeadliftVariant);
+    localStorage.setItem('cooldownMode', defaultCooldownMode);
+
+    setTrainingModel(defaultTrainingModel);
+    setProgramProfile(defaultProgramProfile);
+    setAccessoryMode(defaultAccessoryMode);
+    setPreparationMode(defaultPreparationMode);
+    setSquatVariant(defaultSquatVariant);
+    setBenchPressVariant(defaultBenchPressVariant);
+    setDeadliftVariant(defaultDeadliftVariant);
+    setCooldownMode(defaultCooldownMode);
+
+    setWorkouts(generateWorkoutsForTrainingModel(defaultTrainingModel, {
+      programProfile: defaultProgramProfile,
+      squat: s,
+      bench: b,
+      deadlift: d,
+      accessoryMode: defaultAccessoryMode,
+      accessoryPRs: {},
+      preparationMode: defaultPreparationMode,
+      athleteLevel: getAthleteLevel({
+        prs: { Squat: s, Bench: b, Deadlift: d },
+        history: [],
+        bodyWeights: initialBodyData ? [{ ...initialBodyData }] : [],
+      }),
+      deadliftVariant: defaultDeadliftVariant,
+      benchPressVariant: defaultBenchPressVariant,
+      squatVariant: defaultSquatVariant,
+      cooldownMode: defaultCooldownMode,
+      history: [],
+      currentIndex: 0,
+      currentCycle: 1,
+    }));
+    setCurrentWorkoutIndex(0);
+    setSelectedIndex(0);
+    setCurrentCycle(1);
+
+    setHistory([
+      {
+        workoutNumber: 0,
+        cycle: 0,
+        seedMax: true,
+        lift: 'Squat',
+        topWeight: s,
+        topReps: 1,
+        e1rm: s,
+        date: today,
+      },
+      {
+        workoutNumber: 0,
+        cycle: 0,
+        seedMax: true,
+        lift: 'Bench',
+        topWeight: b,
+        topReps: 1,
+        e1rm: b,
+        date: today,
+      },
+      {
+        workoutNumber: 0,
+        cycle: 0,
+        seedMax: true,
+        lift: 'Deadlift',
+        topWeight: d,
+        topReps: 1,
+        e1rm: d,
+        date: today,
+      }
+    ]);
+
+    setPrs({ Squat: s, Bench: b, Deadlift: d });
+    setAccessoryPRs({});
+    setUserProfile({ ...profile, weightUnit: selectedWeightUnit });
+    setMeetPlannerAttempts({});
+    setMeetPrepChecklist({});
+    setBodyWeights(initialBodyData ? [
+      {
+        workoutNumber: 0,
+        cycle: 1,
+        date: today,
+        timestamp: new Date().toISOString(),
+        ...initialBodyData,
+      }
+    ] : []);
+    setShowNewCycle(false);
+    setScreen('dashboard');
+  }
+
+function changeTrainingModel(nextModel) {
+  const normalizedModel = normalizeTrainingModel(nextModel);
+  setTrainingModel(normalizedModel);
+
+  if (isSmartTrainingModel(normalizedModel)) {
+    const safeIndex = Math.max(0, Math.min(currentIndex, Math.max(workouts.length - 1, 0)));
+    setSelectedIndex(safeIndex);
+  }
+}
+
+function handleResetApp() {
+  setShowResetConfirm(false);
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem('kel-powerlifting');
+  localStorage.removeItem('app_version');
+  localStorage.removeItem('bodyweight_prompt_date');
+  localStorage.removeItem('trainingModel');
+
+  localStorage.setItem('squatVariant', 'standard');
+  localStorage.setItem('benchPressVariant', 'standard');
+  localStorage.setItem('deadliftVariant', 'standard');
+
+  setWorkouts([]);
+  setCurrentWorkoutIndex(0);
+  setSelectedIndex(0);
+  setHistory([]);
+  setPrs({});
+  setAccessoryPRs({});
+  setUserProfile({});
+  setMeetPlannerAttempts({});
+  setMeetPrepChecklist({});
+  setShowNewCycle(false);
+  setShowWorkoutEffortPrompt(false);
+  setCompletedWorkout(null);
+  setCompletedWorkoutIndex(null);
+  setCompletedSummary(null);
+  setCurrentCycle(1);
+  setBodyWeights([]);
+  setTrainingModel(TRAINING_MODELS.CLASSIC);
+  setAccessoryMode('off');
+  setPreparationMode('off');
+  setSquatVariant('standard');
+  setBenchPressVariant('standard');
+  setDeadliftVariant('standard');
+  setScreen('onboarding');
+}
+
+
+
+function handleStartNewCycle() {
+  if (!prs.Squat || !prs.Bench || !prs.Deadlift) {
+    setScreen('onboarding');
+    return;
+  }
+
+  const nextCycle = currentCycle + 1;
+  const newWorkouts = generateWorkoutsForTrainingModel(trainingModel, {
+    programProfile,
+    squat: prs.Squat,
+    bench: prs.Bench,
+    deadlift: prs.Deadlift,
+    accessoryMode,
+    accessoryPRs,
+    preparationMode,
+    athleteLevel,
+    deadliftVariant,
+    benchPressVariant,
+    squatVariant,
+    cooldownMode,
+    history,
+    currentIndex: 0,
+    currentCycle: nextCycle,
+    meetPlannerAttempts: {},
+  });
+
+  setCurrentCycle(nextCycle);
+  setMeetPlannerAttempts({});
+  setWorkouts(newWorkouts);
+  setCurrentWorkoutIndex(0);
+  setSelectedIndex(0);
+  setCompletedWorkout(null);
+  setCompletedSummary(null);
+  setShowNewCycle(false);
+  setShowWorkoutEffortPrompt(false);
+  setScreen('all');
+}
+
+function shouldStartRestTimerAfterToggle(workout, type, index, accIndex = null) {
+  const warmups = workout.warmups || [];
+  const sets = workout.sets || [];
+  const accessories = workout.accessories || [];
+
+  if (type === 'warmup') {
+    const current = warmups[index];
+    if (!current || current.done) return false;
+
+    const isLastWarmup = index === warmups.length - 1;
+    return isLastWarmup && sets.length > 0;
+  }
+
+  if (type === 'main') {
+    const current = sets[index];
+    if (!current || current.done) return false;
+
+    const hasMoreMainSets = index < sets.length - 1;
+    const hasAccessories = accessories.some(a => (a.done || []).some(d => !d));
+
+    return hasMoreMainSets || hasAccessories;
+  }
+
+  if (type === 'accessory') {
+    const acc = accessories[accIndex];
+    if (!acc) return false;
+
+    const currentDone = acc.done[index];
+    if (currentDone) return false;
+
+    const hasMoreAccessorySets =
+      accessories.some((a, ai) =>
+        (a.done || []).some((d, si) => {
+          if (ai < accIndex) return false;
+          if (ai === accIndex && si <= index) return false;
+          return !d;
+        })
+      );
+
+    return hasMoreAccessorySets;
+  }
+
+  return false;
+}
+
+function togglePrepItem(index) {
+  stopTimer();
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      const nextPrepItems = (w.prepItems || []).map((item, i) =>
+        i === index ? { ...item, done: !item.done } : item
+      );
+
+      return {
+        ...w,
+        prepItems: nextPrepItems,
+        lifts: (w.lifts || []).map((liftBlock, liftIndex) => {
+          if (liftIndex !== 0) return liftBlock;
+
+          return {
+            ...liftBlock,
+            prepItems: (liftBlock.prepItems || []).map((item, i) =>
+              i === index ? { ...item, done: !item.done } : item
+            ),
+          };
+        }),
+      };
+    })
+  );
+}
+
+function toggleWarmup(wIndex) {
+  const workout = workouts[selectedIndex];
+  if (shouldStartRestTimerAfterToggle(workout, 'warmup', wIndex)) {
+    startTimer(restTimeSeconds, {
+      workoutNumber: workout.number,
+      type: 'warmup',
+      index: wIndex,
+    });
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) =>
+      wi !== selectedIndex
+        ? w
+        : {
+            ...w,
+            warmups: w.warmups.map((wu, i) =>
+              i === wIndex ? { ...wu, done: !wu.done } : wu
+            ),
+          }
+    )
+  );
+}
+
+function hasMoreWorkAfterMainSet(workout, setIndex) {
+  const sets = workout.sets || [];
+  const accessories = workout.accessories || [];
+
+  const hasMoreMainSets = sets.some((set, index) =>
+    index > setIndex && !set.done && !set.skipped
+  );
+
+  const hasAccessories = accessories.some(a => (a.done || []).some(d => !d));
+
+  return hasMoreMainSets || hasAccessories;
+}
+
+function toggleSet(setIndex) {
+  const workout = workouts[selectedIndex];
+  const currentSet = workout?.sets?.[setIndex];
+
+  const shouldComplete = currentSet && !currentSet.done && !currentSet.skipped;
+
+  if (shouldComplete) {
+    if (hasMoreWorkAfterMainSet(workout, setIndex)) {
+      startTimer(restTimeSeconds, {
+        workoutNumber: workout.number,
+        type: 'main',
+        index: setIndex,
+      });
+    } else {
+      stopTimer();
+    }
+  } else {
+    stopTimer();
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) =>
+      wi !== selectedIndex
+        ? w
+        : {
+            ...w,
+            sets: w.sets.map((s, si) => {
+              if (si !== setIndex) return s;
+
+              if (s.skipped) {
+                const restoredWeight = Number(s.originalWeight ?? s.failedWeight ?? s.weight) || s.weight;
+                const restoredPct = Number(s.originalPct ?? getSetPctForWeight(s, restoredWeight)) || s.pct;
+
+                return {
+                  ...s,
+                  weight: restoredWeight,
+                  pct: restoredPct,
+                  done: false,
+                  failed: false,
+                  skipped: false,
+                  failedAttempts: 0,
+                  failedWeight: null,
+                  adjustedWeight: null,
+                  adjustedFromFailedSet: false,
+                  adjustedFromOriginal: false,
+                };
+              }
+
+              if (!s.done) {
+                return {
+                  ...s,
+                  done: true,
+                  failed: false,
+                };
+              }
+
+              return {
+                ...s,
+                done: false,
+                effort: null,
+              };
+            }),
+          }
+    )
+  );
+}
+
+function markSetFailed(setIndex) {
+  const workout = workouts[selectedIndex];
+
+  if (workout && hasMoreWorkAfterMainSet(workout, setIndex)) {
+    startTimer(restTimeSeconds, {
+      workoutNumber: workout.number,
+      type: 'main',
+      index: setIndex,
+      failed: true,
+    });
+  } else {
+    stopTimer();
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        sets: w.sets.map((s, si) => {
+          if (si !== setIndex) return s;
+
+          const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
+          const originalPct = Number(s.originalPct ?? s.pct) || 0;
+
+          return {
+            ...s,
+            done: true,
+            failed: true,
+            skipped: true,
+            failedAttempts: (Number(s.failedAttempts) || 0) + 1,
+            failedWeight: Number(s.failedWeight ?? s.weight) || 0,
+            originalWeight,
+            originalPct,
+            adjustedWeight: null,
+            adjustedFromFailedSet: false,
+            adjustedFromOriginal: Number(s.weight) !== originalWeight,
+            effort: null,
+          };
+        }),
+      };
+    })
+  );
+}
+
+
+function restoreSetWeight(setIndex) {
+  setWorkouts(prev =>
+    prev.map((w, wi) =>
+      wi !== selectedIndex
+        ? w
+        : {
+            ...w,
+            sets: w.sets.map((s, si) => {
+              if (si !== setIndex) return s;
+
+              const hasRestoreTarget =
+                s.failed ||
+                s.skipped ||
+                s.adjustedFromFailedSet ||
+                s.adjustedFromOriginal ||
+                s.failedWeight ||
+                s.adjustedWeight;
+
+              if (!hasRestoreTarget) return s;
+
+              const restoredWeight = Number(s.failedWeight ?? s.originalWeight ?? s.weight) || s.weight;
+              const restoredPct = Number(s.originalPct ?? getSetPctForWeight(s, restoredWeight)) || s.pct;
+
+              return {
+                ...s,
+                weight: restoredWeight,
+                pct: restoredPct,
+                done: false,
+                failed: false,
+                skipped: false,
+                failedAttempts: 0,
+                failedWeight: null,
+                adjustedWeight: null,
+                adjustedFromFailedSet: false,
+                adjustedFromOriginal: false,
+              };
+            }),
+          }
+    )
+  );
+}
+
+function restoreMeetSetWeight(liftIndex, setIndex) {
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: (w.lifts || []).map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
+            sets: (liftBlock.sets || []).map((s, si) => {
+              if (si !== setIndex) return s;
+
+              const hasRestoreTarget =
+                s.failed ||
+                s.skipped ||
+                s.adjustedFromFailedSet ||
+                s.adjustedFromOriginal ||
+                s.failedWeight ||
+                s.adjustedWeight;
+
+              if (!hasRestoreTarget) return s;
+
+              const restoredWeight = Number(s.failedWeight ?? s.originalWeight ?? s.weight) || s.weight;
+              const restoredPct = Number(s.originalPct ?? getSetPctForWeight(s, restoredWeight)) || s.pct;
+
+              return {
+                ...s,
+                weight: restoredWeight,
+                pct: restoredPct,
+                done: false,
+                failed: false,
+                skipped: false,
+                failedAttempts: 0,
+                failedWeight: null,
+                adjustedWeight: null,
+                adjustedFromFailedSet: false,
+                adjustedFromOriginal: false,
+              };
+            }),
+          };
+        }),
+      };
+    })
+  );
+}
+
+function toggleAccessorySet(accIndex, setIndex) {
+  const workout = workouts[selectedIndex];
+
+  if (shouldStartRestTimerAfterToggle(workout, 'accessory', setIndex, accIndex)) {
+    startTimer(restTimeSeconds, {
+      workoutNumber: workout.number,
+      type: 'accessory',
+      accIndex,
+      index: setIndex,
+    });
+  } else {
+    const currentDone = workout?.accessories?.[accIndex]?.done?.[setIndex];
+    if (currentDone === false) {
+      stopTimer();
+    }
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        accessories: w.accessories.map((a, ai) => {
+          if (ai !== accIndex) return a;
+
+          const isCurrentlyDone = !!a.done?.[setIndex];
+
+          return {
+            ...a,
+            done: a.done.map((d, di) => (di === setIndex ? !d : d)),
+            failed: (a.failed || a.done.map(() => false)).map((failed, di) =>
+              di === setIndex ? false : failed
+            ),
+            failedWeights: (a.failedWeights || a.done.map(() => null)).map((weight, di) =>
+              di === setIndex ? null : weight
+            ),
+            skipped: (a.skipped || a.done.map(() => false)).map((skipped, di) =>
+              di === setIndex ? false : skipped
+            ),
+            adjustedFromFailedSet: (a.adjustedFromFailedSet || a.done.map(() => false)).map((adjusted, di) =>
+              di === setIndex ? false : adjusted
+            ),
+            adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, di) =>
+              di === setIndex && !isCurrentlyDone ? false : adjusted
+            ),
+          };
+        }),
+      };
+    })
+  );
+}
+
+function changeWeight(type, index, val) {
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      if (type === 'warmup') {
+        return {
+          ...w,
+          warmups: w.warmups.map((wu, i) => i === index ? { ...wu, weight: val } : wu),
+        };
+      }
+
+      if (type === 'set') {
+        return {
+          ...w,
+          sets: w.sets.map((s, i) => {
+            if (i !== index) return s;
+
+            const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
+            const originalPct = Number(s.originalPct ?? s.pct) || 0;
+            const nextPct = getSetPctForWeight(
+              { ...s, originalWeight, originalPct },
+              val
+            );
+
+            const nextWeight = Number(val) || originalWeight;
+
+            return {
+              ...s,
+              weight: nextWeight,
+              pct: nextPct || s.pct,
+              done: false,
+              failed: false,
+              skipped: false,
+              failedAttempts: 0,
+              failedWeight: null,
+              adjustedWeight: null,
+              originalWeight,
+              originalPct,
+              adjustedFromFailedSet: false,
+              adjustedFromOriginal: Number(nextWeight) !== originalWeight,
+            };
+          }),
+        };
+      }
+
+      return w;
+    })
+  );
+}
+
+function toggleMeetPrepItem(liftIndex, prepIndex) {
+  stopTimer();
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: (w.lifts || []).map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
+            prepItems: (liftBlock.prepItems || []).map((item, i) =>
+              i === prepIndex ? { ...item, done: !item.done } : item
+            ),
+          };
+        }),
+      };
+    })
+  );
+}
+
+function hasMoreWorkAfterLiftWarmup(workout, liftIndex, warmupIndex) {
+  const liftBlock = workout?.lifts?.[liftIndex];
+  if (!liftBlock) return false;
+
+  const hasLaterWarmupsInSameLift = (liftBlock.warmups || []).some((w, wi) =>
+    wi > warmupIndex && !w.done
+  );
+
+  if (hasLaterWarmupsInSameLift) {
+    return false;
+  }
+
+  return (liftBlock.sets || []).some(s => !s.done && !s.skipped);
+}
+
+function toggleMeetWarmup(liftIndex, warmupIndex) {
+  const workout = workouts[selectedIndex];
+  const currentDone = workout?.lifts?.[liftIndex]?.warmups?.[warmupIndex]?.done;
+
+  if (currentDone === false) {
+    if (hasMoreWorkAfterLiftWarmup(workout, liftIndex, warmupIndex)) {
+      startTimer(restTimeSeconds, {
+        workoutNumber: workout.number,
+        type: 'meetWarmup',
+        liftIndex,
+        index: warmupIndex,
+      });
+    } else {
+      stopTimer();
+    }
+  } else {
+    stopTimer();
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: w.lifts.map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
+            warmups: liftBlock.warmups.map((wu, i) =>
+              i === warmupIndex ? { ...wu, done: !wu.done } : wu
+            ),
+          };
+        }),
+      };
+    })
+  );
+}
+
+function hasMoreMeetSets(workout, liftIndex, setIndex) {
+  const liftBlock = workout?.lifts?.[liftIndex];
+  if (!liftBlock) return false;
+
+  const hasMoreSetsInSameLift = (liftBlock.sets || []).some((s, si) =>
+    si > setIndex && !s.done && !s.skipped
+  );
+
+  if (hasMoreSetsInSameLift) return true;
+
+  const hasMoreAccessories = (workout?.accessories || []).some(accessory =>
+    (accessory.done || []).some(done => !done)
+  );
+
+  return hasMoreAccessories;
+}
+
+function toggleMeetSet(liftIndex, setIndex) {
+  const workout = workouts[selectedIndex];
+  const currentSet = workout?.lifts?.[liftIndex]?.sets?.[setIndex];
+  const shouldComplete = currentSet && !currentSet.done && !currentSet.skipped;
+
+  if (shouldComplete) {
+    if (hasMoreMeetSets(workout, liftIndex, setIndex)) {
+      startTimer(restTimeSeconds, {
+        workoutNumber: workout.number,
+        type: 'meetSet',
+        liftIndex,
+        index: setIndex,
+      });
+    } else {
+      stopTimer();
+    }
+  } else {
+    stopTimer();
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: w.lifts.map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
+            sets: liftBlock.sets.map((s, si) => {
+              if (si !== setIndex) return s;
+
+              if (s.failed && !s.skipped) {
+                return {
+                  ...s,
+                  done: true,
+                  failed: false,
+                  skipped: false,
+                  adjustedWeight: null,
+                  adjustedFromFailedSet: false,
+                  effort: null,
+                };
+              }
+
+              if (s.skipped) {
+                return {
+                  ...s,
+                  done: false,
+                  failed: false,
+                  skipped: false,
+                  failedAttempts: 0,
+                  failedWeight: null,
+                  adjustedWeight: null,
+                  adjustedFromFailedSet: false,
+                  adjustedFromOriginal: false,
+                  effort: null,
+                };
+              }
+
+              return {
+                ...s,
+                done: !s.done,
+                failed: false,
+                skipped: false,
+                adjustedWeight: s.done ? null : s.adjustedWeight,
+                adjustedFromFailedSet: s.done ? false : s.adjustedFromFailedSet,
+                effort: s.done ? null : s.effort,
+              };
+            }),
+          };
+        }),
+      };
+    })
+  );
+}
+
+function markMeetSetFailed(liftIndex, setIndex) {
+  const workout = workouts[selectedIndex];
+
+  if (workout && hasMoreMeetSets(workout, liftIndex, setIndex)) {
+    startTimer(restTimeSeconds, {
+      workoutNumber: workout.number,
+      type: 'meetSet',
+      liftIndex,
+      index: setIndex,
+      failed: true,
+    });
+  } else {
+    stopTimer();
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: (w.lifts || []).map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
+            sets: (liftBlock.sets || []).map((s, si) => {
+              if (si !== setIndex) return s;
+
+              const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
+              const originalPct = Number(s.originalPct ?? s.pct) || 0;
+
+              return {
+                ...s,
+                done: true,
+                failed: true,
+                skipped: true,
+                failedAttempts: (Number(s.failedAttempts) || 0) + 1,
+                failedWeight: Number(s.failedWeight ?? s.weight) || 0,
+                originalWeight,
+                originalPct,
+                adjustedWeight: null,
+                adjustedFromFailedSet: false,
+                adjustedFromOriginal: Number(s.weight) !== originalWeight,
+                effort: null,
+              };
+            }),
+          };
+        }),
+      };
+    })
+  );
+}
+
+
+function changeMeetWeight(liftIndex, setIndex, val) {
+  const roundedVal = roundMeetWeight(val);
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        lifts: w.lifts.map((liftBlock, li) => {
+          if (li !== liftIndex) return liftBlock;
+
+          return {
+            ...liftBlock,
+            sets: liftBlock.sets.map((s, si) => {
+              if (si !== setIndex) return s;
+
+              const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
+              const originalPct = Number(s.originalPct ?? s.pct) || 0;
+              const nextPct = getSetPctForWeight(
+                { ...s, originalWeight, originalPct },
+                roundedVal
+              );
+
+              return {
+                ...s,
+                weight: roundedVal,
+                pct: nextPct || s.pct,
+                done: false,
+                failed: false,
+                skipped: false,
+                failedAttempts: 0,
+                failedWeight: null,
+                adjustedWeight: null,
+                originalWeight,
+                originalPct,
+                adjustedFromFailedSet: false,
+                adjustedFromOriginal: Number(roundedVal) !== originalWeight,
+              };
+            }),
+          };
+        }),
+      };
+    })
+  );
+}
+
+
+
+function markAccessorySetFailed(accIndex, setIndex) {
+  const workout = workouts[selectedIndex];
+
+  const hasLaterAccessoryWork = Boolean(workout) && (
+    (workout.accessories?.[accIndex]?.done || []).some((done, index) =>
+      index > setIndex && !done
+    ) ||
+    (workout.accessories || []).some((accessory, index) =>
+      index > accIndex && (accessory.done || []).some(done => !done)
+    )
+  );
+
+  if (workout && hasLaterAccessoryWork) {
+    startTimer(restTimeSeconds, {
+      workoutNumber: workout.number,
+      type: 'accessory',
+      accIndex,
+      index: setIndex,
+    });
+  } else {
+    stopTimer();
+  }
+
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        accessories: (w.accessories || []).map((a, ai) => {
+          if (ai !== accIndex) return a;
+
+          return {
+            ...a,
+            done: (a.done || []).map((done, i) => i === setIndex ? true : done),
+            skipped: (a.skipped || (a.done || []).map(() => false)).map((skipped, i) =>
+              i === setIndex ? true : skipped
+            ),
+            failed: (a.failed || (a.done || []).map(() => false)).map((failed, i) =>
+              i === setIndex ? true : failed
+            ),
+            failedWeights: (a.failedWeights || (a.done || []).map(() => null)).map((weight, i) =>
+              i === setIndex ? (Number(weight ?? a.weights?.[i]) || 0) : weight
+            ),
+            originalWeights: (a.originalWeights || a.weights || []).map((weight, i) =>
+              Number(weight || a.weights?.[i]) || 0
+            ),
+            adjustedWeights: (a.adjustedWeights || a.weights || []).map((weight, i) =>
+              i === setIndex ? a.weights?.[i] : weight
+            ),
+            adjustedFromFailedSet: (a.adjustedFromFailedSet || (a.done || []).map(() => false)).map((adjusted, i) =>
+              i === setIndex ? false : adjusted
+            ),
+          };
+        }),
+      };
+    })
+  );
+}
+
+
+function restoreAccessoryWeight(accIndex, setIndex) {
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        accessories: w.accessories.map((a, ai) => {
+          if (ai !== accIndex) return a;
+
+          const restoredWeight =
+            Number(a.originalWeights?.[setIndex] || a.failedWeights?.[setIndex] || a.weights?.[setIndex]) || 0;
+
+          return {
+            ...a,
+            weights: a.weights.map((weight, i) => i === setIndex ? restoredWeight : weight),
+            failed: (a.failed || a.done.map(() => false)).map((failed, i) => i === setIndex ? false : failed),
+            failedWeights: (a.failedWeights || a.done.map(() => null)).map((weight, i) => i === setIndex ? null : weight),
+            skipped: (a.skipped || a.done.map(() => false)).map((skipped, i) => i === setIndex ? false : skipped),
+            adjustedFromFailedSet: (a.adjustedFromFailedSet || a.done.map(() => false)).map((adjusted, i) => i === setIndex ? false : adjusted),
+            adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, i) => i === setIndex ? false : adjusted),
+          };
+        }),
+      };
+    })
+  );
+}
+
+function changeAccessoryWeight(accIndex, setIndex, val) {
+  setWorkouts(prev =>
+    prev.map((w, wi) => {
+      if (wi !== selectedIndex) return w;
+
+      return {
+        ...w,
+        accessories: w.accessories.map((a, ai) => {
+          if (ai !== accIndex) return a;
+
+          const originalWeights = a.originalWeights || a.weights;
+
+          return {
+            ...a,
+            originalWeights,
+            weights: a.weights.map((wt, i) => i === setIndex ? val : wt),
+            adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, i) =>
+              i === setIndex ? Number(val) !== Number(originalWeights?.[i]) : adjusted
+            ),
+          };
+        }),
+      };
+    })
+  );
+}
+
+  function toggleCooldownItem(index) {
+    setWorkouts(prev =>
+      prev.map((w, wi) => {
+        if (wi !== selectedIndex) return w;
+
+        const cooldownItems = (w.cooldownItems && w.cooldownItems.length > 0)
+          ? w.cooldownItems
+          : generateCooldownItems();
+
+        return {
+          ...w,
+          cooldownItems: cooldownItems.map((item, i) =>
+            i === index ? { ...item, done: !item.done } : item
+          ),
+        };
+      })
+    );
+  }
+
+  function changeProgramProfile(nextProfile) {
+    const normalizedProfile = normalizeProgramProfile(nextProfile);
+    const settings = settingsForProgramProfile(normalizedProfile);
+
+    setProgramProfile(normalizedProfile);
+    setAccessoryMode(settings.accessoryMode);
+    setPreparationMode(settings.preparationMode);
+    setSquatVariant(settings.squatVariant);
+    setBenchPressVariant(settings.benchPressVariant);
+    setDeadliftVariant(settings.deadliftVariant);
+    setCooldownMode(normalizeCooldownMode(settings.cooldownMode ?? settings.includeCooldown));
+  }
+
+  function applyProgramSettings(settings = {}) {
+    setProgramProfile(normalizeProgramProfile(settings.programProfile));
+    setAccessoryMode(normalizeAccessoryMode(settings.accessoryMode));
+    setPreparationMode(normalizePreparationMode(settings.preparationMode));
+    setCooldownMode(normalizeCooldownMode(settings.cooldownMode));
+    setSquatVariant(normalizeSquatVariant(settings.squatVariant));
+    setBenchPressVariant(normalizeBenchPressVariant(settings.benchPressVariant));
+    setDeadliftVariant(normalizeDeadliftVariant(settings.deadliftVariant));
+  }
+
+  function buildRegeneratedSmartWorkoutsAfterCompletion({
+    nextHistory,
+    finishedWorkout,
+    nextWorkoutIndex,
+    nextPrs = prs,
+  }) {
+    return regenerateSmartWorkoutsAfterCompletion({
+      workouts,
+      finishedWorkout,
+      completedIndex: selectedIndex,
+      nextHistory,
+      currentCycle,
+      nextWorkoutIndex,
+      generationOptions: {
+        programProfile,
+        squat: nextPrs.Squat,
+        bench: nextPrs.Bench,
+        deadlift: nextPrs.Deadlift,
+        accessoryMode,
+        accessoryPRs,
+        preparationMode,
+        // Computed fresh from nextPrs/nextHistory (not the render-time
+        // athleteLevel const) since this runs right after a workout
+        // completion, before React has re-rendered with the new state.
+        athleteLevel: getAthleteLevel({
+          prs: nextPrs,
+          history: nextHistory,
+          bodyWeights,
+        }),
+        deadliftVariant,
+        benchPressVariant,
+        squatVariant,
+        cooldownMode,
+        meetPlannerAttempts,
+      },
+    });
+  }
+
+  function completeWorkout(workoutEffortOverride = null) {
+    const baseWorkout = workouts[selectedIndex];
+    // TOO_MUCH is never a manual choice - a single failed or skipped set
+    // makes it the effort automatically, overriding any manual selection and
+    // skipping the effort prompt entirely.
+    const hasFailedOrSkippedSet = countFailedOrSkippedSetsFromSnapshot(baseWorkout) > 0;
+    const resolvedEffortOverride = hasFailedOrSkippedSet
+      ? 'tooMuch'
+      : workoutEffortOverride;
+    const workout = resolvedEffortOverride
+      ? { ...baseWorkout, workoutEffort: resolvedEffortOverride }
+      : baseWorkout;
+
+    if (!workout?.workoutEffort) {
+      setShowWorkoutEffortPrompt(true);
+      return;
+    }
+
+    setShowWorkoutEffortPrompt(false);
+    stopTimer();
+
+    const finishedWorkout = JSON.parse(JSON.stringify(workout));
+    finishedWorkout.completed = true;
+    finishedWorkout.completedAt = new Date().toISOString();
+
+    const completedSmartDayType = isSmartTrainingModel(trainingModel)
+      ? finishedWorkout.smartDayType || (
+        finishedWorkout.type === 'rest'
+          ? SMART_DAY_TYPES.RECOVERY
+          : finishedWorkout.type === 'meet'
+            ? SMART_DAY_TYPES.MEET
+            : SMART_DAY_TYPES.TRAINING
+      )
+      : null;
+
+    const completedSmartDecisionSummary = isSmartTrainingModel(trainingModel)
+      ? finishedWorkout.smartDecisionSummary || null
+      : null;
+
+    const completedFailedOrSkippedSetCount = countFailedOrSkippedSetsFromSnapshot(finishedWorkout);
+    let completedTrainingHistory = null;
+    let completedTrainingPrs = prs;
+
+    if (workout.type === 'rest') {
+      const restWorkoutEffort = finishedWorkout.workoutEffort || 'easy';
+
+      finishedWorkout.completedSummary = {
+        type: 'rest',
+        bodyWeight: latestBodyWeight,
+      };
+      setCompletedSummary(finishedWorkout.completedSummary);
+
+      const nextHistory = [
+        ...history.filter(entry => !(
+          Number(entry.cycle) === Number(currentCycle) &&
+          Number(entry.workoutNumber) === Number(workout.number) &&
+          entry.restDay
+        )),
+        {
+          workoutNumber: workout.number,
+          cycle: currentCycle,
+          smartDayType: isSmartTrainingModel(trainingModel)
+            ? (finishedWorkout.type === 'rest' ? SMART_DAY_TYPES.RECOVERY : SMART_DAY_TYPES.TRAINING)
+            : null,
+          restDay: true,
+          completionOnly: true,
+          date: new Date().toLocaleDateString('nl-NL'),
+          workoutEffort: restWorkoutEffort,
+          failedOrSkippedSetCount: completedFailedOrSkippedSetCount,
+          smartDecisionSummary: completedSmartDecisionSummary,
+          workoutSnapshot: {
+            ...finishedWorkout,
+            workoutEffort: restWorkoutEffort,
+          },
+        },
+      ];
+
+      setHistory(nextHistory);
+      const smartCycleCompleteAfterRest = isSmartTrainingModel(trainingModel)
+        ? isSmartCycleCompleteAfterHistory(nextHistory, currentCycle)
+        : false;
+      setShowNewCycle(smartCycleCompleteAfterRest);
+
+      const nextWorkoutIndex = smartCycleCompleteAfterRest
+        ? selectedIndex
+        : isSmartTrainingModel(trainingModel)
+          ? selectedIndex + 1
+          : Math.min(selectedIndex + 1, workouts.length - 1);
+
+      setWorkouts(
+        isSmartTrainingModel(trainingModel) && !smartCycleCompleteAfterRest
+          ? buildRegeneratedSmartWorkoutsAfterCompletion({
+            nextHistory,
+            finishedWorkout,
+            nextWorkoutIndex,
+          })
+          : workouts.map((item, index) =>
+            index === selectedIndex ? finishedWorkout : item
+          )
+      );
+
+      setCompletedWorkout({
+        ...finishedWorkout,
+        workoutEffort: null,
+        hideWorkoutEffort: true,
+      });
+      setCompletedWorkoutIndex(selectedIndex);
+
+      if (isSmartTrainingModel(trainingModel)) {
+        setCurrentWorkoutIndex(
+          smartCycleCompleteAfterRest
+            ? selectedIndex
+            : Math.max(currentIndex, nextWorkoutIndex)
+        );
+      } else if (selectedIndex === currentIndex) {
+        setCurrentWorkoutIndex(nextWorkoutIndex);
+      }
+      setSelectedIndex(nextWorkoutIndex);
+      setScreen('completed');
+
+      return;
+    }
+
+    if (workout.type === 'training' && (finishedWorkout.lifts || []).length > 0) {
+      const primaryLiftBlock = finishedWorkout.lifts[0];
+
+      finishedWorkout.lift = primaryLiftBlock.lift;
+      finishedWorkout.prepItems = primaryLiftBlock.prepItems || [];
+      finishedWorkout.warmups = primaryLiftBlock.warmups || [];
+      finishedWorkout.sets = primaryLiftBlock.sets || [];
+    }
+
+    if (workout.type === 'meet') {
+  const today = new Date().toLocaleDateString('nl-NL');
+
+  const results = (workout.lifts || []).map(liftBlock => {
+    const sets = (liftBlock.sets || []).filter(s => s.done && !s.failed && !s.skipped);
+
+    const topSet = sets.length
+      ? sets.reduce(
+          (best, s) =>
+            epley(Number(s.weight) || 0, Number(s.reps) || 0) >
+            epley(Number(best.weight) || 0, Number(best.reps) || 0)
+              ? s
+              : best,
+          sets[0]
+        )
+      : null;
+
+    const oneRMToday = sets.length
+      ? Math.max(...sets.map(s => Number(s.weight) || 0))
+      : 0;
+
+    const e1RMToday = sets.length
+      ? roundE1RM(oneRMToday)
+      : 0;
+
+    const previousLiftHistory = history.filter(h =>
+      h.lift === liftBlock.lift &&
+      !(h.cycle === currentCycle && h.workoutNumber === workout.number)
+    );
+
+    const previousBestE1RM = Math.max(
+      Number(prs[liftBlock.lift]) || 0,
+      ...previousLiftHistory.map(h => getHistoryMaxCandidates(h).e1rm || 0)
+    );
+
+    const previousBest1RM = Math.max(
+      0,
+      ...previousLiftHistory.map(h => getHistoryMaxCandidates(h).oneRM || 0)
+    );
+
+    return {
+      lift: liftBlock.lift,
+      oneRMToday,
+      e1RMToday,
+      previousBest1RM,
+      previousBestE1RM,
+      best1RM: Math.max(previousBest1RM, oneRMToday),
+      bestE1RM: Math.max(previousBestE1RM, e1RMToday),
+      is1RMPR: oneRMToday > previousBest1RM,
+      isE1RMPR: e1RMToday > previousBestE1RM,
+      topSet,
+    };
+  });
+
+  const primaryResult = results[0];
+
+  const nextCompletedSummary = {
+    type: workout.type === 'meet' ? 'meet' : 'multiTraining',
+    results,
+    lift: primaryResult?.lift,
+    oneRMToday: primaryResult?.oneRMToday || 0,
+    e1RMToday: primaryResult?.e1RMToday || 0,
+    previousBest1RM: primaryResult?.previousBest1RM || 0,
+    previousBestE1RM: primaryResult?.previousBestE1RM || 0,
+    best1RM: primaryResult?.best1RM || 0,
+    bestE1RM: primaryResult?.bestE1RM || 0,
+    is1RMPR: !!primaryResult?.is1RMPR,
+    isE1RMPR: !!primaryResult?.isE1RMPR,
+    topSet: primaryResult?.topSet || null,
+    bodyWeight: latestBodyWeight,
+  };
+
+  finishedWorkout.completedSummary = nextCompletedSummary;
+  setCompletedSummary(nextCompletedSummary);
+
+    const withoutCurrentMeet = history.filter(
+    h => !(Number(h.cycle) === Number(currentCycle) && Number(h.workoutNumber) === Number(workout.number))
+  );
+
+  const newEntries = results.map(result => ({
+    workoutNumber: workout.number,
+    cycle: currentCycle,
+    smartDayType: isSmartTrainingModel(trainingModel)
+      ? (finishedWorkout.type === 'rest'
+        ? SMART_DAY_TYPES.RECOVERY
+        : finishedWorkout.type === 'meet'
+          ? SMART_DAY_TYPES.MEET
+          : SMART_DAY_TYPES.TRAINING)
+      : null,
+    lift: result.lift,
+    topWeight: result.oneRMToday,
+    topReps: 1,
+    e1rm: result.e1RMToday,
+    date: today,
+    workoutEffort: finishedWorkout.workoutEffort,
+    failedOrSkippedSetCount: completedFailedOrSkippedSetCount,
+    smartDecisionSummary: completedSmartDecisionSummary,
+    workoutSnapshot: finishedWorkout,
+  }));
+
+  const nextHistory = [...withoutCurrentMeet, ...newEntries];
+
+  const nextPrs = mergeHigherPrs(
+    prs,
+    calculatePrsFromHistory(nextHistory)
+  );
+  setHistory(nextHistory);
+  setPrs(nextPrs);
+
+  setCompletedWorkout(finishedWorkout);
+  setCompletedWorkoutIndex(selectedIndex);
+  const smartCycleCompleteAfterMeet = isSmartTrainingModel(trainingModel)
+    ? isSmartCycleCompleteAfterHistory(nextHistory, currentCycle)
+    : workout.type === 'meet';
+  const nextWorkoutIndex = smartCycleCompleteAfterMeet
+    ? selectedIndex
+    : isSmartTrainingModel(trainingModel)
+      ? selectedIndex + 1
+      : Math.min(selectedIndex + 1, workouts.length - 1);
+
+  setWorkouts(
+    isSmartTrainingModel(trainingModel) && !smartCycleCompleteAfterMeet
+      ? buildRegeneratedSmartWorkoutsAfterCompletion({
+        nextHistory,
+        finishedWorkout,
+        nextWorkoutIndex,
+        nextPrs,
+      })
+      : workouts.map((item, index) =>
+        index === selectedIndex ? finishedWorkout : item
+      )
+  );
+  if (isSmartTrainingModel(trainingModel)) {
+    setCurrentWorkoutIndex(
+      smartCycleCompleteAfterMeet
+        ? selectedIndex
+        : Math.max(currentIndex, nextWorkoutIndex)
+    );
+  } else if (selectedIndex === currentIndex) {
+    setCurrentWorkoutIndex(nextWorkoutIndex);
+  }
+  setSelectedIndex(nextWorkoutIndex);
+  setShowNewCycle(smartCycleCompleteAfterMeet);
+  setScreen('completed');
+
+  return;
+
+}
+
+    if (workout.type === 'training' && (workout.lifts || []).length > 0) {
+      const today = new Date().toLocaleDateString('nl-NL');
+
+      const results = (workout.lifts || []).map(liftBlock => {
+        const trackStrength = shouldTrackLiftBlockStrength(liftBlock, benchPressVariant);
+        const sets = trackStrength
+          ? (liftBlock.sets || []).filter(s => s.done && !s.failed && !s.skipped)
+          : [];
+
+        const topSet = sets.length
+          ? sets.reduce(
+              (best, s) =>
+                epley(Number(s.weight) || 0, Number(s.reps) || 0) >
+                epley(Number(best.weight) || 0, Number(best.reps) || 0)
+                  ? s
+                  : best,
+              sets[0]
+            )
+          : null;
+
+        const oneRMToday = sets.length
+          ? Math.max(...sets.map(s => Number(s.weight) || 0))
+          : 0;
+
+        const e1RMToday = sets.length
+          ? roundE1RM(Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0))))
+          : 0;
+
+        const previousLiftHistory = history.filter(h =>
+          h.lift === liftBlock.lift &&
+          !(h.cycle === currentCycle && h.workoutNumber === workout.number)
+        );
+
+        const previousBestE1RM = Math.max(
+          Number(prs[liftBlock.lift]) || 0,
+          ...previousLiftHistory.map(h => getHistoryMaxCandidates(h).e1rm || 0)
+        );
+
+        const previousBest1RM = Math.max(
+          0,
+          ...previousLiftHistory.map(h => getHistoryMaxCandidates(h).oneRM || 0)
+        );
+
+        return {
+          lift: liftBlock.lift,
+          trackStrength,
+          oneRMToday,
+          e1RMToday,
+          previousBest1RM,
+          previousBestE1RM,
+          best1RM: Math.max(previousBest1RM, oneRMToday),
+          bestE1RM: Math.max(previousBestE1RM, e1RMToday),
+          is1RMPR: oneRMToday > previousBest1RM,
+          isE1RMPR: e1RMToday > previousBestE1RM,
+          topSet,
+        };
+      });
+
+      const primaryResult = results.find(result => result.trackStrength !== false);
+
+      const nextCompletedSummary = {
+        type: 'multiTraining',
+        results,
+        lift: primaryResult?.lift,
+        oneRMToday: primaryResult?.oneRMToday || 0,
+        e1RMToday: primaryResult?.e1RMToday || 0,
+        previousBest1RM: primaryResult?.previousBest1RM || 0,
+        previousBestE1RM: primaryResult?.previousBestE1RM || 0,
+        best1RM: primaryResult?.best1RM || 0,
+        bestE1RM: primaryResult?.bestE1RM || 0,
+        is1RMPR: !!primaryResult?.is1RMPR,
+        isE1RMPR: !!primaryResult?.isE1RMPR,
+        topSet: primaryResult?.topSet || null,
+        bodyWeight: latestBodyWeight,
+      };
+
+      finishedWorkout.completedSummary = nextCompletedSummary;
+      setCompletedSummary(nextCompletedSummary);
+
+      const withoutCurrentWorkout = history.filter(
+        h => !(h.cycle === currentCycle && h.workoutNumber === workout.number)
+      );
+
+      const newEntries = results.map(result => ({
+        completionOnly: result.trackStrength === false,
+        workoutNumber: workout.number,
+        cycle: currentCycle,
+        smartDayType: completedSmartDayType,
+        smartDecisionSummary: completedSmartDecisionSummary,
+        failedOrSkippedSetCount: completedFailedOrSkippedSetCount,
+        lift: result.lift,
+        topWeight: result.trackStrength === false ? 0 : result.oneRMToday,
+        topReps: result.trackStrength === false ? 0 : (result.topSet?.reps || 0),
+        e1rm: result.trackStrength === false ? 0 : result.e1RMToday,
+        date: today,
+        workoutEffort: finishedWorkout.workoutEffort,
+        workoutSnapshot: finishedWorkout,
+      }));
+
+      const nextHistory = [...withoutCurrentWorkout, ...newEntries];
+      const nextPrs = mergeHigherPrs(
+        prs,
+        calculatePrsFromHistory(nextHistory)
+      );
+
+      completedTrainingHistory = nextHistory;
+      completedTrainingPrs = nextPrs;
+      setHistory(nextHistory);
+      setPrs(nextPrs);
+    }
+
+
+    if (workout.type === 'training' && LIFT_ORDER.includes(workout.lift) && !shouldTrackWorkoutStrength(workout.lift, benchPressVariant)) {
+  finishedWorkout.completedSummary = null;
+  setCompletedSummary(null);
+
+  setHistory(prev => {
+    const withoutCurrent = prev.filter(
+      h => !(Number(h.cycle) === Number(currentCycle) && Number(h.workoutNumber) === Number(workout.number) && h.lift === workout.lift)
+    );
+
+    return [
+      ...withoutCurrent,
+      {
+        workoutNumber: workout.number,
+        cycle: currentCycle,
+        smartDayType: completedSmartDayType,
+        smartDecisionSummary: completedSmartDecisionSummary,
+        failedOrSkippedSetCount: completedFailedOrSkippedSetCount,
+        lift: workout.lift,
+        topWeight: 0,
+        topReps: 0,
+        e1rm: 0,
+        date: new Date().toLocaleDateString('nl-NL'),
+        workoutEffort: finishedWorkout.workoutEffort,
+        workoutSnapshot: finishedWorkout,
+        completionOnly: true,
+      },
+    ];
+  });
+}
+
+if (workout.type === 'training' && LIFT_ORDER.includes(workout.lift) && shouldTrackWorkoutStrength(workout.lift, benchPressVariant)) {
+    const sets = (workout.sets || []).filter(s => s.done && !s.failed && !s.skipped);
+
+if (sets.length > 0) {
+
+const topSet = sets.reduce(
+  (best, s) => epley(s.weight, s.reps) > epley(best.weight, best.reps) ? s : best,
+  sets[0]
+);
+
+const oneRMToday = sets.length
+  ? Math.max(...sets.map(s => Number(s.weight) || 0))
+  : 0;
+
+const e1RMToday = sets.length
+  ? roundE1RM(Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0))))
+  : 0;
+
+const previousBestE1RM = prs[workout.lift] || 0;
+
+const previousBest1RM = Math.max(
+  0,
+  ...history
+    .filter(h => h.lift === workout.lift)
+    .map(h => getHistoryMaxCandidates(h).oneRM || 0)
+);
+
+const is1RMPR = oneRMToday > previousBest1RM;
+const isE1RMPR = e1RMToday > previousBestE1RM;
+
+const best1RM = Math.max(previousBest1RM, oneRMToday);
+const bestE1RM = Math.max(previousBestE1RM, e1RMToday);
+
+const nextCompletedSummary = {
+  type: 'training',
+  results: [{
+    lift: workout.lift,
+    trackStrength: true,
+    oneRMToday,
+    e1RMToday,
+    previousBest1RM,
+    previousBestE1RM,
+    best1RM,
+    bestE1RM,
+    is1RMPR,
+    isE1RMPR,
+    topSet,
+  }],
+  lift: workout.lift,
+  oneRMToday,
+  e1RMToday,
+  previousBest1RM,
+  previousBestE1RM,
+  best1RM,
+  bestE1RM,
+  is1RMPR,
+  isE1RMPR,
+  topSet,
+  bodyWeight: latestBodyWeight,
+};
+
+finishedWorkout.completedSummary = nextCompletedSummary;
+setCompletedSummary(nextCompletedSummary);
+
+  setPrs(prev => {
+  const current = prev[workout.lift] || 0;
+  return e1RMToday > current ? { ...prev, [workout.lift]: e1RMToday } : prev;
+});
+
+    setHistory(prev => {
+  const existingIndex = prev.findIndex(
+    h => Number(h.cycle) === Number(currentCycle) && Number(h.workoutNumber) === Number(workout.number) && h.lift === workout.lift
+  );
+
+  const newEntry = {
+    workoutNumber: workout.number,
+    cycle: currentCycle,
+    smartDayType: isSmartTrainingModel(trainingModel)
+      ? (finishedWorkout.type === 'rest'
+        ? SMART_DAY_TYPES.RECOVERY
+        : finishedWorkout.type === 'meet'
+          ? SMART_DAY_TYPES.MEET
+          : SMART_DAY_TYPES.TRAINING)
+      : null,
+    lift: workout.lift,
+    topWeight: oneRMToday,
+    topReps: sets.find(s => Number(s.weight) === oneRMToday)?.reps || topSet.reps,
+    e1rm: e1RMToday,
+    date: new Date().toLocaleDateString('nl-NL'),
+    workoutEffort: finishedWorkout.workoutEffort,
+    failedOrSkippedSetCount: completedFailedOrSkippedSetCount,
+    smartDecisionSummary: completedSmartDecisionSummary,
+    workoutSnapshot: finishedWorkout,
+  };
+
+  if (existingIndex !== -1) {
+    const updated = [...prev];
+    updated[existingIndex] = newEntry;
+    return updated;
+  }
+
+  return [...prev, newEntry];
+});
+}
+}
+
+  if (workout.accessories) {
+    workout.accessories.forEach(acc => {
+      const bestWeight = Math.max(...acc.weights);
+      const name = acc.key || acc.name;
+
+      setAccessoryPRs(prev => {
+        const current = prev[name] || 0;
+        return bestWeight > current ? { ...prev, [name]: bestWeight } : prev;
+      });
+    });
+  }
+
+  const nextWorkoutIndex = isSmartTrainingModel(trainingModel)
+    ? selectedIndex + 1
+    : Math.min(selectedIndex + 1, workouts.length - 1);
+
+  setWorkouts(
+    isSmartTrainingModel(trainingModel) && completedTrainingHistory
+      ? buildRegeneratedSmartWorkoutsAfterCompletion({
+        nextHistory: completedTrainingHistory,
+        finishedWorkout,
+        nextWorkoutIndex,
+        nextPrs: completedTrainingPrs,
+      })
+      : workouts.map((item, index) =>
+        index === selectedIndex ? finishedWorkout : item
+      )
+  );
+
+  setCompletedWorkout(finishedWorkout);
+  setCompletedWorkoutIndex(selectedIndex);
+
+  if (isSmartTrainingModel(trainingModel)) {
+    setCurrentWorkoutIndex(Math.max(currentIndex, nextWorkoutIndex));
+  } else if (selectedIndex === currentIndex) {
+    setCurrentWorkoutIndex(nextWorkoutIndex);
+  }
+  setSelectedIndex(nextWorkoutIndex);
+
+  setScreen('completed');
+}
+
+if (showLaunchSplash) {
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      width: '100vw',
+      height: '100dvh',
+      minHeight: '100dvh',
+      boxSizing: 'border-box',
+      background: '#000000',
+      color: THEME.text,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 18,
+      overflow: 'hidden',
+      overscrollBehavior: 'none',
+      touchAction: 'none',
+      zIndex: 9999
+    }}>
+      <style>
+        {`
+          @keyframes kelaniSplashIn {
+            0% {
+              opacity: 0;
+              transform: scale(0.88);
+              filter: blur(2px);
+            }
+            45% {
+              opacity: 1;
+              transform: scale(1.03);
+              filter: blur(0);
+            }
+            100% {
+              opacity: 1;
+              transform: scale(1);
+              filter: blur(0);
+            }
+          }
+        `}
+      </style>
+      <img
+        src="/kelani-banner.png"
+        alt="Kelani"
+        style={{
+          width: 'min(185vw, 1320px)',
+          height: 'auto',
+          display: 'block',
+          animation: 'kelaniSplashIn 1150ms ease-out both'
+        }}
+      />
+    </div>
+  );
+}
+
+const __kelaniSmartDebug = () => {
+    const key = 'kel-powerlifting-user-data-v1';
+    const data = JSON.parse(localStorage.getItem(key) || '{}');
+    const workouts = data.inProgress?.workouts || [];
+    const currentIndex = data.inProgress?.currentIndex ?? 0;
+    const selectedIndex = data.inProgress?.selectedIndex ?? currentIndex;
+    const currentWorkout = workouts[currentIndex] || null;
+    const selectedWorkout = workouts[selectedIndex] || null;
+
+    const summarizeSet = set => ({
+      labelKey: set.labelKey,
+      reps: set.reps,
+      weight: set.weight,
+      pct: set.pct,
+      done: set.done,
+      failed: set.failed,
+      skipped: set.skipped,
+    });
+
+    const summarizeLift = lift => ({
+      lift: lift.lift,
+      warmups: (lift.warmups || []).map(warmup => ({
+        reps: warmup.reps,
+        weight: warmup.weight,
+        done: warmup.done,
+      })),
+      setCount: (lift.sets || []).length,
+      sets: (lift.sets || []).map(summarizeSet),
+    });
+
+    const summarizeWorkout = workout => workout ? ({
+      number: workout.number,
+      type: workout.type,
+      lift: workout.lift,
+      smartDayType: workout.smartDayType,
+      smartOverride: workout.smartOverride,
+      reason: workout.smartDecisionSummary?.reason,
+      readiness: workout.smartDecisionSummary?.readiness || null,
+      autoregulated: Boolean(workout.smartAutoregulatedTraining),
+      adjustedLifts: workout.smartTrainingAdjustedLifts || [],
+      loadFactor: workout.smartTrainingLoadFactor,
+      volumeCap: workout.smartTrainingVolumeCap,
+      autoregulationByLift: workout.smartTrainingAutoregulationByLift || null,
+      deloadSelection: workout.smartDeloadSelectionSummary || null,
+      deloadByLift: workout.smartDeloadByLift || null,
+      trainingSelection: workout.smartTrainingSelectionSummary || null,
+      warmups: (workout.warmups || []).map(warmup => ({
+        reps: warmup.reps,
+        weight: warmup.weight,
+        done: warmup.done,
+      })),
+      sets: (workout.sets || []).map(summarizeSet),
+      lifts: (workout.lifts || []).map(summarizeLift),
+    }) : null;
+
+    const resolvedTrainingModel = data.trainingModel || localStorage.getItem('trainingModel');
+    const resolvedCurrentCycle = data.currentCycle || 1;
+    const smartCycleCompleteFromHistory = isSmartTrainingModel(resolvedTrainingModel)
+      ? isSmartCycleCompleteAfterHistory(data.history || [], resolvedCurrentCycle)
+      : false;
+
+    return {
+      trainingModel: resolvedTrainingModel,
+      currentCycle: resolvedCurrentCycle,
+      showNewCycle: Boolean(showNewCycle),
+      smartCycleCompleteFromHistory,
+      currentIndex,
+      selectedIndex,
+      currentWorkout: summarizeWorkout(currentWorkout),
+      selectedWorkout: summarizeWorkout(selectedWorkout),
+      visibleCount: workouts.filter(workout => workout.smartVisible !== false).length,
+      visibleWorkouts: workouts
+        .filter(workout => workout.smartVisible !== false)
+        .map(summarizeWorkout),
+      history: (data.history || []).map(entry => ({
+        workoutNumber: entry.workoutNumber,
+        cycle: entry.cycle,
+        lift: entry.lift,
+        restDay: entry.restDay,
+        smartDayType: entry.smartDayType,
+        workoutEffort: entry.workoutEffort,
+        failedOrSkippedSetCount: entry.failedOrSkippedSetCount,
+      })),
+    };
+};
+
+const __kelaniSmartPreviewNextDay = (options = {}) => {
+    const key = 'kel-powerlifting-user-data-v1';
+    const data = JSON.parse(localStorage.getItem(key) || '{}');
+    const inProgress = data.inProgress || {};
+    const workouts = inProgress.workouts || [];
+    const currentCycle = Number(data.currentCycle) || 1;
+    const currentIndex = inProgress.currentIndex ?? inProgress.selectedIndex ?? 0;
+    const currentWorkout = workouts[currentIndex];
+
+    if (!currentWorkout) {
+      return { ok: false, reason: 'current-workout-not-found' };
+    }
+
+    const effort = options.effort || currentWorkout.workoutEffort || 'good';
+    const failedByLift = options.failedByLift || {};
+    const smartDayType = options.smartDayType || currentWorkout.smartDayType || (
+      currentWorkout.type === 'meet'
+        ? SMART_DAY_TYPES.MEET
+        : currentWorkout.type === 'rest'
+          ? SMART_DAY_TYPES.RECOVERY
+          : SMART_DAY_TYPES.TRAINING
+    );
+
+    const today = new Date().toLocaleDateString('nl-NL');
+    const snapshot = {
+      ...currentWorkout,
+      workoutEffort: effort,
+      smartDayType,
+      lifts: (currentWorkout.lifts || []).map(liftBlock => {
+        const failedCount = Number(failedByLift[liftBlock.lift]) || 0;
+        let remainingFailures = failedCount;
+
+        return {
+          ...liftBlock,
+          sets: (liftBlock.sets || []).map(set => {
+            if (remainingFailures > 0) {
+              remainingFailures -= 1;
+              return {
+                ...set,
+                done: true,
+                failed: true,
+                skipped: false,
+              };
+            }
+
+            return {
+              ...set,
+              done: true,
+              failed: false,
+              skipped: false,
+            };
+          }),
+        };
+      }),
+    };
+
+    const previewEntries = (currentWorkout.lifts || []).length > 0
+      ? (snapshot.lifts || []).map(liftBlock => {
+        const successfulSets = (liftBlock.sets || []).filter(set =>
+          set.done && !set.failed && !set.skipped
+        );
+        const topWeight = successfulSets.length
+          ? Math.max(...successfulSets.map(set => Number(set.weight) || 0))
+          : 0;
+        const topSet = successfulSets.find(set => Number(set.weight) === topWeight) || successfulSets[0] || null;
+        const e1rm = successfulSets.length
+          ? roundE1RM(Math.max(...successfulSets.map(set => epley(Number(set.weight) || 0, Number(set.reps) || 0))))
+          : 0;
+
+        return {
+          workoutNumber: currentWorkout.number,
+          cycle: currentCycle,
+          smartDayType,
+          lift: liftBlock.lift,
+          topWeight,
+          topReps: Number(topSet?.reps) || 0,
+          e1rm,
+          date: today,
+          workoutEffort: effort,
+          failedOrSkippedSetCount: Object.values(failedByLift).reduce((total, value) =>
+            total + (Number(value) || 0),
+            0
+          ),
+          smartDecisionSummary: currentWorkout.smartDecisionSummary || null,
+          workoutSnapshot: snapshot,
+        };
+      })
+      : [{
+        workoutNumber: currentWorkout.number,
+        cycle: currentCycle,
+        smartDayType,
+        restDay: currentWorkout.type === 'rest',
+        completionOnly: true,
+        date: today,
+        workoutEffort: effort,
+        failedOrSkippedSetCount: Object.values(failedByLift).reduce((total, value) =>
+          total + (Number(value) || 0),
+          0
+        ),
+        smartDecisionSummary: currentWorkout.smartDecisionSummary || null,
+        workoutSnapshot: snapshot,
+      }];
+
+    const nextHistory = [
+      ...(data.history || []).filter(entry =>
+        !(
+          Number(entry.cycle) === Number(currentCycle) &&
+          Number(entry.workoutNumber) === Number(currentWorkout.number)
+        )
+      ),
+      ...previewEntries,
+    ];
+
+    const nextCurrentIndex = currentIndex + 1;
+    const generated = generateWorkoutsForTrainingModel(data.trainingModel || TRAINING_MODELS.SMART, {
+      programProfile: data.programProfile,
+      squat: data.prs?.Squat,
+      bench: data.prs?.Bench,
+      deadlift: data.prs?.Deadlift,
+      accessoryMode: data.accessoryMode,
+      accessoryPRs: data.accessoryPRs,
+      preparationMode: data.preparationMode,
+      athleteLevel: getAthleteLevel({
+        prs: data.prs,
+        history: nextHistory,
+        bodyWeights: normalizeBodyWeights(data),
+      }),
+      deadliftVariant: data.deadliftVariant,
+      benchPressVariant: data.benchPressVariant,
+      squatVariant: data.squatVariant,
+      cooldownMode: data.cooldownMode,
+      history: nextHistory,
+      currentIndex: nextCurrentIndex,
+      currentCycle,
+      meetPlannerAttempts: data.meetPlannerAttempts || {},
+    });
+
+    const nextWorkout = generated[nextCurrentIndex] || generated[generated.length - 1] || null;
+
+    return {
+      ok: true,
+      simulated: {
+        workoutNumber: currentWorkout.number,
+        type: currentWorkout.type,
+        smartDayType,
+        effort,
+        failedByLift,
+      },
+      next: nextWorkout ? {
+        number: nextWorkout.number,
+        type: nextWorkout.type,
+        smartDayType: nextWorkout.smartDayType,
+        reason: nextWorkout.smartDecisionSummary?.reason,
+        readiness: nextWorkout.smartDecisionSummary?.readiness || null,
+        autoregulated: Boolean(nextWorkout.smartAutoregulatedTraining),
+        adjustedLifts: nextWorkout.smartTrainingAdjustedLifts || [],
+        autoregulationByLift: nextWorkout.smartTrainingAutoregulationByLift || null,
+        deloadSelection: nextWorkout.smartDeloadSelectionSummary || null,
+        deloadByLift: nextWorkout.smartDeloadByLift || null,
+        trainingSelection: nextWorkout.smartTrainingSelectionSummary || null,
+        lifts: (nextWorkout.lifts || []).map(liftBlock => ({
+          lift: liftBlock.lift,
+          warmups: (liftBlock.warmups || []).map(warmup => ({
+            reps: warmup.reps,
+            weight: warmup.weight,
+          })),
+          sets: (liftBlock.sets || []).map(set => ({
+            labelKey: set.labelKey,
+            reps: set.reps,
+            weight: set.weight,
+            pct: set.pct,
+          })),
+        })),
+      } : null,
+    };
+};
+
+const __kelaniSmartPreviewRegression = () => {
+    if (typeof __kelaniSmartPreviewNextDay !== 'function') {
+      return { ok: false, reason: 'preview-helper-not-found' };
+    }
+
+    const buildPeakPreview = (options = {}) => {
+      const key = 'kel-powerlifting-user-data-v1';
+      const data = JSON.parse(localStorage.getItem(key) || '{}');
+      const currentCycle = Number(data.currentCycle) || 1;
+      const currentIndex = Number(options.currentIndex) || 5;
+      const prs = data.prs || {};
+
+      const e1rms = {
+        Squat: Number(options.squatE1RM) || Math.max(0, (Number(prs.Squat) || 150) * 0.99),
+        Bench: Number(options.benchE1RM) || Math.max(0, (Number(prs.Bench) || 100) * 1.0),
+        Deadlift: Number(options.deadliftE1RM) || Math.max(0, (Number(prs.Deadlift) || 185) * 0.92),
+      };
+
+      const syntheticDayTemplates = [
+        ['Squat', 'Bench', 'Deadlift'],
+        ['Bench', 'Squat'],
+        ['Squat', 'Bench'],
+        ['Deadlift', 'Bench'],
+        ['Squat', 'Bench'],
+        ['Bench', 'Deadlift'],
+        ['Deadlift'],
+        ['Squat', 'Bench'],
+      ];
+
+      const syntheticDays = Array.from({ length: Math.max(1, currentIndex) }, (_, index) => ({
+        number: index + 1,
+        lifts: syntheticDayTemplates[index % syntheticDayTemplates.length],
+      }));
+
+      const syntheticHistory = syntheticDays.flatMap(day =>
+        day.lifts.map(lift => ({
+          workoutNumber: day.number,
+          cycle: currentCycle,
+          smartDayType: SMART_DAY_TYPES.TRAINING,
+          lift,
+          topWeight: e1rms[lift],
+          topReps: 1,
+          e1rm: e1rms[lift],
+          date: new Date().toLocaleDateString('nl-NL'),
+          workoutEffort: 'good',
+          failedOrSkippedSetCount: 0,
+          workoutSnapshot: {
+            number: day.number,
+            type: 'training',
+            smartDayType: SMART_DAY_TYPES.TRAINING,
+            workoutEffort: 'good',
+            lifts: day.lifts.map(dayLift => ({
+              lift: dayLift,
+              sets: [{
+                reps: 1,
+                weight: e1rms[dayLift],
+                done: true,
+                failed: false,
+                skipped: false,
+              }],
+            })),
+          },
+        }))
+      );
+
+      const preservedHistory = (data.history || []).filter(entry =>
+        entry?.seedMax ||
+        entry?.manualMax ||
+        Number(entry?.cycle) !== currentCycle
+      );
+
+      const generated = generateWorkoutsForTrainingModel(data.trainingModel || TRAINING_MODELS.SMART, {
+        programProfile: data.programProfile,
+        squat: prs.Squat,
+        bench: prs.Bench,
+        deadlift: prs.Deadlift,
+        accessoryMode: data.accessoryMode,
+        accessoryPRs: data.accessoryPRs,
+        preparationMode: data.preparationMode,
+        athleteLevel: getAthleteLevel({
+          prs,
+          history: [...preservedHistory, ...syntheticHistory],
+          bodyWeights,
+        }),
+        deadliftVariant: data.deadliftVariant,
+        benchPressVariant: data.benchPressVariant,
+        squatVariant: data.squatVariant,
+        cooldownMode: data.cooldownMode,
+        history: [...preservedHistory, ...syntheticHistory],
+        currentIndex,
+        currentCycle,
+        meetPlannerAttempts: data.meetPlannerAttempts || {},
+      });
+
+      const nextWorkout = generated[currentIndex] || generated[generated.length - 1] || null;
+
+      return {
+        ok: Boolean(nextWorkout),
+        next: nextWorkout ? {
+          number: nextWorkout.number,
+          type: nextWorkout.type,
+          smartDayType: nextWorkout.smartDayType,
+          reason: nextWorkout.smartDecisionSummary?.reason,
+          readiness: nextWorkout.smartDecisionSummary?.readiness || null,
+          trainingSelection: nextWorkout.smartTrainingSelectionSummary || null,
+          lifts: (nextWorkout.lifts || []).map(liftBlock => ({
+            lift: liftBlock.lift,
+            sets: (liftBlock.sets || []).map(set => ({
+              labelKey: set.labelKey,
+              reps: set.reps,
+              weight: set.weight,
+              pct: set.pct,
+            })),
+          })),
+        } : null,
+      };
+    };
+
+    const scenarios = [
+      {
+        name: 'hard-no-fail',
+        options: { effort: 'hard', failedByLift: {} },
+        expect: result =>
+          result.smartDayType === SMART_DAY_TYPES.TRAINING &&
+          result.reason === SMART_DECISION_REASONS.TRAINING_FALLBACK &&
+          result.deloadSelection === null &&
+          (
+            result.autoregulated === true ||
+            (Array.isArray(result.overlapLifts) && result.overlapLifts.length === 0)
+          ),
+      },
+      {
+        name: 'too-much-squat-fail',
+        options: { effort: 'tooMuch', failedByLift: { Squat: 1 } },
+        expect: result =>
+          result.smartDayType === SMART_DAY_TYPES.RECOVERY &&
+          result.reason === SMART_DECISION_REASONS.FATIGUE_RECOVERY,
+      },
+      {
+        name: 'good-squat-one-fail',
+        options: { effort: 'good', failedByLift: { Squat: 1 } },
+        expect: result =>
+          result.smartDayType === SMART_DAY_TYPES.TRAINING &&
+          result.reason === SMART_DECISION_REASONS.TRAINING_FALLBACK &&
+          result.failedByLift?.Squat === 1 &&
+          (
+            !result.lifts.includes('Squat') ||
+            result.adjustedLifts.includes('Squat')
+          ),
+      },
+      {
+        name: 'good-squat-two-fail',
+        options: { effort: 'good', failedByLift: { Squat: 2 } },
+        expect: result =>
+          result.smartDayType === SMART_DAY_TYPES.DELOAD &&
+          result.reason === SMART_DECISION_REASONS.FAILED_SET_DELOAD &&
+          result.deloadSelection?.primaryLift === 'Squat',
+      },
+      {
+        name: 'good-bench-two-fail',
+        options: { effort: 'good', failedByLift: { Bench: 2 } },
+        expect: result =>
+          result.smartDayType === SMART_DAY_TYPES.DELOAD &&
+          result.reason === SMART_DECISION_REASONS.FAILED_SET_DELOAD &&
+          result.deloadSelection?.primaryLift === 'Bench',
+      },
+      {
+        name: 'good-deadlift-two-fail',
+        options: { effort: 'good', failedByLift: { Deadlift: 2 } },
+        expect: result =>
+          result.smartDayType === SMART_DAY_TYPES.DELOAD &&
+          result.reason === SMART_DECISION_REASONS.FAILED_SET_DELOAD &&
+          result.deloadSelection?.primaryLift === 'Deadlift',
+      },
+    ];
+
+    const results = scenarios.map(scenario => {
+      const preview = __kelaniSmartPreviewNextDay(scenario.options);
+      const next = preview?.next || {};
+      const readiness = next.readiness || {};
+
+      const result = {
+        name: scenario.name,
+        ok: Boolean(preview?.ok),
+        nextNumber: next.number,
+        sourceWorkout: next.trainingSelection?.sourceWorkoutNumber ||
+          next.deloadSelection?.sourceWorkoutNumber ||
+          null,
+        type: next.type,
+        smartDayType: next.smartDayType,
+        reason: next.reason,
+        lifts: (next.lifts || []).map(liftBlock => liftBlock.lift),
+        failedByLift: readiness.recentFailedOrSkippedSetCountsByLift || {},
+        fatigue: readiness.recentFatigueScore,
+        autoregulated: Boolean(next.autoregulated),
+        adjustedLifts: next.adjustedLifts || [],
+        deloadSelection: next.deloadSelection || null,
+        deloadByLift: next.deloadByLift || null,
+        trainingFlags: next.trainingSelection?.reasonFlags || [],
+        overlapLifts: next.trainingSelection?.overlapLifts || [],
+      };
+
+      return {
+        ...result,
+        pass: Boolean(result.ok && scenario.expect(result)),
+      };
+    });
+
+    const earlyPeakPreview = buildPeakPreview({ currentIndex: 5 });
+    const laterPeakPreview = buildPeakPreview({ currentIndex: 7 });
+
+    const peak = {
+      early: {
+        smartDayType: earlyPeakPreview?.next?.smartDayType,
+        reason: earlyPeakPreview?.next?.reason,
+        usesPeakPreference: Boolean(earlyPeakPreview?.next?.trainingSelection?.usesPeakPreference),
+        sourceWorkout: earlyPeakPreview?.next?.trainingSelection?.sourceWorkoutNumber || null,
+      },
+      later: {
+        smartDayType: laterPeakPreview?.next?.smartDayType,
+        reason: laterPeakPreview?.next?.reason,
+        lifts: (laterPeakPreview?.next?.lifts || []).map(liftBlock => liftBlock.lift),
+        usesPeakPreference: Boolean(laterPeakPreview?.next?.trainingSelection?.usesPeakPreference),
+        peakTargetLift: laterPeakPreview?.next?.trainingSelection?.peakTargetLift || null,
+        sourceWorkout: laterPeakPreview?.next?.trainingSelection?.sourceWorkoutNumber || null,
+      },
+    };
+
+    peak.pass = Boolean(
+      earlyPeakPreview?.ok &&
+      laterPeakPreview?.ok &&
+      peak.early.smartDayType === SMART_DAY_TYPES.RECOVERY &&
+      peak.early.usesPeakPreference === false &&
+      peak.later.smartDayType === SMART_DAY_TYPES.TRAINING &&
+      peak.later.usesPeakPreference === true &&
+      peak.later.peakTargetLift === 'Deadlift' &&
+      peak.later.sourceWorkout &&
+      peak.later.sourceWorkout < 20
+    );
+
+    return {
+      pass: results.every(result => result.pass) && peak.pass,
+      failed: [
+        ...results.filter(result => !result.pass).map(result => result.name),
+        ...(peak.pass ? [] : ['peak-scenario']),
+      ],
+      results,
+      peak,
+    };
+};
+
+const __kelaniSmartSetCurrentEffort = (effort = 'good') => {
+    const key = 'kel-powerlifting-user-data-v1';
+    const data = JSON.parse(localStorage.getItem(key) || '{}');
+    const workouts = data.inProgress?.workouts || [];
+    const currentIndex = data.inProgress?.currentIndex ?? data.inProgress?.selectedIndex ?? 0;
+    const workout = workouts[currentIndex];
+
+    if (!workout) {
+      return { ok: false, reason: 'current-workout-not-found' };
+    }
+
+    workouts[currentIndex] = {
+      ...workout,
+      workoutEffort: effort,
+    };
+
+    data.inProgress = {
+      ...(data.inProgress || {}),
+      workouts,
+    };
+
+    localStorage.setItem(key, JSON.stringify(data));
+    window.location.reload();
+
+    return {
+      ok: true,
+      currentIndex,
+      workoutNumber: workout.number,
+      effort,
+    };
+};
+
+const __kelaniSmartClearSmartHistoryToCurrentCycle = () => {
+    const key = 'kel-powerlifting-user-data-v1';
+    const data = JSON.parse(localStorage.getItem(key) || '{}');
+    const currentCycle = Number(data.currentCycle) || 1;
+
+    data.history = (data.history || []).filter(entry =>
+      entry?.seedMax ||
+      entry?.manualMax ||
+      Number(entry?.cycle) !== currentCycle
+    );
+
+    data.completedWorkout = null;
+    data.completedSummary = null;
+
+    if (data.inProgress) {
+      data.inProgress.currentIndex = 0;
+      data.inProgress.selectedIndex = 0;
+      data.inProgress.workouts = (data.inProgress.workouts || []).map(workout => ({
+        ...workout,
+        completed: false,
+        completedAt: null,
+        completedDate: null,
+        completedSummary: null,
+        workoutEffort: null,
+        smartVisible: false,
+        smartSelectable: false,
+        smartDecision: null,
+        smartDecisionSummary: null,
+        smartTrainingSelectionSummary: null,
+        smartTrainingAutoregulationByLift: null,
+        smartDeloadByLift: null,
+        prepItems: (workout.prepItems || []).map(item => ({ ...item, done: false })),
+        warmups: (workout.warmups || []).map(item => ({ ...item, done: false })),
+        sets: (workout.sets || []).map(set => ({
+          ...set,
+          done: false,
+          failed: false,
+          skipped: false,
+        })),
+        lifts: (workout.lifts || []).map(lift => ({
+          ...lift,
+          prepItems: (lift.prepItems || []).map(item => ({ ...item, done: false })),
+          warmups: (lift.warmups || []).map(item => ({ ...item, done: false })),
+          sets: (lift.sets || []).map(set => ({
+            ...set,
+            done: false,
+            failed: false,
+            skipped: false,
+          })),
+        })),
+      }));
+    }
+
+    localStorage.setItem(key, JSON.stringify(data));
+    window.location.reload();
+
+    return {
+      ok: true,
+      currentCycle,
+    };
+};
+
+const __kelaniSmartResetToW1 = () => {
+    const key = 'kel-powerlifting-user-data-v1';
+    const data = JSON.parse(localStorage.getItem(key) || '{}');
+
+    const resetCycle = 2;
+    const resolvedPrs = {
+      Squat: Number(data?.prs?.Squat || prs?.Squat || 142.5),
+      Bench: Number(data?.prs?.Bench || prs?.Bench || 87.5),
+      Deadlift: Number(data?.prs?.Deadlift || prs?.Deadlift || 152.5),
+    };
+
+    const resetHistory = (Array.isArray(data.history) ? data.history : history || []).filter(entry =>
+      entry?.seedMax || Number(entry?.workoutNumber) === 0
+    );
+
+    const existingWorkouts = data.inProgress?.workouts || [];
+
+    const generatedWorkouts = existingWorkouts.length
+      ? existingWorkouts
+      : generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
+        programProfile: data.programProfile || programProfile,
+        squat: resolvedPrs.Squat,
+        bench: resolvedPrs.Bench,
+        deadlift: resolvedPrs.Deadlift,
+        accessoryMode: data.accessoryMode || accessoryMode,
+        accessoryPRs: data.accessoryPRs || accessoryPRs || {},
+        preparationMode: data.preparationMode || preparationMode,
+        athleteLevel: getAthleteLevel({
+          prs: resolvedPrs,
+          history: resetHistory,
+          bodyWeights,
+        }),
+        deadliftVariant: data.deadliftVariant || deadliftVariant,
+        benchPressVariant: data.benchPressVariant || benchPressVariant,
+        squatVariant: data.squatVariant || squatVariant,
+        cooldownMode: data.cooldownMode || cooldownMode,
+        history: resetHistory,
+        currentIndex: 0,
+        currentCycle: resetCycle,
+        meetPlannerAttempts: {},
+      });
+
+    const resetWorkouts = (generatedWorkouts || []).map((workout, index) => ({
+      ...workout,
+      completed: false,
+      completedAt: null,
+      completedSummary: null,
+      workoutEffort: null,
+      smartVisible: index === 0 ? true : workout.smartVisible === true,
+      smartSelectable: index === 0 ? true : workout.smartSelectable === true,
+      smartDecision: index === 0 ? workout.smartDecision : null,
+      smartDecisionSummary: index === 0 ? workout.smartDecisionSummary : null,
+      smartTrainingSelectionSummary: index === 0 ? workout.smartTrainingSelectionSummary : null,
+      smartTrainingAutoregulationByLift: index === 0 ? workout.smartTrainingAutoregulationByLift : null,
+      smartDeloadByLift: index === 0 ? workout.smartDeloadByLift : null,
+      prepItems: (workout.prepItems || []).map(item => ({ ...item, done: false })),
+      warmups: (workout.warmups || []).map(item => ({ ...item, done: false })),
+      sets: (workout.sets || []).map(set => ({
+        ...set,
+        done: false,
+        failed: false,
+        skipped: false,
+      })),
+      lifts: (workout.lifts || []).map(lift => ({
+        ...lift,
+        prepItems: (lift.prepItems || []).map(item => ({ ...item, done: false })),
+        warmups: (lift.warmups || []).map(item => ({ ...item, done: false })),
+        sets: (lift.sets || []).map(set => ({
+          ...set,
+          done: false,
+          failed: false,
+          skipped: false,
+        })),
+      })),
+    }));
+
+    if (!resetWorkouts.length) {
+      return {
+        ok: false,
+        reason: 'smart-reset-generated-no-workouts',
+        currentCycle: resetCycle,
+      };
+    }
+
+    data.trainingModel = TRAINING_MODELS.SMART;
+    data.prs = resolvedPrs;
+    data.history = resetHistory;
+    data.currentCycle = resetCycle;
+    data.completedWorkout = null;
+    data.completedWorkoutIndex = null;
+    data.completedSummary = null;
+    data.meetPlannerAttempts = {};
+    data.inProgress = {
+      ...(data.inProgress || {}),
+      currentCycle: resetCycle,
+      currentIndex: 0,
+      selectedIndex: 0,
+      workouts: resetWorkouts,
+      programVersion: data.inProgress?.programVersion,
+    };
+
+    localStorage.setItem('trainingModel', TRAINING_MODELS.SMART);
+    localStorage.setItem(key, JSON.stringify(data));
+    window.location.reload();
+
+    return {
+      ok: true,
+      currentCycle: resetCycle,
+      workoutCount: resetWorkouts.length,
+      currentWorkout: resetWorkouts[0]?.number,
+      smartDayType: resetWorkouts[0]?.smartDayType,
+      type: resetWorkouts[0]?.type,
+    };
+};
+
+const __kelaniSmartQA = (options = {}) => {
+  const mode = options.mode || 'default';
+  const helperNames = [
+    '__kelaniSmartDebug',
+    '__kelaniSmartPreviewNextDay',
+    '__kelaniSmartPreviewRegression',
+    '__kelaniSmartSetCurrentEffort',
+    '__kelaniSmartClearSmartHistoryToCurrentCycle',
+    '__kelaniSmartResetToW1',
+    '__kelaniSmartQA',
+  ];
+
+  const key = 'kel-powerlifting-user-data-v1';
+  const data = (() => {
+    try {
+      return JSON.parse(localStorage.getItem(key) || '{}');
+    } catch (error) {
+      return { __parseError: error?.message || String(error) };
+    }
+  })();
+
+  const inProgress = data.inProgress || {};
+  const workouts = inProgress.workouts || [];
+  const currentIndex = inProgress.currentIndex ?? inProgress.selectedIndex ?? 0;
+  const selectedIndex = inProgress.selectedIndex ?? currentIndex;
+  const currentWorkout = workouts[currentIndex] || null;
+  const selectedWorkout = workouts[selectedIndex] || null;
+  const visibleWorkouts = workouts.filter(workout => workout.smartVisible !== false);
+  const resolvedTrainingModel = data.trainingModel || localStorage.getItem('trainingModel') || null;
+
+  const regression = typeof __kelaniSmartPreviewRegression === 'function'
+    ? __kelaniSmartPreviewRegression()
+    : { pass: false, failed: ['preview-regression-helper-missing'] };
+
+  const previewGood = typeof __kelaniSmartPreviewNextDay === 'function'
+    ? __kelaniSmartPreviewNextDay({ effort: 'good', failedByLift: {} })
+    : { ok: false, reason: 'preview-helper-missing' };
+
+  const expected = options.expected || {};
+  const expectedFailures = [];
+
+  if (expected.cycle !== undefined && Number(data.currentCycle) !== Number(expected.cycle)) {
+    expectedFailures.push('expected-cycle-' + expected.cycle + '-got-' + data.currentCycle);
+  }
+
+  if (expected.workoutNumber !== undefined && Number(currentWorkout?.number) !== Number(expected.workoutNumber)) {
+    expectedFailures.push('expected-workout-' + expected.workoutNumber + '-got-' + currentWorkout?.number);
+  }
+
+  if (expected.smartDayType !== undefined && currentWorkout?.smartDayType !== expected.smartDayType) {
+    expectedFailures.push('expected-smart-day-' + expected.smartDayType + '-got-' + currentWorkout?.smartDayType);
+  }
+
+  if (expected.type !== undefined && currentWorkout?.type !== expected.type) {
+    expectedFailures.push('expected-type-' + expected.type + '-got-' + currentWorkout?.type);
+  }
+
+  const helperExposure = typeof window === 'undefined'
+    ? { pass: true, reason: 'no-window' }
+    : {
+      pass: helperNames.every(name =>
+        typeof window[name] === 'function' &&
+        Object.prototype.propertyIsEnumerable.call(window, name) === false
+      ),
+      helpers: helperNames.reduce((summary, name) => ({
+        ...summary,
+        [name]: {
+          type: typeof window[name],
+          enumerable: Object.prototype.propertyIsEnumerable.call(window, name),
+        },
+      }), {}),
+      enumerableSmartKeys: Object.keys(window).filter(keyName => keyName.startsWith('__kelaniSmart')),
+    };
+
+  const smartModel = typeof isSmartTrainingModel === 'function'
+    ? isSmartTrainingModel(resolvedTrainingModel)
+    : String(resolvedTrainingModel || '').toLowerCase().includes('smart');
+
+  const peak = regression?.peak || {};
+  const regressionResults = regression?.results || [];
+  const regressionNames = regressionResults.map(result => result.name);
+  const requiredRegressionScenarios = [
+    'hard-no-fail',
+    'too-much-squat-fail',
+    'good-squat-one-fail',
+    'good-squat-two-fail',
+    'good-bench-two-fail',
+    'good-deadlift-two-fail',
+  ];
+
+
+  const qaCurrentWorkout = typeof currentWorkout !== 'undefined' ? currentWorkout : null;
+  const qaSelectedWorkout = typeof selectedWorkout !== 'undefined' ? selectedWorkout : qaCurrentWorkout;
+  const qaTrainingStructureIssues = [
+    ...getKelaniTrainingStructureIssues(qaCurrentWorkout || {}),
+    ...getKelaniTrainingStructureIssues(qaSelectedWorkout || {}),
+  ];
+  const qaWarmupJumpIssues = [
+    ...getKelaniWarmupJumpIssues(qaCurrentWorkout || {}),
+    ...getKelaniWarmupJumpIssues(qaSelectedWorkout || {}),
+  ];
+  const v1Checks = {
+    noPhoneTopSingleOnlyTraining: qaTrainingStructureIssues.length === 0,
+    noPhoneSquatDeadliftWarmupJumpOver50kg: qaWarmupJumpIssues.length === 0,
+
+    smartModel,
+    hasWorkouts: workouts.length > 0,
+    hasVisibleWorkout: visibleWorkouts.length > 0,
+    currentWorkoutFound: Boolean(currentWorkout),
+    currentWorkoutHasType: Boolean(currentWorkout?.type),
+    currentWorkoutHasSmartDayType: Boolean(currentWorkout?.smartDayType),
+    previewGoodWorks: Boolean(previewGood?.ok && previewGood?.next),
+    regressionScenarioCoverage: requiredRegressionScenarios.every(name => regressionNames.includes(name)),
+    regressionPeakCoverage: Boolean(
+      peak?.pass &&
+      peak?.early?.smartDayType &&
+      peak?.later?.smartDayType &&
+      peak?.later?.usesPeakPreference === true
+    ),
+    nonEnumerableDebugHelpers: Boolean(
+      helperExposure.pass &&
+      (helperExposure.enumerableSmartKeys || []).length === 0
+    ),
+  };
+
+  const checks = {
+    storageParse: !data.__parseError,
+    currentWorkoutFound: Boolean(currentWorkout),
+    regression: Boolean(regression?.pass && (regression.failed || []).length === 0),
+    helperExposure: Boolean(helperExposure.pass),
+    expectedState: expectedFailures.length === 0,
+    ...(mode === 'v1' ? v1Checks : {}),
+  };
+
+  const failed = [
+    ...Object.entries(checks)
+      .filter(([, passed]) => !passed)
+      .map(([name]) => name),
+    ...expectedFailures,
+    ...((regression?.failed || []).map(name => 'regression:' + name)),
+  ];
+
+  return {
+    pass: failed.length === 0,
+    failed,
+    mode,
+    checks,
+    state: {
+      trainingModel: resolvedTrainingModel,
+      currentCycle: data.currentCycle || null,
+      currentIndex,
+      selectedIndex,
+      currentWorkout: currentWorkout ? {
+        number: currentWorkout.number,
+        type: currentWorkout.type,
+        smartDayType: currentWorkout.smartDayType,
+        lift: currentWorkout.lift || null,
+        completed: Boolean(currentWorkout.completed),
+        smartVisible: currentWorkout.smartVisible,
+        smartSelectable: currentWorkout.smartSelectable,
+        reason: currentWorkout.smartDecisionSummary?.reason || null,
+      } : null,
+      selectedWorkout: selectedWorkout ? {
+        number: selectedWorkout.number,
+        type: selectedWorkout.type,
+        smartDayType: selectedWorkout.smartDayType,
+        lift: selectedWorkout.lift || null,
+      } : null,
+      visibleCount: visibleWorkouts.length,
+      workoutCount: workouts.length,
+      historyCount: (data.history || []).length,
+    },
+    regression: {
+      pass: Boolean(regression?.pass),
+      failed: regression?.failed || [],
+      peak: regression?.peak || null,
+      resultCount: regressionResults.length,
+      scenarioNames: regressionNames,
+    },
+    previewGood: {
+      ok: Boolean(previewGood?.ok),
+      reason: previewGood?.reason || previewGood?.next?.reason || null,
+      next: previewGood?.next ? {
+        number: previewGood.next.number,
+        type: previewGood.next.type,
+        smartDayType: previewGood.next.smartDayType,
+        reason: previewGood.next.reason,
+      } : null,
+    },
+    v1: mode === 'v1' ? {
+      pass: Object.values(v1Checks).every(Boolean),
+      checks: v1Checks,
+      requiredRegressionScenarios,
+    } : null,
+    helperExposure,
+  };
+};
+
+const isKelaniSmartDebugExposureAllowed = () => {
+  if (typeof window === 'undefined') return false;
+
+  const host = window.location.hostname;
+  const protocol = window.location.protocol;
+
+  const isLocalDev =
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '' ||
+    protocol === 'file:';
+
+  const hasManualOptIn =
+    window.localStorage?.getItem('kelaniSmartDebug') === '1';
+
+  return isLocalDev || hasManualOptIn;
+};
+
+const exposeKelaniSmartDebugHelpers = () => {
+  if (typeof window === 'undefined') return;
+  if (!isKelaniSmartDebugExposureAllowed()) return;
+
+  const helpers = {
+    __kelaniSmartDebug,
+    __kelaniSmartPreviewNextDay,
+    __kelaniSmartPreviewRegression,
+    __kelaniSmartSetCurrentEffort,
+    __kelaniSmartClearSmartHistoryToCurrentCycle,
+    __kelaniSmartResetToW1,
+    __kelaniSmartQA,
+  };
+
+  Object.entries(helpers).forEach(([name, fn]) => {
+    if (typeof fn !== 'function') return;
+
+    Object.defineProperty(window, name, {
+      value: fn,
+      configurable: true,
+      writable: false,
+      enumerable: false,
+    });
+  });
+};
+
+exposeKelaniSmartDebugHelpers();
+
+if (screen === null) {
+  return (
+    <div style={{
+      minHeight: '100dvh',
+      boxSizing: 'border-box',
+      background: THEME.bg
+    }} />
+  );
+}
+
+if (screen === 'onboarding') return <Onboarding onStart={handleStart} t={t}/>;
+
+if (screen !== 'onboarding' && !workouts.length) {
+  return <Onboarding onStart={handleStart} t={t}/>;
+}
+
+function activateSelectedWorkout() {
+  if (isSmartTrainingModel(trainingModel)) return;
+  if (selectedIndex <= currentIndex) return;
+
+  setCurrentWorkoutIndex(selectedIndex);
+  setSelectedIndex(selectedIndex);
+}
+
+if (screen === 'current' && !workouts[selectedIndex]) {
+  return <Onboarding onStart={handleStart} t={t}/>;
+}
+
+function saveBodyWeight(data) {
+  const today = new Date().toLocaleDateString('nl-NL');
+
+  const bodyData = {
+    bodyWeight: data.bodyWeight || null,
+    bodyFat: data.bodyFat || null,
+    bodyWater: data.bodyWater || null,
+    visceralFat: data.visceralFat || null,
+    leanMass: data.leanMass || null,
+    physiqueRating: data.physiqueRating || null,
+  };
+
+  const hasAnyValue = Object.values(bodyData).some(value => value !== null);
+  if (!hasAnyValue) return;
+
+  setBodyWeights(prev => [
+    ...prev.filter(entry => entry.date !== today),
+    {
+      workoutNumber: currentIndex,
+      cycle: currentCycle,
+      date: today,
+      timestamp: new Date().toISOString(),
+      ...bodyData,
+    },
+  ]);
+}
+
+function changeScreen(nextScreen) {
+  if (nextScreen === 'current') {
+    const safeIndex = Math.min(currentIndex, workouts.length - 1);
+    setSelectedIndex(Math.max(0, safeIndex));
+  }
+
+  setScreen(nextScreen);
+  window.scrollTo({ top: 0, behavior: 'auto' });
+}
+
+const bestMaxesFromHistory = calculateBestMaxesFromHistory(history);
+
+const best1RMs = {
+  Squat: bestMaxesFromHistory.Squat.oneRM || 0,
+  Bench: bestMaxesFromHistory.Bench.oneRM || 0,
+  Deadlift: bestMaxesFromHistory.Deadlift.oneRM || 0,
+};
+
+const bestE1RMs = {
+  Squat: roundE1RM(Math.max(Number(prs.Squat) || 0, bestMaxesFromHistory.Squat.e1rm || 0)),
+  Bench: roundE1RM(Math.max(Number(prs.Bench) || 0, bestMaxesFromHistory.Bench.e1rm || 0)),
+  Deadlift: roundE1RM(Math.max(Number(prs.Deadlift) || 0, bestMaxesFromHistory.Deadlift.e1rm || 0)),
+};
+
+const total1RM = best1RMs.Squat + best1RMs.Bench + best1RMs.Deadlift;
+const totalE1RM = bestE1RMs.Squat + bestE1RMs.Bench + bestE1RMs.Deadlift;
+
+const latestBodyDataEntry = [...bodyWeights].slice(-1)[0];
+const latestBodyWeightEntry = [...bodyWeights].filter(entry => entry.bodyWeight).slice(-1)[0];
+const latestBodyWeight = latestBodyWeightEntry?.bodyWeight || null;
+
+function buildCompletedSummaryForRender(workout) {
+  if (!workout) return null;
+
+  const workoutNumber = Number(workout.number);
+  const currentEntries = (history || []).filter(entry =>
+    Number(entry.cycle) === Number(currentCycle) &&
+    Number(entry.workoutNumber) === workoutNumber
+  );
+
+  function resultForLift(lift, sets = [], liftBlock = null) {
+    const entry = currentEntries.find(item => item.lift === lift);
+    const trackStrength = liftBlock
+      ? shouldTrackLiftBlockStrength(liftBlock, benchPressVariant)
+      : shouldTrackWorkoutStrength(lift, benchPressVariant);
+
+    const successfulSets = trackStrength
+      ? (sets || []).filter(set => set.done && !set.failed && !set.skipped)
+      : [];
+
+    const topSet = successfulSets.length
+      ? successfulSets.reduce(
+          (best, set) =>
+            epley(Number(set.weight) || 0, Number(set.reps) || 0) >
+            epley(Number(best.weight) || 0, Number(best.reps) || 0)
+              ? set
+              : best,
+          successfulSets[0]
+        )
+      : null;
+
+    const oneRMToday = entry
+      ? Number(entry.topWeight) || 0
+      : successfulSets.length
+        ? Math.max(...successfulSets.map(set => Number(set.weight) || 0))
+        : 0;
+
+    const e1RMToday = entry
+      ? roundE1RM(entry.e1rm)
+      : successfulSets.length
+        ? roundE1RM(Math.max(...successfulSets.map(set => epley(Number(set.weight) || 0, Number(set.reps) || 0))))
+        : 0;
+
+    const previousLiftHistory = (history || []).filter(item =>
+      item.lift === lift &&
+      !(Number(item.cycle) === Number(currentCycle) && Number(item.workoutNumber) === workoutNumber)
+    );
+
+    const previousBest1RM = Math.max(
+      0,
+      ...previousLiftHistory.map(item => getHistoryMaxCandidates(item).oneRM || 0)
+    );
+
+    const previousBestE1RM = Math.max(
+      Number(prs?.[lift]) || 0,
+      ...previousLiftHistory.map(item => getHistoryMaxCandidates(item).e1rm || 0)
+    );
+
+    return {
+      lift,
+      trackStrength,
+      oneRMToday,
+      e1RMToday,
+      previousBest1RM,
+      previousBestE1RM,
+      best1RM: Math.max(previousBest1RM, oneRMToday),
+      bestE1RM: Math.max(previousBestE1RM, e1RMToday),
+      is1RMPR: oneRMToday > previousBest1RM && oneRMToday > 0,
+      isE1RMPR: e1RMToday > previousBestE1RM && e1RMToday > 0,
+      topSet,
+    };
+  }
+
+  const results = (workout.lifts || []).length > 0
+    ? (workout.lifts || []).map(liftBlock =>
+        resultForLift(liftBlock.lift, liftBlock.sets || [], liftBlock)
+      )
+    : workout.lift
+      ? [resultForLift(workout.lift, workout.sets || [], null)]
+      : [];
+
+  const primaryResult = results.find(result => result.trackStrength !== false);
+
+  if (!primaryResult) {
+    return {
+      type: workout.type || 'training',
+      results,
+      bodyWeight: latestBodyWeight,
+    };
+  }
+
+  return {
+    type: workout.type === 'meet' ? 'meet' : ((workout.lifts || []).length > 0 ? 'multiTraining' : 'training'),
+    results,
+    lift: primaryResult.lift,
+    oneRMToday: primaryResult.oneRMToday || 0,
+    e1RMToday: primaryResult.e1RMToday || 0,
+    previousBest1RM: primaryResult.previousBest1RM || 0,
+    previousBestE1RM: primaryResult.previousBestE1RM || 0,
+    best1RM: primaryResult.best1RM || 0,
+    bestE1RM: primaryResult.bestE1RM || 0,
+    is1RMPR: !!primaryResult.is1RMPR,
+    isE1RMPR: !!primaryResult.isE1RMPR,
+    topSet: primaryResult.topSet || null,
+    bodyWeight: latestBodyWeight,
+  };
+}
+
+const completedSummaryCandidate = completedWorkout?.completedSummary || completedSummary;
+const completedSummaryForRender =
+  (completedSummaryCandidate?.results || []).length > 0
+    ? completedSummaryCandidate
+    : buildCompletedSummaryForRender(completedWorkout) || completedSummaryCandidate;
+  const completedWorkoutCanStartNewCycle = Boolean(
+    showNewCycle &&
+    isCompletedWorkoutNewCycleBoundary(completedWorkout)
+  );
+
+  const completedWorkoutIsMeetCycleEnd = Boolean(
+    completedWorkoutCanStartNewCycle &&
+    (
+      completedWorkout?.type === 'meet' ||
+      completedWorkout?.smartDayType === (typeof SMART_DAY_TYPES !== 'undefined' ? SMART_DAY_TYPES.MEET : 'meet')
+    )
+  );
+
+
+const strengthRatio = latestBodyWeight
+  ? Math.round((total1RM / latestBodyWeight) * 100) / 100
+  : null;
+
+const eStrengthRatio = latestBodyWeight
+  ? Math.round((totalE1RM / latestBodyWeight) * 100) / 100
+  : null;
+
+function bodyMetricValue(value, suffix = '') {
+  if (!value) return null;
+
+  const formattedValue = Number.isInteger(Number(value))
+    ? formatDecimalDisplay(value, { maximumFractionDigits: 0 })
+    : formatDecimalDisplay(value, { maximumFractionDigits: 1 });
+
+  return suffix ? `${formattedValue} ${suffix}` : formattedValue;
+}
+
+function calculateAge(birthDate) {
+  if (!birthDate) return null;
+
+  const birth = new Date(birthDate);
+  if (Number.isNaN(birth.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age -= 1;
+  }
+
+  return age;
+}
+
+function makeStatus(label, color, symbol = '•') {
+  return { label, color, symbol };
+}
+
+function bodyFatStatus(value) {
+  if (!value) return null;
+
+  const age = calculateAge(userProfile?.birthDate);
+  const sex = userProfile?.sex;
+
+  const ranges = {
+    male: [
+      { minAge: 18, maxAge: 39, lowMin: 6, healthyMin: 8, healthyMax: 20, overfatMax: 25 },
+      { minAge: 40, maxAge: 59, lowMin: 8, healthyMin: 11, healthyMax: 22, overfatMax: 28 },
+      { minAge: 60, maxAge: 99, lowMin: 10, healthyMin: 13, healthyMax: 25, overfatMax: 30 },
+    ],
+    female: [
+      { minAge: 18, maxAge: 39, lowMin: 16, healthyMin: 21, healthyMax: 33, overfatMax: 39 },
+      { minAge: 40, maxAge: 59, lowMin: 18, healthyMin: 23, healthyMax: 34, overfatMax: 40 },
+      { minAge: 60, maxAge: 99, lowMin: 20, healthyMin: 24, healthyMax: 36, overfatMax: 41 },
+    ],
+  };
+
+  const range = age && age >= 18 && age <= 99 && ['male', 'female'].includes(sex)
+    ? ranges[sex].find(r => age >= r.minAge && age <= r.maxAge)
+    : null;
+
+  if (range) {
+    if (value < range.lowMin) return makeStatus(t.bodyMetricUnderfat, THEME.red, '');
+    if (value < range.healthyMin) return makeStatus(t.bodyMetricHealthy, THEME.primary, '');
+    if (value <= range.healthyMax) return makeStatus(t.bodyMetricHealthy, THEME.yellow, '');
+    if (value <= range.overfatMax) return makeStatus(t.bodyMetricOverfat, THEME.primary, '');
+    return makeStatus(t.bodyMetricObese, THEME.red, '');
+  }
+
+  if (value >= 8 && value <= 25) return makeStatus(t.bodyMetricHealthy, THEME.yellow, '');
+  if (value > 25 && value <= 35) return makeStatus(t.bodyMetricOverfat, THEME.primary, '');
+  return makeStatus(t.bodyMetricObese, THEME.red, '');
+}
+
+function bodyWaterStatus(value) {
+  if (!value) return null;
+
+  if (userProfile?.sex === 'male') {
+    return value >= 50 && value <= 65
+      ? makeStatus(t.bodyMetricHealthy, THEME.yellow, '')
+      : makeStatus(t.bodyMetricAverage, THEME.primary, '');
+  }
+
+  if (userProfile?.sex === 'female') {
+    return value >= 45 && value <= 60
+      ? makeStatus(t.bodyMetricHealthy, THEME.yellow, '')
+      : makeStatus(t.bodyMetricAverage, THEME.primary, '');
+  }
+
+  return value >= 45 && value <= 65
+    ? makeStatus(t.bodyMetricHealthy, THEME.yellow, '')
+    : makeStatus(t.bodyMetricAverage, THEME.primary, '');
+}
+
+function visceralFatStatus(value) {
+  if (!value) return null;
+
+  if (value >= 1 && value <= 12) {
+    return makeStatus(t.bodyMetricNormal, THEME.yellow, '');
+  }
+
+  if (value >= 13) {
+    return makeStatus(t.bodyMetricExcessive, THEME.red, '');
+  }
+
+  return null;
+}
+
+function physiqueStatus(value) {
+  if (!value) return null;
+
+  const key = `physique${Math.round(value)}`;
+  if (!t[key]) return null;
+
+  const rounded = Math.round(value);
+  const color = rounded >= 9
+    ? THEME.yellow
+    : rounded >= 5
+      ? THEME.primary
+      : THEME.red;
+
+  return makeStatus(t[key], color, '');
+}
+
+const latestBodyDataRows = [
+  {
+    key: 'bodyWeight',
+    label: t.bodyweight,
+    value: latestBodyDataEntry?.bodyWeight ? formatWeightFromKg(latestBodyDataEntry.bodyWeight, weightUnit, { body: true }) : null,
+  },
+  {
+    key: 'strength',
+    label: t.strength,
+    value: strengthRatio ? formatDecimalDisplay(strengthRatio, { maximumFractionDigits: 2 }) : null,
+  },
+  {
+    key: 'eStrength',
+    label: t.eStrength,
+    value: eStrengthRatio ? formatDecimalDisplay(eStrengthRatio, { maximumFractionDigits: 2 }) : null,
+  },
+  {
+    key: 'bodyFat',
+    label: t.bodyFatPercent,
+    value: bodyMetricValue(latestBodyDataEntry?.bodyFat, '%'),
+    status: bodyFatStatus(latestBodyDataEntry?.bodyFat),
+  },
+  {
+    key: 'bodyWater',
+    label: t.bodyWaterPercent,
+    value: bodyMetricValue(latestBodyDataEntry?.bodyWater, '%'),
+    status: bodyWaterStatus(latestBodyDataEntry?.bodyWater),
+  },
+  {
+    key: 'leanMass',
+    label: t.leanMassKg,
+    value: latestBodyDataEntry?.leanMass ? formatWeightFromKg(latestBodyDataEntry.leanMass, weightUnit, { body: true }) : null,
+  },
+  {
+    key: 'visceralFat',
+    label: t.visceralFatRating,
+    value: bodyMetricValue(latestBodyDataEntry?.visceralFat),
+    status: visceralFatStatus(latestBodyDataEntry?.visceralFat),
+  },
+  {
+    key: 'physiqueRating',
+    label: t.physiqueRating,
+    value: bodyMetricValue(latestBodyDataEntry?.physiqueRating),
+    status: physiqueStatus(latestBodyDataEntry?.physiqueRating),
+  },
+].filter(row => row.value);
+
+const dashboardCurrentWorkout = workouts[currentIndex] || null;
+const dashboardMeetState = getDashboardMeetState(dashboardCurrentWorkout);
+const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
+  Squat: { oneRM: best1RMs.Squat },
+  Bench: { oneRM: best1RMs.Bench },
+  Deadlift: { oneRM: best1RMs.Deadlift },
+});
+
+    return (
+  <div style={{
+    paddingBottom: 70,
+    boxSizing: 'border-box',
+    background: THEME.bg,
+    minHeight: '100dvh',
+    color: THEME.text,
+    overflowX: 'hidden'
+  }}>
+      {screen === 'current' && (
+        <CurrentWorkout
+          workout={workouts[selectedIndex]}
+          currentCycle={currentCycle}
+          totalWorkouts={workouts.length}
+          isReadOnly={selectedIndex > currentIndex}
+          onShowPlateCalculator={(weightKg) => setPlateCalcWeightKg(weightKg)}
+          onTogglePrepItem={togglePrepItem}
+          onToggleWarmup={toggleWarmup}
+          onToggleSet={toggleSet}
+          onMarkSetFailed={markSetFailed}
+          onRestoreSetWeight={restoreSetWeight}
+          onToggleAccessorySet={toggleAccessorySet}
+          onMarkAccessorySetFailed={markAccessorySetFailed}
+          onRestoreAccessoryWeight={restoreAccessoryWeight}
+          onToggleCooldownItem={toggleCooldownItem}
+          onWeightChange={changeWeight}
+          onAccessoryWeightChange={changeAccessoryWeight}
+          onComplete={completeWorkout}
+          onViewAll={() => setScreen('all')}
+          onActivateWorkout={activateSelectedWorkout}
+          showNewCycle={showNewCycle}
+          newCyclePRs={prs}
+          onStartNewCycle={handleStartNewCycle}
+          programProfile={programProfile}
+          benchPressVariant={benchPressVariant}
+          onChangeProgramProfile={changeProgramProfile}
+          trainingModel={trainingModel}
+          t={t}
+          weightUnit={weightUnit}
+          timer={timer}
+          setTimer={stopTimer}
+          onToggleMeetPrepItem={toggleMeetPrepItem}
+          onToggleMeetWarmup={toggleMeetWarmup}
+          onToggleMeetSet={toggleMeetSet}
+          onMarkMeetSetFailed={markMeetSetFailed}
+          onRestoreMeetSetWeight={restoreMeetSetWeight}
+          onMeetWeightChange={changeMeetWeight}
+          athleteLevel={athleteLevel}
+          eStrengthRatio={eStrengthRatio}
+          latestBodyWeight={latestBodyWeight}
+        />
+      )}
+
+      {screen === 'dashboard' && (
+  <div
+    role={dashboardMeetState.isMeetDay ? 'button' : undefined}
+    tabIndex={dashboardMeetState.isMeetDay ? 0 : undefined}
+    aria-label={dashboardMeetState.isMeetDay ? (t.openWorkout || t.workout) : undefined}
+    onClick={dashboardMeetState.isMeetDay ? () => changeScreen('current') : undefined}
+    onKeyDown={dashboardMeetState.isMeetDay ? event => {
+      if (event.key === 'Enter' || event.key === ' ') changeScreen('current');
+    } : undefined}
+    style={{
+      maxWidth: 500,
+      margin: '0 auto',
+      padding: '12px 14px 16px',
+      fontFamily: 'sans-serif',
+      cursor: dashboardMeetState.isMeetDay ? 'pointer' : undefined,
+    }}
+  >
+    <AppHeader
+      t={t}
+      title={dashboardMeetState.isMeetDay
+        ? (t.sbdMeetDay || t.meetDay || 'SBD Meet Day')
+        : (t.appName || 'Kelani SBD Tracker')}
+      subtitle={!dashboardMeetState.isMeetDay ? (
+        <>
+          {formatCycleWorkoutSubtitle({
+            t,
+            currentCycle,
+            workoutNumber: Math.min(currentIndex + 1, workouts.length),
+            totalWorkouts: workouts.length,
+            smartModel: isSmartTrainingModel(trainingModel),
+          })}
+          {isSmartTrainingModel(trainingModel) && (
+            <AthleteLevelBadge
+              athleteLevel={athleteLevel}
+              eStrengthRatio={eStrengthRatio}
+              latestBodyWeight={latestBodyWeight}
+              t={t}
+            />
+          )}
+        </>
+      ) : null}
+    />
+
+    {dashboardMeetState.isMeetDay && (
+      <div style={{ marginTop: 20, padding: '0 4px 8px' }}>
+        <MeetPlanContent
+          meetPlan={dashboardSuggestedMeetPlan.meetPlan}
+          meetTotals={dashboardSuggestedMeetPlan.meetTotals}
+          t={t}
+          weightUnit={weightUnit}
+        />
+      </div>
+    )}
+
+    {!dashboardMeetState.isMeetDay && workouts[currentIndex] && (() => {
+      const nextWorkout = workouts[currentIndex];
+      const isNextMeetDay = nextWorkout.type === 'meet';
+
+      const planLines = getWorkoutPlanLines(nextWorkout, t, weightUnit, benchPressVariant);
+
+      return (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => changeScreen('current')}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') changeScreen('current');
+          }}
+          style={{
+            padding: '0 0 12px',
+            marginTop: 16,
+            marginBottom: 8,
+            textAlign: 'center',
+            cursor: 'pointer',
+          }}
+        >
+          <div style={{
+            color: isNextMeetDay ? THEME.meet : THEME.text,
+            fontSize: 24,
+            fontWeight: 900,
+            marginBottom: planLines.length ? 10 : 0
+          }}>
+            <WorkoutTitle workout={nextWorkout} t={t} benchPressVariant={benchPressVariant} />
+          </div>
+
+          {planLines.length > 0 && (
+            <div style={{
+              color: THEME.muted,
+              fontSize: 14,
+              fontWeight: 800,
+              lineHeight: 1.45
+            }}>
+              {planLines.map((line, index) => {
+                const text = String(line);
+                const match =
+                  text.startsWith('Bench Press') ? { lift: 'Bench', label: 'Bench Press' } :
+                  text.startsWith('Deadlift') ? { lift: 'Deadlift', label: 'Deadlift' } :
+                  text.startsWith('Squat') ? { lift: 'Squat', label: 'Squat' } :
+                  null;
+
+                return (
+                  <div key={`dashboard-next-line-${index}`}>
+                    {match ? (
+                      <>
+                        <span style={{ color: getLiftThemeColor(match.lift) }}>{match.label}</span>
+                        <span style={{ color: THEME.muted }}>{text.slice(match.label.length)}</span>
+                      </>
+                    ) : (
+                      <span style={{ color: THEME.muted }}>{text}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    })()}
+
+    {isSmartTrainingModel(trainingModel) &&
+      !dashboardMeetState.hideRouteToMeet &&
+      workouts[currentIndex] && (() => {
+      const meetReadiness = workouts[currentIndex].smartDecisionSummary?.readiness;
+      const dashboardMeetProjection = meetReadiness?.meetProjection || null;
+      const { meetPlan: dashboardMeetPlan, meetTotals: dashboardMeetTotals } = dashboardSuggestedMeetPlan;
+      const limitingPhaseLabel = getSmartAttemptPhaseLabel(
+        dashboardMeetProjection?.limitingPhase,
+        t
+      );
+
+      return (
+        <>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setShowMeetPlanModal(true)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') setShowMeetPlanModal(true);
+            }}
+            style={{
+              padding: '0 0 12px',
+              marginBottom: 8,
+              textAlign: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: THEME.meet, fontSize: 12, fontWeight: 900, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4 }}>
+              <span>{t.dashboardMeetRouteTitle || 'Route to meet'}</span>
+              <TapInfoIcon color={THEME.meet} />
+            </div>
+            <div style={{ color: THEME.text, fontSize: 14, fontWeight: 800, marginBottom: dashboardMeetProjection?.available && dashboardMeetProjection.limitingLift ? 2 : 6, lineHeight: 1.35 }}>
+              {dashboardMeetProjection?.available
+                ? `${t.expectedMeetWindow || 'Expected meet'}: ${dashboardMeetProjection.label}`
+                : (t.smartProjectionUnavailable || 'Not enough active-cycle data for a reliable projection.')}
+            </div>
+            {dashboardMeetProjection?.available && dashboardMeetProjection.limitingLift && (
+              <div style={{ color: THEME.muted, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                {t.dashboardMeetBlockerLabel || 'Blocker'}: {dashboardMeetProjection.limitingLift} — {limitingPhaseLabel}
+              </div>
+            )}
+            <div style={{ color: THEME.muted, fontSize: 11, fontWeight: 800, marginBottom: 1 }}>
+              {t.projectedTotal}
+            </div>
+            <div style={{ color: THEME.meet, fontSize: 20, fontWeight: 900, lineHeight: 1 }}>
+              {dashboardMeetTotals.third ? formatWeightFromKg(dashboardMeetTotals.third, weightUnit) : '—'}
+            </div>
+          </div>
+
+          {showMeetPlanModal && (
+            <MeetPlanModal
+              meetPlan={dashboardMeetPlan}
+              meetTotals={dashboardMeetTotals}
+              t={t}
+              weightUnit={weightUnit}
+              onClose={() => setShowMeetPlanModal(false)}
+            />
+          )}
+        </>
+      );
+    })()}
+    {!dashboardMeetState.isMeetDay && (
+    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: '4px 6px 8px', marginBottom: 4 }}>
+      {(() => {
+        const cards = [
+          {
+            key: 'Squat',
+            label: t.squat,
+            color: THEME.red,
+            background: 'rgba(255, 92, 69, 0.12)',
+            oneRM: best1RMs.Squat,
+            e1RM: bestE1RMs.Squat,
+            prBaseline: best1RMs.Squat,
+            statsTab: 'lifts',
+          },
+          {
+            key: 'Bench',
+            label: t.bench,
+            color: THEME.primary,
+            background: 'rgba(255, 138, 61, 0.12)',
+            oneRM: best1RMs.Bench,
+            e1RM: bestE1RMs.Bench,
+            prBaseline: best1RMs.Bench,
+            statsTab: 'lifts',
+          },
+          {
+            key: 'Deadlift',
+            label: t.deadlift,
+            color: THEME.yellow,
+            background: 'rgba(255, 209, 102, 0.12)',
+            oneRM: best1RMs.Deadlift,
+            e1RM: bestE1RMs.Deadlift,
+            prBaseline: best1RMs.Deadlift,
+            statsTab: 'lifts',
+          },
+          {
+            key: 'Total',
+            label: t.total || 'Total',
+            color: THEME.meet,
+            background: `${THEME.meet}20`,
+            oneRM: total1RM,
+            e1RM: totalE1RM,
+            prBaseline: total1RM,
+            statsTab: 'totaal',
+          },
+        ];
+
+        const value = weight => weight ? formatWeightFromKg(weight, weightUnit) : '—';
+        const openStatsTab = tab => {
+          setStatsTab(tab);
+          changeScreen('stats');
+        };
+
+        return (
+          <>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 12
+            }}>
+              {cards.map(card => (
+                <div
+                  key={card.key}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openStatsTab(card.statsTab)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') openStatsTab(card.statsTab);
+                  }}
+                  style={{
+                    padding: '6px 2px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{
+                    color: card.color,
+                    fontSize: 19,
+                    fontWeight: 900,
+                    marginBottom: 8,
+                    lineHeight: 1.1
+                  }}>
+                    {card.label}
+                  </div>
+
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'auto 1fr',
+                    gap: '7px 10px',
+                    alignItems: 'baseline'
+                  }}>
+                    <span style={{ color: THEME.muted, fontSize: 13, fontWeight: 900 }}>
+                      {t.oneRM}
+                    </span>
+                    <strong style={{ color: card.color, fontSize: 17, fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {value(card.oneRM)}
+                    </strong>
+
+                    <span style={{ color: THEME.muted, fontSize: 13, fontWeight: 900 }}>
+                      {t.e1RM}
+                    </span>
+                    <strong style={{ color: card.color, fontSize: 17, fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {value(card.e1RM)}
+                    </strong>
+                  </div>
+
+                  {getDashboardE1RMPrGain(card.e1RM, card.prBaseline) > 0 && (
+                    <div style={{
+                      color: THEME.green,
+                      fontSize: 11,
+                      fontWeight: 900,
+                      textAlign: 'right',
+                      marginTop: 4
+                    }}>
+                      {t.newPR || 'New PR'} +{formatWeightFromKg(getDashboardE1RMPrGain(card.e1RM, card.prBaseline), weightUnit)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+          </>
+        );
+      })()}
+    </div>
+    )}
+
+    {!dashboardMeetState.isMeetDay && (() => {
+      const dashboardBodyRowTabs = { bodyWeight: 'lichaam', strength: 'totaal', eStrength: 'totaal' };
+      const dashboardBodyRows = latestBodyDataRows.filter(row => dashboardBodyRowTabs[row.key]);
+
+      return (
+        <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: '4px 8px 4px' }}>
+          {dashboardBodyRows.length > 0 ? (
+            dashboardBodyRows.map((row, index) => (
+              <div
+                key={row.key}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setStatsTab(dashboardBodyRowTabs[row.key]);
+                  changeScreen('stats');
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    setStatsTab(dashboardBodyRowTabs[row.key]);
+                    changeScreen('stats');
+                  }
+                }}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
+                  alignItems: 'center',
+                  columnGap: 14,
+                  padding: '6px 8px',
+                  marginBottom: index === dashboardBodyRows.length - 1 ? 0 : 4,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                }}
+              >
+                <span style={{ color: THEME.text, fontWeight: 800, fontSize: 16 }}>
+                  {row.label}
+                </span>
+
+                <strong style={{
+                  textAlign: 'right',
+                  whiteSpace: 'nowrap',
+                  minWidth: 70,
+                  fontSize: 16,
+                  color: row.status?.color || THEME.primary
+                }}>
+                  {row.value}
+                </strong>
+              </div>
+            ))
+          ) : (
+            <div style={{
+              color: THEME.muted,
+              fontSize: 15,
+              fontWeight: 700,
+              lineHeight: 1.4,
+              textAlign: 'center'
+            }}>
+              {t.noBodyDataYet}
+            </div>
+          )}
+        </div>
+      );
+    })()}
+  </div>
+)}
+
+      {screen === 'all' && (
+        <AllWorkouts
+          workouts={workouts}
+          currentIndex={currentIndex}
+          completedWorkoutNumbers={completedWorkoutNumbers}
+          currentCycle={currentCycle}
+          onSelect={(idx) => {
+            setSelectedIndex(idx);
+            setScreen('current');
+          }}
+          onStartNewCycle={handleStartNewCycle}
+          programProfile={programProfile}
+          trainingModel={trainingModel}
+          preparationMode={preparationMode}
+          accessoryMode={accessoryMode}
+          cooldownMode={cooldownMode}
+          squatVariant={squatVariant}
+          deadliftVariant={deadliftVariant}
+          onApplyProgramSettings={applyProgramSettings}
+          onChangeProgramProfile={changeProgramProfile}
+          t={t}
+          weightUnit={weightUnit}
+          benchPressVariant={benchPressVariant}
+          athleteLevel={athleteLevel}
+          eStrengthRatio={eStrengthRatio}
+          latestBodyWeight={latestBodyWeight}
+        />
+      )}
+
+      {screen === 'stats' && (
+        <StatsScreen
+          history={history}
+          bodyWeights={bodyWeights}
+          currentCycle={currentCycle}
+          currentIndex={currentIndex}
+          totalWorkouts={workouts.length}
+          trainingModel={trainingModel}
+          t={t}
+          weightUnit={weightUnit}
+          best1RMs={best1RMs}
+          bestE1RMs={bestE1RMs}
+          athleteLevel={athleteLevel}
+          eStrengthRatio={eStrengthRatio}
+          latestBodyWeight={latestBodyWeight}
+          activescreen={statsTab}
+          onChangeTab={setStatsTab}
+        />
+)}
+
+      {screen === 'settings' && (
+       <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
+  <AppHeader
+    t={t}
+    title={t.settings}
+  />
+
+  <div style={{
+    background: 'transparent',
+    border: 'none',
+    borderRadius: 8,
+    padding: '0 8px',
+    marginTop: 10,
+    marginBottom: 6
+  }}>
+    <ProfileSection
+      userProfile={userProfile}
+      onSave={setUserProfile}
+      weightUnit={weightUnit}
+      setWeightUnit={setWeightUnit}
+      t={t}
+    />
+
+
+    <BodyDataSection
+      bodyData={latestBodyDataEntry}
+      onSave={saveBodyWeight}
+      t={t}
+      weightUnit={weightUnit}
+    />
+
+    <RestTimeSection
+      t={t}
+    />
+
+    <ModelSection
+      trainingModel={trainingModel}
+      setTrainingModel={changeTrainingModel}
+      t={t}
+    />
+
+    <LanguageSection
+      language={language}
+      setLanguage={setLanguage}
+      t={t}
+    />
+
+    <DataSection
+      t={t}
+    />
+
+    <SupportSection t={t} />
+
+    <SettingsListRow
+      label={t.restart}
+      actionLabel={t.startFromScratch || t.restart}
+      onAction={() => setShowResetConfirm(true)}
+      danger={true}
+    />
+
+  </div>
+
+</div>
+      )}
+    {screen === 'completed' && (
+  <div style={{
+    maxWidth: 500,
+    margin: '0 auto',
+    padding: 24,
+    boxSizing: 'border-box',
+    minHeight: 'calc(100dvh - 70px)',
+    background: THEME.bg,
+    color: THEME.text,
+    fontFamily: 'sans-serif',
+    overflowX: 'hidden'
+  }}>
+    {completedWorkoutIsMeetCycleEnd ? (
+      <div style={{
+        background: 'transparent',
+        border: 'none',
+        borderRadius: 12,
+        padding: 24,
+        textAlign: 'center'
+      }}>
+        <div style={{ fontSize: 40, marginBottom: 10 }}>🎉</div>
+
+        <h2 style={{ margin: '0 0 8px', color: THEME.brown }}>
+          {t.workoutAndCycleCompleted}
+        </h2>
+
+        <p style={{ color: THEME.muted, margin: '0 0 16px' }}>
+          {t.workoutAndCycleSaved}
+        </p>
+
+        {getCompletedWorkoutSuggestions(completedWorkout, t, 'standard').length > 0 && (
+          <div style={{
+            margin: '0 auto 16px',
+            padding: '12px 14px',
+            borderRadius: 10,
+            border: 'none',
+            background: THEME.bg,
+            textAlign: 'left'
+          }}>
+            <div style={{
+              color: THEME.primary,
+              fontSize: 13,
+              fontWeight: 900,
+              marginBottom: 7
+            }}>
+              {t.kelaniSuggestion || 'Kelani suggestion'}
+            </div>
+
+            <div style={{ display: 'grid', gap: 7 }}>
+              {getCompletedWorkoutSuggestions(completedWorkout, t, 'standard').map((suggestion, index) => (
+                <div
+                  key={`meet-suggestion-${index}`}
+                  style={{
+                    color: THEME.text,
+                    fontSize: 14,
+                    fontWeight: 800,
+                    lineHeight: 1.4
+                  }}
+                >
+                  {suggestion}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {(() => {
+          const achievedLiftResults = (completedWorkout?.lifts || []).map(liftBlock => {
+            const successfulSets = (liftBlock.sets || []).filter(set =>
+              set.done && !set.failed && !set.skipped
+            );
+
+            const bestSet = successfulSets.reduce((best, set) => {
+              if (!best) return set;
+              return Number(set.weight) > Number(best.weight) ? set : best;
+            }, null);
+
+            return {
+              lift: liftBlock.lift,
+              weight: Number(bestSet?.weight) || 0,
+            };
+          });
+
+          const achievedTotal = achievedLiftResults.reduce(
+            (total, result) => total + result.weight,
+            0
+          );
+
+          return (
+            <div style={{
+              background: 'transparent',
+              border: 'none',
+              color: THEME.text,
+              borderRadius: 10,
+              padding: 16,
+              marginBottom: 16,
+              textAlign: 'center'
+            }}>
+              <div style={{
+                color: THEME.muted,
+                fontSize: 13,
+                fontWeight: 800,
+                marginBottom: 4
+              }}>
+                {t.achievedTotal || t.total}
+              </div>
+
+              <div style={{
+                color: THEME.primary,
+                fontSize: 28,
+                fontWeight: 900,
+                lineHeight: 1,
+                marginBottom: 12
+              }}>
+                {achievedTotal ? formatWeightFromKg(achievedTotal, weightUnit) : '—'}
+              </div>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr',
+                gap: 8
+              }}>
+                {achievedLiftResults.map(result => (
+                  <div
+                    key={`achieved-${result.lift}`}
+                    style={{
+                      padding: '8px 6px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: 'transparent'
+                    }}
+                  >
+                    <div style={{
+                      color: THEME.muted,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      marginBottom: 3
+                    }}>
+                      {liftLabel(result.lift, t)}
+                    </div>
+                    <div style={{
+                      color: '#ffffff',
+                      fontSize: 13,
+                      fontWeight: 900
+                    }}>
+                      {result.weight ? formatWeightFromKg(result.weight, weightUnit) : '—'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        <div style={{
+          background: 'transparent',
+          border: 'none',
+          color: THEME.text,
+          borderRadius: 8,
+          padding: 16,
+          marginBottom: 16,
+          textAlign: 'left'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.lift}</span>
+            <strong>{completedWorkout?.lift || 'SBD'}</strong>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.workout}</span>
+            <strong>{completedWorkout?.number || '—'}</strong>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
+            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.cycle}</span>
+            <strong>{currentCycle}</strong>
+          </div>
+
+          <div style={{
+            fontSize: 16,
+            fontWeight: 900,
+            color: THEME.primary,
+            marginBottom: 10,
+            textAlign: 'center'
+          }}>
+            {t.meetAttemptsCompleted}
+          </div>
+
+          {(completedWorkout?.lifts || []).map(liftBlock => (
+            <div key={liftBlock.lift} style={{ marginBottom: 14 }}>
+              <div style={{
+                color: THEME.primary,
+                fontWeight: 900,
+                marginBottom: 6
+              }}>
+                {workoutLiftBlockLabel(liftBlock, t, benchPressVariant)}
+              </div>
+
+              {(liftBlock.sets || []).map((set, i) => {
+                const setLabel = set.labelKey ? t[set.labelKey] : `${t.set} ${i + 1}`;
+                const isInvalidSet = set.failed || set.skipped || !set.done;
+
+                return (
+                  <div
+                    key={`${liftBlock.lift}-${i}`}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+                      color: '#ffffff',
+                      opacity: isInvalidSet ? 0.8 : 1,
+                      borderLeft: isInvalidSet ? '3px solid #e74c3c' : '3px solid transparent'
+                    }}
+                  >
+                    <span style={{ color: '#ffffff', fontWeight: 700 }}>
+                      {isInvalidSet ? '✕ ' : '✓ '}
+                      {setLabel}
+                    </span>
+
+                    <strong style={{ color: isInvalidSet ? '#e74c3c' : '#ffffff', whiteSpace: 'nowrap' }}>
+                      {formatWeightFromKg(set.weight, weightUnit)}
+                    </strong>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={handleStartNewCycle}
+          style={{
+            width: '100%',
+            padding: 14,
+            fontSize: 16,
+            fontWeight: 800,
+            background: THEME.primary,
+            color: '#ffffff',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 8,
+            cursor: 'pointer',
+            marginBottom: 10
+          }}
+        >
+          {t.startNewCycle} 🚀
+        </button>
+
+        <button
+          onClick={() => setScreen('stats')}
+          style={{
+            width: '100%',
+            padding: 14,
+            fontSize: 16,
+            fontWeight: 600,
+            background: 'transparent',
+            color: '#ffffff',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 8,
+            cursor: 'pointer',
+            marginBottom: 10
+          }}
+        >
+          {t.viewProgress}
+        </button>
+
+        <button
+          onClick={() => {
+            const targetIndex = Number.isInteger(completedWorkoutIndex)
+              ? completedWorkoutIndex
+              : Math.max(0, (completedWorkout?.number || 1) - 1);
+
+            setSelectedIndex(targetIndex);
+            setScreen('current');
+          }}
+          style={{
+            width: '100%',
+            padding: 14,
+            fontSize: 16,
+            fontWeight: 600,
+            marginBottom: 0,
+            background: 'transparent',
+            color: '#ffffff',
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          {t.backToWorkout}
+        </button>
+      </div>
+    ) : (
+      <div style={{ background: 'transparent', border: 'none', borderRadius: 12, padding: '8px 24px 12px', textAlign: 'center' }}>
+        <div style={{ fontSize: 40, marginBottom: 6 }}>🎉</div>
+
+        <h2 style={{ margin: '0 0 6px', color: THEME.brown }}>
+          {completedWorkoutCanStartNewCycle ? (t.cycleCompleted || 'Cycle complete')
+            : completedWorkout?.type === 'rest'
+              ? 'Rest day complete'
+              : t.workoutCompleted}
+        </h2>
+
+        <p style={{ color: THEME.muted, margin: '0 0 8px' }}>
+          {completedWorkoutCanStartNewCycle ? (t.workoutAndCycleSaved || 'Cycle saved. Start the next cycle when ready.')
+            : completedWorkout?.type === 'rest'
+              ? 'Rest day saved. You can continue to the next workout.'
+              : t.goodJobSaved}
+        </p>
+
+        {(completedWorkout?.lifts || []).length > 0 && (() => {
+          const liftNames = (completedWorkout.lifts || [])
+            .map(liftBlock => workoutLiftBlockLabel(liftBlock, t, benchPressVariant))
+            .filter(Boolean)
+            .join(' + ');
+
+          const effortLabel = getWorkoutEffortLabel(completedWorkout?.workoutEffort, t);
+          const autoTooMuchSetCount = completedWorkout?.workoutEffort === 'tooMuch'
+            ? countFailedOrSkippedSetsFromSnapshot(completedWorkout)
+            : 0;
+
+          const summaryRow = (label, value) => (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+              marginBottom: 6
+            }}>
+              <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
+              <strong style={{ color: '#ffffff', textAlign: 'right' }}>{value}</strong>
+            </div>
+          );
+
+          return (
+            <div style={{
+              background: 'transparent',
+              border: 'none',
+              color: THEME.text,
+              borderRadius: 8,
+              padding: '8px 12px',
+              marginBottom: 4,
+              textAlign: 'left'
+            }}>
+              {summaryRow(t.lifts || t.lift, liftNames || '—')}
+              {summaryRow(t.workout, completedWorkout?.number || '—')}
+              {summaryRow(t.cycle, currentCycle)}
+              {summaryRow(t.workoutEffortWas, effortLabel || '—')}
+              {autoTooMuchSetCount > 0 && (
+                <p style={{
+                  color: THEME.muted,
+                  fontSize: 12,
+                  margin: '2px 0 0',
+                  textAlign: 'left'
+                }}>
+                  {(t.workoutEffortAutoTooMuch || 'Automatically marked as TOO MUCH — {count} set(s) failed or skipped.')
+                    .replace('{count}', autoTooMuchSetCount)}
+                </p>
+              )}
+            </div>
+          );
+        })()}
+
+
+        {(completedWorkout?.lifts || []).length === 0 && getWorkoutEffortText(completedWorkout?.workoutEffort, t) && (
+          <div style={{
+            margin: '0 auto 16px',
+            padding: '10px 14px',
+            borderRadius: 10,
+            border: 'none',
+            background: 'transparent',
+            maxWidth: 260,
+            textAlign: 'center'
+          }}>
+            <div style={{
+              color: THEME.muted,
+              fontSize: 12,
+              fontWeight: 800,
+              marginBottom: 3
+            }}>
+              {t.workoutEffort}
+            </div>
+
+            <div style={{
+              color: THEME.primary,
+              fontSize: 18,
+              fontWeight: 900,
+              lineHeight: 1.1
+            }}>
+              {getWorkoutEffortText(completedWorkout.workoutEffort, t)}
+            </div>
+          </div>
+        )}
+
+        {!isSmartTrainingModel(trainingModel) && getCompletedWorkoutSuggestions(completedWorkout, t, benchPressVariant).length > 0 && (
+          <div style={{
+            margin: '0 auto 16px',
+            padding: '12px 14px',
+            borderRadius: 10,
+            border: 'none',
+            background: THEME.bg,
+            textAlign: 'left'
+          }}>
+            <div style={{
+              color: THEME.primary,
+              fontSize: 13,
+              fontWeight: 900,
+              marginBottom: 7
+            }}>
+              {t.kelaniSuggestion || 'Kelani suggestion'}
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gap: 7
+            }}>
+              {getCompletedWorkoutSuggestions(completedWorkout, t, benchPressVariant).map((suggestion, index) => (
+                <div
+                  key={`completed-suggestion-${index}`}
+                  style={{
+                    color: THEME.text,
+                    fontSize: 14,
+                    fontWeight: 800,
+                    lineHeight: 1.4
+                  }}
+                >
+                  {suggestion}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div style={{
+          display: (
+            completedWorkout?.type === 'meet' ||
+            completedSummaryForRender?.type === 'meet' ||
+            !(completedSummaryForRender?.results || []).some(result => result.trackStrength !== false)
+          ) ? 'none' : undefined,
+          background: 'transparent',
+          border: 'none',
+          color: THEME.text,
+          borderRadius: 8,
+          padding: '6px 12px',
+          marginBottom: 6,
+          textAlign: 'left'
+        }}>
+          <div style={{
+            color: ({
+              Squat: THEME.red,
+              Bench: THEME.primary,
+              Deadlift: THEME.yellow,
+            }[(completedSummaryForRender?.results || []).find(result => result.trackStrength !== false)?.lift || completedWorkout?.lift] || THEME.primary),
+            fontSize: 16,
+            fontWeight: 900,
+            marginBottom: 6,
+            textAlign: 'center'
+          }}>
+            {liftLabel((completedSummaryForRender?.results || []).find(result => result.trackStrength !== false)?.lift || completedWorkout?.lift, t)} · 1RM / e1RM
+          </div>
+
+          {(() => {
+            const row = (label, value, isPR) => (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
+                <strong style={{ color: '#ffffff' }}>
+                  {formatWeightFromKg(value, weightUnit)} {isPR ? '🚀' : ''}
+                </strong>
+              </div>
+            );
+
+            const primaryResult = (completedSummaryForRender?.results || []).find(result => result.trackStrength !== false);
+            if (!primaryResult) return null;
+
+            const sets = (completedWorkout?.sets || []).filter(s => s.done && !s.failed && !s.skipped);
+
+            const calculatedOneRMToday = sets.length
+              ? Math.max(...sets.map(s => Number(s.weight) || 0))
+              : 0;
+
+            const calculatedE1RMToday = sets.length
+              ? roundE1RM(Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0))))
+              : 0;
+
+            const oneRMToday = primaryResult?.oneRMToday ?? calculatedOneRMToday;
+            const e1RMToday = primaryResult?.e1RMToday ?? calculatedE1RMToday;
+
+            const primaryLift = primaryResult?.lift || completedWorkout?.lift;
+
+            const previousBest1RM = Number(best1RMs?.[primaryLift]) || 0;
+            const previousBestE1RM = Number(bestE1RMs?.[primaryLift]) || Number(prs?.[primaryLift]) || 0;
+
+            const best1RM = Math.max(previousBest1RM, oneRMToday || 0);
+            const bestE1RM = Math.max(previousBestE1RM, e1RMToday || 0);
+
+            const is1RMPR = oneRMToday > previousBest1RM && oneRMToday > 0;
+            const isE1RMPR = e1RMToday > previousBestE1RM && e1RMToday > 0;
+
+            return (
+              <>
+                {row(t.oneRMToday, oneRMToday, is1RMPR)}
+                {row(t.e1RMToday, e1RMToday, isE1RMPR)}
+                {row(t.best1RM, best1RM, is1RMPR)}
+                {row(t.bestE1RM, bestE1RM, isE1RMPR)}
+              </>
+            );
+          })()}
+        </div>
+
+        {/* FORCE_MULTI_LIFT_COMPLETED_SETS_START */}
+        {(completedWorkout?.lifts || []).length > 0 && (
+          <div style={{
+            background: 'transparent',
+            border: 'none',
+            color: THEME.text,
+            borderRadius: 8,
+            padding: '4px 12px 8px',
+            marginBottom: 8,
+            textAlign: 'left'
+          }}>
+            {(completedWorkout.lifts || []).map((liftBlock, liftIndex) => (
+              <div
+                key={`force-completed-lift-${liftBlock.lift}`}
+                style={{
+                  marginTop: liftIndex === 0 ? 0 : 8,
+                  paddingTop: 0,
+                }}
+              >
+                <div style={{
+                  color: ({
+                    Squat: THEME.red,
+                    Bench: THEME.primary,
+                    Deadlift: THEME.yellow,
+                  }[liftBlock.lift] || THEME.primary),
+                  fontSize: 16,
+                  fontWeight: 900,
+                  marginBottom: 4
+                }}>
+                  {workoutLiftBlockLabel(liftBlock, t, benchPressVariant)}
+                </div>
+
+                {(() => {
+                  const groups = [];
+
+                  (liftBlock.sets || []).forEach((set, i) => {
+                    const setLabel = set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`;
+                    const isInvalidSet = set.failed || set.skipped || !set.done;
+                    const effortLabel = getSetEffortLabel(set.effort, t);
+                    const weightText = `${formatWorkoutWeightFromKg(
+                      set.weight,
+                      weightUnit,
+                      t,
+                      liftBlock.lift,
+                      liftBlock.benchPressVariant || benchPressVariant
+                    )}${set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}`;
+                    const key = [
+                      setLabel,
+                      set.reps,
+                      weightText,
+                      isInvalidSet ? 'invalid' : 'done',
+                      effortLabel || '',
+                    ].join('|');
+
+                    const previous = groups[groups.length - 1];
+                    if (previous?.key === key) {
+                      previous.count += 1;
+                      return;
+                    }
+
+                    groups.push({
+                      key,
+                      label: setLabel,
+                      reps: set.reps,
+                      weightText,
+                      isInvalidSet,
+                      effortLabel,
+                      count: 1,
+                    });
+                  });
+
+                  return groups.map((group, i) => (
+                    <div
+                      key={`force-${liftBlock.lift}-${i}-${group.key}`}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr auto',
+                        gap: 12,
+                        padding: '5px 0',
+                        opacity: group.isInvalidSet ? 0.75 : 1
+                      }}
+                    >
+                      <div>
+                        <div style={{ color: THEME.text, fontWeight: 800 }}>
+                          {group.isInvalidSet ? '✕ ' : '✓ '}
+                          {group.label}
+                        </div>
+
+                        {group.effortLabel && (
+                          <div style={{
+                            color: THEME.muted,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            marginTop: 2
+                          }}>
+                            {group.effortLabel}
+                          </div>
+                        )}
+                      </div>
+
+                      <strong style={{
+                        color: group.isInvalidSet ? '#e74c3c' : '#ffffff',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {group.count}×{group.reps}×{group.weightText}
+                      </strong>
+                    </div>
+                  ));
+                })()}
+              </div>
+            ))}
+          </div>
+        )}
+        {/* FORCE_MULTI_LIFT_COMPLETED_SETS_END */}
+
+        {completedWorkoutCanStartNewCycle && (
+          <button
+            onClick={handleStartNewCycle}
+            style={{
+              width: '100%',
+              padding: 14,
+              fontSize: 16,
+              fontWeight: 800,
+              background: THEME.primary,
+              color: '#ffffff',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 8,
+              cursor: 'pointer',
+              marginBottom: 10
+            }}
+          >
+            {t.startNewCycle} 🚀
+          </button>
+        )}
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: 8
+        }}>
+          <button
+            onClick={() => setScreen('stats')}
+            style={{
+              width: '100%',
+              minWidth: 0,
+              padding: '11px 8px',
+              fontSize: 14,
+              fontWeight: 700,
+              background: completedWorkoutCanStartNewCycle ? 'transparent' : THEME.primary,
+              color: '#ffffff',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 8,
+              cursor: 'pointer'
+            }}
+          >
+            {t.stats || t.viewProgress}
+          </button>
+
+          <button
+            onClick={() => {
+              const targetIndex = Number.isInteger(completedWorkoutIndex)
+                ? completedWorkoutIndex
+                : Math.max(0, (completedWorkout?.number || 1) - 1);
+
+              setSelectedIndex(targetIndex);
+              setScreen('current');
+            }}
+            style={{
+              width: '100%',
+              minWidth: 0,
+              padding: '11px 8px',
+              fontSize: 14,
+              fontWeight: 700,
+              background: 'transparent',
+              color: '#ffffff',
+              border: `1px solid ${THEME.primary}`,
+              borderRadius: 8,
+              cursor: 'pointer'
+            }}
+          >
+            {t.back || t.backToWorkout}
+          </button>
+        </div>
+      </div>
+    )}
+  </div>
+)}
+
+{false && showNewCycle && screen === 'completed' && (
+  <NewCycleModal
+    prs={prs}
+    onStart={handleStartNewCycle}
+    t={t}
+  />
+)}
+
+{showWorkoutEffortPrompt && (
+  <div style={{
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.65)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 650,
+    padding: 16
+  }}>
+    <div style={{
+      background: THEME.card,
+      border: `1px solid ${THEME.primary}`,
+      borderRadius: 12,
+      padding: 20,
+      maxWidth: 380,
+      width: '100%',
+      color: THEME.text
+    }}>
+      <h3 style={{
+        margin: '0 0 8px',
+        color: THEME.brown,
+        textAlign: 'center'
+      }}>
+        {t.workoutEffortQuestion}
+      </h3>
+
+      <p style={{
+        margin: '0 0 16px',
+        color: THEME.muted,
+        fontSize: 13,
+        lineHeight: 1.4,
+        textAlign: 'center'
+      }}>
+        {t.workoutEffortRequired}
+      </p>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${WORKOUT_EFFORT_OPTIONS.length}, minmax(0, 1fr))`,
+        gap: 8
+      }}>
+        {WORKOUT_EFFORT_OPTIONS.map(option => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => completeWorkout(option)}
+            style={{
+              padding: 12,
+              borderRadius: 8,
+              border: `1px solid ${THEME.primary}`,
+              background: THEME.card,
+              color: THEME.text,
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
+            {t[`workoutEffort${option[0].toUpperCase()}${option.slice(1)}`]}
+          </button>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowWorkoutEffortPrompt(false)}
+        style={{
+          width: '100%',
+          marginTop: 10,
+          padding: 10,
+          fontSize: 14,
+          fontWeight: 700,
+          background: 'transparent',
+          color: THEME.text,
+          border: `1px solid ${THEME.primary}`,
+          borderRadius: 8,
+          cursor: 'pointer'
+        }}
+      >
+        {t.cancel}
+      </button>
+    </div>
+  </div>
+)}
+
+{plateCalcWeightKg !== null && (
+  <PlateCalculator
+    weightKg={plateCalcWeightKg}
+    onClose={() => setPlateCalcWeightKg(null)}
+    theme={THEME}
+    t={t}
+  />
+)}
+{showResetConfirm && (
+  <div style={{
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.65)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 600,
+    padding: 16
+  }}>
+    <div style={{
+      background: THEME.card,
+      border: `1px solid ${THEME.primary}`,
+      borderRadius: 12,
+      padding: 20,
+      maxWidth: 380,
+      width: '100%',
+      color: THEME.text
+    }}>
+      <h3 style={{ margin: '0 0 10px', color: THEME.brown }}>
+        {t.resetConfirmTitle}
+      </h3>
+
+      <p style={{ margin: '0 0 18px', color: THEME.muted, fontSize: 14, lineHeight: 1.45 }}>
+        {t.resetConfirmText}
+      </p>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={() => setShowResetConfirm(false)}
+          style={{
+            flex: 1,
+            padding: 12,
+            fontSize: 14,
+            fontWeight: 700,
+            background: 'transparent',
+            color: THEME.text,
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          {t.resetConfirmCancel}
+        </button>
+
+        <button
+          onClick={handleResetApp}
+          style={{
+            flex: 1,
+            padding: 12,
+            fontSize: 14,
+            fontWeight: 800,
+            background: THEME.red,
+            color: '#ffffff',
+            border: `1px solid ${THEME.red}`,
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          {t.resetConfirmConfirm}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+      <BottomNav screen={screen} onChange={changeScreen} t={t} />
+    </div>
+  );
+}

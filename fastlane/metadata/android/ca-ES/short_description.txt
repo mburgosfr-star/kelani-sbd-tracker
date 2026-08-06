@@ -1,0 +1,1 @@
+Aplicació de seguiment de powerlifting offline per a Squat, Bench i Deadlift.

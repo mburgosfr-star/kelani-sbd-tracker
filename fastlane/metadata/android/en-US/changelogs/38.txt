@@ -1,0 +1,5 @@
+- Rebalanced Stats into six clearer tabs.
+- Polished Meet Planner layout and attempt cards.
+- Improved Settings layout, footer and reset action.
+- Added clearer feedback after starting a new cycle.
+- Improved release and reproducible-build checks.

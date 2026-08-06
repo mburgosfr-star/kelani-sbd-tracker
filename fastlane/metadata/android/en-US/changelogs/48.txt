@@ -1,0 +1,8 @@
+Kelani SBD Tracker v1.1.0
+
+- Added Preparation mode in Settings: Off, Basic, and Shoulder care.
+- Added shoulder-care preparation exercises.
+- Replaced the generic cooldown with a specific rhomboid stretch.
+- Improved onboarding labels and input fields.
+- Improved Settings button alignment.
+- Improved feature graphic readability.

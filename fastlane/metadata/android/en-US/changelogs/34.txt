@@ -1,0 +1,5 @@
+Improved backup import preview.
+Added backup summary metadata.
+Export filenames now include date and time.
+Improved warm-up weight jumps.
+Regenerated program data after warm-up logic update.

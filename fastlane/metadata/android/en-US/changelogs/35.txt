@@ -1,0 +1,5 @@
+Added extended preparation section before warm-ups.
+Added per-lift prep items for squat, bench press, and deadlift.
+Added localized prep labels in Dutch, English, and Catalan.
+Made prep, warm-up, and main set check buttons visually consistent.
+Regenerated program data after the extended warm-up update.

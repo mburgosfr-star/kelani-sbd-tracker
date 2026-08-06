@@ -1,0 +1,5 @@
+Polished Settings and navigation headers.
+
+Settings is now more compact and easier to use, with profile/body data editing in modals, a cleaner language selector, support links, and a safer restart button.
+
+Program and Progress headers are now more consistent with the rest of the app.

@@ -1,0 +1,1 @@
+Fixed 1RM/e1RM logic, total stats, completed workout summary, warm-up editing and settings cleanup.

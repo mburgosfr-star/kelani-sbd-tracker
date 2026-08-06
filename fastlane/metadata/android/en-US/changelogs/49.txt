@@ -1,0 +1,8 @@
+Kelani SBD Tracker v1.2.0
+
+- Added kg/lb unit support during onboarding and in Profile.
+- Added unit-aware workout weights, body data, stats, meet planner values, and completed workout summaries.
+- Added Workout settings with Preparation, Accessories, and Bench Press options.
+- Added Floor Press as a temporary Bench Press alternative.
+- Fixed standalone Bench/Floor Press work-set days showing as Backoff.
+- Fixed cooldown completion state so it stays checked after workout completion.

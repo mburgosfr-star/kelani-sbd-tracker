@@ -1,0 +1,6 @@
+- Added Meet Planner with editable meet attempts.
+- Added projected meet totals in Stats and on meet day.
+- Synced Meet Planner attempts with Workout 28.
+- Added safer reset confirmation for Meet Planner.
+- Clarified manual new-cycle action wording.
+- Fixed automatic app version display for release builds.

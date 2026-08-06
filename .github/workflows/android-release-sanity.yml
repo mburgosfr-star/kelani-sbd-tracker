@@ -1,0 +1,70 @@
+name: Android release sanity
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release-sanity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-sanity:
+    name: Test app and isolated Android release build
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate release automation
+        run: npm run release:self-check
+
+      - name: Run all tests
+        run: npm test -- --runInBand
+        env:
+          CI: "true"
+
+      - name: Build production web assets
+        run: npm run build
+
+      - name: Run isolated Izzy and NeoStore build
+        run: npm run android:izzy-test
+
+      - name: Ensure validation changed no tracked files
+        run: |
+          STATUS="$(git status --porcelain --untracked-files=no)"
+
+          if [[ -n "$STATUS" ]]; then
+            echo "ERROR: validation changed tracked files"
+            git status --short
+            git diff --stat
+            exit 1
+          fi
+
+          echo "Tracked repository state remained clean"

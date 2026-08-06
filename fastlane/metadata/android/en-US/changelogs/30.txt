@@ -1,0 +1,3 @@
+Improved rest timer sound.
+Added configurable rest time: 1:30, 3:00, or 5:00.
+Improved rest time settings layout consistency.

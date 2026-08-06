@@ -1,0 +1,6 @@
+Kelani SBD Tracker 1.0.
+
+- Polished workout layout and phone readability.
+- Made set rows more consistent across main sets, back-offs, work sets and accessories.
+- Improved restore behavior for edited and adjusted workout weights.
+- Updated app information, privacy policy and Google Play readiness.

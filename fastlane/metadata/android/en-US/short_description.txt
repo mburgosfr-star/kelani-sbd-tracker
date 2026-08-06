@@ -1,0 +1,1 @@
+Offline-first powerlifting tracker for Squat, Bench and Deadlift.

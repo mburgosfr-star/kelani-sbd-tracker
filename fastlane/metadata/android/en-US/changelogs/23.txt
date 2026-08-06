@@ -1,0 +1,10 @@
+- Introduced the Kelani SBD Method
+- Removed accessories
+- Added new 28-workout SBD-only program structure
+- Increased bench frequency to 3× per 6 workouts
+- Set squat frequency to 2× per 6 workouts
+- Set deadlift frequency to 1× per 6 workouts
+- Improved dynamic warmups
+- Added W25–W27 pre-meet workouts
+- Added W28 SBD Meet Day
+- Added cycle-aware new cycle flow after W28

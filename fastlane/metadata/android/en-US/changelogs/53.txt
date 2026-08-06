@@ -1,0 +1,6 @@
+Added a Deadlift Alternative workout option.
+
+- New Settings → Workout → Deadlift option with Standard and Alternative modes.
+- Alternative mode replaces deadlift work with Leg Press, Hamstring Curl, and Cable Pull-through.
+- Updated deadlift-day optional accessory from Leg Press to Leg Extension.
+- Kept strength tracking clean so alternative deadlift work does not affect Deadlift 1RM/e1RM progress.

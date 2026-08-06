@@ -1,0 +1,503 @@
+import {
+  buildSmartDiagnosticText,
+  getSmartModalDetailRows,
+  getSmartPrescriptionDetailRows,
+  getSmartAttemptPhaseLabel,
+} from './App';
+
+test('maps the projected third-attempt limiter without falling back to opener', () => {
+  expect(getSmartAttemptPhaseLabel('third-attempt', {
+    smartAttemptPhaseThird: '3e poging',
+  })).toBe('3e poging');
+  expect(getSmartAttemptPhaseLabel('second-attempt', {
+    smartAttemptPhaseSecond: '2e poging',
+  })).toBe('2e poging');
+  expect(getSmartAttemptPhaseLabel('opener', {
+    smartAttemptPhaseOpener: 'opener',
+  })).toBe('opener');
+});
+
+test('meet-day Smart details switch from diagnostics to positive execution guidance', () => {
+  expect(getSmartModalDetailRows({
+    type: 'meet',
+    smartDecisionSummary: {
+      dayType: 'meet',
+      readiness: { recentFatigueScore: 99 },
+    },
+  }, {})).toEqual([
+    {
+      label: 'You are ready',
+      value: 'Trust your preparation. Stay calm and execute one attempt at a time.',
+      kind: 'meet-day',
+    },
+    {
+      label: 'Attempt strategy',
+      value: 'Secure the opener, build the total with the second, then commit to the third.',
+      kind: 'meet-day',
+    },
+  ]);
+});
+
+function volumeSets(lift, count, reps, pct) {
+  return Array.from({ length: count }, () => ({
+    lift,
+    labelKey: 'backoff',
+    reps,
+    pct,
+    weight: 100,
+  }));
+}
+
+function smartLift({
+  lift,
+  role = 'primary',
+  labelKey = 'topDouble',
+  reps = 2,
+  previousPct = 0.825,
+  currentPct = 0.85,
+  volumeCount = 5,
+  volumeReps = 4,
+  volumePct = 0.725,
+  repeatVariationApplied = true,
+}) {
+  return {
+    lift,
+    role,
+    sets: [
+      {
+        lift,
+        labelKey,
+        reps,
+        pct: currentPct,
+        weight: 100,
+      },
+      ...volumeSets(
+        lift,
+        volumeCount,
+        volumeReps,
+        volumePct
+      ),
+    ],
+    warmups: Array.from({ length: 3 }, () => ({})),
+    smartPrescription: {
+      role,
+      topSetAnchorPct: previousPct,
+      progressionAnchorPct: previousPct,
+      volumeAnchorPct: volumePct,
+      plannedVolumePct: volumePct,
+      repeatVariationApplied,
+      regressionReason: null,
+      completeGrid: true,
+      gridItemCount: 9,
+    },
+  };
+}
+
+function workoutWith(lifts) {
+  return {
+    number: 24,
+    smartCurrentCycle: 3,
+    smartDayType: 'training',
+    smartGeneratedPrescriptionVersion: 10,
+    lifts,
+    smartTrainingSelectionSummary: {
+      primaryLift: lifts[0]?.lift || null,
+      secondaryLift: lifts[1]?.lift || null,
+      reasonFlags: [
+        'generated-prescription',
+        'recent-prescription-variation',
+      ],
+      frequencyExposureCounts: {
+        Squat: 3,
+        Bench: 3,
+        Deadlift: 1,
+      },
+    },
+    smartDecisionSummary: {
+      dayType: 'training',
+      reason: 'training-fallback',
+      readiness: {
+        meetPlanReady: false,
+        meetPlanWeakestLift: 'Deadlift',
+        meetPlanWeakestPhase: 'opener',
+        meetPlanOpenerReadyCount: 1,
+        meetPlanSecondAttemptReadyCount: 0,
+        meetPlanThirdAttemptPotentialCount: 0,
+        meetPlanReadiness: {
+          Deadlift: {
+            currentCycleBestE1RM: 157.3,
+            readinessTargetAttempt: 162.5,
+            readinessPhase: 'opener',
+            openerReady: false,
+          },
+        },
+        meetProjection: {
+          available: true,
+          label: 'C3W32–C3W35',
+          limitingLift: 'Squat',
+          limitingPhase: 'opener',
+        },
+        meetdayBlockers: ['meet-plan-not-ready'],
+        recentFatigueScore: 0,
+        recentFailedOrSkippedSetCount: 0,
+      },
+    },
+  };
+}
+
+test('fully demonstrated meet readiness remains visible during taper', () => {
+  const workout = workoutWith([smartLift({ lift: 'Squat', role: 'secondary' })]);
+  workout.smartDecisionSummary.readiness.meetPlanFullyDemonstrated = true;
+  workout.smartDecisionSummary.readiness.meetPlanOpenerReadyCount = 3;
+  workout.smartDecisionSummary.readiness.meetPlanSecondAttemptReadyCount = 3;
+  workout.smartDecisionSummary.readiness.meetPlanThirdAttemptPotentialCount = 3;
+
+  const rows = getSmartModalDetailRows(workout, {
+    smartMeetStatus: 'Meetstatus',
+    smartMeetFullyReadyTaper: 'Volledig wedstrijdklaar — taperen en rusten voor de meet',
+  });
+
+  expect(rows).toContainEqual({
+    label: 'Meetstatus',
+    value: 'Volledig wedstrijdklaar — taperen en rusten voor de meet',
+  });
+  expect(rows).toEqual(expect.arrayContaining([
+    { label: 'Openers', value: '3/3', kind: 'metric' },
+    { label: '2nd attempts', value: '3/3', kind: 'metric' },
+    { label: '3rd potential', value: '3/3', kind: 'metric' },
+  ]));
+});
+
+test('distinguishes the current blocker from the projected limiter', () => {
+  const rows = getSmartModalDetailRows(workoutWith([
+    smartLift({ lift: 'Deadlift' }),
+  ]));
+
+  expect(rows).toEqual(expect.arrayContaining([
+    {
+      label: 'Current blocker',
+      value: 'Deadlift — opener not yet demonstrated',
+    },
+    {
+      label: 'Projected limiter',
+      value: 'Squat — opener',
+    },
+  ]));
+});
+
+test('shows the full readiness/blocker/fatigue detail on a deload or rest day too, not just on training-fallback days', () => {
+  // C3W35 was correctly converted to a rest day (via the
+  // deload frequency fallback), but the modal collapsed to showing only
+  // "Projected meet" because this whole block used to be gated on
+  // isTrainingFallback (dayType==='training' && reason==='training-fallback').
+  // The underlying readiness/fatigue data is exactly as meaningful on a
+  // deload or recovery day - if anything more so, since it explains why
+  // today isn't a training day at all.
+  const workout = workoutWith([]);
+  workout.smartDayType = 'recovery';
+  workout.smartDecisionSummary.dayType = 'recovery';
+  workout.smartDecisionSummary.reason = 'frequency-recovery';
+  workout.smartDecisionSummary.readiness.recentFatigueScore = 6;
+  workout.smartDecisionSummary.readiness.recentFailedOrSkippedSetCount = 2;
+
+  const rows = getSmartModalDetailRows(workout);
+
+  expect(rows).toEqual(expect.arrayContaining([
+    {
+      label: 'Current blocker',
+      value: 'Deadlift — opener not yet demonstrated',
+    },
+    {
+      label: 'Openers',
+      value: '1/3',
+      kind: 'metric',
+    },
+    {
+      label: 'Deadlift — Cycle e1RM',
+      value: '155 kg',
+      kind: 'metric',
+    },
+    {
+      label: 'Fatigue',
+      value: '6 — recovery required',
+    },
+    {
+      label: 'Failed',
+      value: '2/2 — deload required',
+    },
+  ]));
+});
+
+test('the Gap is always exactly (displayed target) - (displayed current) - simple, visible arithmetic on the two numbers shown right above it', () => {
+  // Reproduces the C3W33 third-attempt diagnosis boundary: the UI showed
+  // "Cycle e1RM: 170 kg" and "3rd support: 185 kg" but a Gap of "13.8 kg" -
+  // a flat contradiction of the two rounded numbers right above it (the
+  // expects 185 - 170 = 15). Whether a lift still counts as a blocker at
+  // all is decided separately from raw (unrounded) values in
+  // smartTrainingEngine.js (isEffectivelyMet), but once a lift IS shown as
+  // the blocker, its Gap must match simple subtraction of the displayed
+  // Cycle e1RM and target - never a more "precise" number that doesn't add
+  // up against what's on screen.
+  const workout = workoutWith([smartLift({ lift: 'Deadlift' })]);
+  workout.smartDecisionSummary.readiness.meetPlanReadiness.Deadlift = {
+    currentCycleBestE1RM: 170.66666666666666,
+    readinessTargetAttempt: 184.5,
+    readinessPhase: 'third-attempt',
+    openerReady: true,
+  };
+  workout.smartDecisionSummary.readiness.meetPlanWeakestPhase = 'third-attempt';
+
+  const rows = getSmartModalDetailRows(workout);
+  const gapRow = rows.find(row => row.label === 'Deadlift — Gap');
+  const cycleRow = rows.find(row => row.label === 'Deadlift — Cycle e1RM');
+  const targetRow = rows.find(row => row.label === 'Deadlift — 3rd support');
+
+  expect(cycleRow.value).toBe('170 kg');
+  expect(targetRow.value).toBe('185 kg');
+  expect(gapRow.value).toBe('15 kg');
+});
+
+function secondaryLiftBlock(lift, { volumePct = 0.75, volumeReps = 6, volumeCount = 6 } = {}) {
+  return {
+    lift,
+    role: 'secondary',
+    sets: volumeSets(lift, volumeCount, volumeReps, volumePct).map(
+      set => ({ ...set, labelKey: 'workSets' })
+    ),
+    warmups: Array.from({ length: 2 }, () => ({})),
+    smartPrescription: {
+      role: 'secondary',
+      volumeAnchorPct: volumePct,
+      plannedVolumePct: volumePct,
+      regressionReason: null,
+      repeatVariationApplied: false,
+    },
+  };
+}
+
+test("explains a light day as a clear, short 'light intensity day' when every lift is secondary, instead of implying a heavy lift exists elsewhere", () => {
+  // C3W36 boundary: once neither Squat nor Bench was due for its
+  // heavy exposure this week, BOTH became 'secondary' role - but the old
+  // copy ("Lower volume for the secondary lift") implicitly claims some
+  // OTHER lift in the workout is the heavy one today, which is wrong when
+  // nothing is heavy. His follow-up: the first replacement copy ("No lift is
+  // due for its heavy exposure this week...") was itself "stom en onduidelijk"
+  // (dumb and unclear) - he asked for something short and plain instead.
+  const rows = getSmartPrescriptionDetailRows(
+    workoutWith([secondaryLiftBlock('Squat'), secondaryLiftBlock('Bench')])
+  );
+
+  expect(rows).toHaveLength(2);
+  rows.forEach(row => {
+    expect(row.value).toContain('Light intensity day.');
+    expect(row.value).not.toContain('Lower volume for the secondary lift');
+  });
+});
+
+test('lists every lift still short of full meet demonstration as a blocker, not just the single weakest one', () => {
+  const workout = workoutWith([smartLift({ lift: 'Deadlift' })]);
+  workout.smartDecisionSummary.readiness.meetPlanReadiness = {
+    Deadlift: {
+      currentCycleBestE1RM: 170.66666666666666,
+      readinessTargetAttempt: 184.5,
+      readinessPhase: 'third-attempt',
+      openerReady: true,
+    },
+    Squat: {
+      currentCycleBestE1RM: 138.66666666666666,
+      readinessTargetAttempt: 148.5,
+      readinessPhase: 'third-attempt',
+      openerReady: true,
+    },
+    Bench: {
+      currentCycleBestE1RM: 101.33333333333333,
+      readinessTargetAttempt: 100,
+      readinessPhase: 'ready',
+      openerReady: true,
+    },
+  };
+  workout.smartDecisionSummary.readiness.meetPlanWeakestLift = 'Deadlift';
+  workout.smartDecisionSummary.readiness.meetPlanWeakestPhase = 'third-attempt';
+
+  const rows = getSmartModalDetailRows(workout);
+  const blockerRow = rows.find(row =>
+    row.label === 'Current blockers' || row.label === 'Current blocker'
+  );
+
+  expect(blockerRow.label).toBe('Current blockers');
+  expect(blockerRow.value).toBe(
+    'Deadlift, Squat — third attempt not yet demonstrated'
+  );
+  // Bench is fully ready and must not be listed as a blocker.
+  expect(blockerRow.value).not.toContain('Bench');
+
+  // Showing numbers for only the single weakest lift
+  // (Deadlift) while naming Squat as a blocker too was inconsistent - all
+  // 3 lifts get their own Cycle e1RM/target/Gap rows now, including Bench
+  // even though it's already fully ready (0 kg gap, not omitted).
+  expect(rows).toEqual(expect.arrayContaining([
+    { label: 'Deadlift — Cycle e1RM', value: '170 kg', kind: 'metric' },
+    { label: 'Deadlift — 3rd support', value: '185 kg', kind: 'metric' },
+    { label: 'Deadlift — Gap', value: '15 kg', kind: 'metric' },
+    { label: 'Squat — Cycle e1RM', value: '140 kg', kind: 'metric' },
+    { label: 'Squat — 3rd support', value: '150 kg', kind: 'metric' },
+    { label: 'Squat — Gap', value: '10 kg', kind: 'metric' },
+    { label: 'Bench — Cycle e1RM', value: '100 kg', kind: 'metric' },
+    { label: 'Bench — 3rd support', value: '100 kg', kind: 'metric' },
+    { label: 'Bench — Gap', value: '0 kg', kind: 'metric' },
+  ]));
+});
+
+test("explains the fatigue 'cause' as a rest day, not a literal effort rating, when the previous entry was a rest day", () => {
+  // completeWorkout's "Complete rest day" button always records
+  // workoutEffort: 'easy' for a rest day - technically accurate, but
+  // showing "Previous workout EASY" reads as if a training session felt
+  // easy, when there was no training at all.
+  const workout = workoutWith([smartLift({ lift: 'Deadlift' })]);
+  workout.smartDecisionSummary.readiness.lastWorkoutEffort = 'easy';
+  workout.smartDecisionSummary.readiness.lastWasRestDay = true;
+
+  const rows = getSmartModalDetailRows(workout);
+  const causeRow = rows.find(row => row.label === 'Cause');
+
+  expect(causeRow.value).toBe('Previous workout was a rest day');
+  expect(causeRow.value).not.toContain('EASY');
+});
+
+test('never shows a "pp" delta annotation because it is confusing regardless of what it computed', () => {
+  const bench = smartLift({
+    lift: 'Bench',
+    labelKey: 'topDouble',
+    reps: 2,
+    previousPct: 0.896,
+    currentPct: 0.9,
+  });
+  bench.sets[0].precisePct = 0.921;
+
+  const [row] = getSmartPrescriptionDetailRows(workoutWith([bench]));
+
+  expect(row.value).toContain('90% → 90%');
+  expect(row.value).not.toContain('pp');
+});
+
+test.each([
+  ['Squat', 'topTriple', 3, 0.75, 0.775],
+  ['Bench', 'topDouble', 2, 0.80, 0.825],
+  ['Deadlift', 'topDouble', 2, 0.825, 0.85],
+])(
+  'explains previous and current %s stimulus with compact volume and progression reason',
+  (lift, labelKey, reps, previousPct, currentPct) => {
+    const rows = getSmartPrescriptionDetailRows(workoutWith([
+      smartLift({
+        lift,
+        labelKey,
+        reps,
+        previousPct,
+        currentPct,
+      }),
+    ]));
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].label).toBe(`${lift} — Plan`);
+    expect(rows[0].value).toContain('→');
+    expect(rows[0].value).toContain('5×4×75%');
+    expect(rows[0].value).toContain(
+      'Progressed to avoid repeating the same stimulus.'
+    );
+    expect(rows[0].value).not.toContain('grid');
+    expect(rows[0].value).not.toContain('empty cells');
+  }
+);
+
+test('explains secondary volume without inventing top-set progress', () => {
+  const bench = smartLift({
+    lift: 'Bench',
+    role: 'secondary',
+    labelKey: 'workSets',
+    reps: 4,
+    previousPct: 0,
+    currentPct: 0.75,
+    volumeCount: 3,
+    volumeReps: 4,
+    volumePct: 0.75,
+    repeatVariationApplied: false,
+  });
+  bench.sets = Array.from({ length: 4 }, () => ({
+    lift: 'Bench',
+    labelKey: 'workSets',
+    reps: 4,
+    pct: 0.75,
+    weight: 72.5,
+  }));
+  bench.smartPrescription.gridItemCount = 6;
+
+  // A genuine two-lift day - "secondary" here means "lower volume alongside
+  // a primary lift", not the single-lift-forced-light case (which gets its
+  // own, different reason text; see the dedicated test for that below).
+  const squat = smartLift({ lift: 'Squat' });
+
+  const [row] = getSmartPrescriptionDetailRows(
+    workoutWith([bench, squat])
+  );
+
+  expect(row.value).toContain('4×4×75%');
+  expect(row.value).toContain(
+    'Lower volume for the secondary lift.'
+  );
+  expect(row.value).not.toContain('→');
+});
+
+test("a lift forced light on a single-lift day (heavy weekly slot already used) explains why, instead of falsely calling it a secondary lift", () => {
+  const bench = smartLift({
+    lift: 'Bench',
+    role: 'secondary',
+    labelKey: 'workSets',
+    reps: 5,
+    previousPct: 0,
+    currentPct: 0.7,
+    volumeCount: 6,
+    volumeReps: 5,
+    volumePct: 0.7,
+    repeatVariationApplied: false,
+  });
+  bench.sets = Array.from({ length: 6 }, () => ({
+    lift: 'Bench',
+    labelKey: 'workSets',
+    reps: 5,
+    pct: 0.7,
+    weight: 25,
+  }));
+  bench.smartPrescription.gridItemCount = 6;
+
+  const [row] = getSmartPrescriptionDetailRows(
+    workoutWith([bench])
+  );
+
+  expect(row.value).not.toContain('Lower volume for the secondary lift.');
+  expect(row.value).toContain(
+    "This lift's heavy slot is already used this week, so it's intentionally lighter today."
+  );
+});
+
+test('builds a copyable diagnosis with decision, projection and technical proof', () => {
+  const workout = workoutWith([
+    smartLift({ lift: 'Deadlift' }),
+    smartLift({
+      lift: 'Bench',
+      role: 'secondary',
+      repeatVariationApplied: false,
+    }),
+  ]);
+  const text = buildSmartDiagnosticText(workout);
+
+  expect(text).toContain('Kelani SBD Smart diagnosis');
+  expect(text).toContain('Prescription version: 10');
+  expect(text).toContain('Workout: C3W24');
+  expect(text).toContain('Current blocker: Deadlift');
+  expect(text).toContain('Projected meet: C3W32–C3W35');
+  expect(text).toContain('Projected limiter: Squat — opener');
+  expect(text).toContain('Deadlift — Plan:');
+  expect(text).toContain('Selection: primary=Deadlift, secondary=Bench');
+  expect(text).toContain('repeatVariation=true');
+  expect(text).toContain('gridItems=9');
+});

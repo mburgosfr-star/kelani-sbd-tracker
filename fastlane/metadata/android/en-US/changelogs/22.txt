@@ -1,0 +1,4 @@
+- Improved weight edit UX
+- Set weight edits now save on blur / focus loss
+- Save button now uses app translations
+- Improved completed status label in Program

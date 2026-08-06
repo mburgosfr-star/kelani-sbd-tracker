@@ -1,0 +1,41 @@
+Kelani SBD Tracker is a calm, offline-first powerlifting tracker for structured Squat, Bench Press and Deadlift training.
+
+It helps you plan, track and complete SBD workouts without accounts, ads, subscriptions, analytics or cloud lock-in. Your training data stays on your device unless you choose to export it.
+
+Smart Training:
+
+Smart Training builds each next workout from your actual training history instead of a fixed template.
+
+- Selects primary and secondary lifts from recent training frequency and meet readiness
+- Prescribes warm-ups, top work, back-off work and accessories
+- Adapts to successful work, perceived effort, fatigue, failed sets and skipped sets
+- Tracks whether your planned meet openers have been demonstrated in training
+- Balances Squat, Bench Press and Deadlift frequency instead of repeating the same lift
+- All Smart calculations run locally on your device
+
+Features:
+
+- Structured Squat, Bench Press and Deadlift training cycles
+- Workout tracking with warm-ups, main work, back-offs and optional accessories
+- Automatic progression based on completed training
+- Rest timer with audio signals
+- Meet Planner for squat, bench press and deadlift attempt selection
+- Meet prep checklist for competition-day preparation
+- Bodyweight and body composition logging
+- 1RM, estimated 1RM and strength statistics
+- Perceived effort tracking for sets and completed workouts
+- Exercise alternatives for lower-stress training periods
+- Local data export and import
+- English, Catalan and Dutch interface
+
+Privacy and independence:
+
+- No account required
+- No ads
+- No analytics
+- No tracking
+- No subscription
+- No paywall
+- Offline-first usage
+
+Kelani is made for practical long-term strength progress, not social media engagement.

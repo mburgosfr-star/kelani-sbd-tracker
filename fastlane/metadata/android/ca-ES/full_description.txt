@@ -1,0 +1,41 @@
+Kelani SBD Tracker és una aplicació de seguiment de powerlifting tranquil·la i offline-first per a un entrenament estructurat de Squat, Bench Press i Deadlift.
+
+T'ajuda a planificar, registrar i completar entrenaments SBD sense comptes, anuncis, subscripcions, analítica ni dependència del núvol. Les teves dades d'entrenament es queden al teu dispositiu, tret que triïs exportar-les.
+
+Smart Training:
+
+Smart Training construeix cada pròxim entrenament a partir del teu historial d'entrenament real, en lloc d'una plantilla fixa.
+
+- Tria els aixecaments primaris i secundaris segons la freqüència d'entrenament recent i la preparació per a la competició
+- Prescriu escalfaments, treball principal, sèries de descens i accessoris
+- S'adapta a les sèries reeixides, l'esforç percebut, la fatiga, les sèries fallides i les sèries saltades
+- Fa un seguiment de si les obertures de competició planificades ja s'han demostrat a l'entrenament
+- Equilibra la freqüència de Squat, Bench Press i Deadlift, en lloc de repetir sempre el mateix aixecament
+- Tots els càlculs de Smart es fan localment al teu dispositiu
+
+Funcions:
+
+- Cicles d'entrenament estructurats de Squat, Bench Press i Deadlift
+- Seguiment d'entrenaments amb escalfaments, treball principal, sèries de descens i accessoris opcionals
+- Progressió automàtica basada en l'entrenament completat
+- Temporitzador de descans amb senyals sonors
+- Planificador de competició per triar les obertures de Squat, Bench Press i Deadlift
+- Llista de verificació per preparar el dia de la competició
+- Registre de pes corporal i composició corporal
+- 1RM, 1RM estimat i estadístiques de força
+- Seguiment de l'esforç percebut per sèrie i per entrenament completat
+- Alternatives d'exercicis per a períodes d'entrenament amb menys càrrega
+- Exportació i importació local de dades
+- Interfície en anglès, català i neerlandès
+
+Privadesa i independència:
+
+- No cal cap compte
+- Sense anuncis
+- Sense analítica
+- Sense seguiment
+- Sense subscripció
+- Sense mur de pagament
+- Ús totalment offline
+
+Kelani està pensat per a un progrés de força pràctic i a llarg termini, no per a l'engagement de xarxes socials.
