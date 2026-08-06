@@ -8,14 +8,21 @@ const {
 const repository = 'mburgosfr-star/kelani-sbd-tracker';
 
 test('uses the transitional legacy release only for the current local v2.0.0', () => {
-  expect(parseArguments([])).toEqual({
+  expect(parseArguments([], { localVersion: '2.0.0' })).toEqual({
     version: '2.0.0',
     githubRepository: 'mburgosfr-star/kelani-sbd-tracker-legacy-compromised',
   });
 });
 
-test('explicit future releases default to the trusted repository', () => {
-  expect(parseArguments(['--version', '2.0.1'])).toEqual({
+test('current and explicit future releases default to the trusted repository', () => {
+  expect(parseArguments([], { localVersion: '2.0.1' })).toEqual({
+    version: '2.0.1',
+    githubRepository: repository,
+  });
+  expect(parseArguments(
+    ['--version', '2.0.1'],
+    { localVersion: '2.0.0' }
+  )).toEqual({
     version: '2.0.1',
     githubRepository: repository,
   });

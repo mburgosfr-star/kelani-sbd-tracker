@@ -18,14 +18,14 @@ const defaultRepository = 'mburgosfr-star/kelani-sbd-tracker';
 const trustedSourceRepository = 'mburgosfr-star/kelani-sbd-tracker';
 const izzyBaseUrl = 'https://apt.izzysoft.de';
 
-function parseArguments(argv) {
-  const localVersion = JSON.parse(
+function parseArguments(argv, { localVersion } = {}) {
+  const resolvedLocalVersion = localVersion || JSON.parse(
     fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')
   ).version;
   const options = {
-    version: localVersion,
+    version: resolvedLocalVersion,
     githubRepository:
-      localVersion === '2.0.0'
+      resolvedLocalVersion === '2.0.0'
         ? 'mburgosfr-star/kelani-sbd-tracker-legacy-compromised'
         : defaultRepository,
   };
@@ -51,7 +51,7 @@ function parseArguments(argv) {
     fail('Release version must have the form X.Y.Z.');
   }
 
-  if (!repositoryWasExplicit && options.version !== localVersion) {
+  if (!repositoryWasExplicit && options.version !== resolvedLocalVersion) {
     options.githubRepository = defaultRepository;
   }
 
