@@ -1,0 +1,32 @@
+name: Distribution integrity
+
+on:
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: distribution-integrity
+  cancel-in-progress: false
+
+jobs:
+  verify-public-distribution:
+    name: Compare GitHub and IzzyOnDroid APKs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out trusted monitor
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Compare public release channels
+        run: npm run distribution:check

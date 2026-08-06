@@ -5,6 +5,7 @@ import {
   removeLegacyBrowserAutomaticBackup,
   shouldRetryAutomaticBackup,
   validateBackupPayload,
+  validateImportedBackup,
 } from './App';
 
 test('removes the obsolete full browser backup mirror before canonical persistence', () => {
@@ -113,6 +114,42 @@ test('rejects an automatic backup containing stale workout progress', () => {
   const staleBackup = buildBackupPayload(staleData);
 
   expect(validateBackupPayload(staleBackup, currentData)).toBe(false);
+});
+
+test('accepts a well-formed legacy-compatible manual backup', () => {
+  const data = makeStoredData({
+    inProgress: undefined,
+    bodyWeights: undefined,
+  });
+
+  expect(validateImportedBackup({
+    storageKey: 'kel-powerlifting-user-data-v1',
+    data,
+  })).toBe(true);
+});
+
+test('rejects malformed manual backup data before it can replace saved data', () => {
+  const validEnvelope = {
+    storageKey: 'kel-powerlifting-user-data-v1',
+    data: makeStoredData(),
+  };
+
+  expect(validateImportedBackup({
+    ...validEnvelope,
+    data: { ...validEnvelope.data, history: {} },
+  })).toBe(false);
+  expect(validateImportedBackup({
+    ...validEnvelope,
+    data: { ...validEnvelope.data, prs: { Squat: 145, Bench: 97.5 } },
+  })).toBe(false);
+  expect(validateImportedBackup({
+    ...validEnvelope,
+    data: { ...validEnvelope.data, inProgress: { workouts: 'invalid' } },
+  })).toBe(false);
+  expect(validateImportedBackup({
+    ...validEnvelope,
+    data: { ...validEnvelope.data, currentCycle: 0 },
+  })).toBe(false);
 });
 
 test('does not treat failures, manual exports or unverified records as automatic backups', () => {

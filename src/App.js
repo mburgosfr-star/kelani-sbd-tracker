@@ -332,6 +332,36 @@ export function validateBackupPayload(backup, expectedData) {
   );
 }
 
+export function validateImportedBackup(backup) {
+  if (!backup || typeof backup !== 'object' || Array.isArray(backup)) return false;
+  if (backup.storageKey !== STORAGE_KEY) return false;
+
+  const data = backup.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  if (!data.prs || typeof data.prs !== 'object' || Array.isArray(data.prs)) return false;
+  if (!Array.isArray(data.history)) return false;
+
+  const hasValidMainLiftPrs = ['Squat', 'Bench', 'Deadlift'].every(lift => {
+    const value = Number(data.prs[lift]);
+    return Number.isFinite(value) && value > 0;
+  });
+
+  if (!hasValidMainLiftPrs) return false;
+  if (data.bodyWeights !== undefined && !Array.isArray(data.bodyWeights)) return false;
+
+  if (data.inProgress !== undefined && data.inProgress !== null) {
+    if (typeof data.inProgress !== 'object' || Array.isArray(data.inProgress)) return false;
+    if (!Array.isArray(data.inProgress.workouts)) return false;
+  }
+
+  if (data.currentCycle !== undefined) {
+    const currentCycle = Number(data.currentCycle);
+    if (!Number.isInteger(currentCycle) || currentCycle < 1) return false;
+  }
+
+  return true;
+}
+
 export function isVerifiedAutomaticBackupStatus(status) {
   return Boolean(
     status?.ok === true &&
@@ -1961,22 +1991,16 @@ function DataSection({ t, importOnly = false }) {
       const text = await file.text();
       const backup = JSON.parse(text);
 
-      if (
-        backup?.storageKey !== STORAGE_KEY ||
-        !backup?.data ||
-        typeof backup.data !== 'object' ||
-        !backup.data.prs ||
-        !backup.data.history
-      ) {
+      if (!validateImportedBackup(backup)) {
         setNotice(t.importDataInvalid);
         return;
       }
 
       setPendingImport({
         data: backup.data,
-        appVersion: backup.appVersion || '—',
-        exportedAt: backup.exportedAt || '—',
-        summary: backup.summary || buildDataSectionBackupSummary(backup.data),
+        appVersion: typeof backup.appVersion === 'string' ? backup.appVersion : '—',
+        exportedAt: typeof backup.exportedAt === 'string' ? backup.exportedAt : '—',
+        summary: buildDataSectionBackupSummary(backup.data),
       });
     } catch (e) {
       setNotice(t.importDataError);

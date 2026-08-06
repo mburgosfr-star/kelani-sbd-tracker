@@ -36,6 +36,7 @@
     "android:apk-hygiene": "node scripts/check-release-apk-hygiene.js",
     "android:apk-metadata": "node scripts/check-release-apk-metadata.js",
     "android:build-manifest": "node scripts/check-release-build-manifest.js",
+    "distribution:check": "node scripts/check-distribution.js",
     "release:build": "node scripts/build-release-apk.js",
     "release:install": "node scripts/install-apk.js",
     "release:web-tested": "node scripts/mark-web-tested.js",

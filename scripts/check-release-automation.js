@@ -41,6 +41,8 @@ const expectedScripts = {
     'npm run release:preflight && npm run release:publish',
   'release:self-check':
     'node scripts/check-release-automation.js',
+  'distribution:check':
+    'node scripts/check-distribution.js',
   'android:izzy-test':
     'node scripts/test-izzy-build.js',
   'android:release-gate':
@@ -73,6 +75,7 @@ const requiredFiles = [
   'scripts/release-preflight.js',
   'scripts/guarded-release.js',
   'scripts/create-github-release.js',
+  'scripts/check-distribution.js',
 ];
 
 for (const file of requiredFiles) {
@@ -90,6 +93,58 @@ const releaseCommon = read('scripts/release-common.js');
 const workflow = read(
   '.github/workflows/android-release-sanity.yml'
 );
+const distributionWorkflow = read(
+  '.github/workflows/distribution-integrity.yml'
+);
+const distributionCheck = read(
+  'scripts/check-distribution.js'
+);
+const androidManifest = read(
+  'android/app/src/main/AndroidManifest.xml'
+);
+const androidFilePaths = read(
+  'android/app/src/main/res/xml/file_paths.xml'
+);
+
+if (!androidManifest.includes('android:allowBackup="false"')) {
+  fail('Android system backup must remain disabled for local training data.');
+}
+
+if (
+  !androidFilePaths.includes('<cache-path') ||
+  androidFilePaths.includes('<external-path') ||
+  androidFilePaths.includes('<external-files-path')
+) {
+  fail('Android FileProvider must expose cache exports only.');
+}
+
+for (const signal of [
+  'expectedGithubAssets',
+  'assertIzzyPage',
+  'assertSameMetadata',
+  'assertSignedV2',
+  'GitHub checksum asset does not match',
+  'APK hash differs',
+  'certificateSha256',
+]) {
+  if (!distributionCheck.includes(signal)) {
+    fail(`Distribution check is missing required control: ${signal}`);
+  }
+}
+
+for (const signal of [
+  'schedule:',
+  'workflow_dispatch:',
+  'contents: read',
+  'timeout-minutes: 15',
+  'actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09',
+  'actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444',
+  'npm run distribution:check',
+]) {
+  if (!distributionWorkflow.includes(signal)) {
+    fail(`Distribution workflow is missing required control: ${signal}`);
+  }
+}
 
 for (const signal of [
   'releaseCertificateSha256',
@@ -228,7 +283,8 @@ for (const requiredPath of [
   "scripts/install-apk.js",
   "scripts/create-github-release.js",
   "scripts/check-release-automation.js",
-  ".github/workflows/android-release-sanity.yml",
+    ".github/workflows/android-release-sanity.yml",
+    ".github/workflows/distribution-integrity.yml",
 ]) {
   if (!releaseCommon.includes(requiredPath)) {
     fail(

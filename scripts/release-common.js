@@ -525,8 +525,10 @@ function releaseScriptHashes(base = root) {
     "scripts/check-release-build-manifest.js",
     "scripts/check-release-apk-metadata.js",
     "scripts/check-release-apk-hygiene.js",
+    "scripts/check-distribution.js",
     "scripts/check-release-automation.js",
     ".github/workflows/android-release-sanity.yml",
+    ".github/workflows/distribution-integrity.yml",
   ];
 
   return Object.fromEntries(
