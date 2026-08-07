@@ -7,6 +7,7 @@ const { execFileSync } = require('child_process');
 
 const {
   assertReleasePreparationProof,
+  assertVerifiedReleaseCommits,
   assertSignedV2,
   findAndroidSdk,
   packageName,
@@ -21,8 +22,7 @@ const env = {
   ...process.env,
   JAVA_HOME: javaHome,
   PATH: `${path.join(javaHome, 'bin')}:${process.env.PATH}`,
-  REACT_APP_VERSION: version,
-  GENERATE_SOURCEMAP: 'false',
+  VITE_APP_VERSION: version,
 };
 
 const releaseDir = path.join(root, 'release');
@@ -124,6 +124,7 @@ const versionCode = readExpectedVersionCode();
 const commit = output('git', ['rev-parse', 'HEAD']);
 
 try {
+  assertVerifiedReleaseCommits(root);
   assertReleasePreparationProof(root);
 } catch (error) {
   console.error(`ERROR: ${error.message}`);

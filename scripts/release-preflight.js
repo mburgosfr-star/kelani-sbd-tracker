@@ -23,6 +23,7 @@ const {
   readReleaseNotes,
   releaseScriptHashes,
   assertReleasePreparationProof,
+  assertVerifiedReleaseCommits,
 } = require('./release-common');
 
 function sameJson(a, b) {
@@ -31,6 +32,7 @@ function sameJson(a, b) {
 
 function main() {
   assertCleanSourceTreeExceptRelease(root);
+  assertVerifiedReleaseCommits(root);
 
   const expected = readVersionInfo(root);
   const commit = getHeadCommit(root);

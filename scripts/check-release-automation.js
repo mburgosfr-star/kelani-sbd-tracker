@@ -149,9 +149,23 @@ for (const signal of [
 for (const signal of [
   'releaseCertificateSha256',
   'certificate SHA-256 digest',
+  'assertVerifiedReleaseCommits',
+  "['log', '-1', '--format=%G?', commit]",
 ]) {
   if (!releaseCommon.includes(signal)) {
     fail(`Release signer pinning is missing required check: ${signal}`);
+  }
+}
+
+for (const releaseEntryPoint of [
+  webTestMarker,
+  prepareRelease,
+  read('scripts/build-release-apk.js'),
+  preflight,
+  guarded,
+]) {
+  if (!releaseEntryPoint.includes('assertVerifiedReleaseCommits')) {
+    fail('A release entry point is missing the commit-signature guard.');
   }
 }
 
@@ -277,7 +291,10 @@ for (const signal of [
 for (const requiredPath of [
   "package.json",
   "package-lock.json",
+  "index.html",
+  "vite.config.mjs",
   "android/app/build.gradle",
+  "scripts/run-tests.js",
   "scripts/mark-web-tested.js",
   "scripts/prepare-release.js",
   "scripts/install-apk.js",

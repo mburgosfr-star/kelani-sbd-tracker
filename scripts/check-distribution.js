@@ -24,10 +24,7 @@ function parseArguments(argv, { localVersion } = {}) {
   ).version;
   const options = {
     version: resolvedLocalVersion,
-    githubRepository:
-      resolvedLocalVersion === '2.0.0'
-        ? 'mburgosfr-star/kelani-sbd-tracker-legacy-compromised'
-        : defaultRepository,
+    githubRepository: defaultRepository,
   };
   let repositoryWasExplicit = false;
 

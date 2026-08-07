@@ -17,6 +17,7 @@ const {
   readReleaseNotes,
   releaseScriptHashes,
   assertReleasePreparationProof,
+  assertVerifiedReleaseCommits,
 } = require('./release-common');
 
 const releaseMode = process.argv.includes('--release');
@@ -54,6 +55,7 @@ function remoteTagCommit(tag) {
 
 function main() {
   assertCleanSourceTreeExceptRelease(root);
+  assertVerifiedReleaseCommits(root);
 
   const expected = readVersionInfo(root);
   const commit = getHeadCommit(root);

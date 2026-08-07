@@ -10,6 +10,7 @@ const {
   readVersionInfo,
   getHeadCommit,
   assertCleanSourceTreeExceptRelease,
+  assertVerifiedReleaseCommits,
 } = require('./release-common');
 
 function main() {
@@ -21,6 +22,7 @@ function main() {
   }
 
   assertCleanSourceTreeExceptRelease(root);
+  assertVerifiedReleaseCommits(root);
 
   const branch = output('git', [
     'rev-parse',

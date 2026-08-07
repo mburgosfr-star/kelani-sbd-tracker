@@ -76,7 +76,7 @@ function main() {
       `${process.env.PATH}`,
     CI: 'true',
     GENERATE_SOURCEMAP: 'false',
-    REACT_APP_VERSION: expected.versionName,
+    VITE_APP_VERSION: expected.versionName,
   });
 
   run('npm', ['ci'], {

@@ -216,7 +216,7 @@ export function buildBackupPayload(data) {
   return {
     app: 'Kelani SBD Tracker',
     backupVersion: 1,
-    appVersion: process.env.REACT_APP_VERSION ?? 'dev',
+    appVersion: import.meta.env.VITE_APP_VERSION ?? 'dev',
     exportedAt,
     storageKey: STORAGE_KEY,
     summary: buildBackupSummary(data),
@@ -1968,7 +1968,7 @@ function DataSection({ t, importOnly = false }) {
       const backup = {
         app: t.appName,
         backupVersion: 1,
-        appVersion: process.env.REACT_APP_VERSION ?? 'dev',
+        appVersion: import.meta.env.VITE_APP_VERSION ?? 'dev',
         exportedAt,
         storageKey: STORAGE_KEY,
         summary: buildBackupSummary(data),
@@ -3356,7 +3356,7 @@ function getExerciseGuide(lift, t) {
   const guides = {
     Squat: {
       title: t.squat,
-      videoSrc: `${process.env.PUBLIC_URL || ''}/videos/squat.mp4`,
+      videoSrc: `${import.meta.env.BASE_URL}videos/squat.mp4`,
       steps: [
         t.squatGuideStep1 || 'Set the bar on your upper back and grip it firmly.',
         t.squatGuideStep2 || 'Step out, set your feet, breathe in and brace.',
@@ -3370,7 +3370,7 @@ function getExerciseGuide(lift, t) {
     },
     Bench: {
       title: t.bench,
-      videoSrc: `${process.env.PUBLIC_URL || ''}/videos/bench.mp4`,
+      videoSrc: `${import.meta.env.BASE_URL}videos/bench.mp4`,
       steps: [
         t.benchGuideStep1 || 'Set your feet and pull your shoulder blades back and down.',
         t.benchGuideStep2 || 'Grip the bar evenly and unrack with control.',
@@ -3384,7 +3384,7 @@ function getExerciseGuide(lift, t) {
     },
     Deadlift: {
       title: t.deadlift,
-      videoSrc: `${process.env.PUBLIC_URL || ''}/videos/deadlift.mp4`,
+      videoSrc: `${import.meta.env.BASE_URL}videos/deadlift.mp4`,
       steps: [
         t.deadliftGuideStep1 || 'Stand with the bar over the middle of your foot.',
         t.deadliftGuideStep2 || 'Grip the bar, brace, and build tension before pulling.',
@@ -4008,7 +4008,7 @@ export function buildSmartDiagnosticText(workout = {}, t = {}) {
   const detailRows = getSmartModalDetailRows(workout, t);
   const lines = [
     'Kelani SBD Smart diagnosis',
-    `App version: ${process.env.REACT_APP_VERSION || 'dev'}`,
+    `App version: ${import.meta.env.VITE_APP_VERSION || 'dev'}`,
     `Prescription version: ${Number(workout?.smartGeneratedPrescriptionVersion) || 0}`,
     `Workout: C${cycle}W${workoutNumber}`,
     `Decision: ${dayLabel}`,
@@ -7370,7 +7370,7 @@ function AppTopBar() {
 }
 
 function AppHeader({ title, subtitle, meta, children, titleStyle = {} }) {
-  const versionLabel = process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev';
+  const versionLabel = import.meta.env.VITE_APP_VERSION ? `v${import.meta.env.VITE_APP_VERSION}` : 'dev';
 
   return (
     <div
@@ -8263,7 +8263,7 @@ function Onboarding({ onStart, t }) {
           fontWeight: 800,
           lineHeight: 1
         }}>
-          {process.env.REACT_APP_VERSION ? `v${process.env.REACT_APP_VERSION}` : 'dev'}
+          {import.meta.env.VITE_APP_VERSION ? `v${import.meta.env.VITE_APP_VERSION}` : 'dev'}
         </div>
       </div>
 

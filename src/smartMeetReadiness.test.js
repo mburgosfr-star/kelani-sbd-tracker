@@ -2,6 +2,7 @@ import {
   buildSmartMeetPlanReadiness,
   buildSmartMeetWorkoutProjection,
   buildSmartReadinessSignals,
+  generateWorkoutsForTrainingModel,
 } from './smartTrainingEngine';
 import {
   calculateAchievedMaxesFromHistory,
@@ -594,7 +595,7 @@ test('does not activate a meet when only the openers are supported', () => {
       })
     ),
   ];
-  const workouts = require('./smartTrainingEngine').generateWorkoutsForTrainingModel(
+  const workouts = generateWorkoutsForTrainingModel(
     'smart',
     {
       programProfile: 'kelaniSbdUltra',
@@ -664,7 +665,7 @@ test('schedules one clean taper day only after every lift has also shown third-a
     currentCycle: 1,
   };
 
-  const taperWorkouts = require('./smartTrainingEngine').generateWorkoutsForTrainingModel(
+  const taperWorkouts = generateWorkoutsForTrainingModel(
     'smart',
     {
       ...args,
@@ -718,7 +719,7 @@ test('a light taper workout forces rest before the meet even when the active blo
     lightTaper,
   ];
 
-  const workouts = require('./smartTrainingEngine').generateWorkoutsForTrainingModel('smart', {
+  const workouts = generateWorkoutsForTrainingModel('smart', {
     programProfile: 'kelaniSbdUltra',
     squat: 100,
     bench: 80,
@@ -799,7 +800,7 @@ test('does not schedule the meet-taper day merely because openers and second att
     })
   );
 
-  const workouts = require('./smartTrainingEngine').generateWorkoutsForTrainingModel(
+  const workouts = generateWorkoutsForTrainingModel(
     'smart',
     {
       programProfile: 'kelaniSbdUltra',

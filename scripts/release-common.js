@@ -136,6 +136,58 @@ function assertCleanSourceTreeExceptRelease(base = root) {
   }
 }
 
+function assertValidCommitSignatures(signatures) {
+  const invalid = signatures.filter(({ status }) => status !== 'G');
+
+  if (invalid.length > 0) {
+    fail(
+      'Release commits must have valid cryptographic signatures before ' +
+      'web testing or building:\n' +
+      invalid.map(({ commit, status }) =>
+        `  ${commit} (signature status: ${status || 'missing'})`
+      ).join('\n')
+    );
+  }
+}
+
+function assertVerifiedReleaseCommits(base = root) {
+  const head = getHeadCommit(base);
+  const commits = new Set([head]);
+  const originMain = spawnSync(
+    'git',
+    ['rev-parse', '--verify', '--quiet', 'origin/main'],
+    {
+      cwd: base,
+      encoding: 'utf8',
+      stdio: 'pipe',
+      shell: false,
+    }
+  );
+
+  if (originMain.status === 0) {
+    const unpublished = output(
+      'git',
+      ['rev-list', 'origin/main..HEAD'],
+      { cwd: base }
+    );
+
+    for (const commit of unpublished.split('\n').filter(Boolean)) {
+      commits.add(commit);
+    }
+  }
+
+  const signatures = [...commits].map(commit => ({
+    commit,
+    status: output(
+      'git',
+      ['log', '-1', '--format=%G?', commit],
+      { cwd: base }
+    ),
+  }));
+
+  assertValidCommitSignatures(signatures);
+}
+
 function findAndroidSdk(base = root) {
   const localProperties = path.join(
     base,
@@ -517,7 +569,10 @@ function releaseScriptHashes(base = root) {
   const paths = [
     "package.json",
     "package-lock.json",
+    "index.html",
+    "vite.config.mjs",
     "android/app/build.gradle",
+    "scripts/run-tests.js",
     "scripts/build-release-apk.js",
     "scripts/mark-web-tested.js",
     "scripts/prepare-release.js",
@@ -703,6 +758,8 @@ module.exports = {
   getHeadCommit,
   getStatusLines,
   assertCleanSourceTreeExceptRelease,
+  assertValidCommitSignatures,
+  assertVerifiedReleaseCommits,
   findAndroidSdk,
   findBuildTool,
   getApkMetadata,
