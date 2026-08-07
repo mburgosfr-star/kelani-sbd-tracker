@@ -1011,17 +1011,24 @@ test('splits training fallback details into separate modal rows', () => {
     },
     {
       label: 'Fatigue',
-      value: '1 — below recovery threshold',
-    },
-    {
-      label: 'Cause',
-      value: 'Previous workout HARD',
-    },
-    {
-      label: 'Failed',
-      value: '0/2 — below deload threshold',
+      value: '1 (below recovery threshold)',
     },
   ]);
+});
+
+test('omits zero fatigue and zero missed-set rows from a normal Smart modal', () => {
+  const rows = getSmartModalDetailRows({
+    smartDecisionSummary: {
+      dayType: 'training',
+      readiness: {
+        recentFatigueScore: 0,
+        recentFailedOrSkippedSetCount: 0,
+      },
+    },
+  });
+
+  expect(rows.find(row => row.label === 'Fatigue')).toBeUndefined();
+  expect(rows.find(row => row.label === 'Failed')).toBeUndefined();
 });
 
 test('shows structured recovery details without a combined Reason row', () => {
@@ -1040,15 +1047,11 @@ test('shows structured recovery details without a combined Reason row', () => {
   ).toEqual([
     {
       label: 'Fatigue',
-      value: '4 — recovery required',
-    },
-    {
-      label: 'Cause',
-      value: 'Previous workout TOOMUCH',
+      value: '4 (recovery required)',
     },
     {
       label: 'Failed',
-      value: '1/2 — below deload threshold',
+      value: '1/2 (below deload threshold)',
     },
   ]);
 });

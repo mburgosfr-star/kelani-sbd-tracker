@@ -154,12 +154,12 @@ test('fully demonstrated meet readiness remains visible during taper', () => {
 
   const rows = getSmartModalDetailRows(workout, {
     smartMeetStatus: 'Meetstatus',
-    smartMeetFullyReadyTaper: 'Volledig wedstrijdklaar — taperen en rusten voor de meet',
+    smartMeetFullyReadyTaper: 'Volledig wedstrijdklaar: taperen en rusten voor de meet',
   });
 
   expect(rows).toContainEqual({
     label: 'Meetstatus',
-    value: 'Volledig wedstrijdklaar — taperen en rusten voor de meet',
+    value: 'Volledig wedstrijdklaar: taperen en rusten voor de meet',
   });
   expect(rows).toEqual(expect.arrayContaining([
     { label: 'Openers', value: '3/3', kind: 'metric' },
@@ -176,11 +176,11 @@ test('distinguishes the current blocker from the projected limiter', () => {
   expect(rows).toEqual(expect.arrayContaining([
     {
       label: 'Current blocker',
-      value: 'Deadlift — opener not yet demonstrated',
+      value: 'Deadlift (opener not yet demonstrated)',
     },
     {
-      label: 'Projected limiter',
-      value: 'Squat — opener',
+      label: 'Primary blocker',
+      value: 'Deadlift (opener not yet demonstrated)',
     },
   ]));
 });
@@ -205,7 +205,7 @@ test('shows the full readiness/blocker/fatigue detail on a deload or rest day to
   expect(rows).toEqual(expect.arrayContaining([
     {
       label: 'Current blocker',
-      value: 'Deadlift — opener not yet demonstrated',
+      value: 'Deadlift (opener not yet demonstrated)',
     },
     {
       label: 'Openers',
@@ -213,17 +213,17 @@ test('shows the full readiness/blocker/fatigue detail on a deload or rest day to
       kind: 'metric',
     },
     {
-      label: 'Deadlift — Cycle e1RM',
+      label: 'Deadlift (Cycle e1RM)',
       value: '155 kg',
       kind: 'metric',
     },
     {
       label: 'Fatigue',
-      value: '6 — recovery required',
+      value: '6 (recovery required)',
     },
     {
       label: 'Failed',
-      value: '2/2 — deload required',
+      value: '2/2 (deload required)',
     },
   ]));
 });
@@ -248,9 +248,9 @@ test('the Gap is always exactly (displayed target) - (displayed current) - simpl
   workout.smartDecisionSummary.readiness.meetPlanWeakestPhase = 'third-attempt';
 
   const rows = getSmartModalDetailRows(workout);
-  const gapRow = rows.find(row => row.label === 'Deadlift — Gap');
-  const cycleRow = rows.find(row => row.label === 'Deadlift — Cycle e1RM');
-  const targetRow = rows.find(row => row.label === 'Deadlift — 3rd support');
+  const gapRow = rows.find(row => row.label === 'Deadlift (Gap)');
+  const cycleRow = rows.find(row => row.label === 'Deadlift (Cycle e1RM)');
+  const targetRow = rows.find(row => row.label === 'Deadlift (3rd support)');
 
   expect(cycleRow.value).toBe('170 kg');
   expect(targetRow.value).toBe('185 kg');
@@ -326,7 +326,7 @@ test('lists every lift still short of full meet demonstration as a blocker, not 
 
   expect(blockerRow.label).toBe('Current blockers');
   expect(blockerRow.value).toBe(
-    'Deadlift, Squat — third attempt not yet demonstrated'
+    'Deadlift, Squat (third attempt not yet demonstrated)'
   );
   // Bench is fully ready and must not be listed as a blocker.
   expect(blockerRow.value).not.toContain('Bench');
@@ -336,19 +336,19 @@ test('lists every lift still short of full meet demonstration as a blocker, not 
   // 3 lifts get their own Cycle e1RM/target/Gap rows now, including Bench
   // even though it's already fully ready (0 kg gap, not omitted).
   expect(rows).toEqual(expect.arrayContaining([
-    { label: 'Deadlift — Cycle e1RM', value: '170 kg', kind: 'metric' },
-    { label: 'Deadlift — 3rd support', value: '185 kg', kind: 'metric' },
-    { label: 'Deadlift — Gap', value: '15 kg', kind: 'metric' },
-    { label: 'Squat — Cycle e1RM', value: '140 kg', kind: 'metric' },
-    { label: 'Squat — 3rd support', value: '150 kg', kind: 'metric' },
-    { label: 'Squat — Gap', value: '10 kg', kind: 'metric' },
-    { label: 'Bench — Cycle e1RM', value: '100 kg', kind: 'metric' },
-    { label: 'Bench — 3rd support', value: '100 kg', kind: 'metric' },
-    { label: 'Bench — Gap', value: '0 kg', kind: 'metric' },
+    { label: 'Deadlift (Cycle e1RM)', value: '170 kg', kind: 'metric' },
+    { label: 'Deadlift (3rd support)', value: '185 kg', kind: 'metric' },
+    { label: 'Deadlift (Gap)', value: '15 kg', kind: 'metric' },
+    { label: 'Squat (Cycle e1RM)', value: '140 kg', kind: 'metric' },
+    { label: 'Squat (3rd support)', value: '150 kg', kind: 'metric' },
+    { label: 'Squat (Gap)', value: '10 kg', kind: 'metric' },
+    { label: 'Bench (Cycle e1RM)', value: '100 kg', kind: 'metric' },
+    { label: 'Bench (3rd support)', value: '100 kg', kind: 'metric' },
+    { label: 'Bench (Gap)', value: '0 kg', kind: 'metric' },
   ]));
 });
 
-test("explains the fatigue 'cause' as a rest day, not a literal effort rating, when the previous entry was a rest day", () => {
+test("does not add a fatigue detail or 'cause' for an all-clear rest day", () => {
   // completeWorkout's "Complete rest day" button always records
   // workoutEffort: 'easy' for a rest day - technically accurate, but
   // showing "Previous workout EASY" reads as if a training session felt
@@ -358,10 +358,8 @@ test("explains the fatigue 'cause' as a rest day, not a literal effort rating, w
   workout.smartDecisionSummary.readiness.lastWasRestDay = true;
 
   const rows = getSmartModalDetailRows(workout);
-  const causeRow = rows.find(row => row.label === 'Cause');
-
-  expect(causeRow.value).toBe('Previous workout was a rest day');
-  expect(causeRow.value).not.toContain('EASY');
+  expect(rows.find(row => row.label === 'Fatigue')).toBeUndefined();
+  expect(rows.find(row => row.label === 'Cause')).toBeUndefined();
 });
 
 test('never shows a "pp" delta annotation because it is confusing regardless of what it computed', () => {
@@ -376,7 +374,7 @@ test('never shows a "pp" delta annotation because it is confusing regardless of 
 
   const [row] = getSmartPrescriptionDetailRows(workoutWith([bench]));
 
-  expect(row.value).toContain('90% → 90%');
+  expect(row.value).toContain('90% to 90%');
   expect(row.value).not.toContain('pp');
 });
 
@@ -398,8 +396,8 @@ test.each([
     ]));
 
     expect(rows).toHaveLength(1);
-    expect(rows[0].label).toBe(`${lift} — Plan`);
-    expect(rows[0].value).toContain('→');
+    expect(rows[0].label).toBe(`${lift} (Plan)`);
+    expect(rows[0].value).toContain(' to ');
     expect(rows[0].value).toContain('5×4×75%');
     expect(rows[0].value).toContain(
       'Progressed to avoid repeating the same stimulus.'
@@ -495,8 +493,8 @@ test('builds a copyable diagnosis with decision, projection and technical proof'
   expect(text).toContain('Workout: C3W24');
   expect(text).toContain('Current blocker: Deadlift');
   expect(text).toContain('Projected meet: C3W32–C3W35');
-  expect(text).toContain('Projected limiter: Squat — opener');
-  expect(text).toContain('Deadlift — Plan:');
+  expect(text).not.toContain('Projected limiter');
+  expect(text).toContain('Deadlift (Plan):');
   expect(text).toContain('Selection: primary=Deadlift, secondary=Bench');
   expect(text).toContain('repeatVariation=true');
   expect(text).toContain('gridItems=9');

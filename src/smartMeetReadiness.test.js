@@ -3,7 +3,11 @@ import {
   buildSmartMeetWorkoutProjection,
   buildSmartReadinessSignals,
 } from './smartTrainingEngine';
-import { calculateAchievedMaxesFromHistory, roundE1RM } from './workoutHistoryStats';
+import {
+  calculateAchievedMaxesFromHistory,
+  formatSetPercentDisplay,
+  roundE1RM,
+} from './workoutHistoryStats';
 import {
   buildSmartLiftState,
   buildSmartLiftPrescription,
@@ -165,6 +169,33 @@ test('uses only achieved current-cycle performance for a lighter lifter', () => 
   expect(result.byLift.Bench.plannedTopAttempt).toBe(32.5);
   expect(result.byLift.Bench.ready).toBe(false);
   expect(result.weakestLift).toBe('Bench');
+});
+
+test('uses the same strictly increasing beginner attempts as the visible meet plan', () => {
+  const history = [
+    makeSeedMaxEntry('Squat', 42.5),
+    makeSeedMaxEntry('Bench', 32.5),
+    makeSeedMaxEntry('Deadlift', 60),
+    makeTrainingEntry({ workoutNumber: 1, lift: 'Squat', weight: 40, reps: 1, e1rm: 40 }),
+    makeTrainingEntry({ workoutNumber: 2, lift: 'Bench', weight: 30, reps: 1, e1rm: 30 }),
+    makeTrainingEntry({ workoutNumber: 3, lift: 'Deadlift', weight: 50, reps: 1, e1rm: 50 }),
+  ];
+
+  const result = buildSmartMeetPlanReadiness({
+    history,
+    prs: { Squat: 45, Bench: 35, Deadlift: 60 },
+    currentCycle: 1,
+  });
+
+  expect(result.byLift.Squat.attempts)
+    .toEqual({ opener: 40, secondAttempt: 42.5, thirdAttempt: 45 });
+  expect(result.byLift.Bench.attempts)
+    .toEqual({ opener: 30, secondAttempt: 32.5, thirdAttempt: 35 });
+  expect(result.byLift.Deadlift.attempts)
+    .toEqual({ opener: 55, secondAttempt: 60, thirdAttempt: 62.5 });
+  expect(result.byLift.Deadlift.readinessPhase).toBe('opener');
+  expect(result.byLift.Squat.readinessPhase).toBe('third-attempt');
+  expect(result.byLift.Bench.readinessPhase).toBe('third-attempt');
 });
 
 test('uses opener readiness and identifies the actual limiter for a stronger lifter', () => {
@@ -349,7 +380,7 @@ test('projects a meet as a cycle-workout range from the slowest lift', () => {
   });
 });
 
-test('projects readiness progress from heavy opportunities rather than all lift exposures', () => {
+test('projects readiness progress from the supplied usable lift exposures', () => {
   const projection = buildSmartMeetWorkoutProjection({
     meetPlanReadiness: {
       fullyDemonstrated: false,
@@ -507,6 +538,11 @@ test('uses a wider frequency window for the meet projection than for candidate s
   expect(before.projectionTrainingDayCount).toBe(6);
   expect(after.projectionLiftExposureCounts.Squat).toBe(4);
   expect(after.projectionTrainingDayCount).toBe(7);
+  // A completed Smart exposure progresses its own prescription regardless
+  // of whether the lift was primary or secondary that day. The projection
+  // must use that same usable-exposure cadence.
+  expect(after.projectionProgressionExposureCounts)
+    .toEqual(after.projectionLiftExposureCounts);
 });
 
 test('withholds the meet projection until every lift has active-cycle evidence', () => {
@@ -602,7 +638,7 @@ test('schedules one clean taper day only after every lift has also shown third-a
     // proven, matching the "never rehearse the real attempt in training"
     // design. The e1RM these doubles produce clears each 102.5%-of-real-1RM
     // target without the real 1RM basis itself moving.
-    ['Squat', 97, 2], ['Bench', 77, 2], ['Deadlift', 135, 2],
+    ['Squat', 97, 2], ['Bench', 77.5, 2], ['Deadlift', 135, 2],
   ];
 
   const history = [
@@ -650,7 +686,7 @@ test('schedules one clean taper day only after every lift has also shown third-a
 test('a light taper workout forces rest before the meet even when the active block is short', () => {
   const demonstrated = [
     ['Squat', 97, 2],
-    ['Bench', 77, 2],
+    ['Bench', 77.5, 2],
     ['Deadlift', 135, 2],
   ].map(([lift, weight, reps], index) => makeTrainingEntry({
     workoutNumber: index + 1,
@@ -744,7 +780,7 @@ test("a sub-maximal training PR (raising e1RM/prs) never moves the athlete's mee
   expect(readinessBefore.byLift.Bench.attempts).toEqual(
     readinessAfter.byLift.Bench.attempts
   );
-  expect(readinessAfter.byLift.Bench.attempts.opener).toBeCloseTo(85.5, 1);
+  expect(readinessAfter.byLift.Bench.attempts.opener).toBe(85);
 });
 
 test('does not schedule the meet-taper day merely because openers and second attempts are supported - third-attempt potential is also required', () => {
@@ -900,6 +936,37 @@ test('third-attempt phase prescribes an escalating top double toward third-attem
   // third-attempt single.
   expect(prescription.sets[0].precisePct).toBeCloseTo(0.875, 3);
   expect(prescription.sets[0].precisePct).toBeLessThanOrEqual(0.9612);
+});
+
+test('a progressing 90% top double must visibly advance to 95%', () => {
+  const state = buildSmartLiftState({
+    history: [makeSmartLiftEntry({
+      lift: 'Deadlift',
+      workoutNumber: 1,
+      sets: [
+        makeSet({ labelKey: 'topDouble', reps: 2, pct: 0.90, trainingMax: 180 }),
+        ...Array.from({ length: 4 }, () => makeSet({ labelKey: 'backoff', reps: 4, pct: 0.75, trainingMax: 180 })),
+      ],
+    })],
+    currentCycle: 1,
+    lift: 'Deadlift',
+    trainingMax: 180,
+    meetPlanReadiness: {
+      Deadlift: {
+        ready: false,
+        readinessPhase: 'third-attempt',
+        attempts: { opener: 170, secondAttempt: 180, thirdAttempt: 200 },
+      },
+    },
+  });
+
+  const prescription = buildSmartLiftPrescription({ state, role: 'primary' });
+
+  expect(prescription.sets[0].labelKey).toBe('topDouble');
+  // 170kg is 94.44% of a 180kg training max, but the app's established
+  // five-percent display convention makes that the next, visible 95% step.
+  expect(prescription.sets[0].precisePct).toBeGreaterThan(0.90);
+  expect(formatSetPercentDisplay(prescription.sets[0].precisePct)).toBe('95');
 });
 
 test('third-attempt phase converts a non-double anchor (e.g. a single carried in from second-attempt phase) to its double-equivalent instead of flagging a false regression', () => {

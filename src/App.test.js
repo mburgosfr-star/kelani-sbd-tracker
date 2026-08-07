@@ -1,10 +1,15 @@
 import { render, screen } from '@testing-library/react';
-import App, { capRunningBestChart, formatWorkoutSetPercentDisplay, getDashboardE1RMPrGain, getDashboardMeetState, replaceCurrentChartEndpoint, shouldShowAutomaticBackupStatus } from './App';
+import App, { capRunningBestChart, formatWorkoutSetPercentDisplay, getDashboardE1RMPrGain, getDashboardMeetState, isDashboardE1RMPR, replaceCurrentChartEndpoint, shouldShowAutomaticBackupStatus } from './App';
 
 test('dashboard e1RM PR gain compares against the real 1RM on the same card', () => {
   expect(getDashboardE1RMPrGain(100, 97.5)).toBe(2.5);
   expect(getDashboardE1RMPrGain(150, 142.5)).toBe(7.5);
   expect(getDashboardE1RMPrGain(180, 180)).toBe(0);
+});
+
+test('rounded seed e1RMs do not create a false dashboard PR', () => {
+  expect(isDashboardE1RMPR({ achievedE1RM: 38.5, oneRM: 42.5 })).toBe(false);
+  expect(isDashboardE1RMPR({ achievedE1RM: 43, oneRM: 42.5 })).toBe(true);
 });
 
 test('only the current graph endpoint adopts the rounded live e1RM', () => {

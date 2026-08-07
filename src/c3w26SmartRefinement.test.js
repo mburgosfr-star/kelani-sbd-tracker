@@ -70,7 +70,7 @@ test('supplemented heavy Bench has a visible complete plan and technical diagnos
 
   const diagnosis = buildSmartDiagnosticText(workout, {});
   expect(diagnosis).toContain(
-    'Bench — Plan: Top single: 90% · 3×5×75%',
+    'Bench (Plan): Top single: 90% · 3×5×75%',
   );
   expect(diagnosis).toContain(
     'Selection: primary=Bench, secondary=Deadlift',

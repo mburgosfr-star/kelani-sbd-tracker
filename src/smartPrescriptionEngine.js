@@ -895,6 +895,20 @@ function getNextPrimaryTop(state = {}) {
       pct = Math.max(pct, anchorPct);
     }
 
+    // A Smart progress decision must also be visible at the app's 5%
+    // display precision. Without this floor, a real kg increase could still
+    // read "90% to 90%", which is not an intensity progression.
+    if (
+      progression.direction === 'progress' &&
+      roundPercent(pct) <= roundPercent(anchorPct)
+    ) {
+      pct = clamp(
+        roundPercent(anchorPct) + 0.05,
+        TOP_PCT_LIMITS[2].min,
+        thirdAttemptDoublePct
+      );
+    }
+
     return {
       reps: 2,
       pct: roundPct(pct),
@@ -1038,6 +1052,7 @@ export function buildSmartLiftPrescription({
   const sets = [];
   let progressionAnchorPct = 0;
   let topSetAnchorPct = 0;
+  let topSetAnchorWeight = 0;
   let volumeAnchorPct = Number(
     state.highestRecentSuccessfulVolumePct
   ) || 0;
@@ -1177,6 +1192,7 @@ export function buildSmartLiftPrescription({
 
     progressionAnchorPct = top.anchorPct;
     topSetAnchorPct = top.anchorPct;
+    topSetAnchorWeight = Number(state.lastSuccessfulTop?.weight) || 0;
     meetSpecificProgression = Boolean(
       top.meetSpecificProgression
     );
@@ -1268,6 +1284,7 @@ export function buildSmartLiftPrescription({
     topSetAnchorPct,
     volumeAnchorPct,
     plannedVolumePct,
+    topSetAnchorWeight,
     meetSpecificProgression,
     ...(isMixedLiftWorkout
       ? { isMixedLiftWorkout: true }

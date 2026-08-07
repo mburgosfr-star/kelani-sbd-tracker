@@ -1,4 +1,4 @@
-import { ATHLETE_LEVEL_THRESHOLDS, calculateBestMaxesFromHistory, calculateEStrengthRatio, classifyAthleteLevel, getAthleteLevel, roundE1RM } from './workoutHistoryStats';
+import { ATHLETE_LEVEL_THRESHOLDS, calculateBestMaxesFromHistory, calculateEStrengthRatio, calculateStrengthRatioMaxes, classifyAthleteLevel, getAthleteLevel, roundE1RM } from './workoutHistoryStats';
 
 test('preserves raw historical graph values while current e1RM can be rounded separately', () => {
   const seedHistory = [
@@ -79,5 +79,23 @@ describe('calculateEStrengthRatio / getAthleteLevel', () => {
   test('returns null/beginner when no body weight has been logged yet', () => {
     expect(calculateEStrengthRatio({ prs: { Squat: 150, Bench: 100, Deadlift: 180 }, history: [], bodyWeights: [] })).toBeNull();
     expect(getAthleteLevel({ prs: { Squat: 150, Bench: 100, Deadlift: 180 }, history: [], bodyWeights: [] })).toBe('beginner');
+  });
+
+  test('uses eStrength Max for a stable level when a later weigh-in is heavier', () => {
+    const input = {
+      prs: { Squat: 150, Bench: 100, Deadlift: 180 },
+      history: [],
+      bodyWeights: [
+        { cycle: 1, workoutNumber: 0, bodyWeight: 70 },
+        { cycle: 1, workoutNumber: 1, bodyWeight: 80 },
+      ],
+    };
+
+    expect(calculateEStrengthRatio(input)).toBeCloseTo(5.38, 2);
+    expect(calculateStrengthRatioMaxes(input)).toEqual({
+      strengthMax: 6.14,
+      eStrengthMax: 6.14,
+    });
+    expect(getAthleteLevel(input)).toBe('advanced');
   });
 });

@@ -32,7 +32,9 @@ import {
   isAttemptSetLabel,
   getHistoryMaxCandidates,
   calculateBestMaxesFromHistory,
+  calculateAchievedMaxesFromHistory,
   calculatePrsFromHistory,
+  calculateStrengthRatioMaxes,
   mergeHigherPrs,
   getEntryCycle,
   getEntryWorkoutNumber,
@@ -87,6 +89,10 @@ import {
   getWorkoutSetGroupLabel,
 } from './warmupAndPrepGeneration';
 import { applyAccessoryPlanToWorkouts } from './accessoryGeneration';
+import {
+  buildMeetAttemptsFromOneRM,
+  ensureStrictMeetAttempts as ensureStrictMeetAttemptKeys,
+} from './meetAttemptPlanning';
 import { generateCooldownItems } from './classicProgramTemplates';
 import {
   regenerateSmartWorkoutsAfterCompletion,
@@ -137,6 +143,13 @@ export function buildBackupSummary(data) {
 
 export function getDashboardE1RMPrGain(e1RM, oneRM) {
   return Math.max(0, (Number(e1RM) || 0) - (Number(oneRM) || 0));
+}
+
+// A rounded seed/max estimate is not a new training PR. The dashboard may
+// still show the all-time best e1RM, but the PR badge requires an achieved
+// training estimate to exceed the real 1RM basis.
+export function isDashboardE1RMPR({ achievedE1RM = 0, oneRM = 0 } = {}) {
+  return Number(oneRM) > 0 && Number(achievedE1RM) > Number(oneRM);
 }
 
 export function shouldShowAutomaticBackupStatus(isNativePlatform) {
@@ -3809,11 +3822,16 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
     const currentText = formatSmartPrescriptionPercent(currentPct);
     const previousText = formatSmartPrescriptionPercent(previousPct);
     const topLabel = getSmartSetDisplayLabel(topSet, t);
+    const currentWeight = Number(topSet.weight) || 0;
+    const previousWeight = Number(prescription.topSetAnchorWeight) || 0;
+    const weightText = currentWeight > 0 && previousWeight > 0
+      ? ` (${formatWeightFromKg(previousWeight, WEIGHT_UNITS.KG)} to ${formatWeightFromKg(currentWeight, WEIGHT_UNITS.KG)})`
+      : '';
 
     if (previousText && currentText) {
-      parts.push(`${topLabel}: ${previousText} → ${currentText}`);
+      parts.push(`${topLabel}: ${previousText} to ${currentText}${weightText}`);
     } else if (currentText) {
-      parts.push(`${topLabel}: ${currentText}`);
+      parts.push(`${topLabel}: ${currentText}${currentWeight > 0 ? ` (${formatWeightFromKg(currentWeight, WEIGHT_UNITS.KG)})` : ''}`);
     }
   }
 
@@ -3905,7 +3923,7 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
   }
 
   return {
-    label: `${liftBlock.lift} — ${t.smartPrescriptionPlan || 'Plan'}`,
+    label: `${liftBlock.lift} (${t.smartPrescriptionPlan || 'Plan'})`,
     value: parts.join(' · '),
     kind: 'prescription',
   };
@@ -3950,7 +3968,7 @@ function getFrequencySupplementedLiftPrescriptionPlan(
   );
 
   return {
-    label: `${liftBlock.lift} — ${t.smartPrescriptionPlan || 'Plan'}`,
+    label: `${liftBlock.lift} (${t.smartPrescriptionPlan || 'Plan'})`,
     value: planParts.join(' · '),
     kind: 'prescription',
   };
@@ -4152,10 +4170,10 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
       else blockerGroups.push({ phase, lifts: [lift] });
     });
     const statusText = readiness.meetPlanFullyDemonstrated
-      ? (t.smartMeetFullyReadyTaper || 'Fully meet-ready — tapering and resting before the meet')
+      ? (t.smartMeetFullyReadyTaper || 'Fully meet-ready: tapering and resting before the meet')
       : blockerGroups.length > 0
         ? blockerGroups
-          .map(group => `${group.lifts.join(', ')} — ${blockerPhaseText(group.phase)}`)
+          .map(group => `${group.lifts.join(', ')} (${blockerPhaseText(group.phase)})`)
           .join('; ')
         : (t.smartMeetPlanNotReady || 'Meet plan not ready');
 
@@ -4167,6 +4185,15 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
           : (t.smartCurrentBlocker || 'Current blocker'),
       value: statusText,
     });
+
+    if (readiness.primaryBlockerLift || readiness.meetPlanWeakestLift) {
+      const primaryLift = readiness.primaryBlockerLift || readiness.meetPlanWeakestLift;
+      const primaryPhase = readiness.primaryBlockerPhase || readiness.meetPlanWeakestPhase;
+      rows.push({
+        label: t.smartPrimaryBlocker || 'Primary blocker',
+        value: `${primaryLift} (${blockerPhaseText(primaryPhase)})`,
+      });
+    }
 
     if (
       readiness.meetPlanOpenerReadyCount !== undefined &&
@@ -4226,12 +4253,12 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
 
       rows.push(
         {
-          label: `${lift} — ${t.smartCycleEstimateShort || 'Cycle e1RM'}`,
+          label: `${lift} (${t.smartCycleEstimateShort || 'Cycle e1RM'})`,
           value: formatEstimate(liftDisplayCycleEstimate),
           kind: 'metric',
         },
         {
-          label: `${lift} — ${liftTargetLabel}`,
+          label: `${lift} (${liftTargetLabel})`,
           value: (liftPhase === 'second-attempt' || liftPhase === 'third-attempt' || liftPhase === 'ready')
             ? formatEstimate(liftDisplayReadinessTarget)
             : formatWeightFromKg(
@@ -4241,7 +4268,7 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
           kind: 'metric',
         },
         {
-          label: `${lift} — ${t.smartOpenerGapShort || 'Gap'}`,
+          label: `${lift} (${t.smartOpenerGapShort || 'Gap'})`,
           value: formatEstimate(liftReadinessGap),
           kind: 'metric',
         }
@@ -4264,17 +4291,6 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
           'Not enough active-cycle data for a reliable projection.'),
     });
 
-    if (meetProjection.available && meetProjection.limitingLift) {
-      const limitingPhase = getSmartAttemptPhaseLabel(
-        meetProjection.limitingPhase,
-        t
-      );
-
-      rows.push({
-        label: t.smartProjectedLimiter || 'Projected limiter',
-        value: `${meetProjection.limitingLift} — ${limitingPhase}`,
-      });
-    }
   }
 
   if (showMeetReadinessDetail && hasMeetReadinessDetail) {
@@ -4295,49 +4311,37 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
     }
   }
 
-  // Same reasoning as showMeetReadinessDetail above: fatigue/recent-effort
-  // context is useful on any day type (a deload or rest day is often a
-  // direct consequence of it), so show it whenever the underlying fields
-  // are actually populated rather than only for fatigue-specific days.
-  const hasFatigueReadinessDetail =
-    readiness.recentFatigueScore !== undefined ||
-    readiness.recentFailedOrSkippedSetCount !== undefined;
-
-  if (
+  // A zero fatigue score and zero missed sets add no decision information.
+  // Omitting those two all-clear rows keeps the phone modal focused; any
+  // actual fatigue, failure, recovery decision, or blocker stays visible.
+  const fatigueScore = Number(readiness.recentFatigueScore) || 0;
+  const fatigueThreshold = SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE;
+  const failedCount = Number(readiness.recentFailedOrSkippedSetCount) || 0;
+  const meetdayBlockers = readiness.meetdayBlockers || [];
+  const showFatigueDetail =
     isFatigueRecovery ||
-    hasFatigueReadinessDetail ||
-    (readiness.meetdayBlockers || []).includes('fatigue')
-  ) {
-    const fatigueScore = Number(readiness.recentFatigueScore) || 0;
-    const fatigueThreshold = SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE;
-    const lastEffort = String(readiness.lastWorkoutEffort || '').trim().toUpperCase();
-    const failedCount = Number(readiness.recentFailedOrSkippedSetCount) || 0;
+    fatigueScore > 0 ||
+    meetdayBlockers.includes('fatigue');
+  const showFailureDetail =
+    failedCount > 0 ||
+    meetdayBlockers.includes('failed-skipped');
 
+  if (showFatigueDetail) {
     rows.push({
       label: t.smartBlockerFatigue || 'Fatigue',
       value: fatigueScore >= fatigueThreshold
-        ? `${fatigueScore} — recovery required`
-        : `${fatigueScore} — below recovery threshold`,
+        ? `${fatigueScore} (recovery required)`
+        : `${fatigueScore} (below recovery threshold)`,
     });
 
-    if (lastEffort) {
-      // A rest day's workoutEffort is always literally 'easy' (see
-      // completeWorkout's "Complete rest day" handler), which reads as a
-      // misleadingly specific claim about how a training session felt when
-      // there was no training at all - say it was a rest day instead.
-      rows.push({
-        label: t.smartCause || 'Cause',
-        value: readiness.lastWasRestDay
-          ? (t.smartCausePreviousRestDay || 'Previous workout was a rest day')
-          : `Previous workout ${lastEffort}`,
-      });
-    }
+  }
 
+  if (showFailureDetail) {
     rows.push({
       label: t.smartBlockerFailed || 'Failed',
       value: failedCount >= SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT
-        ? `${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT} — deload required`
-        : `${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT} — below deload threshold`,
+        ? `${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT} (deload required)`
+        : `${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT} (below deload threshold)`,
     });
   }
 
@@ -4411,20 +4415,18 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
   );
   const projectedMeetLabel =
     t.smartProjectedMeet || 'Projected meet';
-  const projectedLimiterLabel =
-    t.smartProjectedLimiter || 'Projected limiter';
   const projectionRows = otherRows.filter(row =>
-    [projectedMeetLabel, projectedLimiterLabel].includes(row.label)
+    row.label === projectedMeetLabel
   );
   const generalRows = otherRows.filter(row =>
     row.kind !== 'prescription' &&
-    ![projectedMeetLabel, projectedLimiterLabel].includes(row.label)
+    row.label !== projectedMeetLabel
   );
   const meetDayRows = generalRows.filter(row => row.kind === 'meet-day');
   const ordinaryGeneralRows = generalRows.filter(row => row.kind !== 'meet-day');
 
   function getPrescriptionPresentation(row = {}) {
-    const lift = String(row.label || '').split(' — ')[0] || row.label;
+    const lift = String(row.label || '').split(' (')[0] || row.label;
     const parts = String(row.value || '')
       .split(' · ')
       .map(part => part.trim())
@@ -4908,7 +4910,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
 }
 
 function CurrentWorkout({
-  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, latestBodyWeight }) {
+  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
   const smartModel = isSmartTrainingModel(trainingModel);
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
@@ -5087,6 +5089,7 @@ function CurrentWorkout({
                 <AthleteLevelBadge
                   athleteLevel={athleteLevel}
                   eStrengthRatio={eStrengthRatio}
+                  eStrengthMax={eStrengthMax}
                   latestBodyWeight={latestBodyWeight}
                   t={t}
                 />
@@ -5217,6 +5220,7 @@ function CurrentWorkout({
                 <AthleteLevelBadge
                   athleteLevel={athleteLevel}
                   eStrengthRatio={eStrengthRatio}
+                  eStrengthMax={eStrengthMax}
                   latestBodyWeight={latestBodyWeight}
                   t={t}
                 />
@@ -5964,10 +5968,6 @@ function CurrentWorkout({
   );
 }
 
-function roundAttempt(weight) {
-  return Math.round((Number(weight) || 0) / 5) * 5;
-}
-
 // Meet attempts round to the nearest 5kg like everything else in the app,
 // but at light training maxes (e.g. a Beginner's early cycles) two attempts
 // 7.5 percentage points apart can round to the same 5kg step. Forcing a
@@ -5979,25 +5979,8 @@ function roundAttempt(weight) {
 // increments for practical gym plate-loading), so the minimum step to
 // break a tie only needs to be 2.5kg here.
 export function ensureStrictMeetAttempts(attempts) {
-  const minStep = 2.5;
-  const opener = Number(attempts.opener) || 0;
-  let second = Number(attempts.second) || 0;
-  let third = Number(attempts.third) || 0;
-
-  if (opener > 0 && second <= opener) {
-    second = opener + minStep;
-  }
-
-  if (second > 0 && third <= second) {
-    third = second + minStep;
-  }
-
-  return {
-    ...attempts,
-    opener,
-    second,
-    third,
-  };
+  const strict = ensureStrictMeetAttemptKeys(attempts);
+  return { ...attempts, opener: strict.opener, second: strict.secondAttempt, third: strict.thirdAttempt };
 }
 
 // Single source of truth for the suggested meet plan (opener/2nd/3rd
@@ -6016,12 +5999,13 @@ export function buildSuggestedMeetPlan(bestStatsByLift = {}) {
   const meetPlan = LIFT_ORDER.map(lift => {
     const oneRM = bestStatsByLift[lift]?.oneRM || 0;
 
+    const attempts = buildMeetAttemptsFromOneRM(oneRM);
     return ensureStrictMeetAttempts({
       lift,
       oneRM,
-      opener: roundAttempt(oneRM * 0.90),
-      second: roundAttempt(oneRM * 0.975),
-      third: roundAttempt(oneRM * 1.025),
+      opener: attempts.opener,
+      second: attempts.secondAttempt,
+      third: attempts.thirdAttempt,
     });
   });
 
@@ -6137,7 +6121,7 @@ function MeetPlanModal({ meetPlan, meetTotals, t, weightUnit = WEIGHT_UNITS.KG, 
   );
 }
 
-function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, trainingModel = TRAINING_MODELS.CLASSIC, t, weightUnit = WEIGHT_UNITS.KG, best1RMs = {}, bestE1RMs = {}, athleteLevel, eStrengthRatio, latestBodyWeight, activescreen = 'lifts', onChangeTab }) {
+function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, trainingModel = TRAINING_MODELS.CLASSIC, t, weightUnit = WEIGHT_UNITS.KG, best1RMs = {}, bestE1RMs = {}, athleteLevel, eStrengthRatio, strengthMax, eStrengthMax, latestBodyWeight, activescreen = 'lifts', onChangeTab }) {
   const setActivescreen = onChangeTab || (() => {});
   const liftData = {};
   const totalData = [];
@@ -6342,18 +6326,34 @@ function getBodyWeightForWorkoutIndex(absoluteWorkoutIndex) {
   return latest?.bodyWeight || null;
 }
 
+let runningStrengthMax = 0;
+let runningEStrengthMax = 0;
+
 totalData.forEach(entry => {
   const bodyWeightForWorkout = getBodyWeightForWorkoutIndex(entry.absoluteWorkoutIndex);
 
   if (!bodyWeightForWorkout) return;
 
+  const strength = Math.round((entry.oneRM / bodyWeightForWorkout) * 100) / 100;
+  const eStrength = Math.round((entry.e1rm / bodyWeightForWorkout) * 100) / 100;
+  runningStrengthMax = Math.max(runningStrengthMax, strength);
+  runningEStrengthMax = Math.max(runningEStrengthMax, eStrength);
+
   strengthData.push({
     label: entry.label,
     absoluteWorkoutIndex: entry.absoluteWorkoutIndex,
-    strength: Math.round((entry.oneRM / bodyWeightForWorkout) * 100) / 100,
-    eStrength: Math.round((entry.e1rm / bodyWeightForWorkout) * 100) / 100,
+    strength,
+    eStrength,
+    strengthMax: runningStrengthMax,
+    eStrengthMax: runningEStrengthMax,
   });
 });
+
+if (strengthData.length > 0) {
+  const latest = strengthData.at(-1);
+  latest.strengthMax = Math.max(latest.strengthMax, Number(strengthMax) || 0);
+  latest.eStrengthMax = Math.max(latest.eStrengthMax, Number(eStrengthMax) || 0);
+}
 
 function chartMetricLabel(key) {
   if (key === 'oneRM') return weightMetricTitle('1RM');
@@ -6361,6 +6361,8 @@ function chartMetricLabel(key) {
   if (key === 'gewicht') return weightMetricTitle(t.bodyweight);
   if (key === 'strength') return t.strength;
   if (key === 'eStrength') return t.eStrength;
+  if (key === 'strengthMax') return t.strengthMax || 'Strength Max';
+  if (key === 'eStrengthMax') return t.eStrengthMax || 'eStrength Max';
   if (key === 'bodyFat') return `${t.bodyFatPercent} (%)`;
   if (key === 'bodyWater') return `${t.bodyWaterPercent} (%)`;
   if (key === 'leanMass') return weightMetricTitle(t.leanMassKg);
@@ -6460,7 +6462,9 @@ function chartMetricLabel(key) {
       return labels;
     }, {});
 
-    const isStrengthChart = dataKeys.some(key => ['strength', 'eStrength'].includes(key));
+    const isStrengthChart = dataKeys.some(key =>
+      ['strength', 'eStrength', 'strengthMax', 'eStrengthMax'].includes(key)
+    );
 
     function formatChartValue(value) {
       const numericValue = Number(value);
@@ -6528,10 +6532,10 @@ function chartMetricLabel(key) {
   }
 
   const statsTabs = [
-    { key: 'lifts', label: 'Lifts' },
-    { key: 'totaal', label: 'Total' },
-    { key: 'lichaam', label: 'Comp.' },
-    { key: 'scores', label: 'Health' },
+    { key: 'lifts', label: t.statsTabLifts || 'Lifts' },
+    { key: 'totaal', label: t.statsTabTotal || 'Total' },
+    { key: 'lichaam', label: t.statsTabBody || 'Body' },
+    { key: 'scores', label: t.statsTabHealth || 'Health' },
   ];
 
   function renderMetricChartCards(charts) {
@@ -6584,6 +6588,7 @@ function chartMetricLabel(key) {
               <AthleteLevelBadge
                 athleteLevel={athleteLevel}
                 eStrengthRatio={eStrengthRatio}
+                eStrengthMax={eStrengthMax}
                 latestBodyWeight={latestBodyWeight}
                 t={t}
               />
@@ -6615,7 +6620,8 @@ function chartMetricLabel(key) {
               borderRadius: 8,
               cursor: 'pointer',
               fontWeight: activescreen === tab.key ? 800 : 700,
-              textAlign: 'center'
+              textAlign: 'center',
+              whiteSpace: 'nowrap',
             }}
           >
             {tab.label}
@@ -6679,6 +6685,16 @@ function chartMetricLabel(key) {
           }}>
             <h3 style={{ margin: '0 0 4px', color: THEME.meet }}>{t.strengthTotalBodyweight}</h3>
             {renderChart(strengthData, ['strength', 'eStrength'], [THEME.muted, THEME.meet], t.noMetricData || t.noStatsData)}
+          </div>
+
+          <div style={{
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 10,
+            padding: 8
+          }}>
+            <h3 style={{ margin: '0 0 4px', color: THEME.meet }}>{t.strengthMax || 'Strength Max'}</h3>
+            {renderChart(strengthData, ['strengthMax', 'eStrengthMax'], [THEME.muted, THEME.meet], t.noMetricData || t.noStatsData)}
           </div>
         </div>
       )}
@@ -7472,15 +7488,16 @@ function TapInfoIcon({ color = THEME.primary, size = 13 }) {
   );
 }
 
-function AthleteLevelBadge({ athleteLevel, eStrengthRatio, latestBodyWeight, t }) {
+function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight, t }) {
   const [showModal, setShowModal] = useState(false);
 
   const levelLabel = t[ATHLETE_LEVEL_LABEL_KEYS[athleteLevel]] || athleteLevel;
   const tier = ATHLETE_LEVEL_THRESHOLDS[athleteLevel] || ATHLETE_LEVEL_THRESHOLDS.beginner;
   const nextLevel = ATHLETE_LEVEL_NEXT[athleteLevel];
   const nextLevelLabel = nextLevel ? (t[ATHLETE_LEVEL_LABEL_KEYS[nextLevel]] || nextLevel) : null;
-  const ratio = Number(eStrengthRatio) || 0;
-  const ratioToNext = nextLevel ? Math.max(tier.max - ratio, 0) : 0;
+  const currentRatio = Number(eStrengthRatio) || 0;
+  const maxRatio = Number(eStrengthMax) || currentRatio;
+  const ratioToNext = nextLevel ? Math.max(tier.max - maxRatio, 0) : 0;
   const kgToNext = nextLevel && latestBodyWeight ? Math.round(ratioToNext * latestBodyWeight) : null;
 
   const modalMutedText = 'rgba(255, 244, 230, 0.52)';
@@ -7532,14 +7549,21 @@ function AthleteLevelBadge({ athleteLevel, eStrengthRatio, latestBodyWeight, t }
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
             <div>
-              <div style={modalLabelStyle}>{t.athleteLevelRatioLabel || 'eStrength ratio'}</div>
-              <div style={modalValueStyle}>{ratio.toFixed(2)}x</div>
+              <div style={modalLabelStyle}>{t.athleteLevelCurrentRatioLabel || 'Current eStrength'}</div>
+              <div style={modalValueStyle}>{currentRatio.toFixed(2)}x</div>
             </div>
             <div>
-              <div style={modalLabelStyle}>{t.athleteLevelRangeLabel || 'Tier range'}</div>
-              <div style={modalValueStyle}>
-                {tier.min}x&nbsp;–&nbsp;{tier.max === Infinity ? '∞' : `${tier.max}x`}
-              </div>
+              <div style={modalLabelStyle}>{t.athleteLevelMaxRatioLabel || 'eStrength Max'}</div>
+              <div style={modalValueStyle}>{maxRatio.toFixed(2)}x</div>
+            </div>
+          </div>
+
+          <div style={modalDividerStyle} />
+
+          <div>
+            <div style={modalLabelStyle}>{t.athleteLevelRangeLabel || 'Tier range'}</div>
+            <div style={modalValueStyle}>
+              {tier.min}x - {tier.max === Infinity ? '∞' : `${tier.max}x`}
             </div>
           </div>
 
@@ -7619,7 +7643,7 @@ function applyCompletedHistorySnapshotsToWorkouts(workouts = [], history = [], c
   return changed ? nextWorkouts : workouts;
 }
 
-function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], currentCycle, onSelect, onStartNewCycle, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, latestBodyWeight }) {
+function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], currentCycle, onSelect, onStartNewCycle, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
   const currentWorkoutRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
   const [showProgramInfo, setShowProgramInfo] = useState(false);
@@ -7761,6 +7785,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
               <AthleteLevelBadge
                 athleteLevel={athleteLevel}
                 eStrengthRatio={eStrengthRatio}
+                eStrengthMax={eStrengthMax}
                 latestBodyWeight={latestBodyWeight}
                 t={t}
               />
@@ -12143,6 +12168,7 @@ function changeScreen(nextScreen) {
 }
 
 const bestMaxesFromHistory = calculateBestMaxesFromHistory(history);
+const achievedMaxesFromHistory = calculateAchievedMaxesFromHistory(history);
 
 const best1RMs = {
   Squat: bestMaxesFromHistory.Squat.oneRM || 0,
@@ -12151,9 +12177,13 @@ const best1RMs = {
 };
 
 const bestE1RMs = {
-  Squat: roundE1RM(Math.max(Number(prs.Squat) || 0, bestMaxesFromHistory.Squat.e1rm || 0)),
-  Bench: roundE1RM(Math.max(Number(prs.Bench) || 0, bestMaxesFromHistory.Bench.e1rm || 0)),
-  Deadlift: roundE1RM(Math.max(Number(prs.Deadlift) || 0, bestMaxesFromHistory.Deadlift.e1rm || 0)),
+  // Dashboard/Stats show the factual all-time estimate. Do not promote a
+  // 42.5kg seed or another half-step value into a misleading 45kg bucket.
+  // Smart readiness has its own active-cycle boundary and remains rounded
+  // there for progression decisions.
+  Squat: bestMaxesFromHistory.Squat.e1rm || Number(prs.Squat) || 0,
+  Bench: bestMaxesFromHistory.Bench.e1rm || Number(prs.Bench) || 0,
+  Deadlift: bestMaxesFromHistory.Deadlift.e1rm || Number(prs.Deadlift) || 0,
 };
 
 const total1RM = best1RMs.Squat + best1RMs.Bench + best1RMs.Deadlift;
@@ -12297,6 +12327,12 @@ const eStrengthRatio = latestBodyWeight
   ? Math.round((totalE1RM / latestBodyWeight) * 100) / 100
   : null;
 
+const { strengthMax, eStrengthMax } = calculateStrengthRatioMaxes({
+  prs,
+  history,
+  bodyWeights,
+});
+
 function bodyMetricValue(value, suffix = '') {
   if (!value) return null;
 
@@ -12422,13 +12458,17 @@ const latestBodyDataRows = [
   },
   {
     key: 'strength',
-    label: t.strength,
-    value: strengthRatio ? formatDecimalDisplay(strengthRatio, { maximumFractionDigits: 2 }) : null,
+    label: t.strengthWithMax || 'Strength / Max',
+    value: strengthRatio
+      ? `${formatDecimalDisplay(strengthRatio, { maximumFractionDigits: 2 })} / ${formatDecimalDisplay(strengthMax || strengthRatio, { maximumFractionDigits: 2 })}`
+      : null,
   },
   {
     key: 'eStrength',
-    label: t.eStrength,
-    value: eStrengthRatio ? formatDecimalDisplay(eStrengthRatio, { maximumFractionDigits: 2 }) : null,
+    label: t.eStrengthWithMax || 'eStrength / Max',
+    value: eStrengthRatio
+      ? `${formatDecimalDisplay(eStrengthRatio, { maximumFractionDigits: 2 })} / ${formatDecimalDisplay(eStrengthMax || eStrengthRatio, { maximumFractionDigits: 2 })}`
+      : null,
   },
   {
     key: 'bodyFat',
@@ -12518,6 +12558,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           onMeetWeightChange={changeMeetWeight}
           athleteLevel={athleteLevel}
           eStrengthRatio={eStrengthRatio}
+          eStrengthMax={eStrengthMax}
           latestBodyWeight={latestBodyWeight}
         />
       )}
@@ -12557,6 +12598,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             <AthleteLevelBadge
               athleteLevel={athleteLevel}
               eStrengthRatio={eStrengthRatio}
+              eStrengthMax={eStrengthMax}
               latestBodyWeight={latestBodyWeight}
               t={t}
             />
@@ -12646,11 +12688,26 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       workouts[currentIndex] && (() => {
       const meetReadiness = workouts[currentIndex].smartDecisionSummary?.readiness;
       const dashboardMeetProjection = meetReadiness?.meetProjection || null;
-      const { meetPlan: dashboardMeetPlan, meetTotals: dashboardMeetTotals } = dashboardSuggestedMeetPlan;
-      const limitingPhaseLabel = getSmartAttemptPhaseLabel(
-        dashboardMeetProjection?.limitingPhase,
-        t
+      const primaryBlockerLift = meetReadiness?.primaryBlockerLift || meetReadiness?.meetPlanWeakestLift;
+      const primaryBlockerPhase = meetReadiness?.primaryBlockerPhase || meetReadiness?.meetPlanWeakestPhase;
+      const primaryBlockerReadiness = primaryBlockerLift
+        ? meetReadiness?.meetPlanReadiness?.[primaryBlockerLift]
+        : null;
+      const cycleE1RM = roundBarbellWeight(
+        Number(primaryBlockerReadiness?.currentCycleBestE1RM) || 0,
+        'nearest',
+        5
       );
+      const readinessTarget = roundBarbellWeight(
+        Number(primaryBlockerReadiness?.readinessTargetAttempt) || 0,
+        'nearest',
+        5
+      );
+      const readinessGap = Math.max(readinessTarget - cycleE1RM, 0);
+      const blockerRouteText = primaryBlockerLift && cycleE1RM > 0 && readinessTarget > 0
+        ? `${primaryBlockerLift}: ${formatWeightFromKg(cycleE1RM, weightUnit)} → ${formatWeightFromKg(readinessTarget, weightUnit)} (${t.smartOpenerGapShort || 'Gap'} ${formatWeightFromKg(readinessGap, weightUnit)})`
+        : null;
+      const { meetPlan: dashboardMeetPlan, meetTotals: dashboardMeetTotals } = dashboardSuggestedMeetPlan;
 
       return (
         <>
@@ -12677,17 +12734,16 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                 ? `${t.expectedMeetWindow || 'Expected meet'}: ${dashboardMeetProjection.label}`
                 : (t.smartProjectionUnavailable || 'Not enough active-cycle data for a reliable projection.')}
             </div>
-            {dashboardMeetProjection?.available && dashboardMeetProjection.limitingLift && (
+            {primaryBlockerLift && primaryBlockerPhase && (
               <div style={{ color: THEME.muted, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
-                {t.dashboardMeetBlockerLabel || 'Blocker'}: {dashboardMeetProjection.limitingLift} — {limitingPhaseLabel}
+                {t.smartPrimaryBlocker || 'Primary blocker'}: {primaryBlockerLift} ({getSmartAttemptPhaseLabel(primaryBlockerPhase, t)})
               </div>
             )}
-            <div style={{ color: THEME.muted, fontSize: 11, fontWeight: 800, marginBottom: 1 }}>
-              {t.projectedTotal}
-            </div>
-            <div style={{ color: THEME.meet, fontSize: 20, fontWeight: 900, lineHeight: 1 }}>
-              {dashboardMeetTotals.third ? formatWeightFromKg(dashboardMeetTotals.third, weightUnit) : '—'}
-            </div>
+            {blockerRouteText && (
+              <div style={{ color: THEME.meet, fontSize: 12, fontWeight: 900, lineHeight: 1.3 }}>
+                {blockerRouteText}
+              </div>
+            )}
           </div>
 
           {showMeetPlanModal && (
@@ -12714,6 +12770,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             oneRM: best1RMs.Squat,
             e1RM: bestE1RMs.Squat,
             prBaseline: best1RMs.Squat,
+            achievedE1RM: achievedMaxesFromHistory.Squat.e1rm,
             statsTab: 'lifts',
           },
           {
@@ -12724,6 +12781,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             oneRM: best1RMs.Bench,
             e1RM: bestE1RMs.Bench,
             prBaseline: best1RMs.Bench,
+            achievedE1RM: achievedMaxesFromHistory.Bench.e1rm,
             statsTab: 'lifts',
           },
           {
@@ -12734,6 +12792,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             oneRM: best1RMs.Deadlift,
             e1RM: bestE1RMs.Deadlift,
             prBaseline: best1RMs.Deadlift,
+            achievedE1RM: achievedMaxesFromHistory.Deadlift.e1rm,
             statsTab: 'lifts',
           },
           {
@@ -12744,6 +12803,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             oneRM: total1RM,
             e1RM: totalE1RM,
             prBaseline: total1RM,
+            isTotal: true,
             statsTab: 'totaal',
           },
         ];
@@ -12799,14 +12859,19 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                     </strong>
 
                     <span style={{ color: THEME.muted, fontSize: 13, fontWeight: 900 }}>
-                      {t.e1RM}
+                      {t.e1RM || 'e1RM'}
                     </span>
                     <strong style={{ color: card.color, fontSize: 17, fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {value(card.e1RM)}
                     </strong>
                   </div>
 
-                  {getDashboardE1RMPrGain(card.e1RM, card.prBaseline) > 0 && (
+                  {(card.isTotal
+                    ? getDashboardE1RMPrGain(card.e1RM, card.prBaseline) > 0
+                    : isDashboardE1RMPR({
+                      achievedE1RM: card.achievedE1RM,
+                      oneRM: card.prBaseline,
+                    })) && (
                     <div style={{
                       color: THEME.green,
                       fontSize: 11,
@@ -12915,9 +12980,10 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           t={t}
           weightUnit={weightUnit}
           benchPressVariant={benchPressVariant}
-          athleteLevel={athleteLevel}
-          eStrengthRatio={eStrengthRatio}
-          latestBodyWeight={latestBodyWeight}
+            athleteLevel={athleteLevel}
+            eStrengthRatio={eStrengthRatio}
+            eStrengthMax={eStrengthMax}
+            latestBodyWeight={latestBodyWeight}
         />
       )}
 
@@ -12935,6 +13001,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           bestE1RMs={bestE1RMs}
           athleteLevel={athleteLevel}
           eStrengthRatio={eStrengthRatio}
+          strengthMax={strengthMax}
+          eStrengthMax={eStrengthMax}
           latestBodyWeight={latestBodyWeight}
           activescreen={statsTab}
           onChangeTab={setStatsTab}

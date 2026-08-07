@@ -18,7 +18,6 @@ import {
   SMART_GENERATED_FLAGS,
   getSmartMaxConsecutiveTrainingDays,
   MEET_ATTEMPT_KEYS,
-  MEET_ATTEMPT_PCTS,
 } from './smartTrainingConstants';
 import {
   LIFT_ORDER,
@@ -51,6 +50,7 @@ import {
   applyAccessoryPlanToWorkouts,
 } from './accessoryGeneration';
 import { generateProgramForProfile } from './classicProgramTemplates';
+import { buildMeetAttemptsFromOneRM } from './meetAttemptPlanning';
 
 export function regenerateSmartWorkoutsAfterCompletion({
   workouts = [],
@@ -728,13 +728,15 @@ export function buildSmartReadinessSignals(context = {}) {
     [lift]: projectionTrainingDays.filter(day => (day.lifts || []).includes(lift)).length,
   }), {});
 
-  // Readiness gaps are closed by progression-capable (heavy) exposures,
-  // not by every light/medium frequency exposure. Counting all exposures
-  // made Intermediate Deadlift look three times closer than its actual
-  // heavy rotation in the C3W37 projection (C3W46–50 vs a C3W56 meet).
+  // A successful Smart exposure advances this lift's prescription even when
+  // it is secondary or light: `getProgressionDecision` receives the same
+  // good-feedback signal and raises its top-set percentage. The meet
+  // projection must therefore count every usable lift exposure, not only
+  // primary/heavy roles. Counting heavy roles alone made the calendar
+  // projection materially later than the exact all-successful simulation.
   const projectionProgressionExposureCounts = LIFT_ORDER.reduce((counts, lift) => ({
     ...counts,
-    [lift]: projectionTrainingDays.filter(day => day.heavyLiftByLift?.[lift]).length,
+    [lift]: projectionTrainingDays.filter(day => (day.lifts || []).includes(lift)).length,
   }), {});
 
   const lastTrainingDay = rollingTrainingDays[rollingTrainingDays.length - 1] || null;
@@ -1151,21 +1153,6 @@ export function hasEffectiveSmartTrainingStimulus(workout = {}) {
   });
 }
 
-function getSmartMeetPlanAttemptWeight({ lift, key, oneRMs = {}, meetPlannerAttempts = {} }) {
-  const custom = Number(meetPlannerAttempts?.[lift]?.[key]);
-
-  if (Number.isFinite(custom) && custom > 0) {
-    return roundMeetWeight(custom);
-  }
-
-  // Percentages of a real achieved 1RM, not an estimated one - see the
-  // comment at the call site in buildSmartMeetPlanReadiness.
-  const base = Number(oneRMs?.[lift]) || 0;
-  const pct = Number(MEET_ATTEMPT_PCTS?.[key]) || 1;
-
-  return base > 0 ? roundMeetWeight(base * pct) : 0;
-}
-
 function getSmartMeetProgressionEvidence(entries = [], lift = null) {
   const bestByWorkout = new Map();
 
@@ -1257,15 +1244,16 @@ export function buildSmartMeetPlanReadiness({
     // comes right back).
     const bestOneRM = Number(bestMaxes?.[lift]?.oneRM) || Number(prs?.[lift]) || 0;
 
-    const attempts = MEET_ATTEMPT_KEYS.reduce((attemptAcc, key) => ({
-      ...attemptAcc,
-      [key]: getSmartMeetPlanAttemptWeight({
-        lift,
-        key,
-        oneRMs: { [lift]: bestOneRM },
-        meetPlannerAttempts,
-      }),
-    }), {});
+    const suggestedAttempts = buildMeetAttemptsFromOneRM(bestOneRM);
+    const attempts = MEET_ATTEMPT_KEYS.reduce((attemptAcc, key) => {
+      const custom = Number(meetPlannerAttempts?.[lift]?.[key]);
+      return {
+        ...attemptAcc,
+        [key]: Number.isFinite(custom) && custom > 0
+          ? roundMeetWeight(custom)
+          : suggestedAttempts[key],
+      };
+    }, {});
 
     const plannedTopAttempt = Math.max(
       Number(attempts.opener) || 0,
@@ -1370,12 +1358,27 @@ export function buildSmartMeetPlanReadiness({
         Math.ceil(openerShortfall / projectedGainPerExposure)
       )
       : 0;
-    const projectedExposureCount = currentCycleShortfall > 0
-      ? Math.max(
+    // A lift may still have several sequential readiness phases left. The
+    // old projection counted only the currently active phase, so a Deadlift
+    // still at opener readiness was projected as if it could jump directly
+    // to third-attempt potential. Walk the phases in order and carry the
+    // projected gains forward between them.
+    const projectedPhaseTargets = [
+      openerTargetAttempt,
+      secondAttemptSupportTarget,
+      thirdAttemptPotentialTarget,
+    ];
+    let projectedReadiness = currentCycleBestE1RM;
+    let projectedExposureCount = 0;
+    projectedPhaseTargets.forEach(target => {
+      if (!(target > projectedReadiness)) return;
+      const exposures = Math.max(
         1,
-        Math.ceil(currentCycleShortfall / projectedGainPerExposure)
-      )
-      : 0;
+        Math.ceil((target - projectedReadiness) / projectedGainPerExposure)
+      );
+      projectedExposureCount += exposures;
+      projectedReadiness += exposures * projectedGainPerExposure;
+    });
 
     return {
       ...acc,
@@ -1463,6 +1466,12 @@ export function buildSmartMeetPlanReadiness({
       .sort((a, b) => ratioForPhase(a) - ratioForPhase(b))[0] || null
     : null;
 
+  // The first unmet readiness phase is the primary current blocker. This is
+  // separate from the projection limiter, which may need more total future
+  // exposures and therefore be a different lift.
+  const primaryBlockerLift = weakestLift;
+  const primaryBlockerPhase = weakestPhase;
+
   return {
     byLift,
     hasCurrentCycleMeetEvidence,
@@ -1489,6 +1498,8 @@ export function buildSmartMeetPlanReadiness({
     weakestBestE1RM: weakestLift
       ? Number(byLift[weakestLift]?.currentCycleBestE1RM) || 0
       : 0,
+    primaryBlockerLift,
+    primaryBlockerPhase,
   };
 }
 
@@ -1610,12 +1621,18 @@ export function buildSmartMeetWorkoutProjection({
     minimumWorkoutNumber,
     maximumWorkoutNumber,
     label,
+    // The displayed limiter answers “which lift reaches full readiness last?”
+    // under the successful-progression model. The calendar calculation still
+    // uses the exposure-based limiter below, but that is not the athlete's
+    // primary readiness blocker and must not be shown as one.
     limitingLift: meetPlanReadiness.fullyDemonstrated
       ? null
-      : limiter?.lift || meetPlanReadiness.weakestLift || null,
+      : meetPlanReadiness.weakestLift || limiter?.lift || null,
     limitingPhase: meetPlanReadiness.fullyDemonstrated
       ? 'ready'
-      : limiter?.phase || meetPlanReadiness.weakestPhase || null,
+      : meetPlanReadiness.weakestPhase || limiter?.phase || null,
+    scheduleLimitingLift: limiter?.lift || null,
+    scheduleLimitingPhase: limiter?.phase || null,
     taperWorkouts,
     minimumWorkoutsBeforeMeet,
     maximumWorkoutsBeforeMeet,
@@ -3543,6 +3560,8 @@ export function buildGeneratedSmartTrainingWorkout({
           prescription.progressionAnchorPct || 0,
         topSetAnchorPct:
           prescription.topSetAnchorPct || 0,
+        topSetAnchorWeight:
+          prescription.topSetAnchorWeight || 0,
         volumeAnchorPct:
           prescription.volumeAnchorPct || 0,
         plannedVolumePct:

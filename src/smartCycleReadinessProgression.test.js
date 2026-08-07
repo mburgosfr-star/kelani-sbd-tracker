@@ -213,16 +213,19 @@ test('names the cycle estimate and opener separately in the Smart modal', () => 
   ).toEqual([
     {
       label: 'Current blocker',
-      value: 'Squat — opener not yet demonstrated',
+      value: 'Squat (opener not yet demonstrated)',
+    },
+    {
+      label: 'Primary blocker',
+      value: 'Squat (opener not yet demonstrated)',
     },
     { label: 'Openers', value: '0/3', kind: 'metric' },
     { label: '2nd attempts', value: '0/3', kind: 'metric' },
     { label: '3rd potential', value: '0/3', kind: 'metric' },
-    { label: 'Squat — Cycle e1RM', value: '115 kg', kind: 'metric' },
-    { label: 'Squat — Meet opener', value: '130 kg', kind: 'metric' },
-    { label: 'Squat — Gap', value: '15 kg', kind: 'metric' },
+    { label: 'Squat (Cycle e1RM)', value: '115 kg', kind: 'metric' },
+    { label: 'Squat (Meet opener)', value: '130 kg', kind: 'metric' },
+    { label: 'Squat (Gap)', value: '15 kg', kind: 'metric' },
     { label: 'Projected meet', value: 'C3W27–C3W29' },
-    { label: 'Projected limiter', value: 'Squat — opener' },
     {
       label: 'Readiness basis',
       value: 'Only successful sets from the active cycle count.',
@@ -272,20 +275,16 @@ test('shows the second-attempt support phase in the Smart modal', () => {
 
   expect(rows[0]).toEqual({
     label: 'Current blocker',
-    value: 'Deadlift — second attempt not yet supported',
+    value: 'Deadlift (second attempt not yet supported)',
   });
   expect(rows).toContainEqual({
-    label: 'Deadlift — 2nd support',
+    label: 'Deadlift (2nd support)',
     value: '170 kg',
     kind: 'metric',
   });
   expect(rows).toContainEqual({
     label: 'Projected meet',
     value: 'C3W29–C3W31',
-  });
-  expect(rows).toContainEqual({
-    label: 'Projected limiter',
-    value: 'Deadlift — 2nd attempt',
   });
 });
 
