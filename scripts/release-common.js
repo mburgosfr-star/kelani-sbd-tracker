@@ -366,7 +366,13 @@ function publicAssetManifest(apkPath) {
     const content = execFileSync(
       'unzip',
       ['-p', apkPath, entry],
-      { encoding: null }
+      {
+        encoding: null,
+        // Production bundles and exercise videos can exceed Node's default
+        // 1 MiB child-process buffer. Keep the APK asset manifest check
+        // bounded while allowing legitimate public assets to be hashed.
+        maxBuffer: 64 * 1024 * 1024,
+      }
     );
 
     return `${sha256Buffer(content)}  ${entry}`;
