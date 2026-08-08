@@ -740,6 +740,13 @@ export function buildSmartReadinessSignals(context = {}) {
   }), {});
 
   const lastTrainingDay = rollingTrainingDays[rollingTrainingDays.length - 1] || null;
+  const lastWorkoutWasHeavyTraining = Boolean(
+    lastDay &&
+    !lastDay.restDay &&
+    lastDay.smartDayType !== SMART_DAY_TYPES.RECOVERY &&
+    lastDay.smartDayType !== SMART_DAY_TYPES.DELOAD &&
+    LIFT_ORDER.some(lift => Boolean(lastDay.heavyLiftByLift?.[lift]))
+  );
   const lastTrainingDayWasLightOnly = Boolean(
     lastTrainingDay &&
     (lastTrainingDay.lifts || []).length > 0 &&
@@ -873,6 +880,7 @@ export function buildSmartReadinessSignals(context = {}) {
     recentLiftSetEffortScores,
     recentSharedLowerBodyFatigueScore,
     lastTrainingDayHeavyDeadlift: Boolean(lastTrainingDay?.heavyLiftByLift?.Deadlift),
+    lastWorkoutWasHeavyTraining,
     lastTrainingDayWasLightOnly,
     recentHeavyDeadliftDayCount: recentHeavyDeadliftDays.length,
     recentSquatMaxPct,
@@ -1014,6 +1022,13 @@ export function violatesSmartTrainingSafety(candidate = {}, readiness = {}) {
   const recentHeavyDeadliftDayCount =
     Number(readiness.recentHeavyDeadliftDayCount) || 0;
   const recentSquatMaxPct = Number(readiness.recentSquatMaxPct) || 0;
+
+  if (
+    readiness.lastWorkoutWasHeavyTraining &&
+    isHeavySmartTrainingCandidate(candidate)
+  ) {
+    return true;
+  }
 
   if (hasHeavyDeadlift && readiness.lastTrainingDayHeavyDeadlift) {
     return true;
@@ -3295,7 +3310,8 @@ export function buildGeneratedSmartTrainingWorkout({
   // gets a genuine heavy exposure regardless of the weekly heavy quota,
   // same as before this change.
   const primaryLiftDueForHeavy = Boolean(
-    primaryPriority === meetWeakestPriority || isDueForHeavy(primaryLift)
+    !readiness.lastWorkoutWasHeavyTraining &&
+    (primaryPriority === meetWeakestPriority || isDueForHeavy(primaryLift))
   );
 
   const secondaryCandidates = configuredPriorities
@@ -4062,6 +4078,8 @@ function generateSmartWorkouts({
               smartDecision.readiness.recentSharedLowerBodyFatigueScore || 0,
             lastTrainingDayHeavyDeadlift:
               Boolean(smartDecision.readiness.lastTrainingDayHeavyDeadlift),
+            lastWorkoutWasHeavyTraining:
+              Boolean(smartDecision.readiness.lastWorkoutWasHeavyTraining),
             lastTrainingDayWasLightOnly:
               Boolean(smartDecision.readiness.lastTrainingDayWasLightOnly),
             recentHeavyDeadliftDayCount:
@@ -4325,7 +4343,7 @@ function regenerateSupplementalLiftBlocksInWorkout(workout) {
   };
 }
 
-export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
+function generateWorkoutsForTrainingModelBase(trainingModel, options = {}) {
   const generatedWorkouts = generateWorkoutsForTrainingModelUnconstrained(
     trainingModel,
     options,
@@ -4501,5 +4519,160 @@ export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
   }
 
   nextWorkouts[currentIndex] = nextWorkout;
+  return nextWorkouts;
+}
+
+const SMART_MEET_PROJECTION_MAX_FUTURE_WORKOUTS = 24;
+
+function markProjectedSmartWorkoutSuccessful(workout = {}) {
+  const lifts = (workout.lifts || []).map(liftBlock => ({
+    ...liftBlock,
+    warmups: (liftBlock.warmups || []).map(item => ({ ...item, done: true })),
+    sets: (liftBlock.sets || []).map(set => ({
+      ...set,
+      done: true,
+      failed: false,
+      skipped: false,
+    })),
+  }));
+
+  return {
+    ...workout,
+    completed: true,
+    workoutEffort: workout.type === 'training' ? 'good' : null,
+    lifts,
+    warmups: lifts[0]?.warmups || [],
+    sets: lifts[0]?.sets || [],
+  };
+}
+
+function projectedSmartHistoryEntries(workout, currentCycle) {
+  const snapshot = markProjectedSmartWorkoutSuccessful(workout);
+  const projectedE1RM = set => {
+    const weight = Number(set?.weight) || 0;
+    const reps = Number(set?.reps) || 0;
+    return reps <= 1 ? weight : weight * (1 + reps / 30);
+  };
+
+  if ((snapshot.lifts || []).length === 0) {
+    return [{
+      workoutNumber: snapshot.number,
+      cycle: currentCycle,
+      smartDayType: snapshot.smartDayType,
+      restDay: snapshot.type === 'rest',
+      completionOnly: true,
+      workoutEffort: null,
+      failedOrSkippedSetCount: 0,
+      smartDecisionSummary: snapshot.smartDecisionSummary || null,
+      workoutSnapshot: snapshot,
+    }];
+  }
+
+  return snapshot.lifts.map(liftBlock => {
+    const successfulSets = liftBlock.sets || [];
+    const topSet = successfulSets.reduce(
+      (best, set) => projectedE1RM(set) > projectedE1RM(best) ? set : best,
+      null,
+    );
+    const topWeight = Number(topSet?.weight) || 0;
+    const topReps = Number(topSet?.reps) || 0;
+    const e1rm = topReps <= 1
+      ? roundE1RM(topWeight)
+      : roundE1RM(projectedE1RM(topSet));
+
+    return {
+      workoutNumber: snapshot.number,
+      cycle: currentCycle,
+      smartDayType: snapshot.smartDayType,
+      lift: liftBlock.lift,
+      topWeight,
+      topReps,
+      e1rm,
+      workoutEffort: 'good',
+      failedOrSkippedSetCount: 0,
+      smartDecisionSummary: snapshot.smartDecisionSummary || null,
+      workoutSnapshot: snapshot,
+    };
+  });
+}
+
+export function projectSmartMeetBySuccessfulSimulation(options = {}) {
+  const currentCycle = Number(options.currentCycle || options.data?.currentCycle) || 1;
+  const startIndex = Math.max(Number(options.currentIndex) || 0, 0);
+  let history = [...(options.history || options.data?.history || [])];
+
+  for (
+    let currentIndex = startIndex;
+    currentIndex < startIndex + SMART_MEET_PROJECTION_MAX_FUTURE_WORKOUTS;
+    currentIndex += 1
+  ) {
+    const workouts = generateWorkoutsForTrainingModelBase(TRAINING_MODELS.SMART, {
+      ...options,
+      history,
+      currentCycle,
+      currentIndex,
+    });
+    const workout = workouts[currentIndex];
+
+    if (!workout) return null;
+    if (workout.type === 'meet' || workout.smartDayType === SMART_DAY_TYPES.MEET) {
+      return {
+        available: true,
+        cycle: currentCycle,
+        currentWorkoutNumber: startIndex + 1,
+        minimumWorkoutNumber: Number(workout.number) || currentIndex + 1,
+        maximumWorkoutNumber: Number(workout.number) || currentIndex + 1,
+        label: `C${currentCycle}W${Number(workout.number) || currentIndex + 1}`,
+        projectedBySimulation: true,
+        assumedSuccessfulFutureWorkouts: true,
+      };
+    }
+
+    history = [
+      ...history,
+      ...projectedSmartHistoryEntries(workout, currentCycle),
+    ];
+  }
+
+  return null;
+}
+
+export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
+  const workouts = generateWorkoutsForTrainingModelBase(trainingModel, options);
+
+  if (!isSmartTrainingModel(trainingModel) || options.skipMeetProjectionSimulation) {
+    return workouts;
+  }
+
+  const currentIndex = getSmartFrequencyCurrentIndex(workouts, options);
+  const currentWorkout = workouts[currentIndex];
+  const readiness = currentWorkout?.smartDecisionSummary?.readiness;
+
+  if (!readiness?.meetProjection?.available || currentWorkout.type === 'meet') {
+    return workouts;
+  }
+
+  const simulatedProjection = projectSmartMeetBySuccessfulSimulation({
+    ...options,
+    skipMeetProjectionSimulation: true,
+  });
+
+  if (!simulatedProjection) return workouts;
+
+  const nextWorkouts = [...workouts];
+  nextWorkouts[currentIndex] = {
+    ...currentWorkout,
+    smartDecisionSummary: {
+      ...currentWorkout.smartDecisionSummary,
+      readiness: {
+        ...readiness,
+        meetProjection: {
+          ...readiness.meetProjection,
+          ...simulatedProjection,
+        },
+      },
+    },
+  };
+
   return nextWorkouts;
 }

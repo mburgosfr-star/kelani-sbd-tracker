@@ -734,6 +734,11 @@ test('a light taper workout forces rest before the meet even when the active blo
   expect(next.smartDecisionSummary.readiness.lastTrainingDayWasLightOnly).toBe(true);
   expect(next.smartDecisionSummary.dayType).toBe('recovery');
   expect(next.type).toBe('rest');
+  expect(next.smartDecisionSummary.readiness.meetProjection).toMatchObject({
+    label: 'C1W9',
+    projectedBySimulation: true,
+    assumedSuccessfulFutureWorkouts: true,
+  });
 });
 
 test("a sub-maximal training PR (raising e1RM/prs) never moves the athlete's meet attempts - only a real heavier single does", () => {

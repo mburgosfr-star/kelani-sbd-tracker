@@ -222,20 +222,20 @@ describe('Smart rolling seven-workout frequency policy', () => {
     expect(bench.role).toBe('primary');
     expect(bench.warmups.map(({ weight, reps }) => [weight, reps]))
       .toEqual([[20, 5], [70, 3]]);
-    // Backoff now mirrors the primary-role formula (topPct - 10%, clamped
-    // 60-80%) instead of a flat 75% - a 90% top clamps to the 80% ceiling.
+    // Backoff mirrors the primary-role formula while respecting the shared
+    // 75% recoverability ceiling.
     expect(bench.sets.map(({ weight, reps }) => [weight, reps]))
       .toEqual([
         [90, 1],
-        [80, 5],
-        [80, 5],
-        [80, 5],
+        [75, 5],
+        [75, 5],
+        [75, 5],
       ]);
     expect(bench.smartPrescription).toMatchObject({
       role: 'primary',
       topSetAnchorPct: 0.90,
-      volumeAnchorPct: 0.80,
-      plannedVolumePct: 0.80,
+      volumeAnchorPct: 0.75,
+      plannedVolumePct: 0.75,
       gridItemCount: 6,
     });
 
@@ -368,16 +368,14 @@ describe('Smart rolling seven-workout frequency policy', () => {
     expect(bench.lift).toBe('Bench');
     // 110 * 0.90 = 99, rounded to the nearest 5 kg (the barbell increment
     // used everywhere in Smart Training) is 100 kg. The backoff now mirrors
-    // the primary-role formula (topPct - 10%, clamped 60-80%) instead of a
-    // flat 75%: a 90% top clamps to the 80% ceiling, i.e. 110 * 0.80 = 88,
-    // rounded to 90 kg - not the template's stale 90/75 kg, and not a flat
-    // 75%/85kg either.
+    // the primary-role formula with its 75% ceiling, i.e. 110 * 0.75 = 82.5,
+    // rounded to 85 kg rather than retaining the template's stale load.
     expect(bench.sets.map(({ weight, reps }) => [weight, reps]))
       .toEqual([
         [100, 1],
-        [90, 5],
-        [90, 5],
-        [90, 5],
+        [85, 5],
+        [85, 5],
+        [85, 5],
       ]);
   });
 

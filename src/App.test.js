@@ -10,6 +10,11 @@ test('dashboard e1RM PR gain compares against the real 1RM on the same card', ()
 test('rounded seed e1RMs do not create a false dashboard PR', () => {
   expect(isDashboardE1RMPR({ achievedE1RM: 38.5, oneRM: 42.5 })).toBe(false);
   expect(isDashboardE1RMPR({ achievedE1RM: 43, oneRM: 42.5 })).toBe(true);
+  expect(isDashboardE1RMPR({
+    achievedE1RM: 181.3333333333,
+    displayedE1RM: 180,
+    oneRM: 180,
+  })).toBe(false);
 });
 
 test('only the current graph endpoint adopts the rounded live e1RM', () => {

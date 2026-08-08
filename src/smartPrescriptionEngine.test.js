@@ -196,7 +196,7 @@ test('converting from a maxed top triple to a top double is a genuine e1RM step 
   });
 });
 
-test('a top single past the old flat 90% cap keeps climbing toward the real second-attempt target, and backoff% follows', () => {
+test('a top single past the old flat 90% cap keeps climbing while backoffs stay at the recoverable ceiling', () => {
   const history = makeLiftHistory({
     lift: 'Bench',
     trainingMax: 100,
@@ -231,7 +231,53 @@ test('a top single past the old flat 90% cap keeps climbing toward the real seco
   backoffs.forEach(set => {
     expect(set).toMatchObject({
       labelKey: 'backoff',
-      pct: 0.80,
+      pct: 0.75,
+    });
+  });
+});
+
+test('a meet-specific 95% Deadlift double never pulls its four-rep backoffs above 75%', () => {
+  const history = makeLiftHistory({
+    lift: 'Deadlift',
+    trainingMax: 180,
+    pct: 0.925,
+    topReps: 2,
+    volumePct: 0.80,
+    volumeReps: 4,
+    volumeSets: 4,
+    workoutEffort: 'good',
+  });
+
+  const state = buildSmartLiftState({
+    history,
+    currentCycle: 1,
+    lift: 'Deadlift',
+    trainingMax: 180,
+    meetPlanReadiness: {
+      Deadlift: {
+        readinessPhase: 'third-attempt',
+        readinessTargetAttempt: 185,
+        attempts: { thirdAttempt: 185 },
+      },
+    },
+  });
+
+  const prescription = buildSmartLiftPrescription({
+    state,
+    role: 'primary',
+    isMixedLiftWorkout: true,
+  });
+
+  expect(prescription.sets[0]).toMatchObject({
+    labelKey: 'topDouble',
+    reps: 2,
+  });
+  expect(prescription.sets[0].pct).toBeGreaterThanOrEqual(0.925);
+  prescription.sets.slice(1).forEach(set => {
+    expect(set).toMatchObject({
+      labelKey: 'backoff',
+      reps: 4,
+      pct: 0.75,
     });
   });
 });

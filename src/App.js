@@ -1,4 +1,4 @@
-import { roundBarbellWeight } from './smartFrequencyPolicy';
+import { getSmartIntensityRole, roundBarbellWeight } from './smartFrequencyPolicy';
 import { roundPercent } from './smartPrescriptionEngine';
 import PlateCalculator from './PlateCalculator';
 import {
@@ -148,8 +148,16 @@ export function getDashboardE1RMPrGain(e1RM, oneRM) {
 // A rounded seed/max estimate is not a new training PR. The dashboard may
 // still show the all-time best e1RM, but the PR badge requires an achieved
 // training estimate to exceed the real 1RM basis.
-export function isDashboardE1RMPR({ achievedE1RM = 0, oneRM = 0 } = {}) {
-  return Number(oneRM) > 0 && Number(achievedE1RM) > Number(oneRM);
+export function isDashboardE1RMPR({
+  achievedE1RM = 0,
+  displayedE1RM = achievedE1RM,
+  oneRM = 0,
+} = {}) {
+  return (
+    Number(oneRM) > 0 &&
+    Number(achievedE1RM) > Number(oneRM) &&
+    getDashboardE1RMPrGain(displayedE1RM, oneRM) > 0
+  );
 }
 
 export function shouldShowAutomaticBackupStatus(isNativePlatform) {
@@ -2891,7 +2899,7 @@ function getSkippedSetMessage(set, t, isLastSet = false) {
   return t.topSetSkipped || 'Set skipped. Continue with the next set.';
 }
 
-export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = false, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator, isLastGroupOfWorkout = false }) {
+export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = false, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator, isLastGroupOfWorkout = false, workoutCompleted = false }) {
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
   const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
@@ -3027,7 +3035,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
     </div>
   );
 
-  const feedback = failedEntry ? (
+  const feedback = failedEntry && !workoutCompleted ? (
     <div style={{
       marginTop: 8,
       padding: '7px 9px',
@@ -4337,11 +4345,17 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
   }
 
   if (showFailureDetail) {
+    const failedThresholdStatus = failedCount >= SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT
+      ? summary.dayType === SMART_DAY_TYPES.RECOVERY
+        ? (t.smartRecoverySelected || 'recovery selected')
+        : summary.dayType === SMART_DAY_TYPES.DELOAD
+          ? (t.smartDeloadSelected || 'deload selected')
+          : (t.smartDeloadRequired || 'deload required')
+      : (t.smartBelowDeloadThreshold || 'below deload threshold');
+
     rows.push({
       label: t.smartBlockerFailed || 'Failed',
-      value: failedCount >= SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT
-        ? `${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT} (deload required)`
-        : `${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT} (below deload threshold)`,
+      value: `${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT} (${failedThresholdStatus})`,
     });
   }
 
@@ -5414,6 +5428,7 @@ function CurrentWorkout({
                         lift={liftBlock.lift}
                         benchPressVariant={effectiveBenchPressVariant}
                         isLastGroupOfWorkout={li === (workout.lifts || []).length - 1}
+                        workoutCompleted={Boolean(workout.completed)}
                       />
                     </React.Fragment>
                   );
@@ -5455,6 +5470,7 @@ function CurrentWorkout({
                           li === (workout.lifts || []).length - 1 &&
                           groupedSetEntries[groupedSetEntries.length - 1]?.index === (liftBlock.sets || []).length - 1
                         }
+                        workoutCompleted={Boolean(workout.completed)}
                       />
                     </React.Fragment>
                   );
@@ -5801,6 +5817,7 @@ function CurrentWorkout({
                   isLastGroupOfWorkout={
                     groupedSetEntries[groupedSetEntries.length - 1]?.index === workout.sets.length - 1
                   }
+                  workoutCompleted={Boolean(workout.completed)}
                 />
               </React.Fragment>
             );
@@ -6887,7 +6904,7 @@ function ProgramProfileSection({
         {
           value: 'sbd',
           title: t.programFocusSbd || 'Kelani SBD',
-          text: t.programFocusSbdText || 'Squat, Bench Press and Deadlift.',
+          text: t.programFocusSbdText || 'Squat, Bench and Deadlift.',
         },
         {
           value: 'lower',
@@ -6897,7 +6914,7 @@ function ProgramProfileSection({
         {
           value: 'ultra',
           title: t.programFocusSbdUltra || t.programProfileKelaniSbdUltra || 'Kelani SBD Ultra',
-          text: t.programFocusSbdUltraText || t.programProfileKelaniSbdUltraText || 'High-frequency SBD meet prep with more Squat, Bench Press and Deadlift exposure.',
+          text: t.programFocusSbdUltraText || t.programProfileKelaniSbdUltraText || 'High-frequency SBD meet prep with more Squat, Bench and Deadlift exposure.',
         },
       ],
     },
@@ -7166,7 +7183,7 @@ function WorkoutTitle({ workout, t, benchPressVariant = 'standard' }) {
     : [{ lift: workout.lift }];
 
   if (liftBlocks.length >= 3) {
-    // Three full lift names ("Deadlift + Bench Press + Squat") overflow the
+    // Three full lift names ("Deadlift + Bench + Squat") overflow the
     // title on the Workout screen and push the Dashboard's next-workout
     // card taller than it needs to be. Powerlifters already read S/B/D
     // shorthand (SBD/DBS/BSD/...) as a standard term regardless of UI
@@ -7210,7 +7227,7 @@ function WorkoutTitle({ workout, t, benchPressVariant = 'standard' }) {
 function ensureProgramPlanLineLift(line, workout, t, benchPressVariant = 'standard') {
   const text = String(line || '').trim();
 
-  if (/^(Squat|Bench Press|Bench|Deadlift)\b/i.test(text)) {
+  if (/^(Squat|Bench|Deadlift)\b/i.test(text)) {
     return text;
   }
 
@@ -7230,7 +7247,7 @@ function ensureProgramPlanLineLift(line, workout, t, benchPressVariant = 'standa
   return `${workoutLiftBlockLabel(liftBlocks[0], t, benchPressVariant)} · ${text}`;
 }
 
-function ProgramWorkoutTitleRows({ workout, t, benchPressVariant = 'standard' }) {
+function ProgramWorkoutTitleRows({ workout, t, benchPressVariant = 'standard', showIntensityLabels = false }) {
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
 
   if (!workout) return t.deload;
@@ -7240,6 +7257,15 @@ function ProgramWorkoutTitleRows({ workout, t, benchPressVariant = 'standard' })
   const liftBlocks = (workout.lifts || []).length > 0
     ? workout.lifts
     : [{ lift: workout.lift }];
+
+  const compactLiftLabel = liftBlock =>
+    workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant);
+
+  const intensityLabel = liftBlock => {
+    const role = getSmartIntensityRole(liftBlock);
+    const key = `smartIntensity${role[0].toUpperCase()}${role.slice(1)}`;
+    return t[key] || role;
+  };
 
   return (
     <>
@@ -7251,7 +7277,12 @@ function ProgramWorkoutTitleRows({ workout, t, benchPressVariant = 'standard' })
             lineHeight: 1.15,
           }}
         >
-          {workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}
+          {compactLiftLabel(liftBlock)}
+          {showIntensityLabels && (
+            <span style={{ color: 'inherit', fontSize: '0.82em', marginLeft: 5 }}>
+              ({intensityLabel(liftBlock)})
+            </span>
+          )}
         </div>
       ))}
     </>
@@ -7970,7 +8001,12 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
                   whiteSpace: 'nowrap',
                 } : null),
               }}>
-                <ProgramWorkoutTitleRows workout={workout} t={t} benchPressVariant={benchPressVariant} />
+                <ProgramWorkoutTitleRows
+                  workout={workout}
+                  t={t}
+                  benchPressVariant={benchPressVariant}
+                  showIntensityLabels={isSmartTrainingModel(trainingModel)}
+                />
                 {isCurrent && (
                   <span style={{
                     fontSize: 11,
@@ -8012,8 +8048,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
                 {planLines.map((line, lineIndex) => {
                   const text = String(line);
                   const match =
-                    text.startsWith('Bench Press') ? { lift: 'Bench', label: 'Bench Press' } :
-              text.startsWith('Bench') ? { lift: 'Bench', label: 'Bench' } :
+                    text.startsWith('Bench') ? { lift: 'Bench', label: 'Bench' } :
                     text.startsWith('Deadlift') ? { lift: 'Deadlift', label: 'Deadlift' } :
                     text.startsWith('Squat') ? { lift: 'Squat', label: 'Squat' } :
                     null;
@@ -12659,7 +12694,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
               {planLines.map((line, index) => {
                 const text = String(line);
                 const match =
-                  text.startsWith('Bench Press') ? { lift: 'Bench', label: 'Bench Press' } :
+                  text.startsWith('Bench') ? { lift: 'Bench', label: 'Bench' } :
                   text.startsWith('Deadlift') ? { lift: 'Deadlift', label: 'Deadlift' } :
                   text.startsWith('Squat') ? { lift: 'Squat', label: 'Squat' } :
                   null;
@@ -12870,6 +12905,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                     ? getDashboardE1RMPrGain(card.e1RM, card.prBaseline) > 0
                     : isDashboardE1RMPR({
                       achievedE1RM: card.achievedE1RM,
+                      displayedE1RM: card.e1RM,
                       oneRM: card.prBaseline,
                     })) && (
                     <div style={{
@@ -13077,13 +13113,14 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
   <div style={{
     maxWidth: 500,
     margin: '0 auto',
-    padding: 24,
+    padding: '20px 24px 16px',
     boxSizing: 'border-box',
-    minHeight: 'calc(100dvh - 70px)',
+    height: 'calc(100dvh - 70px)',
     background: THEME.bg,
     color: THEME.text,
     fontFamily: 'sans-serif',
-    overflowX: 'hidden'
+    overflowX: 'hidden',
+    overflowY: 'auto'
   }}>
     {completedWorkoutIsMeetCycleEnd ? (
       <div style={{

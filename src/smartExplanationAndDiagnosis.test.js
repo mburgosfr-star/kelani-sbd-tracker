@@ -223,7 +223,7 @@ test('shows the full readiness/blocker/fatigue detail on a deload or rest day to
     },
     {
       label: 'Failed',
-      value: '2/2 (deload required)',
+      value: '2/2 (recovery selected)',
     },
   ]));
 });

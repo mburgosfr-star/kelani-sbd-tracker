@@ -57,7 +57,12 @@ export const SMART_DELOAD = {
   MIN_PCT: 0.5,
 };
 
-export const SMART_PRESCRIPTION_VERSION = 10;
+// Primary top sets may continue progressing independently, but the volume
+// work that follows them must remain recoverable. This is also the ceiling
+// used for ordinary medium work.
+export const SMART_PRIMARY_BACKOFF_MAX_PCT = 0.75;
+
+export const SMART_PRESCRIPTION_VERSION = 11;
 
 export const SMART_GENERATED_FLAGS = {
   RECOVERY: 'smartGeneratedRecovery',

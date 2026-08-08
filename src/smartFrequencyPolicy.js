@@ -1,6 +1,7 @@
 import { roundPercent } from './smartPrescriptionEngine';
 import {
   SMART_INTENSITY_POINTS,
+  SMART_PRIMARY_BACKOFF_MAX_PCT,
   SMART_FREQUENCY_SCORE_TARGETS_BY_LEVEL,
   getSmartFrequencyScoreTargets,
   getSmartMaxConsecutiveTrainingDays,
@@ -703,13 +704,18 @@ function normalizeSupplementalHeavyLiftBlock(liftBlock, realTrainingMax = 0) {
     Math.min(topWeight - 5, roundBarbellWeight(trainingMax * 0.70)),
   );
   // Mirrors the primary-role backoff formula in smartPrescriptionEngine.js
-  // (buildSmartLiftPrescription: volumePct = clamp(topPct - 0.10, 0.60, 0.80))
+  // (buildSmartLiftPrescription: topPct - 10%, capped at the shared primary
+  // backoff ceiling)
   // instead of a flat 75% - the old flat value meant a light 70% top single
   // still got a 75% backoff (heavier than the top itself, post-rounding
   // collision), while a genuinely heavy 90% top single got the exact same
   // 75% backoff as everyone else, hiding real intensity differences between
-  // supplemented sessions.
-  const volumePct = roundPercent(clamp(topPct - 0.10, 0.60, 0.80));
+  // supplemented sessions. Lower top sets still scale below the ceiling.
+  const volumePct = roundPercent(clamp(
+    topPct - 0.10,
+    0.60,
+    SMART_PRIMARY_BACKOFF_MAX_PCT,
+  ));
   const volumeWeight = roundBarbellWeight(trainingMax * volumePct);
   const volumeTemplate = originalSets.find(set => set !== topSingle)
     || topSingle;

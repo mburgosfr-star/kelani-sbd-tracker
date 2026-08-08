@@ -92,3 +92,19 @@ test('never tells the athlete to "continue with the next set" when the skipped s
   expect(lastOfWorkout.queryByText('Set skipped. Continue with the next set.')).toBeNull();
   expect(lastOfWorkout.getByText('Set skipped.')).toBeTruthy();
 });
+
+test('hides temporary skipped-set feedback after workout completion', () => {
+  const view = render(
+    <BackoffGroup
+      entries={[{ index: 0, set: { reps: 4, weight: 100, done: true, failed: true, skipped: true } }]}
+      activeIndex={-1} isReadOnly onToggle={() => {}}
+      onEditAll={() => {}} onRestoreAll={() => {}} onMarkFailed={() => {}}
+      renderTimer={() => null} t={t} lift="Deadlift"
+      workoutCompleted
+    />
+  );
+
+  expect(view.getByTestId('workout-set-group-item-0')).toBeTruthy();
+  expect(view.queryByText('Set skipped.')).toBeNull();
+  expect(view.queryByText('Set skipped. Continue with the next set.')).toBeNull();
+});

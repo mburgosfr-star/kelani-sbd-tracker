@@ -425,6 +425,68 @@ test('blocks heavy Deadlift directly after a heavy Deadlift training day', () =>
   ).toBe(true);
 });
 
+test('blocks any heavy lift directly after a different heavy lift', () => {
+  const heavyDeadlift = {
+    type: 'training',
+    lifts: [{
+      lift: 'Deadlift',
+      intensityRole: 'heavy',
+      sets: [{ labelKey: 'topDouble', reps: 2, pct: 0.95 }],
+    }],
+  };
+
+  expect(violatesSmartTrainingSafety(heavyDeadlift, {
+    lastWorkoutWasHeavyTraining: true,
+    lastTrainingDayHeavyDeadlift: false,
+  })).toBe(true);
+
+  expect(violatesSmartTrainingSafety(heavyDeadlift, {
+    lastWorkoutWasHeavyTraining: false,
+    lastTrainingDayHeavyDeadlift: false,
+  })).toBe(false);
+});
+
+test('generation turns the workout after a heavy day into medium/light work or rest', () => {
+  const heavySquatSnapshot = {
+    number: 1,
+    type: 'training',
+    smartDayType: 'training',
+    lift: 'Squat',
+    workoutEffort: 'good',
+    lifts: [{
+      lift: 'Squat',
+      role: 'primary',
+      intensityRole: 'heavy',
+      sets: [{
+        labelKey: 'topDouble', reps: 2, pct: 0.85, weight: 85,
+        done: true, failed: false, skipped: false,
+      }],
+    }],
+  };
+  const workouts = generateWorkoutsForTrainingModel('smart', {
+    programProfile: 'kelaniSbdUltra',
+    squat: 100,
+    bench: 80,
+    deadlift: 140,
+    athleteLevel: 'intermediate',
+    currentCycle: 1,
+    currentIndex: 1,
+    history: [{
+      cycle: 1,
+      workoutNumber: 1,
+      lift: 'Squat',
+      workoutEffort: 'good',
+      workoutSnapshot: heavySquatSnapshot,
+    }],
+  });
+  const next = workouts[1];
+
+  expect(next.smartDecisionSummary.readiness.lastWorkoutWasHeavyTraining).toBe(true);
+  expect((next.lifts || []).some(({ lift }) =>
+    isHeavySmartTrainingLift(next, lift)
+  )).toBe(false);
+});
+
 test('treats a HARD sub-80% Deadlift top set as a heavy Deadlift exposure', () => {
   const candidate = {
     type: 'training',

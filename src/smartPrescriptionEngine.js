@@ -1,4 +1,5 @@
 import {
+  SMART_PRIMARY_BACKOFF_MAX_PCT,
   MEET_ATTEMPT_PCTS,
   SMART_FREQUENCY_SCORE_TARGETS_BY_LEVEL,
 } from './smartTrainingConstants';
@@ -1203,17 +1204,20 @@ export function buildSmartLiftPrescription({
     const volumeReferenceTopPct = repeatVariationApplied
       ? baseTop.pct
       : top.pct;
-    // Ceiling matches the natural result of (top pct - 10%) at the highest
-    // top-single pct (TOP_PCT_LIMITS[1].max = 0.90) - a lower cap here was
-    // silently clipping backoff% for any top set at/near its rep-scheme max,
-    // making backoffs look identical across sessions despite the top set
-    // actually progressing (see C3W26 vs C3W29 Bench stagnation report).
+    // Let the top set progress independently, but keep the following volume
+    // recoverable. Real C3W39 feedback: 4x4 at 80% after a 95% Deadlift
+    // double was not sustainable, matching an earlier failed 80% medium day.
     let volumePct = roundPct(
-      clamp(volumeReferenceTopPct - 0.10, 0.60, 0.80)
+      clamp(
+        volumeReferenceTopPct - 0.10,
+        0.60,
+        SMART_PRIMARY_BACKOFF_MAX_PCT
+      )
     );
 
     if (meetSpecificProgression && volumeAnchorPct > 0) {
       volumePct = roundPct(Math.min(
+        SMART_PRIMARY_BACKOFF_MAX_PCT,
         top.pct - 0.025,
         Math.max(volumePct, volumeAnchorPct - 0.025)
       ));
