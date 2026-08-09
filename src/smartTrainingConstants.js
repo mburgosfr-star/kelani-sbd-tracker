@@ -89,6 +89,15 @@ export const SMART_INTENSITY_POINTS = Object.freeze({
   light: 1,
 });
 
+// INOL-style session load: each set contributes reps / (100 - %e1RM).
+// Unlike linear reps × percentage, this makes work near 1RM progressively
+// more expensive and avoids equating useful 70-75% backoffs with very high
+// rep work at trivial loads.
+export const SMART_INTENSITY_LOAD_THRESHOLDS = Object.freeze({
+  medium: 0.75,
+  heavy: 1.10,
+});
+
 export const SMART_MAX_CONSECUTIVE_TRAINING_DAYS_BY_LEVEL = Object.freeze({
   beginner: Object.freeze({ Squat: 2, Bench: 2, Deadlift: 2 }),
   intermediate: Object.freeze({ Squat: 2, Bench: 2, Deadlift: 2 }),
@@ -122,18 +131,21 @@ export const SMART_FREQUENCY_SCORE_TARGETS_BY_LEVEL = Object.freeze({
       days: 2,
       defaultMix: Object.freeze({ heavy: 1, medium: 1, light: 0 }),
       consecutiveAllowancePerWeek: 0,
+      idealSpacingDays: Object.freeze({ min: 3, max: 4 }),
     }),
     Bench: Object.freeze({
       score: 6,
       days: 3,
       defaultMix: Object.freeze({ heavy: 1, medium: 1, light: 1 }),
       consecutiveAllowancePerWeek: 0,
+      idealSpacingDays: Object.freeze({ min: 2, max: 3 }),
     }),
     Deadlift: Object.freeze({
       score: 3,
       days: 1,
       defaultMix: Object.freeze({ heavy: 1, medium: 0, light: 0 }),
       consecutiveAllowancePerWeek: 0,
+      idealSpacingDays: Object.freeze({ min: 7, max: 7 }),
     }),
   }),
   intermediate: Object.freeze({
@@ -142,18 +154,21 @@ export const SMART_FREQUENCY_SCORE_TARGETS_BY_LEVEL = Object.freeze({
       days: 3,
       defaultMix: Object.freeze({ heavy: 1, medium: 1, light: 1 }),
       consecutiveAllowancePerWeek: 0,
+      idealSpacingDays: Object.freeze({ min: 2, max: 3 }),
     }),
     Bench: Object.freeze({
       score: 7,
       days: 4,
       defaultMix: Object.freeze({ heavy: 1, medium: 1, light: 2 }),
       consecutiveAllowancePerWeek: 1,
+      idealSpacingDays: Object.freeze({ min: 1, max: 2 }),
     }),
     Deadlift: Object.freeze({
       score: 5,
       days: 2,
       defaultMix: Object.freeze({ heavy: 1, medium: 1, light: 0 }),
       consecutiveAllowancePerWeek: 0,
+      idealSpacingDays: Object.freeze({ min: 3, max: 4 }),
     }),
   }),
   advanced: Object.freeze({
@@ -162,18 +177,21 @@ export const SMART_FREQUENCY_SCORE_TARGETS_BY_LEVEL = Object.freeze({
       days: 4,
       defaultMix: Object.freeze({ heavy: 1, medium: 1, light: 2 }),
       consecutiveAllowancePerWeek: 1,
+      idealSpacingDays: Object.freeze({ min: 1, max: 2 }),
     }),
     Bench: Object.freeze({
       score: 9,
       days: 5,
       defaultMix: Object.freeze({ heavy: 1, medium: 2, light: 2 }),
       consecutiveAllowancePerWeek: 2,
+      idealSpacingDays: Object.freeze({ min: 1, max: 2 }),
     }),
     Deadlift: Object.freeze({
       score: 6,
       days: 3,
       defaultMix: Object.freeze({ heavy: 1, medium: 1, light: 1 }),
       consecutiveAllowancePerWeek: 0,
+      idealSpacingDays: Object.freeze({ min: 2, max: 3 }),
     }),
   }),
   elite: Object.freeze({
@@ -182,18 +200,21 @@ export const SMART_FREQUENCY_SCORE_TARGETS_BY_LEVEL = Object.freeze({
       days: 5,
       defaultMix: Object.freeze({ heavy: 1, medium: 2, light: 2 }),
       consecutiveAllowancePerWeek: 2,
+      idealSpacingDays: Object.freeze({ min: 1, max: 2 }),
     }),
     Bench: Object.freeze({
       score: 10,
       days: 6,
       defaultMix: Object.freeze({ heavy: 1, medium: 2, light: 3 }),
       consecutiveAllowancePerWeek: 3,
+      idealSpacingDays: Object.freeze({ min: 1, max: 2 }),
     }),
     Deadlift: Object.freeze({
       score: 7,
       days: 4,
       defaultMix: Object.freeze({ heavy: 1, medium: 1, light: 2 }),
       consecutiveAllowancePerWeek: 1,
+      idealSpacingDays: Object.freeze({ min: 1, max: 2 }),
     }),
   }),
 });

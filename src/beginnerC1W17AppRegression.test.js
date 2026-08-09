@@ -77,7 +77,7 @@ function makeTrainingEntry({
   };
 }
 
-test('generates a correctly light beginner C1W17 through the full Smart app generator when Bench already used its weekly heavy slot', () => {
+test('generates a correctly non-heavy beginner C1W17 through the full Smart app generator when Bench already used its weekly heavy slot', () => {
   // Mirrors the app's onboarding seedMax history entries (App.js
   // handleStart) for the starting maxes - meet attempts and the real-1RM
   // basis now come from these, kept separate from whatever a sub-maximal
@@ -187,7 +187,8 @@ test('generates a correctly light beginner C1W17 through the full Smart app gene
   // soon is correctly blocked (see the real C3W36/37 report this same
   // rule was fixed for), so the day falls back to Squat, which still has
   // genuine remaining weekly capacity but isn't itself due for another
-  // heavy exposure (2 already, at its own weekly target) - hence light.
+  // heavy exposure (2 already, at its own weekly target) - hence a
+  // volume-only medium/light slot rather than another top set.
   expect(c1w17.smartTrainingSelectionSummary.primaryLift).toBe('Squat');
 
   const squat = c1w17.lifts.find(

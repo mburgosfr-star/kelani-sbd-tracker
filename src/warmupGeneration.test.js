@@ -1,6 +1,20 @@
 import { generateWarmups } from './warmupAndPrepGeneration';
 import { completeSmartLiftGrid } from './smartTrainingEngine';
 
+test('reuses the C3W41 70kg bench backoff as the final warm-up', () => {
+  const sets = [
+    { labelKey: 'topTriple', reps: 3, weight: 90 },
+    ...Array.from({ length: 5 }, () => ({ labelKey: 'backoff', reps: 4, weight: 70 })),
+  ];
+
+  expect(
+    generateWarmups(sets, 'Bench', false).map(({ reps, weight }) => ({ reps, weight }))
+  ).toEqual([
+    { reps: 5, weight: 20 },
+    { reps: 3, weight: 70 },
+  ]);
+});
+
 test('builds the C3W52 tapered squat bridge without a jump of 60kg or more', () => {
   const sets = [
     { labelKey: 'topTriple', reps: 3, weight: 135 },

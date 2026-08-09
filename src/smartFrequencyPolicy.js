@@ -1,6 +1,7 @@
 import { roundPercent } from './smartPrescriptionEngine';
 import {
   SMART_INTENSITY_POINTS,
+  SMART_INTENSITY_LOAD_THRESHOLDS,
   SMART_PRIMARY_BACKOFF_MAX_PCT,
   SMART_FREQUENCY_SCORE_TARGETS_BY_LEVEL,
   getSmartFrequencyScoreTargets,
@@ -1141,10 +1142,6 @@ export function constrainSmartWorkoutByFrequency({
 // keep being used exactly as before) so nothing existing changes behavior.
 export function getSmartIntensityRole(liftBlock = {}) {
   const explicitRole = String(liftBlock.intensityRole || '').toLowerCase();
-  if (explicitRole.includes('heavy')) return 'heavy';
-  if (explicitRole.includes('medium')) return 'medium';
-  if (explicitRole.includes('light')) return 'light';
-
   const role = [
     liftBlock.trainingRole,
     liftBlock.smartRole,
@@ -1156,50 +1153,59 @@ export function getSmartIntensityRole(liftBlock = {}) {
     .toLowerCase();
 
   const sets = Array.isArray(liftBlock.sets) ? liftBlock.sets : [];
-  const highestWorkPct = sets.reduce((highest, set) => {
-    const percentage = Number(set?.pct);
-    return Number.isFinite(percentage) ? Math.max(highest, percentage) : highest;
+  const isRecordedWorkout = Boolean(
+    liftBlock.completed ||
+    sets.some(set => set?.done || set?.failed || set?.skipped)
+  );
+
+  // Completed snapshots keep the label under which the workout was
+  // prescribed. Reinterpreting history whenever the dose model evolves is
+  // technically consistent but confusing to the athlete.
+  if (isRecordedWorkout) {
+    if (explicitRole.includes('heavy')) return 'heavy';
+    if (explicitRole.includes('medium')) return 'medium';
+    if (explicitRole.includes('light')) return 'light';
+  }
+  let hasTopSet = false;
+  let highestWorkPct = 0;
+  const totalLoad = sets.reduce((total, set) => {
+    if (set?.warmup || set?.skipped) return total;
+    const percentage = Number(set?.pct ?? set?.originalPct);
+    const reps = Number(set?.reps);
+    if (!Number.isFinite(percentage) || percentage <= 0 || !Number.isFinite(reps) || reps <= 0) {
+      return total;
+    }
+    const label = String(set?.labelKey || '').toLowerCase();
+    if (label.includes('top') || label.includes('single') || label.includes('attempt') || label === 'opener') {
+      hasTopSet = true;
+    }
+    highestWorkPct = Math.max(highestWorkPct, percentage);
+    const percentValue = Math.min(percentage * 100, 99);
+    return total + reps / Math.max(100 - percentValue, 1);
   }, 0);
+
+  if (totalLoad > 0) {
+    if (
+      hasTopSet ||
+      highestWorkPct >= 0.80 ||
+      totalLoad >= SMART_INTENSITY_LOAD_THRESHOLDS.heavy
+    ) return 'heavy';
+    if (
+      highestWorkPct >= 0.75 ||
+      totalLoad >= SMART_INTENSITY_LOAD_THRESHOLDS.medium
+    ) return 'medium';
+    return 'light';
+  }
+
+  if (explicitRole.includes('heavy')) return 'heavy';
+  if (explicitRole.includes('medium')) return 'medium';
+  if (explicitRole.includes('light')) return 'light';
 
   if (role.includes('heavy') || role.includes('primary')) return 'heavy';
   if (role.includes('medium')) return 'medium';
   if (role.includes('light') || role.includes('tertiary')) return 'light';
 
-  // Compatibility for snapshots generated before intensityRole was stored.
-  // Those blocks only say "secondary", although their actual prescription
-  // can be either the 70%-capped light dose or a 75% medium dose.
-  if (role.includes('secondary')) {
-    if (sets.length === 0) return 'medium';
-    return highestWorkPct > 0.70 ? 'medium' : 'light';
-  }
-
-  let highestVolumePct = 0;
-  let hasTopSet = false;
-
-  sets.forEach((set) => {
-    const labelKey = String(set?.labelKey || '').toLowerCase();
-    const percentage = Number(set?.pct);
-    const reps = Number(set?.reps);
-
-    if (
-      labelKey.includes('top')
-      || labelKey.includes('opener')
-      || labelKey.includes('attempt')
-    ) {
-      hasTopSet = true;
-      return;
-    }
-
-    if (Number.isFinite(percentage) && Number.isFinite(reps) && reps <= 6) {
-      highestVolumePct = Math.max(highestVolumePct, percentage);
-    }
-  });
-
-  if (hasTopSet || highestVolumePct >= 0.75) return 'heavy';
-  // Splits the old single "light" bucket at a second threshold - a genuine
-  // backoff/work-set block (~65-75%) reads as medium, anything lighter
-  // (deload-range volume) as light.
-  if (highestVolumePct >= 0.65) return 'medium';
+  if (role.includes('secondary')) return 'medium';
   return 'light';
 }
 

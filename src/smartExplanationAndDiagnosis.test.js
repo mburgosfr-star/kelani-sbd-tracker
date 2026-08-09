@@ -3,7 +3,23 @@ import {
   getSmartModalDetailRows,
   getSmartPrescriptionDetailRows,
   getSmartAttemptPhaseLabel,
+  getHistoricalSmartIntensityRole,
 } from './App';
+
+test('completed workout labels keep their stored historical meaning', () => {
+  expect(getHistoricalSmartIntensityRole({
+    lift: 'Squat',
+    role: 'secondary',
+    intensityRole: 'light',
+    sets: Array.from({ length: 6 }, () => ({ reps: 4, pct: 0.75 })),
+  })).toBe('light');
+  expect(getHistoricalSmartIntensityRole({
+    lift: 'Bench',
+    role: 'secondary',
+    intensityRole: 'light',
+    sets: Array.from({ length: 6 }, () => ({ reps: 4, pct: 0.75 })),
+  })).toBe('light');
+});
 
 test('maps the projected third-attempt limiter without falling back to opener', () => {
   expect(getSmartAttemptPhaseLabel('third-attempt', {
@@ -166,6 +182,20 @@ test('fully demonstrated meet readiness remains visible during taper', () => {
     { label: '2nd attempts', value: '3/3', kind: 'metric' },
     { label: '3rd potential', value: '3/3', kind: 'metric' },
   ]));
+});
+
+test('a ready-phase Bench prescription explains taper instead of recovery or blocked progression', () => {
+  const bench = smartLift({ lift: 'Bench', labelKey: 'topTriple', reps: 3 });
+  bench.smartPrescription.regressionReason = 'ready-taper';
+  bench.smartPrescription.repeatVariationApplied = false;
+
+  const rows = getSmartPrescriptionDetailRows(workoutWith([bench]), {
+    smartTaperReason: 'Taper: vermoeidheid verlagen.',
+    smartRegressionReason: 'Recovery or blocked.',
+  });
+
+  expect(rows[0].value).toContain('Taper: vermoeidheid verlagen.');
+  expect(rows[0].value).not.toContain('Recovery or blocked.');
 });
 
 test('distinguishes the current blocker from the projected limiter', () => {
@@ -429,9 +459,8 @@ test('explains secondary volume without inventing top-set progress', () => {
   }));
   bench.smartPrescription.gridItemCount = 6;
 
-  // A genuine two-lift day - "secondary" here means "lower volume alongside
-  // a primary lift", not the single-lift-forced-light case (which gets its
-  // own, different reason text; see the dedicated test for that below).
+  // A structural secondary role does not imply lower volume. Explain the
+  // measured combined intensity instead.
   const squat = smartLift({ lift: 'Squat' });
 
   const [row] = getSmartPrescriptionDetailRows(
@@ -440,9 +469,23 @@ test('explains secondary volume without inventing top-set progress', () => {
 
   expect(row.value).toContain('4×4×75%');
   expect(row.value).toContain(
-    'Lower volume for the secondary lift.'
+    'Medium total intensity from the combination of sets, reps and percentage.'
   );
   expect(row.value).not.toContain('→');
+});
+
+test('explains W41-style secondary squat from its measured light intensity, not alleged lower volume', () => {
+  const squat = secondaryLiftBlock('Squat', {
+    volumePct: 0.66,
+    volumeReps: 4,
+    volumeCount: 6,
+  });
+  const bench = smartLift({ lift: 'Bench' });
+
+  const [row] = getSmartPrescriptionDetailRows(workoutWith([squat, bench]));
+
+  expect(row.value).toContain('Light total intensity from the combination of sets, reps and percentage.');
+  expect(row.value).not.toContain('Lower volume');
 });
 
 test("a lift forced light on a single-lift day (heavy weekly slot already used) explains why, instead of falsely calling it a secondary lift", () => {

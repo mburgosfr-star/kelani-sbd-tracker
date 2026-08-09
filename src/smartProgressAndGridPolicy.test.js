@@ -1,5 +1,7 @@
 import {
   completeSmartLiftGrid,
+  reshapeSmartTopSetBackoffReps,
+  constrainExplicitMediumLiftDose,
   shouldVaryRepeatedSmartPrescription,
 } from './smartTrainingEngine';
 import { generateWarmups } from './warmupAndPrepGeneration';
@@ -19,6 +21,33 @@ function volumeSet(labelKey = 'backoff', pct = 0.725, weight = 127.5) {
     groupKey: `Deadlift-${labelKey}`,
   };
 }
+
+test.each([
+  ['topSingle', 1, 4, 0.70],
+  ['topDouble', 2, 5, 0.65],
+  ['topTriple', 3, 6, 0.60],
+])('%s uses the agreed %s-rep backoff prescription', (labelKey, topReps, expectedReps, expectedPct) => {
+  const sets = [
+    { labelKey, reps: topReps, pct: 0.9, weight: 90 },
+    ...Array.from({ length: 5 }, () => ({
+      labelKey: 'backoff', reps: 4, pct: 0.7, weight: 70,
+    })),
+  ];
+  const reshaped = reshapeSmartTopSetBackoffReps({ sets, trainingMax: 100 });
+
+  expect(reshaped.slice(1).every(set => set.reps === expectedReps)).toBe(true);
+  expect(reshaped.slice(1).every(set => set.pct === expectedPct)).toBe(true);
+});
+
+test('volume-only medium work has at least four reps and stays at or below 65%', () => {
+  const sets = Array.from({ length: 6 }, () => ({
+    labelKey: 'workSets', reps: 3, pct: 0.65, precisePct: 0.65, weight: 90,
+  }));
+  const reshaped = constrainExplicitMediumLiftDose({ sets, trainingMax: 140 });
+
+  expect(reshaped.every(set => set.reps >= 4)).toBe(true);
+  expect(reshaped.every(set => set.pct <= 0.65)).toBe(true);
+});
 
 test('fills a progressive primary grid with five back-off sets', () => {
   const sets = [
@@ -210,4 +239,3 @@ test('progresses the repeated C3W24 Deadlift double to 85% and completes both gr
   expect(benchWarmups.length + benchSets.length).toBe(4);
   expect((benchWarmups.length + benchSets.length) % 4).toBe(0);
 });
-

@@ -2727,7 +2727,7 @@ function buildSmartTrainingSelectionSummary(candidate = null, readiness = {}) {
   };
 }
 
-function getProjectedSmartLiftEligibility({
+export function getProjectedSmartLiftEligibility({
   history = [],
   currentCycle = 1,
   athleteLevel = 'intermediate',
@@ -2856,6 +2856,26 @@ function getProjectedSmartLiftEligibility({
         SMART_SECONDARY_EXPOSURE_WEIGHT,
   }), {});
 
+  const frequencyTargets = getSmartFrequencyScoreTargets(athleteLevel);
+  const lastExposureWorkoutByLift = LIFT_ORDER.reduce((result, lift) => {
+    const last = [...completedDays.entries()]
+      .reverse()
+      .find(([, day]) => day.lifts.has(lift));
+    result[lift] = last?.[0] || null;
+    return result;
+  }, {});
+  const spacingDaysByLift = LIFT_ORDER.reduce((result, lift) => {
+    const lastWorkout = Number(lastExposureWorkoutByLift[lift]) || 0;
+    result[lift] = lastWorkout > 0
+      ? Number(targetWorkoutNumber) - lastWorkout
+      : Infinity;
+    return result;
+  }, {});
+  const spacingEligibleLifts = new Set(LIFT_ORDER.filter(lift => {
+    const minimum = Number(frequencyTargets[lift]?.idealSpacingDays?.min) || 1;
+    return spacingDaysByLift[lift] >= minimum;
+  }));
+
   const consecutiveEligibleLifts = new Set(LIFT_ORDER.filter(lift => {
     const maximum = getSmartMaxConsecutiveTrainingDays(athleteLevel, lift);
     let streak = 0;
@@ -2898,8 +2918,14 @@ function getProjectedSmartLiftEligibility({
       Number(weightedExposureCounts[a]) / aTarget;
     const bWeightedRatio =
       Number(weightedExposureCounts[b]) / bTarget;
+    const spacingUrgency = lift => {
+      const maximum = Number(frequencyTargets[lift]?.idealSpacingDays?.max) || 1;
+      const gap = Number(spacingDaysByLift[lift]);
+      return Number.isFinite(gap) ? gap / maximum : Number.MAX_SAFE_INTEGER;
+    };
 
     return (
+      spacingUrgency(b) - spacingUrgency(a) ||
       // Recency of each lift's last heavy exposure takes precedence over
       // the flat target-normalized ratio below - otherwise a lift with a
       // higher weekly target (e.g. intermediate Bench at 4 vs Squat's 3)
@@ -2931,6 +2957,7 @@ function getProjectedSmartLiftEligibility({
       // correctly excluded it.
       Number(exposureCounts[lift]) <
         Number(targets[lift] || 0) &&
+      spacingEligibleLifts.has(lift) &&
       consecutiveEligibleLifts.has(lift) &&
       Number(primaryExposureCounts[lift]) <
         Number(targets[lift] || 0)
@@ -2945,6 +2972,7 @@ function getProjectedSmartLiftEligibility({
   const nonRepeatedFallbackPrimaryLifts = LIFT_ORDER
     .filter(lift =>
       lift !== lastPrimaryLift && consecutiveEligibleLifts.has(lift)
+      && spacingEligibleLifts.has(lift)
     )
     .sort(comparePrimaryLoad);
 
@@ -2955,12 +2983,15 @@ function getProjectedSmartLiftEligibility({
         ? nonRepeatedFallbackPrimaryLifts
         : underTargetPrimaryLifts.length > 0
           ? underTargetPrimaryLifts
-          : LIFT_ORDER.filter(lift => consecutiveEligibleLifts.has(lift));
+          : LIFT_ORDER.filter(lift =>
+            consecutiveEligibleLifts.has(lift) && spacingEligibleLifts.has(lift)
+          );
 
   const secondaryEligibleLifts = LIFT_ORDER
     .filter(lift =>
       Number(exposureCounts[lift]) <
         Number(targets[lift] || 0) &&
+      spacingEligibleLifts.has(lift) &&
       consecutiveEligibleLifts.has(lift) &&
       Number(primaryExposureCounts[lift]) <
         Number(targets[lift] || 0)
@@ -2970,15 +3001,16 @@ function getProjectedSmartLiftEligibility({
       const bTarget = Math.max(Number(targets[b]) || 1, 1);
 
       return (
+        comparePrimaryLoad(a, b) ||
         Number(exposureCounts[a]) / aTarget -
-          Number(exposureCounts[b]) / bTarget ||
-        comparePrimaryLoad(a, b)
+          Number(exposureCounts[b]) / bTarget
       );
     });
 
   const eligibleLifts = LIFT_ORDER.filter(lift =>
     Number(exposureCounts[lift]) <
       Number(targets[lift] || 0) &&
+    spacingEligibleLifts.has(lift) &&
     consecutiveEligibleLifts.has(lift)
   );
 
@@ -2992,6 +3024,8 @@ function getProjectedSmartLiftEligibility({
     primaryEligibleLifts,
     secondaryEligibleLifts,
     lastPrimaryLift,
+    spacingDaysByLift,
+    spacingEligibleLifts: [...spacingEligibleLifts],
     previousWorkoutNumbers: previousSixDays.map(([number]) => number),
   };
 }
@@ -3002,7 +3036,41 @@ function getProjectedSmartLiftEligibility({
 // trailing cells) by padding/trimming volume sets to a multiple of it.
 const SMART_LIFT_GRID_COLUMNS = 4;
 const SMART_LIGHT_MAX_TOTAL_WORK_REPS = 24;
-const SMART_LIGHT_MAX_LOADED_PCT = 0.70;
+const SMART_LIGHT_MAX_LOADED_PCT = 0.60;
+const SMART_MEDIUM_MAX_REPS_PER_SET = 4;
+const SMART_MEDIUM_LOADED_PCT = 0.65;
+
+export function reshapeSmartTopSetBackoffReps({ sets = [], trainingMax = 0 } = {}) {
+  const topSet = (sets || []).find(set => isTopSetLabel(set?.labelKey));
+  if (!topSet) return (sets || []).map(set => ({ ...set }));
+
+  const topReps = Number(topSet.reps) || 0;
+  const desiredBackoffReps = topReps <= 1 ? 4 : topReps === 2 ? 5 : 6;
+  const desiredBackoffPct = topReps <= 1 ? 0.70 : topReps === 2 ? 0.65 : 0.60;
+
+  return (sets || []).map(set => {
+    const label = String(set?.labelKey || '').toLowerCase();
+    if (label !== 'backoff' && label !== 'worksets') return { ...set };
+
+    const targetPct = Math.min(
+      Number(set.pct ?? set.precisePct) || desiredBackoffPct,
+      desiredBackoffPct
+    );
+    const targetWeight = Number(trainingMax) > 0 && targetPct > 0
+      ? roundBarbellWeight(Number(trainingMax) * targetPct)
+      : Math.floor((Number(set.weight) || 0) / 5) * 5;
+
+    return {
+      ...set,
+      reps: desiredBackoffReps,
+      pct: targetPct,
+      precisePct: targetPct,
+      weight: targetWeight,
+      originalPct: targetPct,
+      originalWeight: targetWeight,
+    };
+  });
+}
 
 export function constrainExplicitLightLiftDose({ sets = [], trainingMax = 0 } = {}) {
   const isVolumeSet = set => {
@@ -3023,6 +3091,8 @@ export function constrainExplicitLightLiftDose({ sets = [], trainingMax = 0 } = 
     (Number(trainingMax) * SMART_LIGHT_MAX_LOADED_PCT) / 5
   ) * 5;
 
+  let remainingWorkReps = SMART_LIGHT_MAX_TOTAL_WORK_REPS;
+
   return sets.map(set => {
     if (!isVolumeSet(set)) return set;
 
@@ -3033,13 +3103,50 @@ export function constrainExplicitLightLiftDose({ sets = [], trainingMax = 0 } = 
     );
     const weight = Math.min(Number(set.weight) || 0, maxLoadedWeight);
 
+    const reps = Math.min(
+      Number(set.reps) || maxRepsPerSet,
+      maxRepsPerSet,
+      remainingWorkReps
+    );
+    remainingWorkReps -= reps;
+
+    if (reps <= 0) return null;
+
     return {
       ...set,
-      reps: Math.min(Number(set.reps) || maxRepsPerSet, maxRepsPerSet),
+      reps,
       pct,
       precisePct,
       weight,
       originalPct: pct,
+      originalWeight: weight,
+    };
+  }).filter(Boolean);
+}
+
+export function constrainExplicitMediumLiftDose({ sets = [], trainingMax = 0 } = {}) {
+  if (Number(trainingMax) <= 0) return sets;
+
+  return sets.map(set => {
+    const label = String(set?.labelKey || '').toLowerCase();
+    if (label !== 'backoff' && label !== 'worksets') return set;
+
+    const oldReps = Number(set.reps) || SMART_MEDIUM_MAX_REPS_PER_SET;
+    const reps = Math.max(oldReps, SMART_MEDIUM_MAX_REPS_PER_SET);
+    const pct = Math.min(Number(set.pct) || SMART_MEDIUM_LOADED_PCT, SMART_MEDIUM_LOADED_PCT);
+    const maxLoadedWeight = Math.floor(
+      (Number(trainingMax) * pct + 2.5) / 5
+    ) * 5;
+    const weight = maxLoadedWeight;
+    const loadedPct = weight > 0 ? weight / Number(trainingMax) : pct;
+
+    return {
+      ...set,
+      reps,
+      pct: loadedPct,
+      precisePct: loadedPct,
+      weight,
+      originalPct: loadedPct,
       originalWeight: weight,
     };
   });
@@ -3169,9 +3276,12 @@ export function buildGeneratedSmartTrainingWorkout({
   });
 
   const excludedLiftsSet = new Set(excludedLifts);
-  const configuredPriorities = priorities.filter(item =>
+  const configuredPrioritiesBeforeSpacing = priorities.filter(item =>
     !excludedLiftsSet.has(item.lift) &&
     Number(trainingMaxes[item.lift]) > 0
+  );
+  const configuredPriorities = configuredPrioritiesBeforeSpacing.filter(item =>
+    frequencyEligibility.spacingEligibleLifts.includes(item.lift)
   );
 
   let selectedLifts;
@@ -3181,6 +3291,7 @@ export function buildGeneratedSmartTrainingWorkout({
   if (
     forcedSecondaryLift &&
     Number(trainingMaxes[forcedSecondaryLift]) > 0 &&
+    frequencyEligibility.spacingEligibleLifts.includes(forcedSecondaryLift) &&
     !excludedLiftsSet.has(forcedSecondaryLift)
   ) {
     // A lift can still have light-only capacity left (its heavy-maximum is
@@ -3387,6 +3498,7 @@ export function buildGeneratedSmartTrainingWorkout({
   const tertiaryPriority =
     tertiaryLift &&
     !excludedLiftsSet.has(tertiaryLift) &&
+    frequencyEligibility.spacingEligibleLifts.includes(tertiaryLift) &&
     Number(trainingMaxes[tertiaryLift]) > 0 &&
     tertiaryDeficit >= 1 &&
     hasGoodReadinessForTertiary
@@ -3439,6 +3551,7 @@ export function buildGeneratedSmartTrainingWorkout({
   const buildLiftBlocks = ({ avoidRecentRepeat = false } = {}) =>
     selectedLifts.map((selection, selectionIndex) => {
     const isExplicitLightLift = selection.intensityRole === 'light';
+    const isExplicitMediumLift = selection.intensityRole === 'medium';
     const prescription = buildSmartLiftPrescription({
       state: liftStates[selection.lift],
       role: selection.role,
@@ -3456,13 +3569,17 @@ export function buildGeneratedSmartTrainingWorkout({
     }
 
     const isSingleLiftWorkout = selectedLifts.length === 1;
+    const repShapedPrescriptionSets = reshapeSmartTopSetBackoffReps({
+      sets: prescription.sets,
+      trainingMax: trainingMaxes[selection.lift],
+    });
     const initialWarmups = generateWarmups(
-      prescription.sets,
+      repShapedPrescriptionSets,
       selection.lift,
       isSingleLiftWorkout
     );
-    const completedSets = completeSmartLiftGrid({
-      sets: prescription.sets,
+    let completedSets = completeSmartLiftGrid({
+      sets: repShapedPrescriptionSets,
       warmups: initialWarmups,
       // Only bias toward MORE volume on a genuine single-lift day. On a
       // mixed (2- or 3-lift) day the primary lift's backoff count is
@@ -3490,13 +3607,18 @@ export function buildGeneratedSmartTrainingWorkout({
       // isMixedLiftWorkout already targets for them, so the grid can still
       // trim a genuine one-set-too-many but can never collapse a whole
       // volume block down to a token single set.
-      minimumVolumeSets: selection.role === 'primary' ? 2 : 3,
+      minimumVolumeSets: 3,
     });
     let doseConstrainedSets = isExplicitLightLift
       ? constrainExplicitLightLiftDose({
         sets: completedSets,
         trainingMax: trainingMaxes[selection.lift],
       })
+      : isExplicitMediumLift
+        ? constrainExplicitMediumLiftDose({
+          sets: completedSets,
+          trainingMax: trainingMaxes[selection.lift],
+        })
       : completedSets;
     const lightWorkWeights = doseConstrainedSets
       .filter(set => {
@@ -3530,7 +3652,7 @@ export function buildGeneratedSmartTrainingWorkout({
     // number of work sets. The weight no longer changes on this pass, so
     // warm-up generation is stable afterwards.
     if (
-      isExplicitLightLift &&
+      (isExplicitLightLift || isExplicitMediumLift) &&
       (completedWarmups.length + doseConstrainedSets.length) % SMART_LIFT_GRID_COLUMNS !== 0
     ) {
       doseConstrainedSets = completeSmartLiftGrid({
@@ -3538,15 +3660,65 @@ export function buildGeneratedSmartTrainingWorkout({
         warmups: completedWarmups,
         minimumVolumeSets: 3,
       });
-      doseConstrainedSets = constrainExplicitLightLiftDose({
-        sets: doseConstrainedSets,
-        trainingMax: trainingMaxes[selection.lift],
-      });
+      doseConstrainedSets = isExplicitLightLift
+        ? constrainExplicitLightLiftDose({
+          sets: doseConstrainedSets,
+          trainingMax: trainingMaxes[selection.lift],
+        })
+        : constrainExplicitMediumLiftDose({
+          sets: doseConstrainedSets,
+          trainingMax: trainingMaxes[selection.lift],
+        });
       completedWarmups = generateWarmups(
         doseConstrainedSets,
         selection.lift,
         isSingleLiftWorkout
       );
+    }
+
+    // Grid completion must never manufacture training dose. If lowering a
+    // light block changes its warm-up count, choose the number of light work
+    // sets that fills the remaining visual cells and divide the eight-rep
+    // ceiling across them. This keeps the layout invariant subordinate to
+    // the actual light-dose invariant.
+    if (
+      isExplicitLightLift &&
+      (completedWarmups.length + doseConstrainedSets.length) % SMART_LIFT_GRID_COLUMNS !== 0
+    ) {
+      const isVolumeSet = set => {
+        const label = String(set?.labelKey || '').toLowerCase();
+        return label === 'backoff' || label === 'worksets';
+      };
+      const fixedSets = doseConstrainedSets.filter(set => !isVolumeSet(set));
+      const volumeSets = doseConstrainedSets.filter(isVolumeSet);
+      let requiredVolumeCount =
+        (SMART_LIFT_GRID_COLUMNS -
+          ((completedWarmups.length + fixedSets.length) % SMART_LIFT_GRID_COLUMNS)) %
+          SMART_LIFT_GRID_COLUMNS || SMART_LIFT_GRID_COLUMNS;
+      while (requiredVolumeCount < 3) {
+        requiredVolumeCount += SMART_LIFT_GRID_COLUMNS;
+      }
+      const template = volumeSets[0];
+
+      if (template) {
+        const repsPerSet = Math.max(
+          4,
+          Math.floor(SMART_LIGHT_MAX_TOTAL_WORK_REPS / requiredVolumeCount)
+        );
+        const alignedVolumeSets = Array.from({ length: requiredVolumeCount }, (_, index) => ({
+          ...(volumeSets[index] || template),
+          reps: Math.min(Number(volumeSets[index]?.reps || template.reps) || repsPerSet, repsPerSet),
+          done: false,
+          failed: false,
+          skipped: false,
+        }));
+        doseConstrainedSets = [...fixedSets, ...alignedVolumeSets];
+        completedWarmups = generateWarmups(
+          doseConstrainedSets,
+          selection.lift,
+          isSingleLiftWorkout
+        );
+      }
     }
 
     if ((completedWarmups.length + doseConstrainedSets.length) % SMART_LIFT_GRID_COLUMNS !== 0) {
@@ -3694,7 +3866,8 @@ export function buildGeneratedSmartTrainingWorkout({
         'generated-prescription',
         'history-based-lift-priority',
         primaryEligibleSet.size < configuredPriorities.length ||
-          secondaryEligibleSet.size < configuredPriorities.length
+          secondaryEligibleSet.size < configuredPriorities.length ||
+          configuredPriorities.length < configuredPrioritiesBeforeSpacing.length
           ? 'projected-frequency-guard'
           : null,
         primaryEligibleSet.size < configuredPriorities.length
@@ -4309,7 +4482,7 @@ export function regenerateSupplementalLiftBlockGrid(liftBlock) {
   const completedSets = completeSmartLiftGrid({
     sets: liftBlock.sets || [],
     warmups,
-    minimumVolumeSets: 2,
+    minimumVolumeSets: 3,
   });
 
   return {

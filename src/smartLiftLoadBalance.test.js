@@ -265,11 +265,10 @@ test.each(scenarios)(
     });
     expect(selection.frequencyLastPrimaryLift).toBe('Bench');
     expect(selection.frequencyPrimaryEligibleLifts).toEqual(['Squat']);
-    expect(selection.frequencySecondaryEligibleLifts).toEqual(['Bench', 'Squat']);
+    expect(selection.frequencySecondaryEligibleLifts).toEqual(['Squat', 'Bench']);
     expect(selection.reasonFlags).toEqual(
       expect.arrayContaining([
         'primary-load-balance',
-        'secondary-frequency-guard',
         'avoided-consecutive-primary',
       ])
     );

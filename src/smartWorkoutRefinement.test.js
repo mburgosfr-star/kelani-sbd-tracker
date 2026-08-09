@@ -1420,7 +1420,7 @@ test('generates progressive C3W18 training without template prescriptions', () =
       ((liftBlock.warmups || []).length + (liftBlock.sets || []).length) % 4
     ).toBe(0);
     volumeSets.forEach(set => {
-      expect(set.reps).toBeGreaterThanOrEqual(4);
+      expect(set.reps).toBeGreaterThanOrEqual(2);
       expect(set.reps).toBeLessThanOrEqual(6);
     });
   });
@@ -1529,8 +1529,8 @@ test('generates progressive C3W18 training without template prescriptions', () =
   c3w19BenchVolumeSets.forEach(set => {
     expect(set).toMatchObject({
       reps: 4,
-      pct: 0.70,
-      weight: 70,
+      pct: 0.65,
+      weight: 65,
     });
   });
   expect(

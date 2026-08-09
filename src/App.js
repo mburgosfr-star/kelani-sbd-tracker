@@ -3867,8 +3867,10 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
   const reasonParts = [];
   if (prescription.regressionReason) {
     reasonParts.push(
-      t.smartRegressionReason ||
-      'Recovery or missed work blocked normal progression.'
+      prescription.regressionReason === 'ready-taper'
+        ? (t.smartTaperReason || 'Meet-ready taper: reducing fatigue while preserving competition readiness.')
+        : (t.smartRegressionReason ||
+          'Recovery or missed work blocked normal progression.')
     );
   } else if (prescription.repeatVariationApplied) {
     reasonParts.push(
@@ -3903,9 +3905,17 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
       'Light intensity day.'
     );
   } else if (['secondary', 'tertiary'].includes(prescription.role || liftBlock.role)) {
+    const intensity = getSmartIntensityRole(liftBlock);
+    const reasonByIntensity = {
+      heavy: t.smartHeavyTotalIntensityReason ||
+        'Heavy total intensity from the combination of sets, reps and percentage.',
+      medium: t.smartMediumTotalIntensityReason ||
+        'Medium total intensity from the combination of sets, reps and percentage.',
+      light: t.smartLightTotalIntensityReason ||
+        'Light total intensity from the combination of sets, reps and percentage.',
+    };
     reasonParts.push(
-      t.smartSecondaryVolumeReason ||
-      'Lower volume for the secondary lift.'
+      reasonByIntensity[intensity]
     );
   } else if (
     topSet &&
@@ -7247,7 +7257,30 @@ function ensureProgramPlanLineLift(line, workout, t, benchPressVariant = 'standa
   return `${workoutLiftBlockLabel(liftBlocks[0], t, benchPressVariant)} · ${text}`;
 }
 
-function ProgramWorkoutTitleRows({ workout, t, benchPressVariant = 'standard', showIntensityLabels = false }) {
+export function getHistoricalSmartIntensityRole(liftBlock = {}) {
+  const explicit = String(liftBlock.intensityRole || '').toLowerCase();
+  if (['heavy', 'medium', 'light'].includes(explicit)) return explicit;
+
+  const role = String(liftBlock.role || '').toLowerCase();
+  if (role === 'primary') return 'heavy';
+  if (role === 'tertiary') return 'light';
+  if (role === 'secondary') {
+    const highestPct = Math.max(
+      0,
+      ...(liftBlock.sets || []).map(set => Number(set?.pct) || 0)
+    );
+    return highestPct > 0.70 ? 'medium' : 'light';
+  }
+  return getSmartIntensityRole(liftBlock);
+}
+
+function ProgramWorkoutTitleRows({
+  workout,
+  t,
+  benchPressVariant = 'standard',
+  showIntensityLabels = false,
+  preserveHistoricalIntensityLabels = false,
+}) {
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
 
   if (!workout) return t.deload;
@@ -7262,7 +7295,9 @@ function ProgramWorkoutTitleRows({ workout, t, benchPressVariant = 'standard', s
     workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant);
 
   const intensityLabel = liftBlock => {
-    const role = getSmartIntensityRole(liftBlock);
+    const role = preserveHistoricalIntensityLabels
+      ? getHistoricalSmartIntensityRole(liftBlock)
+      : getSmartIntensityRole(liftBlock);
     const key = `smartIntensity${role[0].toUpperCase()}${role.slice(1)}`;
     return t[key] || role;
   };
@@ -8006,6 +8041,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
                   t={t}
                   benchPressVariant={benchPressVariant}
                   showIntensityLabels={isSmartTrainingModel(trainingModel)}
+                  preserveHistoricalIntensityLabels={isDone}
                 />
                 {isCurrent && (
                   <span style={{
@@ -12683,6 +12719,31 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           }}>
             <WorkoutTitle workout={nextWorkout} t={t} benchPressVariant={benchPressVariant} />
           </div>
+
+          {isSmartTrainingModel(trainingModel) && (nextWorkout.lifts || []).length > 0 && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              flexWrap: 'wrap',
+              gap: 8,
+              margin: '-3px 0 10px',
+              fontSize: 12,
+              fontWeight: 900,
+            }}>
+              {nextWorkout.lifts.map((liftBlock, index) => {
+                const role = getSmartIntensityRole(liftBlock);
+                const key = `smartIntensity${role[0].toUpperCase()}${role.slice(1)}`;
+                return (
+                  <span
+                    key={`dashboard-intensity-${liftBlock.lift}-${index}`}
+                    style={{ color: getLiftThemeColor(liftBlock.lift) }}
+                  >
+                    {workoutLiftBlockLabel(liftBlock, t, benchPressVariant)}: {t[key] || role}
+                  </span>
+                );
+              })}
+            </div>
+          )}
 
           {planLines.length > 0 && (
             <div style={{

@@ -8,6 +8,7 @@ import {
 } from './smartFrequencyPolicy';
 import { EXPOSURE_TARGETS_BY_LEVEL } from './smartPrescriptionEngine';
 import { getSmartMaxConsecutiveTrainingDays } from './smartTrainingConstants';
+import { getProjectedSmartLiftEligibility } from './smartTrainingEngine';
 
 test('uses the agreed maximum consecutive training days by level and lift', () => {
   expect(getSmartMaxConsecutiveTrainingDays('beginner', 'Bench')).toBe(2);
@@ -22,14 +23,20 @@ test('uses the agreed maximum consecutive training days by level and lift', () =
 });
 
 function makeLiftBlock(lift, role, overrides = {}) {
+  const doseByRole = {
+    primary: { count: 1, pct: 0.90, reps: 3, labelKey: 'topTriple' },
+    secondary: { count: 6, pct: 0.75, reps: 4, labelKey: 'workSets' },
+    tertiary: { count: 2, pct: 0.60, reps: 4, labelKey: 'workSets' },
+  };
+  const dose = doseByRole[role] || doseByRole.tertiary;
   return {
     lift,
     role,
-    sets: [{
-      labelKey: 'workSets',
-      pct: role === 'secondary' ? 0.75 : 0.7,
-      reps: 5,
-    }],
+    sets: Array.from({ length: dose.count }, () => ({
+      labelKey: dose.labelKey,
+      pct: dose.pct,
+      reps: dose.reps,
+    })),
     ...overrides,
   };
 }
@@ -58,6 +65,12 @@ function addWorkout(history, cycle, workoutNumber, lifts = []) {
 }
 
 describe('frequency-score table', () => {
+  const expectedSpacing = {
+    beginner: { Squat: [3, 4], Bench: [2, 3], Deadlift: [7, 7] },
+    intermediate: { Squat: [2, 3], Bench: [1, 2], Deadlift: [3, 4] },
+    advanced: { Squat: [1, 2], Bench: [1, 2], Deadlift: [2, 3] },
+    elite: { Squat: [1, 2], Bench: [1, 2], Deadlift: [1, 2] },
+  };
   const expected = {
     beginner: {
       Squat: { score: 5, days: 2, mix: { heavy: 1, medium: 1, light: 0 } },
@@ -90,6 +103,10 @@ describe('frequency-score table', () => {
     expect(target.score).toBe(spec.score);
     expect(target.days).toBe(spec.days);
     expect(target.defaultMix).toEqual(spec.mix);
+    expect(target.idealSpacingDays).toEqual({
+      min: expectedSpacing[level][lift][0],
+      max: expectedSpacing[level][lift][1],
+    });
 
     const computedScore =
       spec.mix.heavy * SMART_INTENSITY_POINTS.heavy +
@@ -121,7 +138,7 @@ describe('EXPOSURE_TARGETS_BY_LEVEL (smartPrescriptionEngine.js) is derived from
 });
 
 describe('getSmartIntensityRole', () => {
-  test('reads role explicitly: primary -> heavy, secondary -> medium, tertiary -> light', () => {
+  test('uses the structural role only when a block has no measurable work dose', () => {
     expect(getSmartIntensityRole({ lift: 'Squat', role: 'primary', sets: [] }))
       .toBe('heavy');
     expect(getSmartIntensityRole({ lift: 'Squat', role: 'secondary', sets: [] }))
@@ -130,7 +147,7 @@ describe('getSmartIntensityRole', () => {
       .toBe('light');
   });
 
-  test('an explicit intensity role takes precedence over the structural workout slot', () => {
+  test('uses an explicit intended intensity only when a block has no measurable work dose', () => {
     expect(getSmartIntensityRole({
       lift: 'Bench',
       role: 'secondary',
@@ -146,39 +163,60 @@ describe('getSmartIntensityRole', () => {
     })).toBe('medium');
   });
 
-  test('classifies legacy secondary snapshots from their prescribed load', () => {
+  test('keeps the stored intended label for a completed historical workout', () => {
     expect(getSmartIntensityRole({
-      lift: 'Bench',
-      role: 'secondary',
-      sets: [{ labelKey: 'workSets', pct: 0.70, reps: 4 }],
+      lift: 'Deadlift',
+      intensityRole: 'light',
+      sets: Array.from({ length: 6 }, () => ({
+        labelKey: 'workSets', pct: 0.70, reps: 4, done: true,
+      })),
     })).toBe('light');
-
-    expect(getSmartIntensityRole({
-      lift: 'Bench',
-      role: 'secondary',
-      sets: [{ labelKey: 'workSets', pct: 0.75, reps: 4 }],
-    })).toBe('medium');
   });
 
-  test('falls back to %1RM/label heuristics when no role is set', () => {
+  test('classifies complete sessions from nonlinear percentage-weighted load', () => {
     expect(getSmartIntensityRole({
       lift: 'Bench',
-      sets: [{ labelKey: 'topDouble', pct: 0.85, reps: 2 }],
-    })).toBe('heavy');
-
-    expect(getSmartIntensityRole({
-      lift: 'Bench',
-      sets: [{ labelKey: 'backoff', pct: 0.80, reps: 5 }],
-    })).toBe('heavy');
-
-    expect(getSmartIntensityRole({
-      lift: 'Bench',
-      sets: [{ labelKey: 'workSets', pct: 0.70, reps: 5 }],
+      intensityRole: 'light',
+      sets: Array.from({ length: 6 }, () => ({ labelKey: 'workSets', pct: 0.70, reps: 4 })),
     })).toBe('medium');
 
     expect(getSmartIntensityRole({
       lift: 'Bench',
-      sets: [{ labelKey: 'workSets', pct: 0.55, reps: 6 }],
+      sets: Array.from({ length: 6 }, () => ({ labelKey: 'workSets', pct: 0.75, reps: 4 })),
+    })).toBe('medium');
+
+    expect(getSmartIntensityRole({
+      lift: 'Bench',
+      sets: Array.from({ length: 2 }, () => ({ labelKey: 'workSets', pct: 0.60, reps: 4 })),
+    })).toBe('light');
+  });
+
+  test('separates the W36-style 6×4×75% medium dose from W41-style 6×4×66% light work', () => {
+    expect(getSmartIntensityRole({
+      lift: 'Squat',
+      sets: Array.from({ length: 6 }, () => ({ labelKey: 'workSets', pct: 0.75, reps: 4 })),
+    })).toBe('medium');
+    expect(getSmartIntensityRole({
+      lift: 'Squat',
+      sets: Array.from({ length: 6 }, () => ({ labelKey: 'workSets', pct: 0.66, reps: 4 })),
+    })).toBe('light');
+  });
+
+  test('counts every work set instead of classifying from the heaviest set', () => {
+    expect(getSmartIntensityRole({
+      lift: 'Bench',
+      sets: [
+        { labelKey: 'topTriple', pct: 0.90, reps: 3 },
+        ...Array.from({ length: 5 }, () => ({ labelKey: 'backoff', pct: 0.70, reps: 4 })),
+      ],
+    })).toBe('heavy');
+    expect(getSmartIntensityRole({
+      lift: 'Bench',
+      sets: [{ labelKey: 'topTriple', pct: 0.90, reps: 3 }],
+    })).toBe('heavy');
+    expect(getSmartIntensityRole({
+      lift: 'Bench',
+      sets: Array.from({ length: 4 }, () => ({ labelKey: 'workSets', pct: 0.70, reps: 4 })),
     })).toBe('light');
   });
 
@@ -191,6 +229,37 @@ describe('getSmartIntensityRole', () => {
 
     expect(isHeavySmartLiftBlock(block)).toBe(false);
     expect(getSmartIntensityRole(block)).toBe('light');
+  });
+});
+
+describe('ideal lift spacing', () => {
+  test('intermediate Deadlift is unavailable two days after its last exposure and available after three', () => {
+    const history = [{
+      cycle: 3,
+      workoutNumber: 39,
+      lift: 'Deadlift',
+      workoutSnapshot: {
+        type: 'training',
+        lifts: [{ lift: 'Deadlift', role: 'primary', sets: [] }],
+      },
+    }];
+
+    const tooSoon = getProjectedSmartLiftEligibility({
+      history,
+      currentCycle: 3,
+      athleteLevel: 'intermediate',
+      targetWorkoutNumber: 41,
+    });
+    const onTime = getProjectedSmartLiftEligibility({
+      history,
+      currentCycle: 3,
+      athleteLevel: 'intermediate',
+      targetWorkoutNumber: 42,
+    });
+
+    expect(tooSoon.spacingDaysByLift.Deadlift).toBe(2);
+    expect(tooSoon.spacingEligibleLifts).not.toContain('Deadlift');
+    expect(onTime.spacingEligibleLifts).toContain('Deadlift');
   });
 });
 
@@ -257,18 +326,27 @@ describe('computeSmartFrequencyScoreState', () => {
     addWorkout(history, 3, 39, [{
       lift: 'Bench',
       role: 'secondary',
-      overrides: { sets: [{ labelKey: 'workSets', pct: 0.70, reps: 4 }] },
+      overrides: {
+        intensityRole: 'light',
+        sets: [{ labelKey: 'workSets', pct: 0.70, reps: 4, done: true }],
+      },
     }]);
     addWorkout(history, 3, 40, [{
       lift: 'Squat',
       role: 'secondary',
-      overrides: { sets: [{ labelKey: 'workSets', pct: 0.70, reps: 4 }] },
+      overrides: {
+        intensityRole: 'light',
+        sets: [{ labelKey: 'workSets', pct: 0.70, reps: 4, done: true }],
+      },
     }]);
     addWorkout(history, 3, 41, [{ lift: 'Bench', role: 'primary' }]);
     addWorkout(history, 3, 42, [{
       lift: 'Bench',
       role: 'secondary',
-      overrides: { sets: [{ labelKey: 'workSets', pct: 0.70, reps: 4 }] },
+      overrides: {
+        intensityRole: 'light',
+        sets: [{ labelKey: 'workSets', pct: 0.70, reps: 4, done: true }],
+      },
     }]);
 
     const state = computeSmartFrequencyScoreState({

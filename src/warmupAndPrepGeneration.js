@@ -159,6 +159,15 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
 
   function finalWarmupWeight() {
     if (hasTopSet) {
+      if (
+        normalizedLift === 'Bench' &&
+        targetReps >= 3 &&
+        highestNonTopWorkWeight > 20 &&
+        targetWeight - highestNonTopWorkWeight <= MAX_WARMUP_JUMP_KG
+      ) {
+        return highestNonTopWorkWeight;
+      }
+
       if (usesReusableRoundBackoffWarmup || usesReusableTaperBackoffWarmup) {
         return reusableBackoffWarmupWeight;
       }
@@ -177,6 +186,11 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
 
   function cleanWarmupWeight(weight) {
     const rounded = roundTo10(weight);
+    const reusesBenchBackoff =
+      normalizedLift === 'Bench' &&
+      hasTopSet &&
+      targetReps >= 3 &&
+      rounded === roundTo10(highestNonTopWorkWeight);
 
     if (rounded <= 20) return null;
 
@@ -184,6 +198,8 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
       !hasCloseBackoff &&
       !usesReusableRoundBackoffWarmup &&
       !usesReusableTaperBackoffWarmup &&
+      !reusesBenchBackoff &&
+      normalizedLift !== 'Bench' &&
       rounded >= lowestWorkWeight
     ) {
       const belowLowestWorkWeight = roundDown10(lowestWorkWeight - 0.001);
@@ -245,8 +261,13 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
 
     if (finalWeight) {
       let last = 20;
+      const bridgeJumpLimit =
+        normalizedLift === 'Bench' &&
+        (usesReusableTaperBackoffWarmup || targetReps >= 3)
+          ? 50
+          : MAX_WARMUP_JUMP_KG;
 
-      while (finalWeight - last > MAX_WARMUP_JUMP_KG) {
+      while (finalWeight - last > bridgeJumpLimit) {
         const bridge = cleanWarmupWeight(last + WARMUP_BRIDGE_STEP_KG);
         if (!bridge || bridge <= last || bridge >= finalWeight) break;
 
@@ -293,7 +314,11 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
     const previousAlreadyBridgesTop =
       targetWeight - previousWeight <= MAX_WARMUP_JUMP_KG;
 
-    if (sitsRightBelowBackoff && previousAlreadyBridgesTop) {
+    if (
+      sitsRightBelowBackoff &&
+      previousAlreadyBridgesTop &&
+      !usesReusableTaperBackoffWarmup
+    ) {
       sortedWarmupWeights.pop();
     }
   }
@@ -314,6 +339,15 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
       if (
         (usesReusableRoundBackoffWarmup || usesReusableTaperBackoffWarmup) &&
         currentWeight === reusableBackoffWarmupWeight
+      ) {
+        return true;
+      }
+
+      if (
+        normalizedLift === 'Bench' &&
+        hasTopSet &&
+        targetReps >= 3 &&
+        currentWeight === roundTo10(targetWeight * 0.82)
       ) {
         return true;
       }

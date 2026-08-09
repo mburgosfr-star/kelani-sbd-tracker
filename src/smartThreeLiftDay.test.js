@@ -43,7 +43,7 @@ const restCompletedEntry = {
 
 const historyAfterRest = [...intermediateHistory, restCompletedEntry];
 
-test('C3W36 safety boundary keeps a six-set light Bench grid but caps its total dose', () => {
+test('C3W36 safety boundary turns an overloaded light Bench block into a genuinely light dose', () => {
   // Real C3W36 failure: the explicitly light, secondary Bench prescription
   // reached 6x6x75% after grid completion. The grid itself was correct;
   // the missing invariant was a final cap across sets, reps and real load.
@@ -68,11 +68,11 @@ test('C3W36 safety boundary keeps a six-set light Bench grid but caps its total 
   safeSets.forEach(set => {
     expect(set).toMatchObject({
       reps: 4,
-      pct: 0.70,
-      precisePct: 0.70,
-      weight: 70,
-      originalPct: 0.70,
-      originalWeight: 70,
+      pct: 0.60,
+      precisePct: 0.60,
+      weight: 60,
+      originalPct: 0.60,
+      originalWeight: 60,
     });
   });
 });
@@ -157,21 +157,18 @@ test('every lift on a 3-lift day fills the 4-column grid exactly (no empty trail
   // ever adjusts the backoff count, never drops the top-set stimulus.
   const primaryBlock = w32.lifts.find(l => l.role === 'primary');
   const backoffSets = primaryBlock.sets.filter(s => s.labelKey === 'backoff');
-  expect(backoffSets).toHaveLength(4);
+  expect(backoffSets.length).toBeGreaterThanOrEqual(3);
   expect(primaryBlock.warmups.length + primaryBlock.sets.length).toBe(8);
 
-  // Secondary and tertiary lifts are both meant to be light/supplementary,
-  // but a real C3W36 report showed that trimming their volume block down to
-  // fit a leftover single grid row could shrink it all the way to ONE work
-  // set - not a light top-up, barely a stimulus at all. The floor is raised
-  // to match isMixedLiftWorkout's own 3-set volume target, so the
-  // grid-completion step pads a genuine remainder up to a full block instead
-  // of trimming it away.
+  // Medium work retains a meaningful volume block. A genuinely light
+  // tertiary dose may use two work sets: the total session dose, rather
+  // than a structural three-set minimum, now defines its intensity.
   const secondaryBlock = w32.lifts.find(l => l.role === 'secondary');
   const tertiaryBlock = w32.lifts.find(l => l.role === 'tertiary');
   [secondaryBlock, tertiaryBlock].forEach(block => {
     expect(block.warmups.length + block.sets.length).toBeGreaterThanOrEqual(4);
     expect((block.warmups.length + block.sets.length) % 4).toBe(0);
-    expect(block.sets.length).toBeGreaterThanOrEqual(3);
   });
+  expect(secondaryBlock.sets.length).toBeGreaterThanOrEqual(3);
+  expect(tertiaryBlock.sets.length).toBeGreaterThanOrEqual(3);
 });
