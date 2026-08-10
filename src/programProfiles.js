@@ -111,8 +111,8 @@ export function normalizeTrainingModel(model) {
     : TRAINING_MODELS.CLASSIC;
 }
 
-export function getNewUserTrainingModel(model) {
-  return normalizeTrainingModel(model || TRAINING_MODELS.SMART);
+export function getNewUserTrainingModel() {
+  return TRAINING_MODELS.SMART;
 }
 
 export function isSmartTrainingModel(model) {

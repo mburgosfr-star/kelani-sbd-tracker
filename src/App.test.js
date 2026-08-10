@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import App, { capRunningBestChart, formatWorkoutSetPercentDisplay, getDashboardE1RMPrGain, getDashboardMeetState, isDashboardE1RMPR, replaceCurrentChartEndpoint, shouldShowAutomaticBackupStatus } from './App';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import App, { canSwitchClassicToSmart, capRunningBestChart, formatWorkoutSetPercentDisplay, getDashboardE1RMPrGain, getDashboardMeetState, isDashboardE1RMPR, replaceCurrentChartEndpoint, shouldShowAutomaticBackupStatus } from './App';
 
 test('dashboard e1RM PR gain compares against the real 1RM on the same card', () => {
   expect(getDashboardE1RMPrGain(100, 97.5)).toBe(2.5);
@@ -110,14 +110,110 @@ test('renders the Kelani splash screen', () => {
   expect(screen.getByAltText('Kelani')).toBeInTheDocument();
 });
 
-test('offers legacy-backup import directly from first setup', async () => {
+test('offers backup import directly from the compact setup actions', async () => {
   localStorage.clear();
   render(<App />);
 
-  expect(await screen.findByText(
-    'Moving from an earlier Kelani installation?',
-    {},
+  expect(await screen.findByRole(
+    'button',
+    { name: 'Import backup' },
     { timeout: 3000 }
   )).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Import' })).toBeInTheDocument();
+});
+
+test('new setup offers Smart directly without a Classic model choice', async () => {
+  localStorage.clear();
+  render(<App />);
+
+  await screen.findByText('Start with Smart Training', {}, { timeout: 3000 });
+  expect(screen.queryByText('Kelani SBD Classic')).not.toBeInTheDocument();
+  expect(screen.queryByText('Choose training model')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Body weight')).toBeInTheDocument();
+  expect(screen.getByRole('spinbutton', { name: 'Squat Weight' })).toBeInTheDocument();
+  expect(screen.getByRole('spinbutton', { name: 'Bench Weight' })).toBeInTheDocument();
+  expect(screen.getByRole('spinbutton', { name: 'Deadlift Weight' })).toBeInTheDocument();
+  expect(screen.queryByText('Profile')).not.toBeInTheDocument();
+  expect(screen.queryByText('Body data')).not.toBeInTheDocument();
+});
+
+test('Classic can switch only before the current workout has user progress', () => {
+  expect(canSwitchClassicToSmart('classic', {
+    sets: [{ reps: 5, weight: 100, originalWeight: 100, done: false }],
+  })).toBe(true);
+  expect(canSwitchClassicToSmart('classic', {
+    sets: [{ reps: 5, weight: 100, originalWeight: 100, done: true }],
+  })).toBe(false);
+  expect(canSwitchClassicToSmart('classic', {
+    prepItems: [{ key: 'brace', done: true }],
+  })).toBe(false);
+  expect(canSwitchClassicToSmart('classic', {
+    accessories: [{ done: [false, true] }],
+  })).toBe(false);
+  expect(canSwitchClassicToSmart('classic', {
+    cooldownItems: [{ key: 'walk', done: true }],
+  })).toBe(false);
+  expect(canSwitchClassicToSmart('smart', {})).toBe(false);
+});
+
+test('finishing the compact setup creates a Smart user with body weight and starting maxes', async () => {
+  localStorage.clear();
+  render(<App />);
+
+  await screen.findByText('Start with Smart Training', {}, { timeout: 3000 });
+  fireEvent.change(screen.getByLabelText('Body weight'), {
+    target: { value: '80' },
+  });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Squat Weight' }), {
+    target: { value: '100' },
+  });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Squat Reps' }), {
+    target: { value: '5' },
+  });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Bench Weight' }), {
+    target: { value: '75' },
+  });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Deadlift Weight' }), {
+    target: { value: '125' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+  await waitFor(() => {
+    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    expect(saved.trainingModel).toBe('smart');
+    expect(saved.userProfile).toEqual({ weightUnit: 'kg', trainingModel: 'smart' });
+    expect(saved.prs.Squat).toBe(115);
+    expect(saved.bodyWeights[0].bodyWeight).toBe(80);
+  });
+});
+
+test('an existing Classic user keeps Classic and can make the one-way switch to Smart', async () => {
+  localStorage.clear();
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1,
+    trainingModel: 'classic',
+    currentCycle: 1,
+    prs: { Squat: 100, Bench: 75, Deadlift: 125 },
+    history: [
+      { workoutNumber: 0, cycle: 0, seedMax: true, lift: 'Squat', topWeight: 100, topReps: 1, e1rm: 100 },
+      { workoutNumber: 0, cycle: 0, seedMax: true, lift: 'Bench', topWeight: 75, topReps: 1, e1rm: 75 },
+      { workoutNumber: 0, cycle: 0, seedMax: true, lift: 'Deadlift', topWeight: 125, topReps: 1, e1rm: 125 },
+    ],
+  }));
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole(
+    'button',
+    { name: 'Settings' },
+    { timeout: 3000 }
+  ));
+  expect(screen.getByText('Model')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Classic' }));
+  expect(screen.getByText('Switch to Smart Training')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Switch permanently to Smart' }));
+
+  await waitFor(() => {
+    expect(screen.queryByText('Model')).not.toBeInTheDocument();
+    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    expect(saved.trainingModel).toBe('smart');
+  });
 });

@@ -79,6 +79,7 @@ import {
 import {
   mergeGeneratedWorkoutStructure,
   hydrateWorkoutsWithHistory,
+  workoutHasUserProgress,
 } from './workoutStateMerge';
 import {
   removeDeprecatedPrepItemsFromWorkouts,
@@ -400,6 +401,32 @@ export function shouldRetryAutomaticBackup(status, expectedPath = AUTO_BACKUP_PA
   return !isVerifiedAutomaticBackupStatus(status) || status?.path !== expectedPath;
 }
 
+export function workoutHasAnyUserProgress(workout) {
+  const liftBlocks = Array.isArray(workout?.lifts) && workout.lifts.length > 0
+    ? workout.lifts
+    : [workout];
+  const anyDone = items => (items || []).some(item => item?.done === true);
+  const anyAccessoryDone = (workout?.accessories || []).some(accessory =>
+    (accessory?.done || []).some(Boolean)
+  );
+
+  return Boolean(
+    workoutHasUserProgress(workout) ||
+    liftBlocks.some(block => anyDone(block?.prepItems)) ||
+    anyDone(workout?.prepItems) ||
+    anyAccessoryDone ||
+    anyDone(workout?.cooldownItems) ||
+    anyDone(workout?.meetPrepItems)
+  );
+}
+
+export function canSwitchClassicToSmart(trainingModel, currentWorkout) {
+  return (
+    !isSmartTrainingModel(trainingModel) &&
+    !workoutHasAnyUserProgress(currentWorkout)
+  );
+}
+
 export function formatAutomaticBackupTimestamp(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
@@ -503,6 +530,19 @@ const THEME = {
   brown: '#a67c52'
 
 };
+
+const BOTTOM_NAV_SPACE = 52;
+
+function balancedVerticalScreenStyle(bottomOffset = BOTTOM_NAV_SPACE) {
+  return {
+    minHeight: bottomOffset
+      ? `calc(100dvh - ${bottomOffset}px)`
+      : '100dvh',
+    display: 'grid',
+    alignContent: 'space-between',
+    boxSizing: 'border-box',
+  };
+}
 
 // // const APP_TOP_BAR_HEIGHT = 50; // unused // unused after local black statusbar patch
 
@@ -1748,11 +1788,13 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
   );
 }
 
-function SettingsListRow({ label, description, value, valueColor = THEME.text, actionLabel, onAction, actionContent, danger = false, compact = false, valueNowrap = false, valueFontSize = 15 }) {
+function SettingsListRow({ label, description, value, valueColor = THEME.text, actionLabel, onAction, actionContent, danger = false, compact = false, compactAction = false, labelNowrap = false, valueNowrap = false, valueFontSize = 15 }) {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'minmax(0, 1fr) minmax(180px, 190px)',
+      gridTemplateColumns: compactAction
+        ? 'minmax(0, 1fr) auto'
+        : 'minmax(0, 1fr) minmax(180px, 190px)',
       alignItems: 'center',
       gap: 10,
       padding: compact ? '4px 0' : '7px 0',
@@ -1765,7 +1807,8 @@ function SettingsListRow({ label, description, value, valueColor = THEME.text, a
           color: danger ? THEME.red : THEME.text,
           fontSize: 16,
           fontWeight: 800,
-          lineHeight: 1.2
+          lineHeight: 1.2,
+          whiteSpace: labelNowrap ? 'nowrap' : 'normal',
         }}>
           {label}
         </div>
@@ -1921,7 +1964,7 @@ function Toast({ message }) {
 }
 
 
-function DataSection({ t, importOnly = false }) {
+function DataSection({ t, importOnly = false, triggerOnly = false }) {
   const [notice, setNotice] = useState('');
   const [pendingImport, setPendingImport] = useState(null);
   const importInputRef = useRef(null);
@@ -2074,15 +2117,37 @@ function DataSection({ t, importOnly = false }) {
 
   return (
     <>
-      <SettingsListRow
+      {triggerOnly ? (
+        <button
+          type="button"
+          onClick={() => importInputRef.current?.click()}
+          style={{
+            width: 'min(150px, calc(50vw - 28px))',
+            padding: '11px 14px',
+            fontSize: 15,
+            fontWeight: 800,
+            background: THEME.card,
+            color: THEME.text,
+            border: `1px solid ${THEME.primary}`,
+            borderRadius: 6,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {t.importBackupAction || 'Import backup'}
+        </button>
+      ) : (
+        <SettingsListRow
         label={importOnly ? t.migrationImportBackup : t.dataManagement}
         compact={true}
+        compactAction={importOnly}
+        labelNowrap={importOnly}
         actionContent={(
           <div style={{
             display: 'grid',
             gap: 6,
             justifyItems: 'stretch',
-            width: '100%'
+            width: importOnly ? 'auto' : '100%'
           }}>
             {!importOnly && (
               <button
@@ -2111,8 +2176,8 @@ function DataSection({ t, importOnly = false }) {
               type="button"
               onClick={() => importInputRef.current?.click()}
               style={{
-                width: '100%',
-                padding: '7px 9px',
+                width: importOnly ? 86 : '100%',
+                padding: importOnly ? '7px 12px' : '7px 9px',
                 fontSize: 14,
                 fontWeight: 800,
                 background: THEME.card,
@@ -2129,7 +2194,8 @@ function DataSection({ t, importOnly = false }) {
             </button>
           </div>
         )}
-      />
+        />
+      )}
 
       {!importOnly && shouldShowAutomaticBackupStatus(Capacitor.isNativePlatform()) && (
         <SettingsListRow
@@ -2759,9 +2825,11 @@ function getTrainingModelShortLabel(model) {
   return isSmartTrainingModel(model) ? 'Smart' : 'Classic';
 }
 
-function ModelSection({ trainingModel, setTrainingModel, t }) {
+function ModelSection({ trainingModel, switchToSmart, switchBlocked, t }) {
   const [isEditing, setIsEditing] = useState(false);
   const currentModel = normalizeTrainingModel(trainingModel);
+
+  if (isSmartTrainingModel(currentModel)) return null;
 
   return (
     <>
@@ -2773,22 +2841,33 @@ function ModelSection({ trainingModel, setTrainingModel, t }) {
 
       {isEditing && (
         <SettingsModal
-          title={t.trainingModelLabel || 'Model'}
+          title={t.switchToSmartTitle || 'Switch to Smart Training'}
           onClose={() => setIsEditing(false)}
         >
-          {[TRAINING_MODELS.CLASSIC, TRAINING_MODELS.SMART].map(model => (
-            <button
-              type="button"
-              key={model}
-              onClick={() => {
-                setTrainingModel(normalizeTrainingModel(model));
-                setIsEditing(false);
-              }}
-              style={selectionModalButtonStyle(currentModel === model)}
-            >
-              {getTrainingModelShortLabel(model)}
-            </button>
-          ))}
+          <p style={{ margin: '0 0 14px', color: THEME.text, lineHeight: 1.45, textAlign: 'center' }}>
+            {t.switchToSmartText || 'Smart Training uses your existing history to choose each next workout. This switch is permanent; Classic remains available only until you switch.'}
+          </p>
+          {switchBlocked && (
+            <p style={{ margin: '0 0 14px', color: THEME.red, fontWeight: 800, lineHeight: 1.4, textAlign: 'center' }}>
+              {t.switchToSmartBlocked || 'Finish or clear your current Classic workout before switching so no set progress is lost.'}
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={switchBlocked}
+            onClick={() => {
+              if (switchBlocked) return;
+              switchToSmart();
+              setIsEditing(false);
+            }}
+            style={{
+              ...selectionModalButtonStyle(false),
+              opacity: switchBlocked ? 0.45 : 1,
+              cursor: switchBlocked ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {t.switchToSmartAction || 'Switch permanently to Smart'}
+          </button>
         </SettingsModal>
       )}
     </>
@@ -3886,9 +3965,13 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
     // (see the forced-secondary retry in generateSmartWorkouts) - there is
     // no other lift in the workout to be "secondary" to, so the normal
     // two-lift-day copy below would be misleading here.
+    const intensity = getSmartIntensityRole(liftBlock);
     reasonParts.push(
-      t.smartFrequencyLightSoloReason ||
-      "This lift's heavy slot is already used this week, so it's intentionally lighter today."
+      intensity === 'medium'
+        ? (t.smartFrequencyMediumSoloReason ||
+          "This lift's heavy slot is already used this week. Today's medium session fills its remaining weekly target.")
+        : (t.smartFrequencyLightSoloReason ||
+          "This lift's heavy slot is already used this week, so it's intentionally lighter today.")
     );
   } else if (
     ['secondary', 'tertiary'].includes(prescription.role || liftBlock.role) &&
@@ -6598,7 +6681,7 @@ function chartMetricLabel(key) {
   }
 
   return (
-    <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
+    <div style={{ ...balancedVerticalScreenStyle(), display: 'flex', flexDirection: 'column', maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
       <AppHeader
         t={t}
         title={t.stats}
@@ -6656,6 +6739,7 @@ function chartMetricLabel(key) {
         ))}
       </div>
 
+      <div style={{ flex: 1, display: 'grid', alignContent: 'space-evenly' }}>
       {activescreen === 'lifts' && (
   <div>
     {LIFT_ORDER.map(lift => {
@@ -6767,6 +6851,7 @@ function chartMetricLabel(key) {
           color: THEME.primary,
         },
       ])}
+      </div>
 
 
     </div>
@@ -7801,7 +7886,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
   }
 
   return (
-    <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
+    <div style={{ ...balancedVerticalScreenStyle(), display: 'flex', flexDirection: 'column', maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
       <AppHeader
         t={t}
         title={
@@ -7967,7 +8052,13 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
 
       {renderWorkoutListToggleButton('top')}
 
-      <div data-kelani-program-list-spacer style={{ marginTop: 14 }}>
+      <div data-kelani-program-list-spacer style={{
+        flex: smartModel && visibleWorkoutEntries.length === 1 ? 1 : undefined,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: smartModel && visibleWorkoutEntries.length === 1 ? 'center' : 'flex-start',
+        marginTop: smartModel && visibleWorkoutEntries.length === 1 ? 0 : 14,
+      }}>
 {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
         const isDone = completedWorkoutNumberSet.has(Number(workout.number)) || Boolean(workout.completed);
@@ -8148,36 +8239,17 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
 }
 
 function Onboarding({ onStart, t }) {
-  const [onboardingStep, setOnboardingStep] = useState(1);
   const [onboardingError, setOnboardingError] = useState('');
   const [onboardingWeightUnit, setOnboardingWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
-  const [onboardingTrainingModel, setOnboardingTrainingModel] = useState(() =>
-    getNewUserTrainingModel(localStorage.getItem('trainingModel'))
-  );
-  const [squat, setSquat] = useState('');
-  const [bench, setBench] = useState('');
-  const [deadlift, setDeadlift] = useState('');
-  const [onboardingCalculators, setOnboardingCalculators] = useState({
-    Squat: { weight: '', reps: '' },
-    Bench: { weight: '', reps: '' },
-    Deadlift: { weight: '', reps: '' },
-  });
-  const [birthDate, setBirthDate] = useState('');
-  const [sex, setSex] = useState('');
-  const [bodyForm, setBodyForm] = useState({
-    bodyWeight: '',
-    bodyFat: '',
-    bodyWater: '',
-    visceralFat: '',
-    physiqueRating: '',
+  const [bodyWeight, setBodyWeight] = useState('');
+  const [liftInputs, setLiftInputs] = useState({
+    Squat: { weight: '', reps: '1' },
+    Bench: { weight: '', reps: '1' },
+    Deadlift: { weight: '', reps: '1' },
   });
 
-  function updateBodyField(field, value) {
-    setBodyForm(prev => ({ ...prev, [field]: value }));
-  }
-
-  function updateOnboardingCalculator(lift, field, value) {
-    setOnboardingCalculators(prev => ({
+  function updateLiftInput(lift, field, value) {
+    setLiftInputs(prev => ({
       ...prev,
       [lift]: {
         ...(prev[lift] || {}),
@@ -8186,117 +8258,37 @@ function Onboarding({ onStart, t }) {
     }));
   }
 
-  function calculateOnboardingE1RM(lift, setter) {
+  function calculateStartingMax(lift) {
     const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
-    const calculator = onboardingCalculators[lift] || {};
-    const weightKg = displayWeightToKg(parseFloat(calculator.weight), selectedWeightUnit);
-    const reps = parseInt(calculator.reps, 10);
+    const input = liftInputs[lift] || {};
+    const weightKg = displayWeightToKg(parseFloat(input.weight), selectedWeightUnit);
+    const reps = parseInt(input.reps, 10);
 
-    if (!Number(weightKg) || !Number.isFinite(reps) || reps < 1) return;
+    if (!Number(weightKg) || !Number.isFinite(reps) || reps < 1 || reps > 12) return 0;
 
-    const estimatedE1RM = roundE1RM(weightKg * (1 + reps / 30));
-    const displayValue = kgToDisplayWeight(estimatedE1RM, selectedWeightUnit);
-
-    if (displayValue === '') return;
-
-    setter(formatWeightValue(displayValue, selectedWeightUnit));
-  }
-
-  function buildInitialBodyData() {
-    const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
-    const bodyWeightInput = toOptionalNumber(bodyForm.bodyWeight);
-    const bodyFat = toOptionalNumber(bodyForm.bodyFat);
-    const bodyWater = toOptionalNumber(bodyForm.bodyWater);
-    const visceralFat = toOptionalNumber(bodyForm.visceralFat);
-    const physiqueRating = toOptionalNumber(bodyForm.physiqueRating);
-    const bodyWeight = bodyWeightInput !== null ? displayWeightToKg(bodyWeightInput, selectedWeightUnit) : null;
-    const leanMass = calculateLeanMassEstimate(bodyWeight, bodyFat);
-
-    const bodyData = {
-      bodyWeight,
-      bodyFat,
-      bodyWater,
-      visceralFat,
-      leanMass,
-      physiqueRating,
-    };
-
-    return Object.values(bodyData).some(value => value !== null) ? bodyData : null;
-  }
-
-  function parseBirthDateInput(value) {
-    const trimmed = value.trim();
-    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (isoMatch) return trimmed;
-
-    const match = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
-    if (!match) return '';
-
-    const [, dayRaw, monthRaw, yearRaw] = match;
-    const day = Number(dayRaw);
-    const month = Number(monthRaw);
-    const year = Number(yearRaw);
-    const date = new Date(year, month - 1, day);
-
-    if (
-      date.getFullYear() !== year ||
-      date.getMonth() !== month - 1 ||
-      date.getDate() !== day
-    ) {
-      return '';
-    }
-
-    return `${yearRaw}-${monthRaw.padStart(2, '0')}-${dayRaw.padStart(2, '0')}`;
-  }
-
-  function hasRequiredTrainingDetails() {
-    const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
-    const squatKg = displayWeightToKg(parseFloat(squat), selectedWeightUnit);
-    const benchKg = displayWeightToKg(parseFloat(bench), selectedWeightUnit);
-    const deadliftKg = displayWeightToKg(parseFloat(deadlift), selectedWeightUnit);
-
-    return Boolean(squatKg && benchKg && deadliftKg);
-  }
-
-  function goToNextOnboardingStep() {
-    if (onboardingStep === 3 && !hasRequiredTrainingDetails()) {
-      setOnboardingError(t.fillRequiredFields);
-      return;
-    }
-
-    setOnboardingError('');
-    setOnboardingStep(step => Math.min(5, step + 1));
+    return reps === 1
+      ? weightKg
+      : roundE1RM(weightKg * (1 + reps / 30));
   }
 
   function handleStart() {
     const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
-    const s = displayWeightToKg(parseFloat(squat), selectedWeightUnit);
-    const b = displayWeightToKg(parseFloat(bench), selectedWeightUnit);
-    const d = displayWeightToKg(parseFloat(deadlift), selectedWeightUnit);
+    const startingBodyWeight = displayWeightToKg(parseFloat(bodyWeight), selectedWeightUnit);
+    const s = calculateStartingMax('Squat');
+    const b = calculateStartingMax('Bench');
+    const d = calculateStartingMax('Deadlift');
 
-    const normalizedBirthDate = birthDate ? parseBirthDateInput(birthDate) : '';
-
-    if (!s || !b || !d || (birthDate && !normalizedBirthDate)) {
+    if (!startingBodyWeight || !s || !b || !d) {
       setOnboardingError(t.fillRequiredFields);
       return;
     }
 
     setOnboardingError('');
     onStart(s, b, d, {
-      birthDate: normalizedBirthDate,
-      sex,
       weightUnit: selectedWeightUnit,
-      trainingModel: normalizeTrainingModel(onboardingTrainingModel),
-    }, buildInitialBodyData());
+      trainingModel: getNewUserTrainingModel(),
+    }, { bodyWeight: startingBodyWeight });
   }
-
-  const bodyFields = [
-    { key: 'bodyWeight', label: `${t.bodyweight} (${t.optional})`, unit: onboardingWeightUnit },
-    { key: 'bodyFat', label: `${t.bodyFatPercent} (${t.optional})`, unit: '%' },
-    { key: 'bodyWater', label: `${t.bodyWaterPercent} (${t.optional})`, unit: '%' },
-    { key: 'visceralFat', label: `${t.visceralFatRating} (${t.optional})` },
-    { key: 'physiqueRating', label: `${t.physiqueRating} (${t.optional})` },
-  ];
 
   return (
     <div style={{
@@ -8306,26 +8298,27 @@ function Onboarding({ onStart, t }) {
       overflowX: 'hidden'
     }}>
       <div style={{
+        ...balancedVerticalScreenStyle(0),
         maxWidth: 500,
         margin: '0 auto',
-        padding: 24,
-        paddingTop: 24,
+        padding: '14px 20px',
         boxSizing: 'border-box',
-        minHeight: '100dvh',
         fontFamily: 'sans-serif',
         background: '#000000',
         color: THEME.text,
-        overflowX: 'hidden'
+        overflowX: 'hidden',
+        rowGap: 'clamp(5px, 0.8dvh, 8px)',
       }}>
-      <div style={{ textAlign: 'center', marginBottom: 14 }}>
+      <div style={{ textAlign: 'center' }}>
         <img
-          src="/kelani-banner.png"
+          src="/icons/icon-512.webp"
           alt={t.appName}
           style={{
-            width: 'min(360px, 92vw)',
+            width: 108,
             height: 'auto',
             display: 'block',
-            margin: '0 auto 4px'
+            margin: '0 auto 4px',
+            borderRadius: 24,
           }}
         />
         <div style={{
@@ -8339,40 +8332,8 @@ function Onboarding({ onStart, t }) {
       </div>
 
       <div style={{
-        padding: 0
+        display: 'contents',
       }}>
-        {onboardingStep !== 1 && (
-          <h2 style={{ marginTop: 0, marginBottom: 8, color: THEME.text, textAlign: 'center' }}>
-            {onboardingStep === 2
-              ? t.onboardingModelTitle || 'Choose training model'
-              : onboardingStep === 3
-              ? t.onboardingTrainingTitle
-              : onboardingStep === 4
-              ? t.onboardingProfileTitle
-              : t.onboardingBodyTitle}
-          </h2>
-        )}
-
-        {onboardingStep !== 1 && (
-          <p style={{
-            margin: '0 0 14px',
-            color: THEME.muted,
-            fontSize: 14,
-            fontWeight: 700,
-            lineHeight: 1.4,
-            textAlign: 'center'
-          }}>
-            {onboardingStep === 2
-              ? t.onboardingModelHelp || 'Choose Classic for fixed programs or Smart for one-workout-at-a-time coaching.'
-              : onboardingStep === 3
-              ? t.onboardingMaxHelp
-              : onboardingStep === 4
-              ? t.onboardingProfileHelp
-              : t.onboardingBodyHelp}
-          </p>
-        )}
-
-
         {onboardingError && (
           <div style={{
             margin: '0 0 16px',
@@ -8390,180 +8351,98 @@ function Onboarding({ onStart, t }) {
           </div>
         )}
 
-        {onboardingStep === 1 && (
-          <div style={{ marginBottom: 26, textAlign: 'left' }}>
+          <div style={{ display: 'contents' }}>
             <h3 style={{
-              margin: '0 0 10px',
+              margin: 0,
               color: THEME.red,
-              fontSize: 30,
+              fontSize: 'clamp(20px, 6vw, 26px)',
               fontWeight: 900,
               lineHeight: 1.15,
-              textAlign: 'left'
+              textAlign: 'center',
+              whiteSpace: 'nowrap',
             }}>
               {t.onboardingHeroTitle}
             </h3>
 
             <p style={{
-              margin: '0 0 22px',
+              margin: '0 auto',
               maxWidth: 'none',
               color: THEME.text,
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: 800,
-              lineHeight: 1.55
+              lineHeight: 1.45,
+              textAlign: 'center',
             }}>
               {t.onboardingHeroText}
             </p>
+          </div>
 
-            <div style={{
-              display: 'grid',
-              gap: 8,
-              margin: '0 0 22px',
-              maxWidth: 'none',
-              textAlign: 'left'
-            }}>
-              {[t.onboardingBenefitWorkouts, t.onboardingBenefitProgress, t.onboardingBenefitMeetDay].map(item => (
-                <div key={item} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  color: THEME.text,
+        <div style={{ display: 'contents' }}>
+          <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateColumns: '120px 110px', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+            <label style={{ fontWeight: 800, color: THEME.text }}>
+              {t.weightUnit}
+            </label>
+            <select
+              value={onboardingWeightUnit}
+              onChange={e => setOnboardingWeightUnit(normalizeWeightUnit(e.target.value))}
+              style={{
+                width: '100%',
+                padding: 8,
+                fontSize: 15,
+                borderRadius: 5,
+                border: `1px solid ${THEME.primary}`,
+                boxSizing: 'border-box',
+                background: THEME.bg,
+                color: THEME.text,
+                textAlign: 'center',
+                textAlignLast: 'center',
+              }}
+            >
+              <option value={WEIGHT_UNITS.KG}>{t.weightUnitKg}</option>
+              <option value={WEIGHT_UNITS.LB}>{t.weightUnitLb}</option>
+            </select>
+          </div>
+
+          <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateColumns: '120px 110px', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+            <label htmlFor="onboarding-bodyweight" style={{ fontWeight: 800, color: THEME.text }}>
+              {t.bodyweight}
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input
+                id="onboarding-bodyweight"
+                type="number"
+                min="0"
+                step={onboardingWeightUnit === WEIGHT_UNITS.LB ? '1' : '0.1'}
+                value={bodyWeight}
+                onChange={e => setBodyWeight(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 38px 8px 9px',
                   fontSize: 15,
-                  fontWeight: 800
-                }}>
-                  <span style={{
-                    width: 18,
-                    height: 18,
-                    borderRadius: '50%',
-                    background: THEME.primary,
-                    color: THEME.bg,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 12,
-                    fontWeight: 900,
-                    flexShrink: 0
-                  }}>✓</span>
-                  <span>{item}</span>
-                </div>
-              ))}
-            </div>
-
-            <p style={{
-              margin: 0,
-              maxWidth: 'none',
-              color: THEME.muted,
-              fontSize: 13,
-              fontWeight: 700,
-              lineHeight: 1.55
-            }}>
-              {t.onboardingResponsibilityText}
-            </p>
-
-            <div style={{
-              marginTop: 20,
-              padding: '12px 14px',
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 10,
-              background: THEME.card,
-            }}>
-              <strong style={{ display: 'block', marginBottom: 6, color: THEME.text }}>
-                {t.migrationRestoreTitle}
-              </strong>
-              <p style={{
-                margin: '0 0 10px',
-                color: THEME.muted,
-                fontSize: 13,
-                fontWeight: 700,
-                lineHeight: 1.45,
-              }}>
-                {t.migrationRestoreDescription}
-              </p>
-              <DataSection t={t} importOnly={true} />
+                  borderRadius: 5,
+                  border: `1px solid ${THEME.primary}`,
+                  boxSizing: 'border-box',
+                  background: THEME.bg,
+                  color: THEME.text,
+                }}
+              />
+              <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: THEME.muted, fontSize: 13, pointerEvents: 'none' }}>
+                {onboardingWeightUnit}
+              </span>
             </div>
           </div>
-        )}
 
-        {onboardingStep === 2 && (
-          <div style={{ display: 'grid', gap: 10 }}>
-            {[
-              {
-                value: TRAINING_MODELS.CLASSIC,
-                title: t.trainingModelClassic || 'Kelani SBD Classic',
-                text: t.trainingModelClassicText || 'Choose a fixed program and follow the plan.',
-              },
-              {
-                value: TRAINING_MODELS.SMART,
-                title: t.trainingModelSmart || 'Kelani SBD Smart',
-                text: t.trainingModelSmartText || 'The app chooses one next workout at a time from your history.',
-              },
-            ].map(option => {
-              const active = normalizeTrainingModel(onboardingTrainingModel) === option.value;
-
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setOnboardingTrainingModel(option.value)}
-                  style={{
-                    width: '100%',
-                    padding: 12,
-                    fontSize: 15,
-                    fontWeight: 800,
-                    textAlign: 'left',
-                    borderRadius: 8,
-                    border: `1px solid ${THEME.primary}`,
-                    background: active ? THEME.primary : THEME.bg,
-                    color: active ? THEME.bg : THEME.text,
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div style={{ fontWeight: 900 }}>{option.title}</div>
-                  <div style={{
-                    marginTop: 4,
-                    color: active ? THEME.bg : THEME.muted,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    lineHeight: 1.35
-                  }}>
-                    {option.text}
-                  </div>
-                </button>
-              );
-            })}
+          <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateColumns: '76px minmax(0, 1fr) 68px', gap: 8, color: THEME.muted, fontSize: 11, fontWeight: 800, textAlign: 'center' }}>
+            <span />
+            <span>{t.weight}</span>
+            <span>{t.reps}</span>
           </div>
-        )}
-
-        {onboardingStep === 3 && (
-          <>
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
-            {t.weightUnit}
-          </label>
-
-          <select
-            value={onboardingWeightUnit}
-            onChange={e => setOnboardingWeightUnit(normalizeWeightUnit(e.target.value))}
-            style={{
-              width: '100%',
-              padding: 10,
-              fontSize: 16,
-              borderRadius: 4,
-              border: `1px solid ${THEME.primary}`,
-              boxSizing: 'border-box',
-              background: THEME.bg,
-              color: THEME.text
-            }}
-          >
-            <option value={WEIGHT_UNITS.KG}>{t.weightUnitKg}</option>
-            <option value={WEIGHT_UNITS.LB}>{t.weightUnitLb}</option>
-          </select>
-        </div>
 
         {[
-          ['Squat', t.squat1RM, squat, setSquat],
-          ['Bench', t.bench1RM, bench, setBench],
-          ['Deadlift', t.deadlift1RM, deadlift, setDeadlift],
-        ].map(([lift, label, val, setter]) => {
+          ['Squat', t.squat],
+          ['Bench', t.bench],
+          ['Deadlift', t.deadlift],
+        ].map(([lift, label]) => {
           const liftColor = lift === 'Squat'
             ? THEME.red
             : lift === 'Deadlift'
@@ -8574,29 +8453,31 @@ function Onboarding({ onStart, t }) {
           <div
             key={lift}
             style={{
-              marginBottom: 16,
-              padding: 10,
-              borderRadius: 10,
-              border: `1px solid ${liftColor}`,
-              background: THEME.bg
+              display: 'grid',
+              width: '100%',
+              maxWidth: 400,
+              margin: '0 auto',
+              gridTemplateColumns: '76px minmax(0, 1fr) 68px',
+              alignItems: 'center',
+              gap: 8,
             }}
           >
-            <label style={{ display: 'block', marginBottom: 10, fontWeight: 800, color: liftColor }}>
+            <label style={{ fontWeight: 900, color: liftColor }}>
               {label}
             </label>
-
-            <div style={{ position: 'relative', marginBottom: 10 }}>
+            <div style={{ position: 'relative' }}>
               <input
                 type="number"
+                aria-label={`${label} ${t.weight}`}
                 min="0"
                 step={onboardingWeightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"}
-                value={val}
-                onChange={e => setter(e.target.value)}
+                value={liftInputs[lift]?.weight || ''}
+                onChange={e => updateLiftInput(lift, 'weight', e.target.value)}
                 style={{
                   width: '100%',
-                  padding: '10px 42px 10px 10px',
-                  fontSize: 16,
-                  borderRadius: 4,
+                  padding: '8px 36px 8px 9px',
+                  fontSize: 15,
+                  borderRadius: 5,
                   border: `1px solid ${liftColor}`,
                   boxSizing: 'border-box',
                   background: THEME.bg,
@@ -8607,249 +8488,52 @@ function Onboarding({ onStart, t }) {
                 position: 'absolute',
                 right: 12,
                 top: '50%',
-                color: THEME.text,
-                fontSize: 16,
+                transform: 'translateY(-50%)',
+                color: THEME.muted,
+                fontSize: 13,
                 pointerEvents: 'none'
               }}>
                 {onboardingWeightUnit}
               </span>
             </div>
-
-            <div style={{ background: THEME.bg, border: `1px solid ${liftColor}`, borderRadius: 8, padding: 10 }}>
-              <div style={{ fontWeight: 800, fontSize: 13, color: liftColor, marginBottom: 8 }}>
-                {t.estimateE1RM}
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                <input
-                  type="number"
-                  min="0"
-                  step={onboardingWeightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"}
-                  value={onboardingCalculators[lift]?.weight || ''}
-                  onChange={e => updateOnboardingCalculator(lift, 'weight', e.target.value)}
-                  placeholder={t.submaxWeight}
-                  style={{
-                    width: '100%',
-                    padding: 10,
-                    fontSize: 15,
-                    borderRadius: 4,
-                    border: `1px solid ${liftColor}`,
-                    boxSizing: 'border-box',
-                    background: THEME.bg,
-                    color: THEME.text
-                  }}
-                />
-
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={onboardingCalculators[lift]?.reps || ''}
-                  onChange={e => updateOnboardingCalculator(lift, 'reps', e.target.value)}
-                  placeholder={t.submaxReps}
-                  style={{
-                    width: '100%',
-                    padding: 10,
-                    fontSize: 15,
-                    borderRadius: 4,
-                    border: `1px solid ${liftColor}`,
-                    boxSizing: 'border-box',
-                    background: THEME.bg,
-                    color: THEME.text
-                  }}
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => calculateOnboardingE1RM(lift, setter)}
-                style={{
-                  width: '100%',
-                  padding: 9,
-                  fontSize: 14,
-                  fontWeight: 800,
-                  background: 'transparent',
-                  color: THEME.text,
-                  border: `1px solid ${liftColor}`,
-                  borderRadius: 6,
-                  cursor: 'pointer'
-                }}
-              >
-                {t.calculateE1RM}
-              </button>
-            </div>
-          </div>
-          );
-        })}
-          </>
-        )}
-
-        {onboardingStep === 4 && (
-          <>
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
-            {t.birthDate}
-          </label>
-
-          <div
-            onClick={e => {
-              const input = e.currentTarget.querySelector('input[type="date"]');
-              if (input?.showPicker) {
-                input.showPicker();
-              } else {
-                input?.focus();
-                input?.click();
-              }
-            }}
-            style={{
-              position: 'relative',
-              width: '100%',
-              height: 42,
-              borderRadius: 4,
-              border: `1px solid ${THEME.primary}`,
-              boxSizing: 'border-box',
-              background: THEME.bg,
-              cursor: 'pointer'
-            }}
-          >
-            <div style={{
-              padding: '10px 42px 10px 10px',
-              fontSize: 16,
-              color: birthDate ? THEME.text : 'transparent',
-              boxSizing: 'border-box'
-            }}>
-              {birthDate || ' '}
-            </div>
-
-            <span style={{
-              position: 'absolute',
-              right: 12,
-              top: '50%',
-              color: THEME.text,
-              fontSize: 16,
-              pointerEvents: 'none'
-            }}>
-              📅
-            </span>
-
             <input
-              type="date"
-              value={birthDate}
-              onChange={e => setBirthDate(e.target.value)}
+              type="number"
+              aria-label={`${label} ${t.reps}`}
+              min="1"
+              max="12"
+              step="1"
+              value={liftInputs[lift]?.reps || ''}
+              onChange={e => updateLiftInput(lift, 'reps', e.target.value)}
               style={{
-                position: 'absolute',
-                inset: 0,
                 width: '100%',
-                height: '100%',
-                opacity: 0,
-                pointerEvents: 'none'
+                padding: '8px 7px',
+                fontSize: 15,
+                textAlign: 'center',
+                borderRadius: 5,
+                border: `1px solid ${liftColor}`,
+                boxSizing: 'border-box',
+                background: THEME.bg,
+                color: THEME.text,
               }}
             />
           </div>
+          );
+        })}
         </div>
-
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
-            {t.sex}
-          </label>
-
-          <select
-            value={sex}
-            onChange={e => setSex(e.target.value)}
-            style={{
-              width: '100%',
-              padding: 10,
-              fontSize: 16,
-              borderRadius: 4,
-              border: `1px solid ${THEME.primary}`,
-              boxSizing: 'border-box',
-              background: THEME.bg,
-              color: THEME.text
-            }}
-          >
-            <option value="">{t.selectSex}</option>
-            <option value="male">{t.male}</option>
-            <option value="female">{t.female}</option>
-            <option value="other">{t.other}</option>
-          </select>
-        </div>
-          </>
-        )}
-
-        {onboardingStep === 5 && (
-          <>
-        {bodyFields.map(field => (
-          <div key={field.key} style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', marginBottom: 10, fontWeight: 500, color: THEME.text }}>
-              {field.label}
-            </label>
-
-            <div style={{ position: 'relative' }}>
-              <input
-                type="number"
-                value={bodyForm[field.key]}
-                onChange={e => updateBodyField(field.key, e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: field.unit ? '10px 48px 10px 10px' : 10,
-                  fontSize: 16,
-                  borderRadius: 4,
-                  border: `1px solid ${THEME.primary}`,
-                  boxSizing: 'border-box',
-                  background: THEME.bg,
-                  color: THEME.text
-                }}
-              />
-              {field.unit && (
-                <span style={{
-                  position: 'absolute',
-                  right: 12,
-                  top: '50%',
-                  color: THEME.text,
-                  fontSize: 16,
-                  pointerEvents: 'none'
-                }}>
-                  {field.unit}
-                </span>
-              )}
-            </div>
-          </div>
-        ))}
-          </>
-        )}
 
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: onboardingStep === 1 ? '1fr' : '1fr 1fr',
+          display: 'flex',
+          justifyContent: 'center',
           gap: 8,
-          marginTop: 8
+          margin: 0,
         }}>
-          {onboardingStep > 1 && (
-            <button
-              type="button"
-              onClick={() => { setOnboardingError(''); setOnboardingStep(step => Math.max(1, step - 1)); }}
-              style={{
-                width: '100%',
-                padding: 14,
-                fontSize: 16,
-                background: 'transparent',
-                color: THEME.text,
-                border: `1px solid ${THEME.primary}`,
-                borderRadius: 4,
-                cursor: 'pointer',
-                fontWeight: 700
-              }}
-            >
-              {t.onboardingBack}
-            </button>
-          )}
-
+          <DataSection t={t} importOnly={true} triggerOnly={true} />
           <button
             type="button"
-            onClick={onboardingStep < 5 ? goToNextOnboardingStep : handleStart}
+            onClick={handleStart}
             style={{
-              width: '100%',
-              padding: 14,
+              width: 'min(150px, calc(50vw - 28px))',
+              padding: '11px 20px',
               fontSize: 16,
               background: THEME.primary,
               color: '#ffffff',
@@ -8859,7 +8543,7 @@ function Onboarding({ onStart, t }) {
               fontWeight: 700
             }}
           >
-            {onboardingStep === 1 ? t.onboardingStartSetup : onboardingStep < 5 ? t.onboardingNext : t.startProgram}
+            {t.onboardingStartSetup}
           </button>
         </div>
       </div>
@@ -9114,6 +8798,8 @@ function App() {
 
   const t = translations[language];
   const [screen, setScreen] = useState(null);
+  const appViewportRef = useRef(null);
+  const [workoutNeedsNavClearance, setWorkoutNeedsNavClearance] = useState(false);
   const [workouts, setWorkouts] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [currentWorkoutIndex, setCurrentWorkoutIndex] = useState(0);
@@ -9137,6 +8823,35 @@ function App() {
   const [plateCalcWeightKg, setPlateCalcWeightKg] = useState(null);
   const automaticBackupKeyRef = useRef(null);
   const automaticBackupStartupAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    if (screen !== 'current') {
+      setWorkoutNeedsNavClearance(false);
+      return undefined;
+    }
+
+    const viewport = appViewportRef.current;
+    const workoutContent = viewport?.firstElementChild;
+    if (!viewport || !workoutContent) return undefined;
+
+    const measure = () => {
+      const contentHeight = workoutContent.getBoundingClientRect().height;
+      const availableAboveNav = viewport.clientHeight - BOTTOM_NAV_SPACE;
+      setWorkoutNeedsNavClearance(contentHeight > availableAboveNav + 0.5);
+    };
+
+    measure();
+    window.addEventListener('resize', measure);
+    const observer = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(measure)
+      : null;
+    observer?.observe(workoutContent);
+
+    return () => {
+      window.removeEventListener('resize', measure);
+      observer?.disconnect();
+    };
+  }, [screen, selectedIndex, workouts]);
 
   useEffect(() => {
     if (!workouts.length) return;
@@ -9496,7 +9211,7 @@ function App() {
     localStorage.removeItem('app_version');
 
     const selectedWeightUnit = normalizeWeightUnit(profile.weightUnit || weightUnit);
-    const defaultTrainingModel = getNewUserTrainingModel(profile.trainingModel);
+    const defaultTrainingModel = getNewUserTrainingModel();
     const defaultProgramProfile = 'kelaniSbd';
     const defaultSettings = settingsForProgramProfile(defaultProgramProfile);
     const defaultAccessoryMode = defaultSettings.accessoryMode;
@@ -9600,14 +9315,12 @@ function App() {
     setScreen('dashboard');
   }
 
-function changeTrainingModel(nextModel) {
-  const normalizedModel = normalizeTrainingModel(nextModel);
-  setTrainingModel(normalizedModel);
+function switchClassicToSmart() {
+  if (!canSwitchClassicToSmart(trainingModel, workouts[currentIndex])) return;
 
-  if (isSmartTrainingModel(normalizedModel)) {
-    const safeIndex = Math.max(0, Math.min(currentIndex, Math.max(workouts.length - 1, 0)));
-    setSelectedIndex(safeIndex);
-  }
+  setTrainingModel(TRAINING_MODELS.SMART);
+  const safeIndex = Math.max(0, Math.min(currentIndex, Math.max(workouts.length - 1, 0)));
+  setSelectedIndex(safeIndex);
 }
 
 function handleResetApp() {
@@ -9638,7 +9351,7 @@ function handleResetApp() {
   setCompletedSummary(null);
   setCurrentCycle(1);
   setBodyWeights([]);
-  setTrainingModel(TRAINING_MODELS.CLASSIC);
+  setTrainingModel(TRAINING_MODELS.SMART);
   setAccessoryMode('off');
   setPreparationMode('off');
   setSquatVariant('standard');
@@ -12581,13 +12294,17 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
 });
 
     return (
-  <div style={{
-    paddingBottom: 70,
+  <div ref={appViewportRef} style={{
+    paddingBottom: screen === 'current' && !workoutNeedsNavClearance
+      ? 0
+      : BOTTOM_NAV_SPACE,
     boxSizing: 'border-box',
     background: THEME.bg,
     minHeight: '100dvh',
+    height: screen === 'current' ? '100dvh' : undefined,
     color: THEME.text,
-    overflowX: 'hidden'
+    overflowX: 'hidden',
+    overflowY: screen === 'current' ? 'auto' : undefined,
   }}>
       {screen === 'current' && (
         <CurrentWorkout
@@ -12644,6 +12361,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       if (event.key === 'Enter' || event.key === ' ') changeScreen('current');
     } : undefined}
     style={{
+      ...balancedVerticalScreenStyle(),
       maxWidth: 500,
       margin: '0 auto',
       padding: '12px 14px 16px',
@@ -13107,7 +12825,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
 )}
 
       {screen === 'settings' && (
-       <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
+       <div style={{ ...balancedVerticalScreenStyle(), display: 'flex', flexDirection: 'column', maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
   <AppHeader
     t={t}
     title={t.settings}
@@ -13119,7 +12837,10 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
     borderRadius: 8,
     padding: '0 8px',
     marginTop: 10,
-    marginBottom: 6
+    marginBottom: 6,
+    flex: 1,
+    display: 'grid',
+    alignContent: 'space-evenly',
   }}>
     <ProfileSection
       userProfile={userProfile}
@@ -13143,7 +12864,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
 
     <ModelSection
       trainingModel={trainingModel}
-      setTrainingModel={changeTrainingModel}
+      switchToSmart={switchClassicToSmart}
+      switchBlocked={!canSwitchClassicToSmart(trainingModel, workouts[currentIndex])}
       t={t}
     />
 
@@ -13176,7 +12898,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
     margin: '0 auto',
     padding: '20px 24px 16px',
     boxSizing: 'border-box',
-    height: 'calc(100dvh - 70px)',
+    height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
     background: THEME.bg,
     color: THEME.text,
     fontFamily: 'sans-serif',

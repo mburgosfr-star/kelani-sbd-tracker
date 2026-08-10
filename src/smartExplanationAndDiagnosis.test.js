@@ -493,21 +493,23 @@ test("a lift forced light on a single-lift day (heavy weekly slot already used) 
     lift: 'Bench',
     role: 'secondary',
     labelKey: 'workSets',
-    reps: 5,
+    reps: 4,
     previousPct: 0,
-    currentPct: 0.7,
+    currentPct: 0.6,
     volumeCount: 6,
-    volumeReps: 5,
-    volumePct: 0.7,
+    volumeReps: 4,
+    volumePct: 0.6,
     repeatVariationApplied: false,
   });
+  bench.intensityRole = 'light';
   bench.sets = Array.from({ length: 6 }, () => ({
     lift: 'Bench',
     labelKey: 'workSets',
-    reps: 5,
-    pct: 0.7,
+    reps: 4,
+    pct: 0.6,
     weight: 25,
   }));
+  bench.smartPrescription.intensityRole = 'light';
   bench.smartPrescription.gridItemCount = 6;
 
   const [row] = getSmartPrescriptionDetailRows(
@@ -518,6 +520,39 @@ test("a lift forced light on a single-lift day (heavy weekly slot already used) 
   expect(row.value).toContain(
     "This lift's heavy slot is already used this week, so it's intentionally lighter today."
   );
+});
+
+test("a planned medium single-lift day explains that it fills the remaining weekly target", () => {
+  const deadlift = smartLift({
+    lift: 'Deadlift',
+    role: 'secondary',
+    labelKey: 'workSets',
+    reps: 4,
+    previousPct: 0,
+    currentPct: 0.65,
+    volumeCount: 5,
+    volumeReps: 4,
+    volumePct: 0.65,
+    repeatVariationApplied: false,
+  });
+  deadlift.intensityRole = 'medium';
+  deadlift.sets = Array.from({ length: 6 }, () => ({
+    lift: 'Deadlift',
+    labelKey: 'workSets',
+    reps: 4,
+    pct: 0.65,
+    weight: 115,
+  }));
+  deadlift.smartPrescription.intensityRole = 'medium';
+  deadlift.smartPrescription.gridItemCount = 6;
+
+  const [row] = getSmartPrescriptionDetailRows(workoutWith([deadlift]));
+
+  expect(row.value).toContain('6×4×65%');
+  expect(row.value).toContain(
+    "This lift's heavy slot is already used this week. Today's medium session fills its remaining weekly target."
+  );
+  expect(row.value).not.toContain('intentionally lighter today');
 });
 
 test('builds a copyable diagnosis with decision, projection and technical proof', () => {

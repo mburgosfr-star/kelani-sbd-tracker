@@ -1142,6 +1142,20 @@ export function constrainSmartWorkoutByFrequency({
 // keep being used exactly as before) so nothing existing changes behavior.
 export function getSmartIntensityRole(liftBlock = {}) {
   const explicitRole = String(liftBlock.intensityRole || '').toLowerCase();
+  const intendedIntensity = explicitRole.includes('heavy')
+    ? 'heavy'
+    : explicitRole.includes('medium')
+      ? 'medium'
+      : explicitRole.includes('light')
+        ? 'light'
+        : null;
+  const preserveIntendedFloor = measuredIntensity => (
+    intendedIntensity &&
+    SMART_INTENSITY_POINTS[intendedIntensity] >
+      SMART_INTENSITY_POINTS[measuredIntensity]
+      ? intendedIntensity
+      : measuredIntensity
+  );
   const role = [
     liftBlock.trainingRole,
     liftBlock.smartRole,
@@ -1189,12 +1203,18 @@ export function getSmartIntensityRole(liftBlock = {}) {
       hasTopSet ||
       highestWorkPct >= 0.80 ||
       totalLoad >= SMART_INTENSITY_LOAD_THRESHOLDS.heavy
-    ) return 'heavy';
+    ) return preserveIntendedFloor('heavy');
     if (
       highestWorkPct >= 0.75 ||
       totalLoad >= SMART_INTENSITY_LOAD_THRESHOLDS.medium
-    ) return 'medium';
-    return 'light';
+    ) return preserveIntendedFloor('medium');
+    // Generated prescriptions deliberately attach an intended three-way
+    // intensity role before their concrete sets are built. Keep that role
+    // as a floor: the ordinary medium prescription is capped at 4 reps and
+    // 65%, so 6x4 can sit just below the generic dose threshold even though
+    // it is the lift's scheduled medium exposure. Measured dose can still
+    // upgrade an accidentally overloaded light/medium block.
+    return preserveIntendedFloor('light');
   }
 
   if (explicitRole.includes('heavy')) return 'heavy';

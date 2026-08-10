@@ -191,6 +191,17 @@ describe('getSmartIntensityRole', () => {
     })).toBe('light');
   });
 
+  test('keeps the planned medium floor for the reported 6x4x65% Deadlift session', () => {
+    expect(getSmartIntensityRole({
+      lift: 'Deadlift',
+      role: 'secondary',
+      intensityRole: 'medium',
+      sets: Array.from({ length: 6 }, () => ({
+        labelKey: 'workSets', pct: 0.65, reps: 4, weight: 115,
+      })),
+    })).toBe('medium');
+  });
+
   test('separates the W36-style 6×4×75% medium dose from W41-style 6×4×66% light work', () => {
     expect(getSmartIntensityRole({
       lift: 'Squat',
