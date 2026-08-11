@@ -5,7 +5,7 @@ import {
   EXPOSURE_TARGETS_BY_LEVEL,
   SMART_LIFTS,
 } from './smartPrescriptionEngine';
-import { constrainSmartWorkoutByFrequency, getSmartFrequencyPolicyDecision, roundBarbellWeight, normalizeAthleteLevel, getSmartFrequencyScoreTargets, computeSmartFrequencyScoreState } from './smartFrequencyPolicy';
+import { constrainSmartWorkoutByFrequency, getSmartFrequencyPolicyDecision, getSmartIntensityRole, roundBarbellWeight, normalizeAthleteLevel, getSmartFrequencyScoreTargets, computeSmartFrequencyScoreState } from './smartFrequencyPolicy';
 import {
   TRAINING_MODELS,
   SMART_DAY_TYPES,
@@ -3037,8 +3037,9 @@ export function getProjectedSmartLiftEligibility({
 const SMART_LIFT_GRID_COLUMNS = 4;
 const SMART_LIGHT_MAX_TOTAL_WORK_REPS = 24;
 const SMART_LIGHT_MAX_LOADED_PCT = 0.60;
-const SMART_MEDIUM_MAX_REPS_PER_SET = 4;
-const SMART_MEDIUM_LOADED_PCT = 0.65;
+const SMART_MEDIUM_MAX_TOTAL_WORK_REPS = 24;
+const SMART_MEDIUM_LOADED_PCT = 0.70;
+const SMART_MEDIUM_MIN_NORMAL_PLANNED_PCT = 0.65;
 
 export function reshapeSmartTopSetBackoffReps({ sets = [], trainingMax = 0 } = {}) {
   const topSet = (sets || []).find(set => isTopSetLabel(set?.labelKey));
@@ -3124,25 +3125,60 @@ export function constrainExplicitLightLiftDose({ sets = [], trainingMax = 0 } = 
   }).filter(Boolean);
 }
 
-export function constrainExplicitMediumLiftDose({ sets = [], trainingMax = 0 } = {}) {
+export function constrainExplicitMediumLiftDose({
+  sets = [],
+  trainingMax = 0,
+  preserveLowerDose = false,
+} = {}) {
   if (Number(trainingMax) <= 0) return sets;
 
-  return sets.map(set => {
+  const isVolumeSet = set => {
     const label = String(set?.labelKey || '').toLowerCase();
-    if (label !== 'backoff' && label !== 'worksets') return set;
+    return label === 'backoff' || label === 'worksets';
+  };
+  const volumeSetCount = sets.filter(isVolumeSet).length;
+  if (volumeSetCount === 0) return sets;
 
-    const oldReps = Number(set.reps) || SMART_MEDIUM_MAX_REPS_PER_SET;
-    const reps = Math.max(oldReps, SMART_MEDIUM_MAX_REPS_PER_SET);
-    const pct = Math.min(Number(set.pct) || SMART_MEDIUM_LOADED_PCT, SMART_MEDIUM_LOADED_PCT);
-    const maxLoadedWeight = Math.floor(
-      (Number(trainingMax) * pct + 2.5) / 5
-    ) * 5;
-    const weight = maxLoadedWeight;
-    const loadedPct = weight > 0 ? weight / Number(trainingMax) : pct;
+  // Keep medium below the heavy-dose boundary even when an older volume
+  // anchor supplies six reps across a six-set grid. Medium and light can
+  // share the same maximum rep count; their load is what separates them.
+  const maxRepsPerSet = Math.max(
+    4,
+    Math.min(6, Math.floor(SMART_MEDIUM_MAX_TOTAL_WORK_REPS / volumeSetCount))
+  );
+  let remainingWorkReps = SMART_MEDIUM_MAX_TOTAL_WORK_REPS;
+  const repConstrainedSets = sets.map(set => {
+    if (!isVolumeSet(set)) return set;
+
+    const reps = Math.min(
+      Math.max(Number(set.reps) || 4, 4),
+      maxRepsPerSet,
+      remainingWorkReps
+    );
+    remainingWorkReps -= reps;
+    return { ...set, reps };
+  }).filter(set => !isVolumeSet(set) || Number(set.reps) > 0);
+
+  const volumeSets = repConstrainedSets.filter(isVolumeSet);
+  const plannedPct = Math.max(...volumeSets.map(set =>
+    Number(set.precisePct ?? set.pct) || 0
+  ));
+
+  // Medium uses a stable 70% target so it stays meaningfully separated
+  // from the 60% light ceiling without making short blocks or low training
+  // maxes jump disproportionately. When the caller identifies a deliberate
+  // recovery response, preserve its genuinely lowered dose below 65%.
+  const targetPct = preserveLowerDose && plannedPct < SMART_MEDIUM_MIN_NORMAL_PLANNED_PCT
+    ? plannedPct
+    : SMART_MEDIUM_LOADED_PCT;
+  const weight = roundBarbellWeight(Number(trainingMax) * targetPct);
+  const loadedPct = weight > 0 ? weight / Number(trainingMax) : targetPct;
+
+  return repConstrainedSets.map(set => {
+    if (!isVolumeSet(set)) return set;
 
     return {
       ...set,
-      reps,
       pct: loadedPct,
       precisePct: loadedPct,
       weight,
@@ -3552,6 +3588,11 @@ export function buildGeneratedSmartTrainingWorkout({
     selectedLifts.map((selection, selectionIndex) => {
     const isExplicitLightLift = selection.intensityRole === 'light';
     const isExplicitMediumLift = selection.intensityRole === 'medium';
+    const preserveLowerMediumDose = [
+      'failed-skipped',
+      'too-much',
+      'light-volume-failure-recovery',
+    ].includes(liftStates[selection.lift]?.progression?.reason);
     const prescription = buildSmartLiftPrescription({
       state: liftStates[selection.lift],
       role: selection.role,
@@ -3618,6 +3659,7 @@ export function buildGeneratedSmartTrainingWorkout({
         ? constrainExplicitMediumLiftDose({
           sets: completedSets,
           trainingMax: trainingMaxes[selection.lift],
+          preserveLowerDose: preserveLowerMediumDose,
         })
       : completedSets;
     const lightWorkWeights = doseConstrainedSets
@@ -3668,6 +3710,7 @@ export function buildGeneratedSmartTrainingWorkout({
         : constrainExplicitMediumLiftDose({
           sets: doseConstrainedSets,
           trainingMax: trainingMaxes[selection.lift],
+          preserveLowerDose: preserveLowerMediumDose,
         });
       completedWarmups = generateWarmups(
         doseConstrainedSets,
@@ -3730,11 +3773,18 @@ export function buildGeneratedSmartTrainingWorkout({
     const includePreparation =
       selectionIndex === 0 ||
       normalizedPreparationMode === 'basicAll';
+    // A recovery-preserved dose can occupy a slot that was originally due
+    // to be medium while measuring as light. Store what was actually
+    // prescribed so the dashboard and next frequency window do not award
+    // medium credit for recovery-like work.
+    const finalIntensityRole = preserveLowerMediumDose
+      ? getSmartIntensityRole({ sets: doseConstrainedSets })
+      : selection.intensityRole;
 
     const liftBlock = {
       lift: selection.lift,
       role: selection.role,
-      intensityRole: selection.intensityRole,
+      intensityRole: finalIntensityRole,
       sets: doseConstrainedSets,
       warmups: completedWarmups,
       prepItems: includePreparation
@@ -3742,7 +3792,7 @@ export function buildGeneratedSmartTrainingWorkout({
         : [],
       smartPrescription: {
         role: selection.role,
-        intensityRole: selection.intensityRole,
+        intensityRole: finalIntensityRole,
         priorityScore: selection.priority.score,
         progressionAnchorPct:
           prescription.progressionAnchorPct || 0,

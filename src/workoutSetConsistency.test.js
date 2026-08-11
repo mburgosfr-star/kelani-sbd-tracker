@@ -57,7 +57,8 @@ test('gives every grouped set its own weight label and reps value', () => {
   const reps = view.getAllByTestId('workout-circle-reps');
   expect(reps.map(node => node.textContent)).toEqual(['3', '3']);
   expect(view.queryByText('3 × 125 kg (70%)')).toBeNull();
-  expect(view.getByTestId('workout-set-group-action-grid').style.gap).toBe('8px');
+  expect(view.getByTestId('workout-set-group-action-grid').style.gap)
+    .toBe('clamp(8px, 2vw, 10px)');
   expect(view.getByTestId('workout-circle-status')).toHaveTextContent('✓');
 });
 

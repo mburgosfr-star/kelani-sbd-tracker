@@ -305,22 +305,43 @@ function secondaryLiftBlock(lift, { volumePct = 0.75, volumeReps = 6, volumeCoun
   };
 }
 
-test("explains a light day as a clear, short 'light intensity day' when every lift is secondary, instead of implying a heavy lift exists elsewhere", () => {
-  // C3W36 boundary: once neither Squat nor Bench was due for its
-  // heavy exposure this week, BOTH became 'secondary' role - but the old
-  // copy ("Lower volume for the secondary lift") implicitly claims some
-  // OTHER lift in the workout is the heavy one today, which is wrong when
-  // nothing is heavy. His follow-up: the first replacement copy ("No lift is
-  // due for its heavy exposure this week...") was itself "stom en onduidelijk"
-  // (dumb and unclear) - he asked for something short and plain instead.
+test('explains genuinely light secondary lifts from their dose', () => {
   const rows = getSmartPrescriptionDetailRows(
-    workoutWith([secondaryLiftBlock('Squat'), secondaryLiftBlock('Bench')])
+    workoutWith([
+      secondaryLiftBlock('Squat', { volumePct: 0.60, volumeReps: 4, volumeCount: 6 }),
+      secondaryLiftBlock('Bench', { volumePct: 0.60, volumeReps: 4, volumeCount: 6 }),
+    ])
   );
 
   expect(rows).toHaveLength(2);
   rows.forEach(row => {
-    expect(row.value).toContain('Light intensity day.');
+    expect(row.value).toContain('Light intensity.');
     expect(row.value).not.toContain('Lower volume for the secondary lift');
+  });
+});
+
+test('C3W43 secondary roles are both explained as medium from their prescribed dose', () => {
+  const squat = secondaryLiftBlock('Squat', {
+    volumePct: 100 / 145,
+    volumeReps: 4,
+    volumeCount: 6,
+  });
+  const bench = secondaryLiftBlock('Bench', {
+    volumePct: 0.70,
+    volumeReps: 4,
+    volumeCount: 6,
+  });
+  squat.intensityRole = 'medium';
+  bench.intensityRole = 'medium';
+  squat.smartPrescription.intensityRole = 'medium';
+  bench.smartPrescription.intensityRole = 'medium';
+
+  const rows = getSmartPrescriptionDetailRows(workoutWith([squat, bench]));
+
+  expect(rows).toHaveLength(2);
+  rows.forEach(row => {
+    expect(row.value).toContain('Medium intensity.');
+    expect(row.value).not.toContain('Light intensity');
   });
 });
 
@@ -469,7 +490,7 @@ test('explains secondary volume without inventing top-set progress', () => {
 
   expect(row.value).toContain('4×4×75%');
   expect(row.value).toContain(
-    'Medium total intensity from the combination of sets, reps and percentage.'
+    'Medium intensity.'
   );
   expect(row.value).not.toContain('→');
 });
@@ -484,7 +505,7 @@ test('explains W41-style secondary squat from its measured light intensity, not 
 
   const [row] = getSmartPrescriptionDetailRows(workoutWith([squat, bench]));
 
-  expect(row.value).toContain('Light total intensity from the combination of sets, reps and percentage.');
+  expect(row.value).toContain('Light intensity.');
   expect(row.value).not.toContain('Lower volume');
 });
 

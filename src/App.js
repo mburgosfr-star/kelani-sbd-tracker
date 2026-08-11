@@ -544,23 +544,82 @@ function balancedVerticalScreenStyle(bottomOffset = BOTTOM_NAV_SPACE) {
   };
 }
 
+const RESPONSIVE_CONTENT_UI = Object.freeze({
+  screenPadding: 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px',
+  headerTitleFontSize: 'clamp(30px, 7vw, 36px)',
+  headerSubtitleFontSize: 'clamp(15px, 3.4vw, 17px)',
+  bodyFontSize: 'clamp(14px, 3.4vw, 17px)',
+  compactFontSize: 'clamp(11px, 2.7vw, 14px)',
+});
+
+const RESPONSIVE_STATS_UI = Object.freeze({
+  tabGap: 'clamp(5px, 1.5vw, 8px)',
+  tabFontSize: 'clamp(13px, 3.2vw, 16px)',
+  tabMinHeight: 'clamp(38px, 5dvh, 42px)',
+  cardGap: 'clamp(4px, 0.8dvh, 8px)',
+  cardPadding: 'clamp(3px, 1.2vw, 6px)',
+  chartTitleFontSize: 'clamp(16px, 3.8vw, 19px)',
+  chartTitleHeight: 'clamp(28px, 4dvh, 34px)',
+  chartMinHeight: 108,
+});
+
+const RESPONSIVE_SETTINGS_UI = Object.freeze({
+  rowGap: 'clamp(8px, 2vw, 12px)',
+  rowPadding: 'clamp(5px, 0.8dvh, 8px) 0',
+  labelFontSize: 'clamp(16px, 4vw, 20px)',
+  descriptionFontSize: 'clamp(13px, 3.2vw, 16px)',
+  valueFontSize: 'clamp(15px, 3.7vw, 18px)',
+  buttonFontSize: 'clamp(15px, 3.7vw, 18px)',
+  buttonMinHeight: 'clamp(44px, 5.5dvh, 52px)',
+  modalTitleFontSize: 'clamp(20px, 4.8vw, 24px)',
+  modalBodyFontSize: 'clamp(15px, 3.6vw, 18px)',
+});
+
+function responsiveStatsChartGridStyle() {
+  return {
+    height: '100%',
+    minHeight: 0,
+    display: 'grid',
+    gridTemplateRows: 'repeat(3, minmax(0, 1fr))',
+    gap: RESPONSIVE_STATS_UI.cardGap,
+  };
+}
+
+function responsiveContentScreenStyle(bottomOffset = BOTTOM_NAV_SPACE) {
+  return {
+    ...balancedVerticalScreenStyle(bottomOffset),
+    width: '100%',
+    maxWidth: 500,
+    margin: '0 auto',
+    padding: RESPONSIVE_CONTENT_UI.screenPadding,
+    boxSizing: 'border-box',
+    fontFamily: 'sans-serif',
+  };
+}
+
 // // const APP_TOP_BAR_HEIGHT = 50; // unused // unused after local black statusbar patch
 
 
-const WORKOUT_CIRCLE_SIZE = 44;
-const WORKOUT_CIRCLE_FONT_SIZE = 18;
-const WORKOUT_SECTION_TITLE_FONT_SIZE = 18;
-const WORKOUT_TEXT_FONT_SIZE = 15;
-const WORKOUT_CHECKLIST_COLUMN_GAP = 12;
 const WORKOUT_WORK_ROW_PADDING_X = 12;
 const WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE = 'repeat(2, minmax(0, 1fr))';
 const WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE = 'repeat(4, minmax(0, 1fr))';
-const WORKOUT_CIRCLE_ITEM_GAP = 8;
-const WORKOUT_LABEL_CIRCLE_GAP = 6;
-const WORKOUT_SMART_LABEL_FONT_SIZE = 15;
-const WORKOUT_LIFT_HEADER_FONT_SIZE = 20;
-const WORKOUT_INFO_ICON_SIZE = 14;
-const WORKOUT_INTERACTIVE_HEADER_MIN_HEIGHT = 32;
+
+const RESPONSIVE_WORKOUT_UI = Object.freeze({
+  circleSize: 'clamp(44px, 10.5vw, 52px)',
+  circleFontSize: 'clamp(18px, 4.4vw, 22px)',
+  sectionTitleFontSize: 'clamp(18px, 4.2vw, 21px)',
+  textFontSize: 'clamp(15px, 3.5vw, 18px)',
+  compactTextFontSize: 'clamp(13px, 3vw, 16px)',
+  smallTextFontSize: 'clamp(12px, 2.8vw, 14px)',
+  smartHeaderFontSize: 'clamp(17px, 4.2vw, 21px)',
+  liftHeaderFontSize: 'clamp(23px, 5.5vw, 28px)',
+  infoIconSize: 'clamp(18px, 4.5vw, 22px)',
+  infoIconFontSize: 'clamp(10px, 2.5vw, 12px)',
+  circleGap: 'clamp(8px, 2vw, 10px)',
+  labelCircleGap: 'clamp(6px, 0.8dvh, 9px)',
+  rowPaddingX: 'clamp(12px, 3vw, 16px)',
+  sectionGap: 'clamp(10px, 1.5dvh, 16px)',
+});
 
 
 
@@ -838,10 +897,10 @@ function WorkoutCircle({
         disabled={disabled}
         style={{
           position: 'relative',
-          width: WORKOUT_CIRCLE_SIZE,
-          height: WORKOUT_CIRCLE_SIZE,
-          minWidth: WORKOUT_CIRCLE_SIZE,
-          flex: `0 0 ${WORKOUT_CIRCLE_SIZE}px`,
+          width: RESPONSIVE_WORKOUT_UI.circleSize,
+          height: RESPONSIVE_WORKOUT_UI.circleSize,
+          minWidth: RESPONSIVE_WORKOUT_UI.circleSize,
+          flex: `0 0 ${RESPONSIVE_WORKOUT_UI.circleSize}`,
           borderRadius: '50%',
           border: `${isActiveOpen ? 3 : 2}px solid ${borderColor}`,
           background,
@@ -851,7 +910,7 @@ function WorkoutCircle({
           justifyContent: 'center',
           cursor: disabled ? 'not-allowed' : 'pointer',
           fontWeight: 900,
-          fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+          fontSize: RESPONSIVE_WORKOUT_UI.circleFontSize,
           lineHeight: 1,
           padding: 0,
           opacity: disabled && isOpen ? 0.8 : 1,
@@ -980,7 +1039,7 @@ function WorkoutCircleItem({
         gridTemplateRows: 'auto auto auto',
         justifyItems: 'center',
         alignContent: 'start',
-        rowGap: WORKOUT_LABEL_CIRCLE_GAP,
+        rowGap: RESPONSIVE_WORKOUT_UI.labelCircleGap,
         minWidth: 0,
         gridColumn: fullWidth ? '1 / -1' : undefined,
       }}
@@ -989,7 +1048,7 @@ function WorkoutCircleItem({
         width: '100%',
         minWidth: 0,
         color: THEME.text,
-        fontSize: WORKOUT_TEXT_FONT_SIZE,
+        fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
         fontWeight: 800,
         lineHeight: 1.15,
         textAlign: 'center',
@@ -1014,7 +1073,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
           <div
             title={label}
             style={{
-              fontSize: WORKOUT_TEXT_FONT_SIZE - 1,
+              fontSize: 'clamp(14px, 3.3vw, 17px)',
               fontWeight: 800,
               lineHeight: 1.05,
             }}
@@ -1025,7 +1084,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
             title={prescription}
             style={{
               color: THEME.muted,
-              fontSize: WORKOUT_TEXT_FONT_SIZE - 1,
+              fontSize: 'clamp(14px, 3.3vw, 17px)',
               fontWeight: 700,
               marginTop: 1,
               lineHeight: 1.05,
@@ -1056,9 +1115,9 @@ export function WorkoutLiftGrid({ children, testId = 'workout-lift-grid' }) {
         display: 'grid',
         gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
         justifyContent: 'start',
-        gap: WORKOUT_CIRCLE_ITEM_GAP,
-        padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`,
-        marginBottom: 10,
+        gap: RESPONSIVE_WORKOUT_UI.circleGap,
+        padding: `0 ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
+        marginBottom: RESPONSIVE_WORKOUT_UI.sectionGap,
       }}
     >
       {children}
@@ -1078,8 +1137,8 @@ export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activ
         display: 'grid',
         gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
         justifyContent: 'start',
-        gap: WORKOUT_CIRCLE_ITEM_GAP,
-        padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`,
+        gap: RESPONSIVE_WORKOUT_UI.circleGap,
+        padding: `0 ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
       }}
     >
       {warmups.map((warmup, index) => {
@@ -1182,7 +1241,7 @@ function CooldownBlock({ items = [], onToggleItem = () => {}, t, isReadOnly = fa
     }}>
       <div style={{
         padding: '5px 10px',
-        fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+        fontSize: RESPONSIVE_WORKOUT_UI.sectionTitleFontSize,
         fontWeight: 900,
         color: THEME.meet,
         textAlign: 'center',
@@ -1511,9 +1570,9 @@ function SetActionButton({ title, onClick, borderColor, disabled = false, childr
       disabled={disabled}
       onClick={onClick}
       style={{
-        width: WORKOUT_CIRCLE_SIZE,
-        height: WORKOUT_CIRCLE_SIZE,
-        minWidth: WORKOUT_CIRCLE_SIZE,
+        width: RESPONSIVE_WORKOUT_UI.circleSize,
+        height: RESPONSIVE_WORKOUT_UI.circleSize,
+        minWidth: RESPONSIVE_WORKOUT_UI.circleSize,
         borderRadius: '50%',
         border: `2px solid ${borderColor}`,
         background: 'transparent',
@@ -1521,7 +1580,7 @@ function SetActionButton({ title, onClick, borderColor, disabled = false, childr
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+        fontSize: RESPONSIVE_WORKOUT_UI.circleFontSize,
         fontWeight: 900,
         lineHeight: 1,
         padding: 0,
@@ -1639,7 +1698,7 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
       borderRadius: 999,
       border: `1px solid ${THEME.primary}`,
       color: THEME.primary,
-      fontSize: WORKOUT_TEXT_FONT_SIZE - 2,
+      fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
       fontWeight: 800,
       lineHeight: 1.15,
     }}>
@@ -1668,14 +1727,14 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
           width: 96,
           boxSizing: 'border-box',
           padding: '4px 8px',
-          fontSize: WORKOUT_CIRCLE_FONT_SIZE,
+          fontSize: RESPONSIVE_WORKOUT_UI.circleFontSize,
           fontWeight: 700,
           borderRadius: 4,
           border: '2px solid #e74c3c',
           textAlign: 'right',
         }}
       />
-      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>{normalizeWeightUnit(weightUnit)}</span>
+      <span style={{ fontSize: RESPONSIVE_WORKOUT_UI.circleFontSize, color: THEME.text }}>{normalizeWeightUnit(weightUnit)}</span>
     </div>
   ) : (
     <div
@@ -1685,7 +1744,7 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
         gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
         alignItems: 'center',
         justifyItems: 'center',
-        gap: WORKOUT_CIRCLE_ITEM_GAP,
+        gap: RESPONSIVE_WORKOUT_UI.circleGap,
         marginTop: 8,
         gridColumn: compactGrid ? '1 / -1' : undefined,
       order: compactGrid ? 1 : undefined,
@@ -1738,7 +1797,7 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
       style={compactGrid ? {
         display: 'contents',
       } : {
-        padding: `4px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+        padding: `4px ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
         marginBottom: 4,
       }}
     >
@@ -1749,7 +1808,7 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
         } : {
           display: 'grid',
           gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
-          gap: WORKOUT_CIRCLE_ITEM_GAP,
+          gap: RESPONSIVE_WORKOUT_UI.circleGap,
         }}
       >
         <WorkoutCircleItem
@@ -1761,7 +1820,7 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
             <div
               data-testid="workout-set-effort-label"
               style={{
-                width: WORKOUT_CIRCLE_SIZE,
+                width: RESPONSIVE_WORKOUT_UI.circleSize,
                 display: 'flex',
                 justifyContent: 'center',
               }}
@@ -1788,16 +1847,16 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
   );
 }
 
-function SettingsListRow({ label, description, value, valueColor = THEME.text, actionLabel, onAction, actionContent, danger = false, compact = false, compactAction = false, labelNowrap = false, valueNowrap = false, valueFontSize = 15 }) {
+export function SettingsListRow({ label, description, value, valueColor = THEME.text, actionLabel, onAction, actionContent, danger = false, compact = false, compactAction = false, labelNowrap = false, valueNowrap = false, valueFontSize = RESPONSIVE_SETTINGS_UI.valueFontSize }) {
   return (
     <div style={{
       display: 'grid',
       gridTemplateColumns: compactAction
         ? 'minmax(0, 1fr) auto'
-        : 'minmax(0, 1fr) minmax(180px, 190px)',
+        : 'minmax(0, 1fr) minmax(150px, 42%)',
       alignItems: 'center',
-      gap: 10,
-      padding: compact ? '4px 0' : '7px 0',
+      gap: RESPONSIVE_SETTINGS_UI.rowGap,
+      padding: compact ? '4px 0' : RESPONSIVE_SETTINGS_UI.rowPadding,
       borderBottom: 'none'
     }}>
       <div style={{
@@ -1805,7 +1864,7 @@ function SettingsListRow({ label, description, value, valueColor = THEME.text, a
       }}>
         <div style={{
           color: danger ? THEME.red : THEME.text,
-          fontSize: 16,
+          fontSize: RESPONSIVE_SETTINGS_UI.labelFontSize,
           fontWeight: 800,
           lineHeight: 1.2,
           whiteSpace: labelNowrap ? 'nowrap' : 'normal',
@@ -1816,7 +1875,7 @@ function SettingsListRow({ label, description, value, valueColor = THEME.text, a
         {description && (
           <div style={{
             color: THEME.muted,
-            fontSize: 13,
+            fontSize: RESPONSIVE_SETTINGS_UI.descriptionFontSize,
             fontWeight: 700,
             lineHeight: 1.25,
             marginTop: 3
@@ -1840,17 +1899,18 @@ function SettingsListRow({ label, description, value, valueColor = THEME.text, a
               onClick={onAction}
               style={{
                 width: '100%',
-                padding: '7px 9px',
-                fontSize: 14,
+                minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
+                padding: '8px 9px',
+                fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
                 fontWeight: 800,
                 background: danger ? '#8b1e1e' : THEME.card,
                 color: '#ffffff',
                 border: `1px solid ${danger ? THEME.red : THEME.primary}`,
                 borderRadius: 8,
                 cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis'
+                whiteSpace: 'normal',
+                overflowWrap: 'anywhere',
+                lineHeight: 1.15,
               }}
             >
               {actionLabel}
@@ -1879,20 +1939,20 @@ function SettingsModal({ title, onClose, children }) {
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 650,
-      padding: 16
+      padding: 'clamp(12px, 4vw, 20px)'
     }}>
       <div style={{
         background: THEME.card,
         border: `1px solid ${THEME.primary}`,
         borderRadius: 12,
-        padding: 18,
-        maxWidth: 420,
+        padding: 'clamp(16px, 4vw, 22px)',
+        maxWidth: 440,
         width: '100%',
         maxHeight: '88vh',
         overflowY: 'auto',
         color: THEME.text
       }}>
-        <h3 style={{ margin: '0 0 16px', textAlign: 'center' }}>{title}</h3>
+        <h3 style={{ margin: '0 0 clamp(12px, 2dvh, 18px)', textAlign: 'center', fontSize: RESPONSIVE_SETTINGS_UI.modalTitleFontSize }}>{title}</h3>
         {children}
       </div>
     </div>
@@ -1902,8 +1962,9 @@ function SettingsModal({ title, onClose, children }) {
 function modalInputStyle() {
   return {
     width: '100%',
+    minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
     padding: 10,
-    fontSize: 16,
+    fontSize: RESPONSIVE_SETTINGS_UI.modalBodyFontSize,
     borderRadius: 4,
     background: THEME.bg,
     color: THEME.text,
@@ -1927,9 +1988,9 @@ function modalActionButtonStyle(variant = 'secondary') {
 
   return {
     width: '100%',
-    minHeight: 42,
+    minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
     padding: '10px 12px',
-    fontSize: 14,
+    fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
     fontWeight: 800,
     background: isDanger ? THEME.red : isPrimary ? THEME.card : 'transparent',
     color: THEME.text,
@@ -2155,17 +2216,18 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
                 onClick={exportData}
                 style={{
                   width: '100%',
-                  padding: '7px 9px',
-                  fontSize: 14,
+                  minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
+                  padding: '8px 9px',
+                  fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
                   fontWeight: 800,
                   background: THEME.card,
                   color: THEME.text,
                   border: `1px solid ${THEME.primary}`,
                   borderRadius: 8,
                   cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
+                  whiteSpace: 'normal',
+                  overflowWrap: 'anywhere',
+                  lineHeight: 1.15,
                 }}
               >
                 {t.exportDataShort || t.exportData}
@@ -2177,17 +2239,18 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
               onClick={() => importInputRef.current?.click()}
               style={{
                 width: importOnly ? 86 : '100%',
-                padding: importOnly ? '7px 12px' : '7px 9px',
-                fontSize: 14,
+                minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
+                padding: importOnly ? '8px 12px' : '8px 9px',
+                fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
                 fontWeight: 800,
                 background: THEME.card,
                 color: THEME.text,
                 border: `1px solid ${THEME.primary}`,
                 borderRadius: 8,
                 cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis'
+                whiteSpace: 'normal',
+                overflowWrap: 'anywhere',
+                lineHeight: 1.15,
               }}
             >
               {t.importDataShort || t.importData}
@@ -2204,7 +2267,7 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
           valueColor={autoBackupDisplayVerified ? THEME.primary : autoBackupFailed ? THEME.red : THEME.muted}
           compact={true}
           valueNowrap={true}
-          valueFontSize={13}
+          valueFontSize={RESPONSIVE_SETTINGS_UI.descriptionFontSize}
         />
       )}
 
@@ -2330,18 +2393,18 @@ function SupportActionButton({ children, onClick }) {
       onClick={onClick}
       style={{
         padding: '9px 11px',
-        fontSize: 15,
+        fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
         fontWeight: 800,
         background: THEME.card,
         color: '#ffffff',
         border: `1px solid ${THEME.primary}`,
         borderRadius: 8,
         cursor: 'pointer',
-        minHeight: 42,
+        minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
         width: '100%',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis'
+        whiteSpace: 'normal',
+        overflowWrap: 'anywhere',
+        lineHeight: 1.15,
       }}
     >
       {children}
@@ -2768,8 +2831,9 @@ function RestTimeSection({ t }) {
 function selectionModalButtonStyle(active) {
   return {
     width: '100%',
+    minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
     padding: 12,
-    fontSize: 15,
+    fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
     fontWeight: 700,
     background: active ? THEME.primary : THEME.card,
     color: '#ffffff',
@@ -3061,7 +3125,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
           textAlign: 'right',
         }}
       />
-      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>
+      <span style={{ fontSize: RESPONSIVE_WORKOUT_UI.circleFontSize, color: THEME.text }}>
         {normalizeWeightUnit(weightUnit)}
       </span>
     </div>
@@ -3073,7 +3137,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
         gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
         alignItems: 'center',
         justifyItems: 'center',
-        gap: WORKOUT_CIRCLE_ITEM_GAP,
+        gap: RESPONSIVE_WORKOUT_UI.circleGap,
         marginTop: 8,
         gridColumn: compactGrid ? '1 / -1' : undefined,
       order: compactGrid ? 1 : undefined,
@@ -3141,7 +3205,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
       style={compactGrid ? {
         display: 'contents',
       } : {
-        padding: `4px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+        padding: `4px ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
         marginBottom: 4,
       }}
     >
@@ -3152,7 +3216,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
         } : {
           display: 'grid',
           gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
-          gap: WORKOUT_CIRCLE_ITEM_GAP,
+          gap: RESPONSIVE_WORKOUT_UI.circleGap,
           marginTop: 0,
         }}
       >
@@ -3162,7 +3226,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
             Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed) ||
             Number(set.weight) !== Number(set.originalWeight ?? set.weight);
           const setDescription = (
-            <span style={{ fontSize: WORKOUT_TEXT_FONT_SIZE, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: RESPONSIVE_WORKOUT_UI.textFontSize, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <WorkoutWeightPercentLabel
                 weightText={`${formatWorkoutWeightFromKg(
                   set.weight,
@@ -3297,7 +3361,7 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
           textAlign: 'right',
         }}
       />
-      <span style={{ fontSize: WORKOUT_CIRCLE_FONT_SIZE, color: THEME.text }}>
+      <span style={{ fontSize: RESPONSIVE_WORKOUT_UI.circleFontSize, color: THEME.text }}>
         {normalizeWeightUnit(weightUnit)}
       </span>
     </div>
@@ -3309,7 +3373,7 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
         gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
         alignItems: 'center',
         justifyItems: 'center',
-        gap: WORKOUT_CIRCLE_ITEM_GAP,
+        gap: RESPONSIVE_WORKOUT_UI.circleGap,
         marginTop: 8,
       }}
     >
@@ -3323,7 +3387,7 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
     <div
       data-testid="workout-accessory-group"
       style={{
-        padding: `4px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+        padding: `4px ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
         marginBottom: 8,
       }}
     >
@@ -3331,7 +3395,7 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
         data-testid="workout-accessory-label"
         style={{
           color: THEME.text,
-          fontSize: WORKOUT_TEXT_FONT_SIZE,
+          fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
           fontWeight: 800,
           lineHeight: 1.25,
           textAlign: 'center',
@@ -3347,8 +3411,8 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
           display: 'grid',
           gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
           justifyItems: 'center',
-          gap: WORKOUT_CIRCLE_ITEM_GAP,
-          marginTop: WORKOUT_LABEL_CIRCLE_GAP,
+          gap: RESPONSIVE_WORKOUT_UI.circleGap,
+          marginTop: RESPONSIVE_WORKOUT_UI.labelCircleGap,
         }}
       >
         {(acc.done || []).map((done, index) => {
@@ -3384,7 +3448,7 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
                   <span
                     style={{
                       color: isAdjusted ? '#f39c12' : THEME.text,
-                      fontSize: WORKOUT_TEXT_FONT_SIZE,
+                      fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
                       fontWeight: 800,
                     }}
                   >
@@ -3877,7 +3941,18 @@ function formatSmartPrescriptionPercent(pct) {
   return formatted ? `${formatted}%` : null;
 }
 
-function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkout = false, noLiftIsHeavyToday = false) {
+function getSmartIntensityReasonDisplayText(liftBlock = {}, t = {}) {
+  const intensity = getSmartIntensityRole(liftBlock);
+  const reasonByIntensity = {
+    heavy: t.smartHeavyTotalIntensityReason || 'Heavy intensity.',
+    medium: t.smartMediumTotalIntensityReason || 'Medium intensity.',
+    light: t.smartLightTotalIntensityReason || 'Light intensity.',
+  };
+
+  return reasonByIntensity[intensity] || reasonByIntensity.light;
+}
+
+function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkout = false) {
   const prescription = liftBlock?.smartPrescription || null;
   if (!prescription) return null;
 
@@ -3943,7 +4018,7 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
     }).join(' + '));
   }
 
-  const reasonParts = [];
+  const reasonParts = [getSmartIntensityReasonDisplayText(liftBlock, t)];
   if (prescription.regressionReason) {
     reasonParts.push(
       prescription.regressionReason === 'ready-taper'
@@ -3965,42 +4040,15 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
     // (see the forced-secondary retry in generateSmartWorkouts) - there is
     // no other lift in the workout to be "secondary" to, so the normal
     // two-lift-day copy below would be misleading here.
-    const intensity = getSmartIntensityRole(liftBlock);
     reasonParts.push(
-      intensity === 'medium'
+      getSmartIntensityRole(liftBlock) === 'medium'
         ? (t.smartFrequencyMediumSoloReason ||
           "This lift's heavy slot is already used this week. Today's medium session fills its remaining weekly target.")
         : (t.smartFrequencyLightSoloReason ||
           "This lift's heavy slot is already used this week, so it's intentionally lighter today.")
     );
   } else if (
-    ['secondary', 'tertiary'].includes(prescription.role || liftBlock.role) &&
-    noLiftIsHeavyToday
-  ) {
-    // Every lift in today's workout is light, not just this one relative to
-    // some other heavy lift - "lower volume for the secondary lift" implied
-    // a heavy day was happening elsewhere today, which was misleading once
-    // no lift still needed its heavy exposure this week (C3W36 regression:
-    // both Squat and Bench showed this same copy, each seemingly
-    // pointing at the other as "the heavy one").
-    reasonParts.push(
-      t.smartAllLiftsLightReason ||
-      'Light intensity day.'
-    );
-  } else if (['secondary', 'tertiary'].includes(prescription.role || liftBlock.role)) {
-    const intensity = getSmartIntensityRole(liftBlock);
-    const reasonByIntensity = {
-      heavy: t.smartHeavyTotalIntensityReason ||
-        'Heavy total intensity from the combination of sets, reps and percentage.',
-      medium: t.smartMediumTotalIntensityReason ||
-        'Medium total intensity from the combination of sets, reps and percentage.',
-      light: t.smartLightTotalIntensityReason ||
-        'Light total intensity from the combination of sets, reps and percentage.',
-    };
-    reasonParts.push(
-      reasonByIntensity[intensity]
-    );
-  } else if (
+    !['secondary', 'tertiary'].includes(prescription.role || liftBlock.role) &&
     topSet &&
     Number(topSet.precisePct ?? topSet.pct ?? topSet.originalPct) >
       Number(
@@ -4012,7 +4060,7 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
       t.smartSafeProgressionReason ||
       'Safe progression from the previous successful top set.'
     );
-  } else {
+  } else if (!['secondary', 'tertiary'].includes(prescription.role || liftBlock.role)) {
     reasonParts.push(
       t.smartPrimarySelectionReason ||
       'Primary work was selected from readiness and recent training.'
@@ -4061,6 +4109,7 @@ function getFrequencySupplementedLiftPrescriptionPlan(
   const planParts = [
     `${t.smartTopSingle || 'Top single'}: ${formatPct(topSingle.pct)}`,
     `${volumeSets.length}×${volumeReps}×${formatPct(volumePct)}`,
+    getSmartIntensityReasonDisplayText(liftBlock, t),
   ];
 
   planParts.push(
@@ -4084,14 +4133,11 @@ export function getSmartPrescriptionDetailRows(workout = {}, t = {}) {
   }
 
   const isSingleLiftWorkout = (workout.lifts || []).length === 1;
-  const noLiftIsHeavyToday = (workout.lifts || []).every(
-    liftBlock => (liftBlock?.smartPrescription?.role || liftBlock?.role) !== 'primary'
-  );
 
   return (workout.lifts || [])
     .map(liftBlock => (
       getFrequencySupplementedLiftPrescriptionPlan(liftBlock, t)
-      || getSmartLiftPrescriptionPlan(liftBlock, t, isSingleLiftWorkout, noLiftIsHeavyToday)
+      || getSmartLiftPrescriptionPlan(liftBlock, t, isSingleLiftWorkout)
     ))
     .filter(row => row?.value);
 }
@@ -4153,6 +4199,7 @@ export function buildSmartDiagnosticText(workout = {}, t = {}) {
     lines.push(
       `${liftBlock.lift} technical: ` +
       `role=${prescription.role || liftBlock.role || 'unknown'}, ` +
+      `intensity=${getSmartIntensityRole(liftBlock)}, ` +
       `topAnchor=${formatDiagnosisPct(prescription.topSetAnchorPct)}, ` +
       `volumeAnchor=${formatDiagnosisPct(prescription.volumeAnchorPct)}, ` +
       `plannedVolume=${formatDiagnosisPct(prescription.plannedVolumePct)}, ` +
@@ -4562,7 +4609,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
   };
   const smartModalSectionTitleStyle = {
     color: THEME.primary,
-    fontSize: 11,
+    fontSize: 'clamp(11px, 2.7vw, 13px)',
     fontWeight: 900,
     lineHeight: 1.2,
     letterSpacing: 0.5,
@@ -4571,7 +4618,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
   };
   const smartModalLabelStyle = {
     color: smartModalMutedText,
-    fontSize: 10,
+    fontSize: 'clamp(10px, 2.5vw, 12px)',
     fontWeight: 700,
     lineHeight: 1.2,
     letterSpacing: 0.3,
@@ -4599,14 +4646,14 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
             alignItems: 'center',
             justifyContent: 'center',
             gap: 6,
-            minHeight: WORKOUT_INTERACTIVE_HEADER_MIN_HEIGHT,
+            minHeight: 'clamp(32px, 7vw, 38px)',
             padding: '4px 10px',
             margin: 0,
             border: 'none',
             borderRadius: 8,
             background: 'transparent',
             color: THEME.meet,
-            fontSize: WORKOUT_SMART_LABEL_FONT_SIZE,
+            fontSize: RESPONSIVE_WORKOUT_UI.smartHeaderFontSize,
             fontWeight: 900,
             lineHeight: 1.2,
             cursor: 'pointer',
@@ -4620,14 +4667,14 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: WORKOUT_INFO_ICON_SIZE + 4,
-              height: WORKOUT_INFO_ICON_SIZE + 4,
-              flex: `0 0 ${WORKOUT_INFO_ICON_SIZE + 4}px`,
+              width: RESPONSIVE_WORKOUT_UI.infoIconSize,
+              height: RESPONSIVE_WORKOUT_UI.infoIconSize,
+              flex: `0 0 ${RESPONSIVE_WORKOUT_UI.infoIconSize}`,
               borderRadius: 999,
               background: `${THEME.meet}26`,
               border: `1px solid ${THEME.meet}`,
               color: THEME.meet,
-              fontSize: 10,
+              fontSize: RESPONSIVE_WORKOUT_UI.infoIconFontSize,
               fontWeight: 900,
               lineHeight: 1,
             }}
@@ -4659,7 +4706,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
             onClick={e => e.stopPropagation()}
             style={{
               width: '100%',
-              maxWidth: 390,
+              maxWidth: 'clamp(390px, 88vw, 430px)',
               maxHeight: 'calc(100vh - 28px)',
               display: 'flex',
               flexDirection: 'column',
@@ -4677,7 +4724,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
               background: `linear-gradient(90deg, transparent, ${THEME.primary}, transparent)`,
             }} />
 
-            <div style={{ padding: '16px 18px 16px', overflowY: 'auto', minHeight: 0 }}>
+            <div style={{ padding: 'clamp(16px, 4vw, 20px)', overflowY: 'auto', minHeight: 0 }}>
               <header style={{
                 marginBottom: 16,
                 textAlign: 'center',
@@ -4685,7 +4732,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                 <h2 style={{
                   margin: 0,
                   color: THEME.primary,
-                  fontSize: 20,
+                  fontSize: RESPONSIVE_WORKOUT_UI.liftHeaderFontSize,
                   fontWeight: 900,
                   lineHeight: 1.15,
                   letterSpacing: -0.25,
@@ -4696,7 +4743,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                   <div style={{
                     marginTop: 5,
                     color: smartModalMutedText,
-                    fontSize: 12,
+                    fontSize: RESPONSIVE_WORKOUT_UI.smallTextFontSize,
                     fontWeight: 700,
                   }}>
                     {decisionRow.value}
@@ -4716,14 +4763,14 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                             key={row.label}
                             style={{
                               display: 'grid',
-                              gridTemplateColumns: '64px minmax(0, 1fr)',
-                              gap: 10,
+                              gridTemplateColumns: 'clamp(64px, 15vw, 72px) minmax(0, 1fr)',
+                              gap: 'clamp(10px, 2.5vw, 14px)',
                               minWidth: 0,
                             }}
                           >
                             <div style={{
                               color: presentation.color,
-                              fontSize: 11,
+                              fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
                               fontWeight: 900,
                               lineHeight: 1.3,
                               textTransform: 'uppercase',
@@ -4733,7 +4780,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                             <div style={{ minWidth: 0 }}>
                               <div style={{
                                 color: THEME.text,
-                                fontSize: 14,
+                                fontSize: RESPONSIVE_WORKOUT_UI.bodyFontSize,
                                 fontWeight: 800,
                                 lineHeight: 1.3,
                                 overflowWrap: 'anywhere',
@@ -4744,7 +4791,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                                 <div style={{
                                   marginTop: 2,
                                   color: smartModalMutedText,
-                                  fontSize: 11,
+                                  fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
                                   fontWeight: 600,
                                   lineHeight: 1.3,
                                   overflowWrap: 'anywhere',
@@ -4776,7 +4823,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                               <div style={{
                                 marginTop: 2,
                                 color: THEME.text,
-                                fontSize: 14,
+                                fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
                                 fontWeight: 800,
                                 lineHeight: 1.3,
                                 overflowWrap: 'anywhere',
@@ -4811,7 +4858,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                                 >
                                   <div style={{
                                     color: index >= 3 ? THEME.primary : THEME.text,
-                                    fontSize: 15,
+                                    fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
                                     fontWeight: 900,
                                     lineHeight: 1.1,
                                     whiteSpace: 'nowrap',
@@ -4844,7 +4891,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                                   <div style={{
                                     marginTop: 3,
                                     color: THEME.text,
-                                    fontSize: 13,
+                                    fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
                                     fontWeight: 800,
                                     lineHeight: 1.3,
                                     overflowWrap: 'anywhere',
@@ -4869,7 +4916,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                         {meetDayRows.map(row => (
                           <section key={row.label}>
                             <div style={smartModalLabelStyle}>{row.label}</div>
-                            <div style={{ marginTop: 3, color: THEME.text, fontSize: 14, fontWeight: 800, lineHeight: 1.35 }}>
+                            <div style={{ marginTop: 3, color: THEME.text, fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize, fontWeight: 800, lineHeight: 1.35 }}>
                               {row.value}
                             </div>
                           </section>
@@ -4899,7 +4946,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                               <div style={{
                                 minWidth: 0,
                                 color: THEME.text,
-                                fontSize: 12,
+                                fontSize: RESPONSIVE_WORKOUT_UI.smallTextFontSize,
                                 fontWeight: 700,
                                 lineHeight: 1.3,
                                 overflowWrap: 'anywhere',
@@ -4917,7 +4964,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                     <div style={{
                       marginTop: 16,
                       color: smartModalMutedText,
-                      fontSize: 10.5,
+                      fontSize: 'clamp(10.5px, 2.6vw, 12.5px)',
                       fontWeight: 600,
                       lineHeight: 1.4,
                     }}>
@@ -4941,7 +4988,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                 <p style={{
                   margin: '0 0 14px',
                   color: smartModalMutedText,
-                  fontSize: 14,
+                  fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
                   fontWeight: 800,
                   lineHeight: 1.35,
                   textAlign: 'center',
@@ -4975,7 +5022,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                     border: `1px solid ${THEME.primary}`,
                     background: `${THEME.primary}18`,
                     color: THEME.primary,
-                    fontSize: 13,
+                    fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
                     fontWeight: 900,
                     cursor: 'pointer',
                   }}
@@ -5000,7 +5047,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                     border: `1px solid ${THEME.primary}`,
                     background: 'transparent',
                     color: THEME.text,
-                    fontSize: 13,
+                    fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
                     fontWeight: 900,
                     cursor: 'pointer',
                   }}
@@ -5133,7 +5180,7 @@ function CurrentWorkout({
                 type="button"
                 onClick={() => setShowActivateConfirm(false)}
                 style={{
-                  padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+                  padding: `8px ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
                   borderRadius: 6,
                   border: `1px solid ${THEME.primary}`,
                   background: 'transparent',
@@ -5153,7 +5200,7 @@ function CurrentWorkout({
                   onActivateWorkout();
                 }}
                 style={{
-                  padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+                  padding: `8px ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
                   borderRadius: 6,
                   border: `1px solid ${THEME.primary}`,
                   background: THEME.primary,
@@ -5174,12 +5221,7 @@ function CurrentWorkout({
 
   if (workout.type === 'rest') {
     return (
-      <div style={{
-        maxWidth: 500,
-        margin: '0 auto',
-        padding: '10px 14px 16px',
-        fontFamily: 'sans-serif'
-      }}>
+      <div style={responsiveContentScreenStyle()}>
         <AppHeader
           t={t}
           title={t.restAndRecovery || t.deload}
@@ -5203,6 +5245,8 @@ function CurrentWorkout({
               )}
             </>
           )}
+          titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
+          subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
         />
 
         {renderActivateWorkoutCard()}
@@ -5217,7 +5261,7 @@ function CurrentWorkout({
           textAlign: 'center'
         }}>
           <div style={{
-            fontSize: 42,
+            fontSize: 'clamp(42px, 10vw, 52px)',
             lineHeight: 1,
             marginBottom: 14
           }}>
@@ -5227,13 +5271,13 @@ function CurrentWorkout({
           <h2 style={{
             margin: '0 0 8px',
             color: THEME.text,
-            fontSize: 22,
+            fontSize: 'clamp(22px, 5.2vw, 27px)',
             fontWeight: 900
           }}>
             {t.restAndRecovery || t.deload}
             {!isReadOnly && (
               <span style={{
-                fontSize: 11,
+                fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
                 background: THEME.primary,
                 color: '#ffffff',
                 padding: '1px 6px',
@@ -5250,7 +5294,7 @@ function CurrentWorkout({
             margin: '0 auto',
             maxWidth: 360,
             color: THEME.muted,
-            fontSize: 14,
+            fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
             fontWeight: 700,
             lineHeight: 1.4
           }}>
@@ -5264,8 +5308,9 @@ function CurrentWorkout({
             onClick={() => onComplete('easy')}
             style={{
               width: '100%',
+              minHeight: 44,
               padding: 10,
-              fontSize: 16,
+              fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
               background: THEME.card,
               color: '#ffffff',
               border: `1px solid ${THEME.primary}`,
@@ -5302,7 +5347,7 @@ function CurrentWorkout({
     );
 
     return (
-      <div style={{ maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
+      <div style={responsiveContentScreenStyle()}>
         {selectedExerciseGuideLift && (
           <ExerciseGuideModal
             lift={selectedExerciseGuideLift}
@@ -5336,12 +5381,13 @@ function CurrentWorkout({
           )}
           titleStyle={{
             textShadow: 'none',
-            fontSize: 30,
+            fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             color: isMeetDay ? THEME.meet : THEME.text
           }}
+          subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
         />
 
         {renderActivateWorkoutCard()}
@@ -5357,8 +5403,8 @@ function CurrentWorkout({
 
           return (
             <div
-              key={liftBlock.lift}
-              style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: 4 }}
+            key={liftBlock.lift}
+              style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: 'clamp(4px, 0.8dvh, 8px)' }}
             >
               <div style={{
                 padding: '2px 10px 4px',
@@ -5386,13 +5432,13 @@ function CurrentWorkout({
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 7,
-                        minHeight: WORKOUT_INTERACTIVE_HEADER_MIN_HEIGHT,
+                        minHeight: 'clamp(32px, 7vw, 38px)',
                         padding: '4px 12px',
                         border: 'none',
                         borderRadius: 8,
                         background: 'transparent',
                         color: liftColor,
-                        fontSize: WORKOUT_LIFT_HEADER_FONT_SIZE,
+                        fontSize: RESPONSIVE_WORKOUT_UI.liftHeaderFontSize,
                         fontWeight: 900,
                         lineHeight: 1.1,
                         cursor: guideAvailable ? 'pointer' : 'default',
@@ -5404,14 +5450,14 @@ function CurrentWorkout({
                           display: 'inline-flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          width: WORKOUT_INFO_ICON_SIZE + 4,
-                          height: WORKOUT_INFO_ICON_SIZE + 4,
-                          flex: `0 0 ${WORKOUT_INFO_ICON_SIZE + 4}px`,
+                          width: RESPONSIVE_WORKOUT_UI.infoIconSize,
+                          height: RESPONSIVE_WORKOUT_UI.infoIconSize,
+                          flex: `0 0 ${RESPONSIVE_WORKOUT_UI.infoIconSize}`,
                           borderRadius: 999,
                           background: `${liftColor}26`,
                           border: `1px solid ${liftColor}`,
                           color: liftColor,
-                          fontSize: 10,
+                          fontSize: RESPONSIVE_WORKOUT_UI.infoIconFontSize,
                           fontWeight: 900,
                           lineHeight: 1,
                         }}>
@@ -5430,9 +5476,9 @@ function CurrentWorkout({
                     display: 'grid',
                     gridTemplateColumns: WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE,
                     justifyContent: 'center',
-                    columnGap: WORKOUT_CHECKLIST_COLUMN_GAP,
+                    columnGap: 'clamp(12px, 3vw, 16px)',
                     rowGap: 6,
-                    padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`
+                    padding: `0 ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`
                   }}>
                     {visiblePrepItems.map((item, pi) => (
                       <PrepRow
@@ -5590,7 +5636,7 @@ function CurrentWorkout({
                   {false && showMeetSetNotice && (
                     <div style={{
                       margin: 0,
-                      padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
+                      padding: `8px ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
                       borderTop: '1px solid #e74c3c',
                       borderBottom: '1px solid #e74c3c',
                       color: '#ffffff',
@@ -5675,7 +5721,7 @@ function CurrentWorkout({
           }}>
             <div style={{
               padding: '6px 10px',
-              fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+              fontSize: RESPONSIVE_WORKOUT_UI.sectionTitleFontSize,
               fontWeight: 900,
               color: THEME.meet,
               textAlign: 'center',
@@ -5735,8 +5781,9 @@ function CurrentWorkout({
           style={{
             display: 'block',
             width: 'auto',
+            minHeight: 44,
             padding: '10px 28px',
-            fontSize: 16,
+            fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
             fontWeight: 600,
             background: THEME.card,
             color: (allMeetDone && !isReadOnly) ? 'white' : '#666',
@@ -5769,17 +5816,11 @@ function CurrentWorkout({
   }
 
   return (
-    <div style={{
-      maxWidth: 500,
-      margin: '0 auto',
-      padding: '8px 12px 12px',
-      paddingBottom: 16,
-      fontFamily: 'sans-serif'
-    }}>
+    <div style={responsiveContentScreenStyle()}>
       <h2 style={{
         margin: '12px 0 8px',
         textAlign: 'center',
-        fontSize: 30,
+        fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize,
         fontWeight: 900,
         lineHeight: 1.15,
         color: ({
@@ -5791,7 +5832,7 @@ function CurrentWorkout({
         {t.workout} {workout.number} — {workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant)}
       </h2>
 
-      <div style={{ textAlign: 'center', color: THEME.muted, fontSize: 13, marginBottom: 12 }}>
+      <div style={{ textAlign: 'center', color: THEME.muted, fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize, marginBottom: 12 }}>
         {formatCycleWorkoutSubtitle({ t, currentCycle, workoutNumber: workout.number, totalWorkouts, smartModel })}
       </div>
 
@@ -5802,7 +5843,7 @@ function CurrentWorkout({
         <div style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
           <div style={{
             padding: '6px 10px',
-            fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+            fontSize: RESPONSIVE_WORKOUT_UI.sectionTitleFontSize,
             fontWeight: 900,
             color: THEME.brown,
             textAlign: 'center'
@@ -5814,9 +5855,9 @@ function CurrentWorkout({
             display: 'grid',
                     gridTemplateColumns: WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE,
                     justifyContent: 'center',
-                    columnGap: WORKOUT_CHECKLIST_COLUMN_GAP,
+                    columnGap: 'clamp(12px, 3vw, 16px)',
                     rowGap: 4,
-                    padding: `0 ${WORKOUT_WORK_ROW_PADDING_X}px`
+                    padding: `0 ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`
           }}>
             {workout.prepItems.map((item, i) => (
               <PrepRow
@@ -5866,7 +5907,7 @@ function CurrentWorkout({
       }}>
         <div style={{
           padding: '6px 10px',
-          fontSize: 16,
+          fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
           fontWeight: 700,
           color: THEME.text,
           textAlign: 'center'
@@ -5989,7 +6030,7 @@ function CurrentWorkout({
         }}>
           <div style={{
             padding: '6px 10px',
-            fontSize: WORKOUT_SECTION_TITLE_FONT_SIZE,
+            fontSize: RESPONSIVE_WORKOUT_UI.sectionTitleFontSize,
             fontWeight: 900,
             color: THEME.meet,
             textAlign: 'center',
@@ -6049,8 +6090,9 @@ function CurrentWorkout({
         style={{
           display: 'block',
           width: 'auto',
+          minHeight: 44,
           padding: '10px 28px',
-          fontSize: 16,
+          fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
           fontWeight: 700,
           background: THEME.card,
           color: (allDone && !isReadOnly) ? 'white' : '#666',
@@ -6231,7 +6273,7 @@ function MeetPlanModal({ meetPlan, meetTotals, t, weightUnit = WEIGHT_UNITS.KG, 
   );
 }
 
-function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, trainingModel = TRAINING_MODELS.CLASSIC, t, weightUnit = WEIGHT_UNITS.KG, best1RMs = {}, bestE1RMs = {}, athleteLevel, eStrengthRatio, strengthMax, eStrengthMax, latestBodyWeight, activescreen = 'lifts', onChangeTab }) {
+export function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, trainingModel = TRAINING_MODELS.CLASSIC, t, weightUnit = WEIGHT_UNITS.KG, best1RMs = {}, bestE1RMs = {}, athleteLevel, eStrengthRatio, strengthMax, eStrengthMax, latestBodyWeight, activescreen = 'lifts', onChangeTab }) {
   const setActivescreen = onChangeTab || (() => {});
   const liftData = {};
   const totalData = [];
@@ -6482,12 +6524,22 @@ function chartMetricLabel(key) {
   return key;
 }
 
-  function renderChart(data, dataKeys, colors, emptyMessage = t.noStatsData, chartHeight = 150) {
+  function renderChart(data, dataKeys, colors, emptyMessage = t.noStatsData) {
     if (!data || data.length === 0) {
       return (
-        <p style={{ color: THEME.text, textAlign: 'center', padding: 14 }}>
+        <div
+          data-testid="stats-chart-frame"
+          style={{
+            height: '100%',
+            minHeight: RESPONSIVE_STATS_UI.chartMinHeight,
+            display: 'grid',
+            placeItems: 'center',
+          }}
+        >
+        <p style={{ color: THEME.text, textAlign: 'center', padding: 14, margin: 0, fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize }}>
           {emptyMessage}
         </p>
+        </div>
       );
     }
 
@@ -6586,7 +6638,8 @@ function chartMetricLabel(key) {
     }
 
     return (
-      <ResponsiveContainer width="100%" height={chartHeight}>
+      <div data-testid="stats-chart-frame" style={{ height: '100%', minHeight: RESPONSIVE_STATS_UI.chartMinHeight }}>
+      <ResponsiveContainer width="100%" height="100%">
         <LineChart data={visibleData} margin={{ top: 2, right: 12, left: 10, bottom: 0 }}>
           <CartesianGrid stroke={THEME.border} vertical={false} />
           <XAxis
@@ -6638,6 +6691,7 @@ function chartMetricLabel(key) {
 ))}
         </LineChart>
       </ResponsiveContainer>
+      </div>
     );
   }
 
@@ -6647,6 +6701,37 @@ function chartMetricLabel(key) {
     { key: 'lichaam', label: t.statsTabBody || 'Body' },
     { key: 'scores', label: t.statsTabHealth || 'Health' },
   ];
+
+  function renderChartCard(chart) {
+    return (
+      <section
+        key={chart.key}
+        data-testid="stats-chart-card"
+        style={{
+          background: 'transparent',
+          border: 'none',
+          borderRadius: 10,
+          padding: RESPONSIVE_STATS_UI.cardPadding,
+          minHeight: 0,
+          display: 'grid',
+          gridTemplateRows: `${RESPONSIVE_STATS_UI.chartTitleHeight} minmax(0, 1fr)`,
+        }}
+      >
+        <h3 style={{
+          minHeight: RESPONSIVE_STATS_UI.chartTitleHeight,
+          margin: 0,
+          color: chart.color || neutralChartColor,
+          fontSize: RESPONSIVE_STATS_UI.chartTitleFontSize,
+          lineHeight: 1.15,
+          display: 'flex',
+          alignItems: 'flex-end',
+        }}>
+          {chart.title}
+        </h3>
+        {renderChart(chart.data, chart.dataKeys || [chart.key], chart.colors || [chart.color], chart.emptyMessage)}
+      </section>
+    );
+  }
 
   function renderMetricChartCards(charts) {
     const visibleCharts = charts.filter(chart => chart.data.length > 0);
@@ -6660,28 +6745,20 @@ function chartMetricLabel(key) {
     }
 
     return (
-      <div>
-        {visibleCharts.map(chart => (
-          <div
-            key={chart.key}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 10,
-              padding: 8,
-              marginBottom: 6
-            }}
-          >
-            <h3 style={{ margin: '0 0 4px', color: neutralChartColor }}>{chart.title}</h3>
-            {renderChart(chart.data, [chart.key], [chart.color])}
-          </div>
-        ))}
+      <div style={responsiveStatsChartGridStyle()}>
+        {visibleCharts.map(chart => renderChartCard({ ...chart, color: neutralChartColor, colors: [chart.color] }))}
       </div>
     );
   }
 
   return (
-    <div style={{ ...balancedVerticalScreenStyle(), display: 'flex', flexDirection: 'column', maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
+    <div style={{
+      ...responsiveContentScreenStyle(),
+      height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
+      minHeight: 600,
+      display: 'flex',
+      flexDirection: 'column',
+    }}>
       <AppHeader
         t={t}
         title={t.stats}
@@ -6705,14 +6782,16 @@ function chartMetricLabel(key) {
             )}
           </>
         )}
+        titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
+        subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
       />
 
       <div style={{
         display: 'grid',
         gridTemplateColumns: `repeat(${statsTabs.length}, minmax(0, 1fr))`,
-        gap: 6,
-        marginTop: 10,
-        marginBottom: 8
+        gap: RESPONSIVE_STATS_UI.tabGap,
+        marginTop: 'clamp(8px, 1.2dvh, 12px)',
+        marginBottom: RESPONSIVE_STATS_UI.cardGap,
       }}>
         {statsTabs.map(tab => (
           <button
@@ -6720,9 +6799,9 @@ function chartMetricLabel(key) {
             onClick={() => setActivescreen(tab.key)}
             style={{
               width: '100%',
-              minHeight: 38,
-              padding: '8px 6px',
-              fontSize: 15,
+              minHeight: RESPONSIVE_STATS_UI.tabMinHeight,
+              padding: '8px clamp(3px, 1.5vw, 7px)',
+              fontSize: RESPONSIVE_STATS_UI.tabFontSize,
               lineHeight: 1.2,
               background: THEME.card,
               color: activescreen === tab.key ? THEME.primary : THEME.text,
@@ -6739,74 +6818,56 @@ function chartMetricLabel(key) {
         ))}
       </div>
 
-      <div style={{ flex: 1, display: 'grid', alignContent: 'space-evenly' }}>
+      <div style={{ flex: 1, minHeight: 0 }}>
       {activescreen === 'lifts' && (
-  <div>
+  <div style={responsiveStatsChartGridStyle()}>
     {LIFT_ORDER.map(lift => {
   const liftLabel =
     lift === 'Deadlift' ? t.deadlift :
     lift === 'Bench' ? t.bench :
     t.squat;
 
-  return (
-    <div
-      key={lift}
-      style={{
-        background: 'transparent',
-        border: 'none',
-        borderRadius: 10,
-        padding: 8,
-        marginBottom: 6
-      }}
-    >
-      <h3 style={{ margin: '0 0 4px', color: COLORS[lift] }}>
-        {liftLabel}
-      </h3>
-      {renderChart(
-        liftData[lift] || [],
-        ['oneRM', 'e1rm'],
-        [THEME.muted, COLORS[lift]],
-        t.noStatsData,
-        132
-      )}
-    </div>
-  );
+  return renderChartCard({
+      key: lift,
+      title: liftLabel,
+      color: COLORS[lift],
+      data: liftData[lift] || [],
+      dataKeys: ['oneRM', 'e1rm'],
+      colors: [THEME.muted, COLORS[lift]],
+      emptyMessage: t.noStatsData,
+    });
 })}
   </div>
 )}
 
       {activescreen === 'totaal' && (
-        <div>
-          <div style={{
-            background: 'transparent',
-            border: 'none',
-            borderRadius: 10,
-            padding: 10,
-            marginBottom: 8
-          }}>
-            <h3 style={{ margin: '0 0 6px', color: THEME.meet }}>{t.totalSBD}</h3>
-            {renderChart(totalData.map(entry => ({ ...entry, oneRM: chartWeightFromKg(entry.oneRM), e1rm: chartWeightFromKg(entry.e1rm) })), ['oneRM', 'e1rm'], [THEME.muted, THEME.meet])}
-          </div>
-
-          <div style={{
-            background: 'transparent',
-            border: 'none',
-            borderRadius: 10,
-            padding: 8
-          }}>
-            <h3 style={{ margin: '0 0 4px', color: THEME.meet }}>{t.strengthTotalBodyweight}</h3>
-            {renderChart(strengthData, ['strength', 'eStrength'], [THEME.muted, THEME.meet], t.noMetricData || t.noStatsData)}
-          </div>
-
-          <div style={{
-            background: 'transparent',
-            border: 'none',
-            borderRadius: 10,
-            padding: 8
-          }}>
-            <h3 style={{ margin: '0 0 4px', color: THEME.meet }}>{t.strengthMax || 'Strength Max'}</h3>
-            {renderChart(strengthData, ['strengthMax', 'eStrengthMax'], [THEME.muted, THEME.meet], t.noMetricData || t.noStatsData)}
-          </div>
+        <div style={responsiveStatsChartGridStyle()}>
+          {renderChartCard({
+            key: 'totalSBD',
+            title: t.totalSBD,
+            color: THEME.meet,
+            data: totalData.map(entry => ({ ...entry, oneRM: chartWeightFromKg(entry.oneRM), e1rm: chartWeightFromKg(entry.e1rm) })),
+            dataKeys: ['oneRM', 'e1rm'],
+            colors: [THEME.muted, THEME.meet],
+          })}
+          {renderChartCard({
+            key: 'strengthTotalBodyweight',
+            title: t.strengthTotalBodyweight,
+            color: THEME.meet,
+            data: strengthData,
+            dataKeys: ['strength', 'eStrength'],
+            colors: [THEME.muted, THEME.meet],
+            emptyMessage: t.noMetricData || t.noStatsData,
+          })}
+          {renderChartCard({
+            key: 'strengthMax',
+            title: t.strengthMax || 'Strength Max',
+            color: THEME.meet,
+            data: strengthData,
+            dataKeys: ['strengthMax', 'eStrengthMax'],
+            colors: [THEME.muted, THEME.meet],
+            emptyMessage: t.noMetricData || t.noStatsData,
+          })}
         </div>
       )}
 
@@ -7520,7 +7581,7 @@ function AppTopBar() {
   return null;
 }
 
-function AppHeader({ title, subtitle, meta, children, titleStyle = {} }) {
+function AppHeader({ title, subtitle, meta, children, titleStyle = {}, subtitleStyle = {} }) {
   const versionLabel = import.meta.env.VITE_APP_VERSION ? `v${import.meta.env.VITE_APP_VERSION}` : 'dev';
 
   return (
@@ -7570,6 +7631,7 @@ function AppHeader({ title, subtitle, meta, children, titleStyle = {} }) {
             fontWeight: 700,
             lineHeight: 1.35,
             marginTop: 16,
+            ...subtitleStyle,
           }}
         >
           {subtitle}
@@ -7878,7 +7940,11 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
       <button
         type="button"
         onClick={() => setShowAllWorkouts(value => !value)}
-        style={programActionButtonStyle(THEME.primary, position === 'top' ? '14px 0 10px' : '6px 0 0')}
+        style={{
+          ...programActionButtonStyle(THEME.primary, position === 'top' ? '14px 0 10px' : '6px 0 0'),
+          padding: 'clamp(12px, 1.6dvh, 15px)',
+          fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
+        }}
       >
         {showAllWorkouts ? t.showFewerWorkouts : t.showAllWorkouts}
       </button>
@@ -8057,7 +8123,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
         display: 'flex',
         flexDirection: 'column',
         justifyContent: smartModel && visibleWorkoutEntries.length === 1 ? 'center' : 'flex-start',
-        marginTop: smartModel && visibleWorkoutEntries.length === 1 ? 0 : 14,
+        marginTop: smartModel && visibleWorkoutEntries.length === 1 ? 0 : 'clamp(14px, 2dvh, 22px)',
       }}>
 {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
@@ -8086,8 +8152,8 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
             style={{
               display: 'flex',
               alignItems: 'center',
-              padding: '9px 12px',
-              marginBottom: 6,
+              padding: 'clamp(9px, 1.2dvh, 12px) clamp(12px, 3vw, 16px)',
+              marginBottom: 'clamp(6px, 0.8dvh, 9px)',
               borderRadius: 8,
               border: isCurrent ? `2px solid ${focusColor}` : 'none',
               background: 'transparent',
@@ -8100,8 +8166,8 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
             }}
           >
             <div style={{
-              width: 38,
-              height: 38,
+              width: 'clamp(38px, 9vw, 44px)',
+              height: 'clamp(38px, 9vw, 44px)',
               borderRadius: 8,
               background: '#000000',
               display: 'flex',
@@ -8109,8 +8175,8 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
               justifyContent: 'center',
               color: '#ffffff',
               fontWeight: 700,
-              fontSize: 16,
-              marginRight: 10,
+              fontSize: 'clamp(16px, 3.8vw, 19px)',
+              marginRight: 'clamp(10px, 2.5vw, 14px)',
               flexShrink: 0
             }}>
               {workout.number}
@@ -8120,6 +8186,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
               <div style={{
                 fontWeight: isCurrent ? 800 : 700,
                 color: titleColor,
+                fontSize: 'clamp(16px, 3.8vw, 19px)',
                 ...(workout.type === 'meet' ? {
                   display: 'flex',
                   alignItems: 'center',
@@ -8136,7 +8203,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
                 />
                 {isCurrent && (
                   <span style={{
-                    fontSize: 11,
+                    fontSize: RESPONSIVE_CONTENT_UI.compactFontSize,
                     background: focusColor,
                     color: '#ffffff',
                     padding: '1px 6px',
@@ -8150,7 +8217,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
 
               {completedAtLabel && (
                 <div style={{
-                  fontSize: 11,
+                  fontSize: RESPONSIVE_CONTENT_UI.compactFontSize,
                   color: THEME.muted,
                   fontWeight: 700,
                   marginTop: 3
@@ -8162,14 +8229,14 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
 
             {planLines.length > 0 && (
               <div style={{
-                marginLeft: 10,
+                marginLeft: 'clamp(10px, 2.5vw, 14px)',
                 display: 'grid',
-                gap: 2,
+                gap: 'clamp(2px, 0.35dvh, 4px)',
                 color: THEME.text,
-                fontSize: 11,
+                fontSize: RESPONSIVE_CONTENT_UI.compactFontSize,
                 lineHeight: 1.2,
                 textAlign: 'right',
-                maxWidth: 210,
+                maxWidth: 'clamp(210px, 45vw, 240px)',
                 flexShrink: 0
               }}>
                 {planLines.map((line, lineIndex) => {
@@ -8203,7 +8270,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
               </div>
             )}
 
-            {isDone && !completedAtLabel && <span style={{ color: THEME.primary, fontSize: 18, marginLeft: 8 }}>✅</span>}
+            {isDone && !completedAtLabel && <span style={{ color: THEME.primary, fontSize: 'clamp(18px, 4.2vw, 21px)', marginLeft: 8 }}>✅</span>}
           </div>
         );
       })}
@@ -12361,11 +12428,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       if (event.key === 'Enter' || event.key === ' ') changeScreen('current');
     } : undefined}
     style={{
-      ...balancedVerticalScreenStyle(),
-      maxWidth: 500,
-      margin: '0 auto',
-      padding: '12px 14px 16px',
-      fontFamily: 'sans-serif',
+      ...responsiveContentScreenStyle(),
+      alignContent: 'start',
+      rowGap: 'clamp(14px, 2.2dvh, 24px)',
       cursor: dashboardMeetState.isMeetDay ? 'pointer' : undefined,
     }}
   >
@@ -12394,6 +12459,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           )}
         </>
       ) : null}
+      titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
+      subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
     />
 
     {dashboardMeetState.isMeetDay && (
@@ -12422,18 +12489,17 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             if (e.key === 'Enter' || e.key === ' ') changeScreen('current');
           }}
           style={{
-            padding: '0 0 12px',
-            marginTop: 16,
-            marginBottom: 8,
+            padding: 0,
+            margin: 0,
             textAlign: 'center',
             cursor: 'pointer',
           }}
         >
           <div style={{
             color: isNextMeetDay ? THEME.meet : THEME.text,
-            fontSize: 24,
+            fontSize: 'clamp(24px, 6vw, 30px)',
             fontWeight: 900,
-            marginBottom: planLines.length ? 10 : 0
+            marginBottom: planLines.length ? 'clamp(8px, 1.2dvh, 12px)' : 0
           }}>
             <WorkoutTitle workout={nextWorkout} t={t} benchPressVariant={benchPressVariant} />
           </div>
@@ -12443,9 +12509,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
               display: 'flex',
               justifyContent: 'center',
               flexWrap: 'wrap',
-              gap: 8,
-              margin: '-3px 0 10px',
-              fontSize: 12,
+              gap: 'clamp(8px, 2vw, 12px)',
+              margin: '-3px 0 clamp(8px, 1.2dvh, 12px)',
+              fontSize: 'clamp(12px, 3vw, 15px)',
               fontWeight: 900,
             }}>
               {nextWorkout.lifts.map((liftBlock, index) => {
@@ -12466,7 +12532,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           {planLines.length > 0 && (
             <div style={{
               color: THEME.muted,
-              fontSize: 14,
+              fontSize: 'clamp(14px, 3.4vw, 17px)',
               fontWeight: 800,
               lineHeight: 1.45
             }}>
@@ -12533,28 +12599,28 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
               if (e.key === 'Enter' || e.key === ' ') setShowMeetPlanModal(true);
             }}
             style={{
-              padding: '0 0 12px',
-              marginBottom: 8,
+              padding: 0,
+              margin: 0,
               textAlign: 'center',
               cursor: 'pointer',
             }}
           >
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: THEME.meet, fontSize: 12, fontWeight: 900, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: THEME.meet, fontSize: 'clamp(12px, 2.9vw, 14px)', fontWeight: 900, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4 }}>
               <span>{t.dashboardMeetRouteTitle || 'Route to meet'}</span>
               <TapInfoIcon color={THEME.meet} />
             </div>
-            <div style={{ color: THEME.text, fontSize: 14, fontWeight: 800, marginBottom: dashboardMeetProjection?.available && dashboardMeetProjection.limitingLift ? 2 : 6, lineHeight: 1.35 }}>
+            <div style={{ color: THEME.text, fontSize: 'clamp(14px, 3.3vw, 16px)', fontWeight: 800, marginBottom: dashboardMeetProjection?.available && dashboardMeetProjection.limitingLift ? 2 : 6, lineHeight: 1.35 }}>
               {dashboardMeetProjection?.available
                 ? `${t.expectedMeetWindow || 'Expected meet'}: ${dashboardMeetProjection.label}`
                 : (t.smartProjectionUnavailable || 'Not enough active-cycle data for a reliable projection.')}
             </div>
             {primaryBlockerLift && primaryBlockerPhase && (
-              <div style={{ color: THEME.muted, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+              <div style={{ color: THEME.muted, fontSize: 'clamp(12px, 2.9vw, 14px)', fontWeight: 700, marginBottom: 6 }}>
                 {t.smartPrimaryBlocker || 'Primary blocker'}: {primaryBlockerLift} ({getSmartAttemptPhaseLabel(primaryBlockerPhase, t)})
               </div>
             )}
             {blockerRouteText && (
-              <div style={{ color: THEME.meet, fontSize: 12, fontWeight: 900, lineHeight: 1.3 }}>
+              <div style={{ color: THEME.meet, fontSize: 'clamp(12px, 2.9vw, 14px)', fontWeight: 900, lineHeight: 1.3 }}>
                 {blockerRouteText}
               </div>
             )}
@@ -12573,7 +12639,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       );
     })()}
     {!dashboardMeetState.isMeetDay && (
-    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: '4px 6px 8px', marginBottom: 4 }}>
+    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: '2px 6px' }}>
       {(() => {
         const cards = [
           {
@@ -12633,7 +12699,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              gap: 12
+              gap: 'clamp(12px, 3vw, 16px)'
             }}>
               {cards.map(card => (
                 <div
@@ -12645,15 +12711,15 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                     if (e.key === 'Enter' || e.key === ' ') openStatsTab(card.statsTab);
                   }}
                   style={{
-                    padding: '6px 2px',
+                    padding: 'clamp(5px, 0.8dvh, 8px) 2px',
                     cursor: 'pointer',
                   }}
                 >
                   <div style={{
                     color: card.color,
-                    fontSize: 19,
+                    fontSize: 'clamp(19px, 4.6vw, 23px)',
                     fontWeight: 900,
-                    marginBottom: 8,
+                    marginBottom: 'clamp(7px, 1dvh, 10px)',
                     lineHeight: 1.1
                   }}>
                     {card.label}
@@ -12662,20 +12728,20 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'auto 1fr',
-                    gap: '7px 10px',
+                    gap: 'clamp(7px, 0.9dvh, 10px) 10px',
                     alignItems: 'baseline'
                   }}>
-                    <span style={{ color: THEME.muted, fontSize: 13, fontWeight: 900 }}>
+                    <span style={{ color: THEME.muted, fontSize: 'clamp(13px, 3.2vw, 16px)', fontWeight: 900 }}>
                       {t.oneRM}
                     </span>
-                    <strong style={{ color: card.color, fontSize: 17, fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <strong style={{ color: card.color, fontSize: 'clamp(17px, 4.2vw, 21px)', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {value(card.oneRM)}
                     </strong>
 
-                    <span style={{ color: THEME.muted, fontSize: 13, fontWeight: 900 }}>
+                    <span style={{ color: THEME.muted, fontSize: 'clamp(13px, 3.2vw, 16px)', fontWeight: 900 }}>
                       {t.e1RM || 'e1RM'}
                     </span>
-                    <strong style={{ color: card.color, fontSize: 17, fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <strong style={{ color: card.color, fontSize: 'clamp(17px, 4.2vw, 21px)', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {value(card.e1RM)}
                     </strong>
                   </div>
@@ -12689,7 +12755,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                     })) && (
                     <div style={{
                       color: THEME.green,
-                      fontSize: 11,
+                      fontSize: 'clamp(11px, 2.7vw, 14px)',
                       fontWeight: 900,
                       textAlign: 'right',
                       marginTop: 4
@@ -12712,7 +12778,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       const dashboardBodyRows = latestBodyDataRows.filter(row => dashboardBodyRowTabs[row.key]);
 
       return (
-        <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: '4px 8px 4px' }}>
+        <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: '2px 8px 4px' }}>
           {dashboardBodyRows.length > 0 ? (
             dashboardBodyRows.map((row, index) => (
               <div
@@ -12734,13 +12800,13 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   gridTemplateColumns: '1fr auto',
                   alignItems: 'center',
                   columnGap: 14,
-                  padding: '6px 8px',
-                  marginBottom: index === dashboardBodyRows.length - 1 ? 0 : 4,
+                  padding: 'clamp(6px, 0.9dvh, 10px) 8px',
+                  marginBottom: index === dashboardBodyRows.length - 1 ? 0 : 'clamp(3px, 0.5dvh, 6px)',
                   borderRadius: 8,
                   cursor: 'pointer',
                 }}
               >
-                <span style={{ color: THEME.text, fontWeight: 800, fontSize: 16 }}>
+                <span style={{ color: THEME.text, fontWeight: 800, fontSize: 'clamp(16px, 3.8vw, 19px)' }}>
                   {row.label}
                 </span>
 
@@ -12748,7 +12814,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   textAlign: 'right',
                   whiteSpace: 'nowrap',
                   minWidth: 70,
-                  fontSize: 16,
+                  fontSize: 'clamp(16px, 3.8vw, 19px)',
                   color: row.status?.color || THEME.primary
                 }}>
                   {row.value}
@@ -12825,22 +12891,24 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
 )}
 
       {screen === 'settings' && (
-       <div style={{ ...balancedVerticalScreenStyle(), display: 'flex', flexDirection: 'column', maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
+       <div style={{ ...responsiveContentScreenStyle(), display: 'flex', flexDirection: 'column' }}>
   <AppHeader
     t={t}
     title={t.settings}
+    titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
   />
 
   <div style={{
     background: 'transparent',
     border: 'none',
     borderRadius: 8,
-    padding: '0 8px',
-    marginTop: 10,
-    marginBottom: 6,
+    padding: '0 clamp(2px, 1.5vw, 8px)',
+    marginTop: 'clamp(6px, 1dvh, 10px)',
+    marginBottom: 4,
     flex: 1,
     display: 'grid',
-    alignContent: 'space-evenly',
+    gap: 'clamp(1px, 0.35dvh, 4px)',
+    alignContent: 'safe center',
   }}>
     <ProfileSection
       userProfile={userProfile}

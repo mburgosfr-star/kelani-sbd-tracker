@@ -6,6 +6,7 @@ import {
 } from './smartTrainingEngine';
 import { generateWarmups } from './warmupAndPrepGeneration';
 import { buildSmartLiftPrescription } from './smartPrescriptionEngine';
+import { getSmartIntensityRole } from './smartFrequencyPolicy';
 
 function topDouble(pct = 0.825, weight = 145) {
   return {
@@ -39,14 +40,53 @@ test.each([
   expect(reshaped.slice(1).every(set => set.pct === expectedPct)).toBe(true);
 });
 
-test('volume-only medium work has at least four reps and stays at or below 65%', () => {
+test('a full C3W43-style medium Squat block reaches a real medium dose near 70%', () => {
   const sets = Array.from({ length: 6 }, () => ({
-    labelKey: 'workSets', reps: 3, pct: 0.65, precisePct: 0.65, weight: 90,
+    labelKey: 'workSets', reps: 4, pct: 0.725, precisePct: 0.725, weight: 105,
   }));
-  const reshaped = constrainExplicitMediumLiftDose({ sets, trainingMax: 140 });
+  const reshaped = constrainExplicitMediumLiftDose({ sets, trainingMax: 145 });
 
-  expect(reshaped.every(set => set.reps >= 4)).toBe(true);
-  expect(reshaped.every(set => set.pct <= 0.65)).toBe(true);
+  expect(reshaped).toHaveLength(6);
+  expect(reshaped.every(set => set.reps === 4)).toBe(true);
+  expect(reshaped.every(set => set.weight === 100)).toBe(true);
+  expect(getSmartIntensityRole({ sets: reshaped })).toBe('medium');
+});
+
+test('a short medium block uses the stable 70% target without an aggressive jump', () => {
+  const sets = Array.from({ length: 3 }, () => ({
+    labelKey: 'workSets', reps: 6, pct: 0.725, precisePct: 0.725, weight: 70,
+  }));
+  const reshaped = constrainExplicitMediumLiftDose({ sets, trainingMax: 100 });
+
+  expect(reshaped).toHaveLength(3);
+  expect(reshaped.every(set => set.reps === 6)).toBe(true);
+  expect(reshaped.every(set => set.weight === 70)).toBe(true);
+  expect(getSmartIntensityRole({ intensityRole: 'medium', sets: reshaped }))
+    .toBe('medium');
+});
+
+test('medium volume is capped before its aggregate dose becomes heavy', () => {
+  const sets = Array.from({ length: 6 }, () => ({
+    labelKey: 'workSets', reps: 6, pct: 0.725, precisePct: 0.725, weight: 70,
+  }));
+  const reshaped = constrainExplicitMediumLiftDose({ sets, trainingMax: 100 });
+
+  expect(reshaped.reduce((total, set) => total + set.reps, 0)).toBe(24);
+  expect(getSmartIntensityRole({ sets: reshaped })).toBe('medium');
+});
+
+test('an explicit failed-set recovery keeps its deliberately lower medium-slot dose', () => {
+  const sets = Array.from({ length: 3 }, () => ({
+    labelKey: 'workSets', reps: 4, pct: 0.60, precisePct: 0.60, weight: 60,
+  }));
+  const reshaped = constrainExplicitMediumLiftDose({
+    sets,
+    trainingMax: 100,
+    preserveLowerDose: true,
+  });
+
+  expect(reshaped.every(set => set.weight === 60)).toBe(true);
+  expect(getSmartIntensityRole({ sets: reshaped })).toBe('light');
 });
 
 test('fills a progressive primary grid with five back-off sets', () => {

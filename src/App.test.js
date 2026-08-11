@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import App, { canSwitchClassicToSmart, capRunningBestChart, formatWorkoutSetPercentDisplay, getDashboardE1RMPrGain, getDashboardMeetState, isDashboardE1RMPR, replaceCurrentChartEndpoint, shouldShowAutomaticBackupStatus } from './App';
+import App, { SettingsListRow, StatsScreen, canSwitchClassicToSmart, capRunningBestChart, formatWorkoutSetPercentDisplay, getDashboardE1RMPrGain, getDashboardMeetState, isDashboardE1RMPR, replaceCurrentChartEndpoint, shouldShowAutomaticBackupStatus } from './App';
+import { translations } from './translations';
 
 test('dashboard e1RM PR gain compares against the real 1RM on the same card', () => {
   expect(getDashboardE1RMPrGain(100, 97.5)).toBe(2.5);
@@ -57,6 +58,48 @@ test('the canonical current e1RM permanently caps older raw running-best points'
     { label: 'C3W46', e1rm: 180 },
     { label: 'C3W48', e1rm: 180 },
   ]);
+});
+
+test('stats tabs keep the same chart frame size, including empty charts', () => {
+  const statsTranslations = {
+    stats: 'Stats', cycle: 'Cycle', workoutProgress: 'Workout',
+    squat: 'Squat', bench: 'Bench', deadlift: 'Deadlift',
+    statsTabLifts: 'Lifts', statsTabTotal: 'Total', statsTabBody: 'Body', statsTabHealth: 'Health',
+    totalSBD: 'Total SBD', strengthTotalBodyweight: 'Strength / bodyweight', strengthMax: 'Strength Max',
+    noStatsData: 'No data', noMetricData: 'No metric data', e1RM: 'e1RM', bodyweight: 'Body weight',
+  };
+  const commonProps = {
+    history: [], bodyWeights: [], currentCycle: 1, currentIndex: 0, totalWorkouts: 4,
+    t: statsTranslations,
+  };
+  const view = render(<StatsScreen {...commonProps} activescreen="lifts" />);
+  const liftFrames = screen.getAllByTestId('stats-chart-frame');
+
+  expect(liftFrames).toHaveLength(3);
+  expect(new Set(liftFrames.map(frame => frame.style.height))).toEqual(new Set(['100%']));
+  expect(new Set(liftFrames.map(frame => frame.style.minHeight))).toEqual(new Set(['108px']));
+
+  view.rerender(<StatsScreen {...commonProps} activescreen="totaal" />);
+  const totalFrames = screen.getAllByTestId('stats-chart-frame');
+
+  expect(totalFrames).toHaveLength(3);
+  expect(totalFrames.map(frame => frame.style.height)).toEqual(liftFrames.map(frame => frame.style.height));
+});
+
+test('settings rows use responsive text and phone-sized action targets', () => {
+  render(<SettingsListRow label="Profile" actionLabel="Edit" onAction={() => {}} />);
+
+  expect(screen.getByText('Profile').style.fontSize).toBe('clamp(16px, 4vw, 20px)');
+  const action = screen.getByRole('button', { name: 'Edit' });
+  expect(action.style.minHeight).toBe('clamp(44px, 5.5dvh, 52px)');
+  expect(action.style.fontSize).toBe('clamp(15px, 3.7vw, 18px)');
+  expect(action.style.whiteSpace).toBe('normal');
+});
+
+test('the destructive settings action stays concise in every language', () => {
+  expect(translations.nl.startFromScratch).toBe('Opnieuw');
+  expect(translations.en.startFromScratch).toBe('Start over');
+  expect(translations.ca.startFromScratch).toBe('Reinicia');
 });
 
 test('automatic emergency-backup status is shown only in the native app', () => {

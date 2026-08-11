@@ -76,7 +76,7 @@ test('supplemented heavy Bench has a visible complete plan and technical diagnos
     'Selection: primary=Bench, secondary=Deadlift',
   );
   expect(diagnosis).toContain(
-    'Bench technical: role=primary, topAnchor=90%, ' +
+    'Bench technical: role=primary, intensity=heavy, topAnchor=90%, ' +
     'volumeAnchor=75%, plannedVolume=75%',
   );
   expect(diagnosis).toContain('gridItems=6');
