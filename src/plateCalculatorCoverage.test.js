@@ -62,7 +62,7 @@ test('per-side accessories remain excluded from the plate calculator', () => {
   );
 
   expect(block).toMatch(
-    /\{onShowPlateCalculator && !acc\.perSide && \(/
+    /\{onShowPlateCalculator && !isBodyweight && !acc\.perSide && \(/
   );
 });
 

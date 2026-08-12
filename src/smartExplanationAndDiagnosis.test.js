@@ -244,7 +244,7 @@ test('shows the full readiness/blocker/fatigue detail on a deload or rest day to
     },
     {
       label: 'Deadlift (Cycle e1RM)',
-      value: '155 kg',
+      value: '157.5 kg',
       kind: 'metric',
     },
     {
@@ -315,7 +315,7 @@ test('explains genuinely light secondary lifts from their dose', () => {
 
   expect(rows).toHaveLength(2);
   rows.forEach(row => {
-    expect(row.value).toContain('Light intensity.');
+    expect(row.value).toContain('Light work.');
     expect(row.value).not.toContain('Lower volume for the secondary lift');
   });
 });
@@ -341,7 +341,7 @@ test('C3W43 secondary roles are both explained as medium from their prescribed d
   expect(rows).toHaveLength(2);
   rows.forEach(row => {
     expect(row.value).toContain('Medium intensity.');
-    expect(row.value).not.toContain('Light intensity');
+    expect(row.value).not.toContain('Light work');
   });
 });
 
@@ -390,12 +390,42 @@ test('lists every lift still short of full meet demonstration as a blocker, not 
     { label: 'Deadlift (Cycle e1RM)', value: '170 kg', kind: 'metric' },
     { label: 'Deadlift (3rd support)', value: '185 kg', kind: 'metric' },
     { label: 'Deadlift (Gap)', value: '15 kg', kind: 'metric' },
-    { label: 'Squat (Cycle e1RM)', value: '140 kg', kind: 'metric' },
-    { label: 'Squat (3rd support)', value: '150 kg', kind: 'metric' },
+    { label: 'Squat (Cycle e1RM)', value: '137.5 kg', kind: 'metric' },
+    { label: 'Squat (3rd support)', value: '147.5 kg', kind: 'metric' },
     { label: 'Squat (Gap)', value: '10 kg', kind: 'metric' },
-    { label: 'Bench (Cycle e1RM)', value: '100 kg', kind: 'metric' },
+    { label: 'Bench (Cycle e1RM)', value: '102.5 kg', kind: 'metric' },
     { label: 'Bench (3rd support)', value: '100 kg', kind: 'metric' },
     { label: 'Bench (Gap)', value: '0 kg', kind: 'metric' },
+  ]));
+});
+
+test('live dashboard e1RMs override stale 5kg workout snapshots in the Smart modal', () => {
+  const workout = workoutWith([smartLift({ lift: 'Deadlift' })]);
+  workout.smartDecisionSummary.readiness.meetPlanReadiness = {
+    Bench: {
+      currentCycleBestE1RM: 100,
+      readinessTargetAttempt: 105,
+      readinessPhase: 'third-attempt',
+    },
+    Deadlift: {
+      currentCycleBestE1RM: 180,
+      readinessTargetAttempt: 185,
+      readinessPhase: 'third-attempt',
+    },
+  };
+
+  const rows = getSmartModalDetailRows(workout, {}, {
+    Bench: 102.5,
+    Deadlift: 182.5,
+  });
+
+  expect(rows).toEqual(expect.arrayContaining([
+    { label: 'Bench (Cycle e1RM)', value: '102.5 kg', kind: 'metric' },
+    { label: 'Bench (3rd support)', value: '105 kg', kind: 'metric' },
+    { label: 'Bench (Gap)', value: '2.5 kg', kind: 'metric' },
+    { label: 'Deadlift (Cycle e1RM)', value: '182.5 kg', kind: 'metric' },
+    { label: 'Deadlift (3rd support)', value: '185 kg', kind: 'metric' },
+    { label: 'Deadlift (Gap)', value: '2.5 kg', kind: 'metric' },
   ]));
 });
 
@@ -505,7 +535,7 @@ test('explains W41-style secondary squat from its measured light intensity, not 
 
   const [row] = getSmartPrescriptionDetailRows(workoutWith([squat, bench]));
 
-  expect(row.value).toContain('Light intensity.');
+  expect(row.value).toContain('Light work.');
   expect(row.value).not.toContain('Lower volume');
 });
 
@@ -538,9 +568,8 @@ test("a lift forced light on a single-lift day (heavy weekly slot already used) 
   );
 
   expect(row.value).not.toContain('Lower volume for the secondary lift.');
-  expect(row.value).toContain(
-    "This lift's heavy slot is already used this week, so it's intentionally lighter today."
-  );
+  expect(row.value).toBe('6×4×60% · Light work.');
+  expect(row.value).not.toContain('heavy work');
 });
 
 test("a planned medium single-lift day explains that it fills the remaining weekly target", () => {
@@ -573,7 +602,7 @@ test("a planned medium single-lift day explains that it fills the remaining week
   expect(row.value).toContain(
     "This lift's heavy slot is already used this week. Today's medium session fills its remaining weekly target."
   );
-  expect(row.value).not.toContain('intentionally lighter today');
+  expect(row.value).not.toContain('today adds useful practice and volume');
 });
 
 test('builds a copyable diagnosis with decision, projection and technical proof', () => {

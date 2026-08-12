@@ -1,4 +1,12 @@
 import { generateWorkoutsForTrainingModel } from './smartTrainingEngine';
+import { generatePrepItems } from './warmupAndPrepGeneration';
+import { translations } from './translations';
+
+test('Bench preparation uses four compactly named exercises', () => {
+  expect(generatePrepItems('Bench', 'basicFirst')).toHaveLength(4);
+  expect(translations.en.prepBandPullApart).toBe('Pull-aparts');
+  expect(translations.en.prepBandExternalRotation).toBe('External rotations');
+});
 
 function findFirstSmartTrainingWorkout(workouts) {
   return workouts.find(workout => workout?.smartGeneratedPrescription);

@@ -70,6 +70,42 @@ test('uses the next unique accessory when both lifts share the same first choice
   ]);
 });
 
+test('prefers the least recently completed accessory on a multi-lift day', () => {
+  const history = [{
+    cycle: 1,
+    workoutNumber: 4,
+    workoutSnapshot: {
+      accessories: [{ key: 'lift-a-main', done: [true, true, true] }],
+    },
+  }];
+
+  expect(selectSmartAccessoriesForWorkout([
+    [accessory('lift-a-main'), accessory('lift-a-extra')],
+    [accessory('lift-b-main'), accessory('lift-b-extra')],
+  ], { history })).toEqual([
+    accessory('lift-a-extra'),
+    accessory('lift-b-main'),
+  ]);
+});
+
+test('does not treat an unperformed planned accessory as recent work', () => {
+  const history = [{
+    cycle: 1,
+    workoutNumber: 4,
+    workoutSnapshot: {
+      accessories: [{ key: 'lift-a-main', done: [false, false, false] }],
+    },
+  }];
+
+  expect(selectSmartAccessoriesForWorkout([
+    [accessory('lift-a-main'), accessory('lift-a-extra')],
+    [accessory('lift-b-main'), accessory('lift-b-extra')],
+  ], { history })).toEqual([
+    accessory('lift-a-main'),
+    accessory('lift-b-main'),
+  ]);
+});
+
 test('recognizes a safe exact recent prescription repeat', () => {
   const candidate = {
     type: 'training',

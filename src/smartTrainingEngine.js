@@ -2969,23 +2969,10 @@ export function getProjectedSmartLiftEligibility({
       lift !== lastPrimaryLift
     );
 
-  const nonRepeatedFallbackPrimaryLifts = LIFT_ORDER
-    .filter(lift =>
-      lift !== lastPrimaryLift && consecutiveEligibleLifts.has(lift)
-      && spacingEligibleLifts.has(lift)
-    )
-    .sort(comparePrimaryLoad);
-
   const primaryEligibleLifts =
     nonRepeatedUnderTargetPrimaryLifts.length > 0
       ? nonRepeatedUnderTargetPrimaryLifts
-      : nonRepeatedFallbackPrimaryLifts.length > 0
-        ? nonRepeatedFallbackPrimaryLifts
-        : underTargetPrimaryLifts.length > 0
-          ? underTargetPrimaryLifts
-          : LIFT_ORDER.filter(lift =>
-            consecutiveEligibleLifts.has(lift) && spacingEligibleLifts.has(lift)
-          );
+      : underTargetPrimaryLifts;
 
   const secondaryEligibleLifts = LIFT_ORDER
     .filter(lift =>
@@ -3864,7 +3851,8 @@ export function buildGeneratedSmartTrainingWorkout({
     )
   );
   const accessories = selectSmartAccessoriesForWorkout(
-    accessoriesByLift
+    accessoriesByLift,
+    { history }
   );
   const repeatVariationApplied = Boolean(
     primaryBlock?.smartPrescription?.repeatVariationApplied
@@ -4012,6 +4000,37 @@ function generateSmartWorkouts({
     Math.max(smartDecision.index, 0),
     Math.max(generatedWorkouts.length - 1, 0)
   );
+
+  const decisionWorkoutNumber = Number(
+    generatedWorkouts[visibleThroughIndex]?.number
+  ) || visibleThroughIndex + 1;
+  const projectedFrequencyEligibility = getProjectedSmartLiftEligibility({
+    history,
+    currentCycle,
+    athleteLevel,
+    targetWorkoutNumber: decisionWorkoutNumber,
+  });
+  const allProjectedFrequencyTargetsMet = LIFT_ORDER.every(lift =>
+    Number(projectedFrequencyEligibility.exposureCounts[lift]) >=
+      Number(projectedFrequencyEligibility.targets[lift] || 0)
+  );
+
+  // The readiness decision defaults to a training day. That is only valid
+  // while at least one lift still has genuine room in the current rolling
+  // week. Previously the generic primary fallback looked only at heavy-turn
+  // recency, so it could re-admit a fully allocated lift as a light session
+  // (real report: C3W44 Bench after Squat 3/3, Bench 4/4 and Deadlift 2/2).
+  // Close that fallback before prescription generation: a completed weekly
+  // allocation earns a recovery day and the next completed day will roll
+  // the six-day window forward naturally.
+  if (
+    smartDecision.dayType === SMART_DAY_TYPES.TRAINING &&
+    allProjectedFrequencyTargetsMet
+  ) {
+    smartDecision.dayType = SMART_DAY_TYPES.RECOVERY;
+    smartDecision.reason = SMART_DECISION_REASONS.FREQUENCY_RECOVERY;
+    smartDecision.overrideType = 'rest';
+  }
 
   let generatedSmartTrainingWorkout = null;
 

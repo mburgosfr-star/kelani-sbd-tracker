@@ -281,6 +281,48 @@ test('preserves begun set progress only for the active workout', () => {
   });
 });
 
+test('preserves a begun accessory plan when the active workout regenerates', () => {
+  const currentWorkout = {
+    number: 7,
+    type: 'training',
+    lifts: [],
+    accessories: [{
+      key: 'machineCrunch',
+      weights: [20, 20, 20],
+      originalWeights: [20, 20, 20],
+      done: [true, false, false],
+    }],
+    cooldownItems: [],
+  };
+  const regeneratedWorkout = {
+    ...currentWorkout,
+    accessories: [{
+      key: 'plank',
+      bodyweight: true,
+      durationSeconds: 30,
+      weights: [0, 0, 0],
+      originalWeights: [0, 0, 0],
+      done: [false, false, false],
+    }],
+  };
+
+  const [activeMerged] = applyAccessoryPlanToWorkouts(
+    [currentWorkout],
+    [regeneratedWorkout],
+    new Set(),
+    7
+  );
+  const [futureMerged] = applyAccessoryPlanToWorkouts(
+    [currentWorkout],
+    [regeneratedWorkout],
+    new Set(),
+    6
+  );
+
+  expect(activeMerged.accessories).toEqual(currentWorkout.accessories);
+  expect(futureMerged.accessories[0].key).toBe('plank');
+});
+
 
 test('gives Ultra Bench Strength three Deadlift work sets', () => {
   const workouts = generateUltraProgram(145, 100, 180);

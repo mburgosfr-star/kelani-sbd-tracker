@@ -16,6 +16,7 @@ import {
   formatWeightValue,
   formatDecimalDisplay,
   formatWeightFromKg,
+  roundToStep,
 } from './workoutUnits';
 import {
   LIFT_ORDER,
@@ -142,8 +143,46 @@ export function buildBackupSummary(data) {
   };
 }
 
+export function roundDashboardWeightKg(value) {
+  return roundToStep(Number(value) || 0, 2.5);
+}
+
 export function getDashboardE1RMPrGain(e1RM, oneRM) {
-  return Math.max(0, (Number(e1RM) || 0) - (Number(oneRM) || 0));
+  const displayedE1RM = roundDashboardWeightKg(e1RM);
+  const displayedOneRM = roundDashboardWeightKg(oneRM);
+
+  return Math.max(0, displayedE1RM - displayedOneRM);
+}
+
+export function buildDashboardE1RMMetrics(oneRMs = {}, e1RMs = {}) {
+  const lifts = Object.fromEntries(LIFT_ORDER.map(lift => {
+    const oneRM = roundDashboardWeightKg(oneRMs[lift]);
+    const e1RM = Math.max(
+      oneRM,
+      roundDashboardWeightKg(e1RMs[lift])
+    );
+
+    return [lift, {
+      oneRM,
+      e1RM,
+      prGain: getDashboardE1RMPrGain(e1RM, oneRM),
+    }];
+  }));
+  const total = LIFT_ORDER.reduce((result, lift) => ({
+    oneRM: result.oneRM + lifts[lift].oneRM,
+    e1RM: result.e1RM + lifts[lift].e1RM,
+    prGain: result.prGain + lifts[lift].prGain,
+  }), { oneRM: 0, e1RM: 0, prGain: 0 });
+
+  return { lifts, total };
+}
+
+// Dashboard e1RM is factual performance: a real 1RM baseline or a higher
+// estimate actually achieved in training. Do not use inherited `bestE1RM`
+// summary fields here; those can contain Smart's rounded planning max even
+// when no set ever achieved it.
+export function getDashboardE1RMValue(oneRM, achievedE1RM) {
+  return Math.max(Number(oneRM) || 0, Number(achievedE1RM) || 0);
 }
 
 // A rounded seed/max estimate is not a new training PR. The dashboard may
@@ -597,12 +636,123 @@ function responsiveContentScreenStyle(bottomOffset = BOTTOM_NAV_SPACE) {
   };
 }
 
+export function restWorkoutScreenStyle() {
+  return {
+    ...responsiveContentScreenStyle(),
+    // The rest screen uses space-between for header, information and its
+    // completion action. A little more bottom inset moves both lower items
+    // upward without detaching the Smart label from the header or changing
+    // the layout model on shorter phones.
+    paddingBottom: 32,
+  };
+}
+
+export function statsScreenStyle() {
+  return {
+    ...responsiveContentScreenStyle(),
+    height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
+    minHeight: 600,
+    display: 'flex',
+    flexDirection: 'column',
+    // Keep the final graph comfortably clear of the fixed navigation. The
+    // flex chart area absorbs this small inset across its three rows, so the
+    // charts become only slightly more compact and their visual centre moves
+    // upward instead of the bottom graph sitting against the nav bar.
+    paddingBottom: 32,
+  };
+}
+
+export function workoutCompletionButtonStyle({ enabled = true } = {}) {
+  return {
+    display: 'block',
+    width: 'auto',
+    minHeight: 44,
+    padding: '10px 28px',
+    fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
+    fontWeight: 700,
+    background: THEME.card,
+    color: enabled ? 'white' : '#666',
+    border: `1px solid ${THEME.primary}`,
+    borderRadius: 8,
+    cursor: enabled ? 'pointer' : 'not-allowed',
+    margin: '14px auto 10px',
+    opacity: 1,
+  };
+}
+
 // // const APP_TOP_BAR_HEIGHT = 50; // unused // unused after local black statusbar patch
 
 
 const WORKOUT_WORK_ROW_PADDING_X = 12;
-const WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE = 'repeat(2, minmax(0, 1fr))';
+const WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE = 'repeat(4, minmax(0, 1fr))';
 const WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE = 'repeat(4, minmax(0, 1fr))';
+const WORKOUT_ACTION_BUTTON_SIZE = 'clamp(50px, 12vw, 58px)';
+
+export function preparationGridStyle(rowGap = 6) {
+  return {
+    display: 'grid',
+    gridTemplateColumns: WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE,
+    justifyContent: 'center',
+    columnGap: RESPONSIVE_WORKOUT_UI.circleGap,
+    rowGap,
+    padding: `0 ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
+  };
+}
+
+export function workoutActionGridStyle(columnCount = 3) {
+  const isSingleAction = columnCount === 1;
+
+  return {
+    display: 'grid',
+    gridTemplateColumns: `repeat(${columnCount}, ${WORKOUT_ACTION_BUTTON_SIZE})`,
+    alignItems: 'center',
+    justifyItems: 'center',
+    justifyContent: isSingleAction ? 'center' : 'space-evenly',
+    columnGap: 0,
+    width: isSingleAction ? 'fit-content' : '100%',
+    maxWidth: '100%',
+    margin: '8px auto 0',
+  };
+}
+
+function WorkoutActionIcon({ type }) {
+  const commonProps = {
+    width: 'clamp(26px, 6.8vw, 32px)',
+    height: 'clamp(26px, 6.8vw, 32px)',
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2.25,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  };
+
+  if (type === 'edit') {
+    return (
+      <svg {...commonProps}>
+        <path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z" />
+        <path d="m13.5 6.5 4 4" />
+      </svg>
+    );
+  }
+
+  if (type === 'restore') {
+    return (
+      <svg {...commonProps}>
+        <path d="M4 7v5h5" />
+        <path d="M5.6 16.5a8 8 0 1 0 .2-9.2L4 9" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...commonProps}>
+      <path d="m6.5 6.5 11 11" />
+      <path d="m17.5 6.5-11 11" />
+    </svg>
+  );
+}
 
 const RESPONSIVE_WORKOUT_UI = Object.freeze({
   circleSize: 'clamp(44px, 10.5vw, 52px)',
@@ -845,11 +995,13 @@ function WorkoutCircle({
   label,
   accentColor = THEME.primary,
   reps = null,
+  displayValue = null,
 }) {
   const isActiveOpen = active && !done && !skipped;
   const isOpen = !done && !skipped;
   const numericReps = Number(reps);
   const hasReps = Number.isFinite(numericReps) && numericReps > 0;
+  const circleValue = displayValue ?? (hasReps ? numericReps : null);
 
   const borderColor = skipped ? '#e74c3c' : accentColor;
   const background = skipped
@@ -922,9 +1074,9 @@ function WorkoutCircle({
           animation: isActiveOpen ? 'kelaniActiveWorkoutCirclePulse 1.05s ease-in-out infinite' : 'none',
         }}
       >
-        {hasReps ? (
+        {circleValue != null ? (
           <>
-            <span data-testid="workout-circle-reps">{numericReps}</span>
+            <span data-testid="workout-circle-reps">{circleValue}</span>
             {(done || skipped) && (
               <span
                 data-testid="workout-circle-status"
@@ -1062,9 +1214,22 @@ function WorkoutCircleItem({
   );
 }
 
-function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
+export function compactPrepLabelStyle() {
+  return {
+    fontSize: 'clamp(12px, 3vw, 14px)',
+    lineHeight: 1.1,
+    height: '2.2em',
+    display: '-webkit-box',
+    WebkitBoxOrient: 'vertical',
+    WebkitLineClamp: 2,
+    overflow: 'hidden',
+  };
+}
+
+function PrepRow({ item, isActive, isReadOnly, onToggle, t, compact = false }) {
   const label = t[item.labelKey];
   const prescription = formatPrepPrescription(item, t);
+  const compactStyle = compactPrepLabelStyle();
 
   return (
     <WorkoutCircleItem
@@ -1073,9 +1238,13 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
           <div
             title={label}
             style={{
-              fontSize: 'clamp(14px, 3.3vw, 17px)',
+              fontSize: compact
+                ? compactStyle.fontSize
+                : 'clamp(14px, 3.3vw, 17px)',
               fontWeight: 800,
-              lineHeight: 1.05,
+              lineHeight: compact ? 1.1 : 1.05,
+              overflowWrap: 'anywhere',
+              ...(compact ? compactStyle : {}),
             }}
           >
             {label}
@@ -1084,7 +1253,9 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t }) {
             title={prescription}
             style={{
               color: THEME.muted,
-              fontSize: 'clamp(14px, 3.3vw, 17px)',
+              fontSize: compact
+                ? compactStyle.fontSize
+                : 'clamp(14px, 3.3vw, 17px)',
               fontWeight: 700,
               marginTop: 1,
               lineHeight: 1.05,
@@ -1570,12 +1741,12 @@ function SetActionButton({ title, onClick, borderColor, disabled = false, childr
       disabled={disabled}
       onClick={onClick}
       style={{
-        width: RESPONSIVE_WORKOUT_UI.circleSize,
-        height: RESPONSIVE_WORKOUT_UI.circleSize,
-        minWidth: RESPONSIVE_WORKOUT_UI.circleSize,
+        width: WORKOUT_ACTION_BUTTON_SIZE,
+        height: WORKOUT_ACTION_BUTTON_SIZE,
+        minWidth: WORKOUT_ACTION_BUTTON_SIZE,
         borderRadius: '50%',
         border: `2px solid ${borderColor}`,
-        background: 'transparent',
+        background: `${borderColor}18`,
         color: '#ffffff',
         display: 'inline-flex',
         alignItems: 'center',
@@ -1586,7 +1757,8 @@ function SetActionButton({ title, onClick, borderColor, disabled = false, childr
         padding: 0,
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.45 : 1,
-        flexShrink: 0
+        flexShrink: 0,
+        boxShadow: `0 0 0 1px ${borderColor}18, 0 5px 14px rgba(0, 0, 0, 0.28)`,
       }}
     >
       {children}
@@ -1740,14 +1912,9 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
     <div
       data-testid="workout-set-action-grid"
       style={{
-        display: 'grid',
-        gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
-        alignItems: 'center',
-        justifyItems: 'center',
-        gap: RESPONSIVE_WORKOUT_UI.circleGap,
-        marginTop: 8,
+        ...workoutActionGridStyle(),
         gridColumn: compactGrid ? '1 / -1' : undefined,
-      order: compactGrid ? 1 : undefined,
+        order: compactGrid ? 1 : undefined,
       }}
     >
       {!isWarmup && (
@@ -1756,7 +1923,7 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
           borderColor={THEME.primary}
           onClick={handleEditClick}
         >
-          ✎
+          <WorkoutActionIcon type="edit" />
         </SetActionButton>
       )}
 
@@ -1769,7 +1936,7 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
             onRestoreWeight();
           }}
         >
-          ↺
+          <WorkoutActionIcon type="restore" />
         </SetActionButton>
       )}
 
@@ -1782,7 +1949,7 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
             onMarkFailed();
           }}
         >
-          ✕
+          <WorkoutActionIcon type="failed" />
         </SetActionButton>
       )}
     </div>
@@ -1926,6 +2093,36 @@ export function SettingsListRow({ label, description, value, valueColor = THEME.
   );
 }
 
+export function settingsModalPanelStyle() {
+  return {
+    background: THEME.card,
+    border: `1px solid ${THEME.primary}`,
+    borderRadius: 12,
+    padding: 'clamp(16px, 4vw, 22px)',
+    maxWidth: 440,
+    width: '100%',
+    // Use every pixel that remains inside the overlay padding. The previous
+    // fixed 88vh cap created a small, unnecessary scroll range on phones
+    // where the content itself still fitted comfortably in the viewport.
+    maxHeight: 'calc(100dvh - clamp(24px, 8vw, 40px))',
+    boxSizing: 'border-box',
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
+    color: THEME.text,
+  };
+}
+
+export function regularSettingsClusterStyle() {
+  return {
+    display: 'grid',
+    gap: 'clamp(1px, 0.35dvh, 4px)',
+    // Transform affects only the ordinary settings visually; it deliberately
+    // keeps the cluster's original layout footprint, so the separately
+    // rendered destructive action below does not move at all.
+    transform: 'translateY(-14px)',
+  };
+}
+
 function SettingsModal({ title, onClose, children }) {
   return (
     <div style={{
@@ -1939,19 +2136,11 @@ function SettingsModal({ title, onClose, children }) {
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 650,
-      padding: 'clamp(12px, 4vw, 20px)'
+      padding: 'clamp(12px, 4vw, 20px)',
+      boxSizing: 'border-box',
+      overscrollBehavior: 'none',
     }}>
-      <div style={{
-        background: THEME.card,
-        border: `1px solid ${THEME.primary}`,
-        borderRadius: 12,
-        padding: 'clamp(16px, 4vw, 22px)',
-        maxWidth: 440,
-        width: '100%',
-        maxHeight: '88vh',
-        overflowY: 'auto',
-        color: THEME.text
-      }}>
+      <div style={settingsModalPanelStyle()}>
         <h3 style={{ margin: '0 0 clamp(12px, 2dvh, 18px)', textAlign: 'center', fontSize: RESPONSIVE_SETTINGS_UI.modalTitleFontSize }}>{title}</h3>
         {children}
       </div>
@@ -3133,14 +3322,9 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
     <div
       data-testid="workout-set-group-action-grid"
       style={{
-        display: 'grid',
-        gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
-        alignItems: 'center',
-        justifyItems: 'center',
-        gap: RESPONSIVE_WORKOUT_UI.circleGap,
-        marginTop: 8,
+        ...workoutActionGridStyle(),
         gridColumn: compactGrid ? '1 / -1' : undefined,
-      order: compactGrid ? 1 : undefined,
+        order: compactGrid ? 1 : undefined,
       }}
     >
       <SetActionButton
@@ -3149,7 +3333,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
         borderColor={THEME.primary}
         onClick={handleEditClick}
       >
-        ✎
+        <WorkoutActionIcon type="edit" />
       </SetActionButton>
 
       <SetActionButton
@@ -3161,7 +3345,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
           onRestoreAll();
         }}
       >
-        ↺
+        <WorkoutActionIcon type="restore" />
       </SetActionButton>
 
       <SetActionButton
@@ -3173,7 +3357,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
           if (firstOpenEntry) onMarkFailed(firstOpenEntry.index);
         }}
       >
-        ✕
+        <WorkoutActionIcon type="failed" />
       </SetActionButton>
     </div>
   );
@@ -3288,12 +3472,12 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
         })}
       </div>
 
-      {actions}
       {compactGrid && timerNode ? (
         <div style={{ gridColumn: '1 / -1', order: 1 }}>
           {timerNode}
         </div>
       ) : timerNode}
+      {actions}
       {feedback}
     </div>
   );
@@ -3303,6 +3487,8 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
   const [editing, setEditing] = useState(false);
   const firstWeight = acc.weights?.[0] || 0;
   const firstOpenIndex = (acc.done || []).findIndex(done => !done);
+  const isBodyweight = Boolean(acc.bodyweight);
+  const durationSeconds = Number(acc.durationSeconds) || 0;
   const [inputVal, setInputVal] = useState(String(firstWeight || ''));
 
   useEffect(() => {
@@ -3339,7 +3525,14 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
   const accessoryLabel = acc.nameKey ? t[acc.nameKey] : acc.name;
   const isAccessoryComplete = (acc.done || []).length > 0 && (acc.done || []).every(Boolean);
 
-  const actions = !isActiveGroup || isAccessoryComplete || isReadOnly ? null : editing ? (
+  const actions = !isActiveGroup || isAccessoryComplete || isReadOnly ? null : isBodyweight ? (
+    <div
+      data-testid="workout-accessory-action-grid"
+      style={workoutActionGridStyle(1)}
+    >
+      <SetActionButton title={t.markSetFailed} disabled={firstOpenIndex === -1} borderColor="#e74c3c" onClick={e => { e.stopPropagation(); if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex); }}><WorkoutActionIcon type="failed" /></SetActionButton>
+    </div>
+  ) : editing ? (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginTop: 8 }}>
       <input
         type="number"
@@ -3368,18 +3561,11 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
   ) : (
     <div
       data-testid="workout-accessory-action-grid"
-      style={{
-        display: 'grid',
-        gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
-        alignItems: 'center',
-        justifyItems: 'center',
-        gap: RESPONSIVE_WORKOUT_UI.circleGap,
-        marginTop: 8,
-      }}
+      style={workoutActionGridStyle()}
     >
-      <SetActionButton title={t.edit} disabled={isReadOnly} borderColor={THEME.primary} onClick={handleEditClick}>✎</SetActionButton>
-      <SetActionButton title={t.restoreOriginalWeight} disabled={isReadOnly} borderColor="#f39c12" onClick={e => { e.stopPropagation(); onRestoreAll(); }}>↺</SetActionButton>
-      <SetActionButton title={t.markSetFailed} disabled={isReadOnly || firstOpenIndex === -1} borderColor="#e74c3c" onClick={e => { e.stopPropagation(); if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex); }}>✕</SetActionButton>
+      <SetActionButton title={t.edit} disabled={isReadOnly} borderColor={THEME.primary} onClick={handleEditClick}><WorkoutActionIcon type="edit" /></SetActionButton>
+      <SetActionButton title={t.restoreOriginalWeight} disabled={isReadOnly} borderColor="#f39c12" onClick={e => { e.stopPropagation(); onRestoreAll(); }}><WorkoutActionIcon type="restore" /></SetActionButton>
+      <SetActionButton title={t.markSetFailed} disabled={isReadOnly || firstOpenIndex === -1} borderColor="#e74c3c" onClick={e => { e.stopPropagation(); if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex); }}><WorkoutActionIcon type="failed" /></SetActionButton>
     </div>
   );
 
@@ -3428,9 +3614,13 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
               acc.failed?.[index]
             ) ||
             setWeight !== originalWeight;
-          const weightText =
-            `${formatWeightFromKg(setWeight, weightUnit)}` +
-            `${acc.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}`;
+          const weightText = isBodyweight
+            ? (t.bodyweight || 'Body weight')
+            : `${formatWeightFromKg(setWeight, weightUnit)}` +
+              `${acc.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}`;
+          const setTargetText = durationSeconds > 0
+            ? `${durationSeconds} s`
+            : `${acc.reps} reps`;
 
           return (
             <WorkoutCircleItem
@@ -3454,7 +3644,7 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
                   >
                     {weightText}
                   </span>
-                  {onShowPlateCalculator && !acc.perSide && (
+                  {onShowPlateCalculator && !isBodyweight && !acc.perSide && (
                     <button
                       type="button"
                       title={t.plateCalculatorTitle || 'Plate calculator'}
@@ -3489,16 +3679,17 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
                 skipped={!!acc.skipped?.[index]}
                 disabled={isReadOnly}
                 onClick={() => onToggle(index)}
-                label={`${accessoryLabel} ${index + 1}: ${weightText}, ${acc.reps} reps`}
+                label={`${accessoryLabel} ${index + 1}: ${weightText}, ${setTargetText}`}
                 reps={acc.reps}
+                displayValue={durationSeconds > 0 ? `${durationSeconds}s` : null}
               />
             </WorkoutCircleItem>
           );
         })}
       </div>
 
-      {actions}
       {timerNode}
+      {actions}
     </div>
   );
 }
@@ -3946,7 +4137,7 @@ function getSmartIntensityReasonDisplayText(liftBlock = {}, t = {}) {
   const reasonByIntensity = {
     heavy: t.smartHeavyTotalIntensityReason || 'Heavy intensity.',
     medium: t.smartMediumTotalIntensityReason || 'Medium intensity.',
-    light: t.smartLightTotalIntensityReason || 'Light intensity.',
+    light: t.smartLightTotalIntensityReason || 'Light work.',
   };
 
   return reasonByIntensity[intensity] || reasonByIntensity.light;
@@ -4040,13 +4231,12 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
     // (see the forced-secondary retry in generateSmartWorkouts) - there is
     // no other lift in the workout to be "secondary" to, so the normal
     // two-lift-day copy below would be misleading here.
-    reasonParts.push(
-      getSmartIntensityRole(liftBlock) === 'medium'
-        ? (t.smartFrequencyMediumSoloReason ||
-          "This lift's heavy slot is already used this week. Today's medium session fills its remaining weekly target.")
-        : (t.smartFrequencyLightSoloReason ||
-          "This lift's heavy slot is already used this week, so it's intentionally lighter today.")
-    );
+    if (getSmartIntensityRole(liftBlock) === 'medium') {
+      reasonParts.push(
+        t.smartFrequencyMediumSoloReason ||
+        "This lift's heavy slot is already used this week. Today's medium session fills its remaining weekly target."
+      );
+    }
   } else if (
     !['secondary', 'tertiary'].includes(prescription.role || liftBlock.role) &&
     topSet &&
@@ -4142,7 +4332,7 @@ export function getSmartPrescriptionDetailRows(workout = {}, t = {}) {
     .filter(row => row?.value);
 }
 
-export function buildSmartDiagnosticText(workout = {}, t = {}) {
+export function buildSmartDiagnosticText(workout = {}, t = {}, currentE1RMs = {}) {
   const summary = workout?.smartDecisionSummary || {};
   const readiness = summary.readiness || {};
   const selection = workout?.smartTrainingSelectionSummary || {};
@@ -4152,7 +4342,7 @@ export function buildSmartDiagnosticText(workout = {}, t = {}) {
     workout?.smartDayType || summary.dayType,
     t
   ) || summary.dayType || 'Unknown';
-  const detailRows = getSmartModalDetailRows(workout, t);
+  const detailRows = getSmartModalDetailRows(workout, t, currentE1RMs);
   const lines = [
     'Kelani SBD Smart diagnosis',
     `App version: ${import.meta.env.VITE_APP_VERSION || 'dev'}`,
@@ -4241,7 +4431,7 @@ async function copySmartDiagnosticText(text = '') {
   if (!copied) throw new Error('Clipboard copy failed.');
 }
 
-export function getSmartModalDetailRows(workout = {}, t = {}) {
+export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {}) {
   const summary = workout?.smartDecisionSummary || {};
   const readiness = summary.readiness || {};
   const rows = [];
@@ -4376,13 +4566,22 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
       if (!liftReadiness) return;
 
       const liftPhase = liftReadiness.readinessPhase || 'opener';
-      const liftCycleEstimate = Number(liftReadiness.currentCycleBestE1RM) || 0;
+      // The workout snapshot contains the 5kg readiness value used by the
+      // training engine. That is intentionally stable for planning, but it
+      // is not the live 2.5kg dashboard value and older persisted workouts
+      // can keep that snapshot for days. The modal is presentation UI, so
+      // prefer the live dashboard source passed by App; fall back to the
+      // snapshot only for isolated helpers/tests that have no app state.
+      const liftCycleEstimate =
+        Number(currentE1RMs?.[lift]) ||
+        Number(liftReadiness.currentCycleBestE1RM) ||
+        0;
       const liftReadinessTarget = Number(liftReadiness.readinessTargetAttempt) || 0;
 
       if (!(liftCycleEstimate > 0 && liftReadinessTarget > 0)) return;
 
-      const liftDisplayCycleEstimate = roundBarbellWeight(liftCycleEstimate, 'nearest', 5);
-      const liftDisplayReadinessTarget = roundBarbellWeight(liftReadinessTarget, 'nearest', 5);
+      const liftDisplayCycleEstimate = roundDashboardWeightKg(liftCycleEstimate);
+      const liftDisplayReadinessTarget = roundDashboardWeightKg(liftReadinessTarget);
       // Same reasoning as the (now per-lift) blocker text above: the gap
       // must be simple, visible arithmetic on the two numbers shown right
       // above it, never a more "precise" number that doesn't add up against
@@ -4502,7 +4701,12 @@ export function getSmartModalDetailRows(workout = {}, t = {}) {
   return rows;
 }
 
-function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
+function SmartDayTypeInline({
+  workout,
+  t,
+  weightUnit = WEIGHT_UNITS.KG,
+  currentE1RMs = {},
+}) {
   const [showSmartInfo, setShowSmartInfo] = useState(false);
   const [smartCopyStatus, setSmartCopyStatus] = useState(null);
   const label = getSmartDayTypeDisplayLabel(workout?.smartDayType, t);
@@ -4526,7 +4730,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
     )
     : 0;
   const detailRows = [
-    ...getSmartModalDetailRows(workout, t),
+    ...getSmartModalDetailRows(workout, t, currentE1RMs),
     ...(meetDayProjectedTotal > 0 ? [{
       label: t.projectedTotal,
       value: formatWeightFromKg(meetDayProjectedTotal, weightUnit),
@@ -4629,8 +4833,8 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
   return (
     <>
       <div style={{
-        marginTop: 4,
-        marginBottom: 8,
+        marginTop: 2,
+        marginBottom: 0,
         textAlign: 'center',
       }}>
         <button
@@ -5008,7 +5212,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
                   onClick={async () => {
                     try {
                       await copySmartDiagnosticText(
-                        buildSmartDiagnosticText(workout, t)
+                        buildSmartDiagnosticText(workout, t, currentE1RMs)
                       );
                       setSmartCopyStatus('copied');
                     } catch {
@@ -5064,7 +5268,7 @@ function SmartDayTypeInline({ workout, t, weightUnit = WEIGHT_UNITS.KG }) {
 }
 
 function CurrentWorkout({
-  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
+  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight, currentE1RMs = {} }) {
   const smartModel = isSmartTrainingModel(trainingModel);
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
@@ -5221,26 +5425,36 @@ function CurrentWorkout({
 
   if (workout.type === 'rest') {
     return (
-      <div style={responsiveContentScreenStyle()}>
+      <div style={restWorkoutScreenStyle()}>
         <AppHeader
           t={t}
           title={t.restAndRecovery || t.deload}
           subtitle={(
             <>
-              {formatCycleWorkoutSubtitle({
-                t,
-                currentCycle,
-                workoutNumber: Math.min(Number(workout.number) || 1, totalWorkouts),
-                totalWorkouts,
-                smartModel,
-              })}
+              <div>
+                {formatCycleWorkoutSubtitle({
+                  t,
+                  currentCycle,
+                  workoutNumber: Math.min(Number(workout.number) || 1, totalWorkouts),
+                  totalWorkouts,
+                  smartModel,
+                })}
+                {smartModel && (
+                  <AthleteLevelBadge
+                    athleteLevel={athleteLevel}
+                    eStrengthRatio={eStrengthRatio}
+                    eStrengthMax={eStrengthMax}
+                    latestBodyWeight={latestBodyWeight}
+                    t={t}
+                  />
+                )}
+              </div>
               {smartModel && (
-                <AthleteLevelBadge
-                  athleteLevel={athleteLevel}
-                  eStrengthRatio={eStrengthRatio}
-                  eStrengthMax={eStrengthMax}
-                  latestBodyWeight={latestBodyWeight}
+                <SmartDayTypeInline
+                  workout={workout}
                   t={t}
+                  weightUnit={weightUnit}
+                  currentE1RMs={currentE1RMs}
                 />
               )}
             </>
@@ -5250,7 +5464,6 @@ function CurrentWorkout({
         />
 
         {renderActivateWorkoutCard()}
-        <SmartDayTypeInline workout={workout} t={t} weightUnit={weightUnit} />
 
         <div style={{
           padding: '8px 0 10px',
@@ -5306,18 +5519,8 @@ function CurrentWorkout({
           <button
             type="button"
             onClick={() => onComplete('easy')}
-            style={{
-              width: '100%',
-              minHeight: 44,
-              padding: 10,
-              fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
-              background: THEME.card,
-              color: '#ffffff',
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 4,
-              cursor: 'pointer',
-              fontWeight: 600
-            }}
+            data-testid="complete-rest-day-button"
+            style={workoutCompletionButtonStyle()}
           >
             {t.completeRestDay || 'Complete rest day'}
           </button>
@@ -5361,20 +5564,30 @@ function CurrentWorkout({
           title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
           subtitle={(
             <>
-              {formatCycleWorkoutSubtitle({
-                t,
-                currentCycle,
-                workoutNumber: workout.number,
-                totalWorkouts,
-                smartModel,
-              })}
+              <div>
+                {formatCycleWorkoutSubtitle({
+                  t,
+                  currentCycle,
+                  workoutNumber: workout.number,
+                  totalWorkouts,
+                  smartModel,
+                })}
+                {smartModel && (
+                  <AthleteLevelBadge
+                    athleteLevel={athleteLevel}
+                    eStrengthRatio={eStrengthRatio}
+                    eStrengthMax={eStrengthMax}
+                    latestBodyWeight={latestBodyWeight}
+                    t={t}
+                  />
+                )}
+              </div>
               {smartModel && (
-                <AthleteLevelBadge
-                  athleteLevel={athleteLevel}
-                  eStrengthRatio={eStrengthRatio}
-                  eStrengthMax={eStrengthMax}
-                  latestBodyWeight={latestBodyWeight}
+                <SmartDayTypeInline
+                  workout={workout}
                   t={t}
+                  weightUnit={weightUnit}
+                  currentE1RMs={currentE1RMs}
                 />
               )}
             </>
@@ -5391,7 +5604,6 @@ function CurrentWorkout({
         />
 
         {renderActivateWorkoutCard()}
-        <SmartDayTypeInline workout={workout} t={t} weightUnit={weightUnit} />
 
         {(workout.lifts || []).map((liftBlock, li) => {
           const visiblePrepItems = getVisiblePrepItems(liftBlock, li);
@@ -5472,14 +5684,7 @@ function CurrentWorkout({
               {visiblePrepItems.length > 0 && (
                 <div style={{ marginBottom: 10 }}>
 
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE,
-                    justifyContent: 'center',
-                    columnGap: 'clamp(12px, 3vw, 16px)',
-                    rowGap: 6,
-                    padding: `0 ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`
-                  }}>
+                  <div style={preparationGridStyle()}>
                     {visiblePrepItems.map((item, pi) => (
                       <PrepRow
                         key={`prep-${pi}`}
@@ -5492,6 +5697,7 @@ function CurrentWorkout({
                         isReadOnly={isReadOnly}
                         onToggle={() => handleToggle(() => onToggleMeetPrepItem(li, pi))}
                         t={t}
+                        compact
                       />
                     ))}
                   </div>
@@ -5832,12 +6038,19 @@ function CurrentWorkout({
         {t.workout} {workout.number} — {workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant)}
       </h2>
 
-      <div style={{ textAlign: 'center', color: THEME.muted, fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize, marginBottom: 12 }}>
+      <div style={{ textAlign: 'center', color: THEME.muted, fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize, marginBottom: smartModel ? 0 : 12 }}>
         {formatCycleWorkoutSubtitle({ t, currentCycle, workoutNumber: workout.number, totalWorkouts, smartModel })}
+        {smartModel && (
+          <SmartDayTypeInline
+            workout={workout}
+            t={t}
+            weightUnit={weightUnit}
+            currentE1RMs={currentE1RMs}
+          />
+        )}
       </div>
 
       {renderActivateWorkoutCard()}
-        <SmartDayTypeInline workout={workout} t={t} weightUnit={weightUnit} />
 
       {(workout.prepItems || []).length > 0 && (
         <div style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
@@ -5851,14 +6064,7 @@ function CurrentWorkout({
             {t.prepTitle}
           </div>
 
-          <div style={{
-            display: 'grid',
-                    gridTemplateColumns: WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE,
-                    justifyContent: 'center',
-                    columnGap: 'clamp(12px, 3vw, 16px)',
-                    rowGap: 4,
-                    padding: `0 ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`
-          }}>
+          <div style={preparationGridStyle(4)}>
             {workout.prepItems.map((item, i) => (
               <PrepRow
                 key={i}
@@ -5867,6 +6073,7 @@ function CurrentWorkout({
                 isReadOnly={isReadOnly}
                 onToggle={() => handleToggle(() => onTogglePrepItem(i))}
                 t={t}
+                compact
               />
             ))}
           </div>
@@ -5995,7 +6202,6 @@ function CurrentWorkout({
                   </span>
                 </div>
               )}
-              {set.failed && renderInlineTimer({ type: 'main', index: i })}
               <SetRow
                 set={set}
                 index={i}
@@ -6014,7 +6220,7 @@ function CurrentWorkout({
 
               onShowPlateCalculator={onShowPlateCalculator}
             />
-              {!set.failed && renderInlineTimer({ type: 'main', index: i })}
+              {renderInlineTimer({ type: 'main', index: i })}
             </React.Fragment>
           );
         })}
@@ -6087,21 +6293,9 @@ function CurrentWorkout({
         }}
         data-testid="complete-workout-button"
         disabled={!allDone || isReadOnly}
-        style={{
-          display: 'block',
-          width: 'auto',
-          minHeight: 44,
-          padding: '10px 28px',
-          fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
-          fontWeight: 700,
-          background: THEME.card,
-          color: (allDone && !isReadOnly) ? 'white' : '#666',
-          border: `1px solid ${THEME.primary}`,
-          borderRadius: 8,
-          cursor: (allDone && !isReadOnly) ? 'pointer' : 'not-allowed',
-          margin: '14px auto 10px',
-          opacity: 1,
-        }}
+        style={workoutCompletionButtonStyle({
+          enabled: allDone && !isReadOnly,
+        })}
       >
         {isReadOnly
           ? t.previewNotCompletable
@@ -6752,13 +6946,7 @@ function chartMetricLabel(key) {
   }
 
   return (
-    <div style={{
-      ...responsiveContentScreenStyle(),
-      height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
-      minHeight: 600,
-      display: 'flex',
-      flexDirection: 'column',
-    }}>
+    <div data-testid="stats-screen" style={statsScreenStyle()}>
       <AppHeader
         t={t}
         title={t.stats}
@@ -12028,17 +12216,25 @@ const best1RMs = {
 };
 
 const bestE1RMs = {
-  // Dashboard/Stats show the factual all-time estimate. Do not promote a
-  // 42.5kg seed or another half-step value into a misleading 45kg bucket.
-  // Smart readiness has its own active-cycle boundary and remains rounded
-  // there for progression decisions.
-  Squat: bestMaxesFromHistory.Squat.e1rm || Number(prs.Squat) || 0,
-  Bench: bestMaxesFromHistory.Bench.e1rm || Number(prs.Bench) || 0,
-  Deadlift: bestMaxesFromHistory.Deadlift.e1rm || Number(prs.Deadlift) || 0,
+  // Smart planning may carry a rounded inherited best (for example 32.5kg
+  // Bench -> 35kg) in completed summaries. Dashboard/Stats must instead show
+  // only a real 1RM baseline or an estimate actually achieved by a set.
+  Squat: getDashboardE1RMValue(best1RMs.Squat, achievedMaxesFromHistory.Squat.e1rm),
+  Bench: getDashboardE1RMValue(best1RMs.Bench, achievedMaxesFromHistory.Bench.e1rm),
+  Deadlift: getDashboardE1RMValue(best1RMs.Deadlift, achievedMaxesFromHistory.Deadlift.e1rm),
 };
 
 const total1RM = best1RMs.Squat + best1RMs.Bench + best1RMs.Deadlift;
 const totalE1RM = bestE1RMs.Squat + bestE1RMs.Bench + bestE1RMs.Deadlift;
+
+// Dashboard cards display weights in 2.5kg barbell steps. Round every lift
+// exactly once before deriving both its PR gain and the total; rounding each
+// raw gain separately while rounding the raw total again can make +5kg and
+// +2.5kg lift gains appear beside only +5kg total progress.
+const dashboardE1RMMetrics = buildDashboardE1RMMetrics(
+  best1RMs,
+  bestE1RMs
+);
 
 const latestBodyDataEntry = [...bodyWeights].slice(-1)[0];
 const latestBodyWeightEntry = [...bodyWeights].filter(entry => entry.bodyWeight).slice(-1)[0];
@@ -12415,6 +12611,12 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           eStrengthRatio={eStrengthRatio}
           eStrengthMax={eStrengthMax}
           latestBodyWeight={latestBodyWeight}
+          currentE1RMs={Object.fromEntries(
+            LIFT_ORDER.map(lift => [
+              lift,
+              dashboardE1RMMetrics.lifts[lift].e1RM,
+            ])
+          )}
         />
       )}
 
@@ -12647,9 +12849,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             label: t.squat,
             color: THEME.red,
             background: 'rgba(255, 92, 69, 0.12)',
-            oneRM: best1RMs.Squat,
-            e1RM: bestE1RMs.Squat,
-            prBaseline: best1RMs.Squat,
+            ...dashboardE1RMMetrics.lifts.Squat,
+            prBaseline: dashboardE1RMMetrics.lifts.Squat.oneRM,
             achievedE1RM: achievedMaxesFromHistory.Squat.e1rm,
             statsTab: 'lifts',
           },
@@ -12658,9 +12859,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             label: t.bench,
             color: THEME.primary,
             background: 'rgba(255, 138, 61, 0.12)',
-            oneRM: best1RMs.Bench,
-            e1RM: bestE1RMs.Bench,
-            prBaseline: best1RMs.Bench,
+            ...dashboardE1RMMetrics.lifts.Bench,
+            prBaseline: dashboardE1RMMetrics.lifts.Bench.oneRM,
             achievedE1RM: achievedMaxesFromHistory.Bench.e1rm,
             statsTab: 'lifts',
           },
@@ -12669,9 +12869,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             label: t.deadlift,
             color: THEME.yellow,
             background: 'rgba(255, 209, 102, 0.12)',
-            oneRM: best1RMs.Deadlift,
-            e1RM: bestE1RMs.Deadlift,
-            prBaseline: best1RMs.Deadlift,
+            ...dashboardE1RMMetrics.lifts.Deadlift,
+            prBaseline: dashboardE1RMMetrics.lifts.Deadlift.oneRM,
             achievedE1RM: achievedMaxesFromHistory.Deadlift.e1rm,
             statsTab: 'lifts',
           },
@@ -12680,9 +12879,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             label: t.total || 'Total',
             color: THEME.meet,
             background: `${THEME.meet}20`,
-            oneRM: total1RM,
-            e1RM: totalE1RM,
-            prBaseline: total1RM,
+            ...dashboardE1RMMetrics.total,
+            prBaseline: dashboardE1RMMetrics.total.oneRM,
             isTotal: true,
             statsTab: 'totaal',
           },
@@ -12747,7 +12945,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   </div>
 
                   {(card.isTotal
-                    ? getDashboardE1RMPrGain(card.e1RM, card.prBaseline) > 0
+                    ? card.prGain > 0
                     : isDashboardE1RMPR({
                       achievedE1RM: card.achievedE1RM,
                       displayedE1RM: card.e1RM,
@@ -12760,7 +12958,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                       textAlign: 'right',
                       marginTop: 4
                     }}>
-                      {t.newPR || 'New PR'} +{formatWeightFromKg(getDashboardE1RMPrGain(card.e1RM, card.prBaseline), weightUnit)}
+                      {t.newPR || 'New PR'} +{formatWeightFromKg(card.prGain, weightUnit)}
                     </div>
                   )}
                 </div>
@@ -12910,51 +13108,57 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
     gap: 'clamp(1px, 0.35dvh, 4px)',
     alignContent: 'safe center',
   }}>
-    <ProfileSection
-      userProfile={userProfile}
-      onSave={setUserProfile}
-      weightUnit={weightUnit}
-      setWeightUnit={setWeightUnit}
-      t={t}
-    />
+    <div
+      data-testid="regular-settings-cluster"
+      style={regularSettingsClusterStyle()}
+    >
+      <ProfileSection
+        userProfile={userProfile}
+        onSave={setUserProfile}
+        weightUnit={weightUnit}
+        setWeightUnit={setWeightUnit}
+        t={t}
+      />
 
+      <BodyDataSection
+        bodyData={latestBodyDataEntry}
+        onSave={saveBodyWeight}
+        t={t}
+        weightUnit={weightUnit}
+      />
 
-    <BodyDataSection
-      bodyData={latestBodyDataEntry}
-      onSave={saveBodyWeight}
-      t={t}
-      weightUnit={weightUnit}
-    />
+      <RestTimeSection
+        t={t}
+      />
 
-    <RestTimeSection
-      t={t}
-    />
+      <ModelSection
+        trainingModel={trainingModel}
+        switchToSmart={switchClassicToSmart}
+        switchBlocked={!canSwitchClassicToSmart(trainingModel, workouts[currentIndex])}
+        t={t}
+      />
 
-    <ModelSection
-      trainingModel={trainingModel}
-      switchToSmart={switchClassicToSmart}
-      switchBlocked={!canSwitchClassicToSmart(trainingModel, workouts[currentIndex])}
-      t={t}
-    />
+      <LanguageSection
+        language={language}
+        setLanguage={setLanguage}
+        t={t}
+      />
 
-    <LanguageSection
-      language={language}
-      setLanguage={setLanguage}
-      t={t}
-    />
+      <DataSection
+        t={t}
+      />
 
-    <DataSection
-      t={t}
-    />
+      <SupportSection t={t} />
+    </div>
 
-    <SupportSection t={t} />
-
-    <SettingsListRow
-      label={t.restart}
-      actionLabel={t.startFromScratch || t.restart}
-      onAction={() => setShowResetConfirm(true)}
-      danger={true}
-    />
+    <div data-testid="start-over-settings-row">
+      <SettingsListRow
+        label={t.restart}
+        actionLabel={t.startFromScratch || t.restart}
+        onAction={() => setShowResetConfirm(true)}
+        danger={true}
+      />
+    </div>
 
   </div>
 

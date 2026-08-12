@@ -1,21 +1,132 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import App, { SettingsListRow, StatsScreen, canSwitchClassicToSmart, capRunningBestChart, formatWorkoutSetPercentDisplay, getDashboardE1RMPrGain, getDashboardMeetState, isDashboardE1RMPR, replaceCurrentChartEndpoint, shouldShowAutomaticBackupStatus } from './App';
+import App, { SettingsListRow, StatsScreen, buildDashboardE1RMMetrics, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, formatWorkoutSetPercentDisplay, getDashboardE1RMPrGain, getDashboardE1RMValue, getDashboardMeetState, isDashboardE1RMPR, preparationGridStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, restWorkoutScreenStyle, settingsModalPanelStyle, shouldShowAutomaticBackupStatus, statsScreenStyle, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
 test('dashboard e1RM PR gain compares against the real 1RM on the same card', () => {
   expect(getDashboardE1RMPrGain(100, 97.5)).toBe(2.5);
   expect(getDashboardE1RMPrGain(150, 142.5)).toBe(7.5);
   expect(getDashboardE1RMPrGain(180, 180)).toBe(0);
+  expect(getDashboardE1RMPrGain(101.3333333333, 97.5)).toBe(5);
+});
+
+test('dashboard total PR is always the sum of the same displayed lift gains', () => {
+  const metrics = buildDashboardE1RMMetrics(
+    { Squat: 145, Bench: 97.5, Deadlift: 180 },
+    {
+      Squat: 145,
+      Bench: 101.3333333333,
+      Deadlift: 181.3333333333,
+    }
+  );
+
+  expect(metrics.lifts).toEqual({
+    Squat: { oneRM: 145, e1RM: 145, prGain: 0 },
+    Bench: { oneRM: 97.5, e1RM: 102.5, prGain: 5 },
+    Deadlift: { oneRM: 180, e1RM: 182.5, prGain: 2.5 },
+  });
+  expect(metrics.total).toEqual({
+    oneRM: 422.5,
+    e1RM: 430,
+    prGain: 7.5,
+  });
+  expect(metrics.total.prGain).toBe(
+    Object.values(metrics.lifts).reduce(
+      (sum, lift) => sum + lift.prGain,
+      0
+    )
+  );
+});
+
+test('rest and training completion actions share the same compact button style', () => {
+  expect(workoutCompletionButtonStyle()).toMatchObject({
+    display: 'block',
+    width: 'auto',
+    minHeight: 44,
+    padding: '10px 28px',
+    fontWeight: 700,
+    borderRadius: 8,
+    margin: '14px auto 10px',
+  });
+});
+
+test('rest information and completion action sit slightly higher', () => {
+  expect(restWorkoutScreenStyle()).toMatchObject({
+    display: 'grid',
+    alignContent: 'space-between',
+    paddingBottom: 32,
+  });
+});
+
+test('stats charts reserve extra clearance above the bottom navigation', () => {
+  expect(statsScreenStyle()).toMatchObject({
+    height: 'calc(100dvh - 52px)',
+    display: 'flex',
+    flexDirection: 'column',
+    paddingBottom: 32,
+  });
+});
+
+test('ordinary settings move up without changing the Start over layout slot', () => {
+  expect(regularSettingsClusterStyle()).toMatchObject({
+    display: 'grid',
+    gap: 'clamp(1px, 0.35dvh, 4px)',
+    transform: 'translateY(-14px)',
+  });
 });
 
 test('rounded seed e1RMs do not create a false dashboard PR', () => {
   expect(isDashboardE1RMPR({ achievedE1RM: 38.5, oneRM: 42.5 })).toBe(false);
-  expect(isDashboardE1RMPR({ achievedE1RM: 43, oneRM: 42.5 })).toBe(true);
+  expect(isDashboardE1RMPR({ achievedE1RM: 43, oneRM: 42.5 })).toBe(false);
+  expect(isDashboardE1RMPR({ achievedE1RM: 44, oneRM: 42.5 })).toBe(true);
   expect(isDashboardE1RMPR({
     achievedE1RM: 181.3333333333,
     displayedE1RM: 180,
     oneRM: 180,
   })).toBe(false);
+});
+
+test('dashboard totals exclude inherited rounded planning maxes that were never achieved', () => {
+  const oneRMs = { Squat: 42.5, Bench: 32.5, Deadlift: 60 };
+  const achievedE1RMs = { Squat: 45, Bench: 30, Deadlift: 55 };
+  const displayedE1RMs = Object.fromEntries(
+    Object.keys(oneRMs).map(lift => [
+      lift,
+      getDashboardE1RMValue(oneRMs[lift], achievedE1RMs[lift]),
+    ])
+  );
+  const total1RM = Object.values(oneRMs).reduce((sum, value) => sum + value, 0);
+  const totalE1RM = Object.values(displayedE1RMs).reduce((sum, value) => sum + value, 0);
+
+  expect(displayedE1RMs).toEqual({ Squat: 45, Bench: 32.5, Deadlift: 60 });
+  expect(total1RM).toBe(135);
+  expect(totalE1RM).toBe(137.5);
+  expect(getDashboardE1RMPrGain(totalE1RM, total1RM)).toBe(2.5);
+});
+
+test('modals use the available dynamic viewport before enabling internal scrolling', () => {
+  expect(settingsModalPanelStyle()).toMatchObject({
+    maxHeight: 'calc(100dvh - clamp(24px, 8vw, 40px))',
+    boxSizing: 'border-box',
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
+  });
+});
+
+test('preparation uses one compact four-column grid row', () => {
+  expect(preparationGridStyle()).toMatchObject({
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+  });
+});
+
+test('compact preparation labels reserve two aligned, readable text lines', () => {
+  expect(compactPrepLabelStyle()).toMatchObject({
+    fontSize: 'clamp(12px, 3vw, 14px)',
+    lineHeight: 1.1,
+    height: '2.2em',
+    WebkitLineClamp: 2,
+    overflow: 'hidden',
+  });
 });
 
 test('only the current graph endpoint adopts the rounded live e1RM', () => {

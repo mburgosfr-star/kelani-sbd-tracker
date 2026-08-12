@@ -5,47 +5,49 @@ import { roundMeetWeight } from './warmupAndPrepGeneration';
 const ACCESSORY_TEMPLATES = {
   standard: {
     Squat: [
-      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.35 },
-      { key: 'machineCrunch', labelKey: 'accessoryMachineCrunch', sets: 3, reps: 12, source: 'squat', pct: 0.40 },
+      { key: 'pulldown', labelKey: 'accessoryPulldown', sets: 4, reps: 10, source: 'deadlift', pct: 0.25 },
+      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 4, reps: 12, source: 'squat', pct: 0.35 },
     ],
     Bench: [
-      { key: 'row', labelKey: 'accessoryRow', sets: 3, reps: 10, source: 'deadlift', pct: 0.25 },
-      { key: 'shoulderRotations', labelKey: 'accessoryShoulderRotations', sets: 2, reps: 15, source: 'fixed', weight: 2.5, perSide: true },
+      { key: 'hipThrust', labelKey: 'accessoryHipThrust', sets: 4, reps: 8, source: 'deadlift', pct: 0.60 },
+      { key: 'row', labelKey: 'accessoryRow', sets: 4, reps: 10, source: 'deadlift', pct: 0.25 },
     ],
     Deadlift: [
-      { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 3, reps: 12, source: 'squat', pct: 0.35 },
-      { key: 'hipAbduction', labelKey: 'accessoryHipAbduction', sets: 3, reps: 12, source: 'squat', pct: 0.45 },
+      { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 4, reps: 12, source: 'squat', pct: 0.35 },
+      { key: 'plank', labelKey: 'accessoryPlank', sets: 4, durationSeconds: 30, source: 'bodyweight' },
     ],
   },
   upperBackFriendly: {
     Squat: [
-      { key: 'hipAbduction', labelKey: 'accessoryHipAbduction', sets: 3, reps: 12, source: 'squat', pct: 0.45 },
-      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.35 },
+      { key: 'hipAbduction', labelKey: 'accessoryHipAbduction', sets: 4, reps: 12, source: 'squat', pct: 0.45 },
+      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 4, reps: 12, source: 'squat', pct: 0.35 },
     ],
     Bench: [
-      { key: 'lateralRaise', labelKey: 'accessoryLateralRaise', sets: 3, reps: 12, source: 'fixed', weight: 5, perSide: true },
+      { key: 'lateralRaise', labelKey: 'accessoryLateralRaise', sets: 4, reps: 12, source: 'fixed', weight: 5, perSide: true },
     ],
     Deadlift: [
-      { key: 'machineCrunch', labelKey: 'accessoryMachineCrunch', sets: 3, reps: 12, source: 'squat', pct: 0.40 },
-      { key: 'seatedCalfRaise', labelKey: 'accessorySeatedCalfRaise', sets: 3, reps: 12, source: 'squat', pct: 0.55 },
+      { key: 'plank', labelKey: 'accessoryPlank', sets: 4, durationSeconds: 30, source: 'bodyweight' },
+      { key: 'seatedCalfRaise', labelKey: 'accessorySeatedCalfRaise', sets: 4, reps: 12, source: 'squat', pct: 0.55 },
     ],
   },
   lowerBodyFriendly: {
     Squat: [
-      { key: 'hipAbduction', labelKey: 'accessoryHipAbduction', sets: 3, reps: 12, source: 'squat', pct: 0.45 },
-      { key: 'machineCrunch', labelKey: 'accessoryMachineCrunch', sets: 3, reps: 12, source: 'squat', pct: 0.40 },
+      { key: 'hipAbduction', labelKey: 'accessoryHipAbduction', sets: 4, reps: 12, source: 'squat', pct: 0.45 },
+      { key: 'plank', labelKey: 'accessoryPlank', sets: 4, durationSeconds: 30, source: 'bodyweight' },
     ],
     Bench: [
-      { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 3, reps: 12, source: 'squat', pct: 0.35 },
+      { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 4, reps: 12, source: 'squat', pct: 0.35 },
     ],
     Deadlift: [
-      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 3, reps: 12, source: 'squat', pct: 0.35 },
-      { key: 'seatedCalfRaise', labelKey: 'accessorySeatedCalfRaise', sets: 3, reps: 12, source: 'squat', pct: 0.55 },
+      { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 4, reps: 12, source: 'squat', pct: 0.35 },
+      { key: 'seatedCalfRaise', labelKey: 'accessorySeatedCalfRaise', sets: 4, reps: 12, source: 'squat', pct: 0.55 },
     ],
   },
 };
 
 function getAccessoryBaseWeight(template, oneRMs, accessoryPRs = {}) {
+  if (template.source === 'bodyweight') return 0;
+
   const previous = Number(accessoryPRs?.[template.key]) || 0;
 
   if (template.source === 'fixed') {
@@ -202,6 +204,8 @@ export function generateAccessoriesForLift(lift, accessoryMode = 'off', accessor
         nameKey: template.labelKey,
         name: template.labelKey,
         reps: template.reps,
+        durationSeconds: template.durationSeconds,
+        bodyweight: template.source === 'bodyweight',
         perSide: !!template.perSide,
         weights: Array.from({ length: template.sets }, () => weight),
         originalWeights: Array.from({ length: template.sets }, () => weight),
@@ -216,7 +220,8 @@ export function generateAccessoriesForLift(lift, accessoryMode = 'off', accessor
 
 
 export function selectSmartAccessoriesForWorkout(
-  accessoriesByLift = []
+  accessoriesByLift = [],
+  { history = [] } = {}
 ) {
   const normalizedLists = (accessoriesByLift || [])
     .filter(Array.isArray);
@@ -225,12 +230,47 @@ export function selectSmartAccessoriesForWorkout(
     return normalizedLists.flat();
   }
 
+  const completedSnapshots = new Map();
+  (history || []).forEach((entry, index) => {
+    const snapshot = entry?.workoutSnapshot;
+    if (!snapshot) return;
+
+    const cycle = Number(entry?.cycle ?? snapshot?.cycle) || 0;
+    const workoutNumber = Number(entry?.workoutNumber ?? snapshot?.number) || index;
+    completedSnapshots.set(`${cycle}:${workoutNumber}`, {
+      order: index,
+      snapshot,
+    });
+  });
+
+  const accessoryRecency = new Map();
+  [...completedSnapshots.values()]
+    .sort((a, b) => a.order - b.order)
+    .forEach(({ order, snapshot }) => {
+      (snapshot.accessories || []).forEach(accessory => {
+        if (!(accessory.done || []).some(Boolean)) return;
+
+        const key = accessory?.key || accessory?.nameKey || accessory?.name;
+        if (key) accessoryRecency.set(key, order);
+      });
+    });
+
   const usedKeys = new Set();
   return normalizedLists.flatMap(accessories => {
-    const selected = (accessories || []).find(accessory => {
-      const key = accessory?.key || accessory?.nameKey || accessory?.name;
-      return key && !usedKeys.has(key);
-    });
+    const candidates = (accessories || [])
+      .map((accessory, templateIndex) => ({ accessory, templateIndex }))
+      .filter(({ accessory }) => {
+        const key = accessory?.key || accessory?.nameKey || accessory?.name;
+        return key && !usedKeys.has(key);
+      })
+      .sort((a, b) => {
+        const aKey = a.accessory?.key || a.accessory?.nameKey || a.accessory?.name;
+        const bKey = b.accessory?.key || b.accessory?.nameKey || b.accessory?.name;
+        const aRecency = accessoryRecency.has(aKey) ? accessoryRecency.get(aKey) : -1;
+        const bRecency = accessoryRecency.has(bKey) ? accessoryRecency.get(bKey) : -1;
+        return aRecency - bRecency || a.templateIndex - b.templateIndex;
+      });
+    const selected = candidates[0]?.accessory;
 
     if (!selected) return [];
 
@@ -255,6 +295,19 @@ export function applyAccessoryPlanToWorkouts(
 
   function accessoryKey(accessory) {
     return accessory?.key || accessory?.nameKey || accessory?.name;
+  }
+
+  function accessoriesHaveUserProgress(accessories = []) {
+    return (accessories || []).some(accessory =>
+      (accessory.done || []).some(Boolean) ||
+      (accessory.failed || []).some(Boolean) ||
+      (accessory.skipped || []).some(Boolean) ||
+      (accessory.adjustedFromFailedSet || []).some(Boolean) ||
+      (accessory.adjustedFromOriginal || []).some(Boolean) ||
+      (accessory.weights || []).some((weight, index) =>
+        Number(weight) !== Number(accessory.originalWeights?.[index] ?? weight)
+      )
+    );
   }
 
   function mergeAccessory(currentAccessory, generatedAccessory) {
@@ -390,6 +443,9 @@ export function applyAccessoryPlanToWorkouts(
     );
 
     const workoutNumber = Number(generated.number || workout.number) || 0;
+    const preserveStartedAccessories =
+      workoutNumber === Number(activeWorkoutNumber) &&
+      accessoriesHaveUserProgress(workout.accessories);
     const sameSmartPrescriptionVersion =
       !generated.smartGeneratedPrescription ||
       Number(workout.smartGeneratedPrescriptionVersion) ===
@@ -416,9 +472,11 @@ export function applyAccessoryPlanToWorkouts(
       sets: primaryLiftBlock.sets || generated.sets || [],
       lifts: mergedLifts,
       cooldownItems: mergedCooldownItems,
-      accessories: (generated.accessories || []).map(generatedAccessory =>
-        mergeAccessory(currentAccessoriesByKey.get(accessoryKey(generatedAccessory)), generatedAccessory)
-      ),
+      accessories: preserveStartedAccessories
+        ? workout.accessories || []
+        : (generated.accessories || []).map(generatedAccessory =>
+          mergeAccessory(currentAccessoriesByKey.get(accessoryKey(generatedAccessory)), generatedAccessory)
+        ),
     };
   });
 }

@@ -5,6 +5,8 @@ import { AccessoryGroup } from './App';
 const translations = {
   accessoryHipThrust: 'Hip thrust',
   accessoryShoulderRotations: 'Shoulder rotations',
+  accessoryPlank: 'Plank',
+  bodyweight: 'Body weight',
   perSideSuffix: '/ side',
 };
 
@@ -34,11 +36,11 @@ test('renders accessory weight above every set and reps inside each circle', () 
   renderAccessory({
     nameKey: 'accessoryHipThrust',
     reps: 8,
-    weights: [40, 40, 40],
-    originalWeights: [40, 40, 40],
-    done: [false, false, false],
-    failed: [false, false, false],
-    skipped: [false, false, false],
+    weights: [40, 40, 40, 40],
+    originalWeights: [40, 40, 40, 40],
+    done: [false, false, false, false],
+    failed: [false, false, false, false],
+    skipped: [false, false, false, false],
   });
 
   expect(screen.getByTestId('workout-accessory-label'))
@@ -48,7 +50,7 @@ test('renders accessory weight above every set and reps inside each circle', () 
     /workout-accessory-set-item-/
   );
 
-  expect(items).toHaveLength(3);
+  expect(items).toHaveLength(4);
 
   items.forEach(item => {
     expect(within(item).getByText('40 kg'))
@@ -84,5 +86,27 @@ test('keeps the per-side label with each accessory weight', () => {
       .toBeInTheDocument();
     expect(within(item).getByText('15'))
       .toBeInTheDocument();
+  });
+});
+
+test('renders planks as timed bodyweight sets', () => {
+  renderAccessory({
+    nameKey: 'accessoryPlank',
+    bodyweight: true,
+    durationSeconds: 30,
+    weights: [0, 0, 0, 0],
+    originalWeights: [0, 0, 0, 0],
+    done: [false, false, false, false],
+    failed: [false, false, false, false],
+    skipped: [false, false, false, false],
+  });
+
+  const items = screen.getAllByTestId(/workout-accessory-set-item-/);
+  expect(items).toHaveLength(4);
+
+  items.forEach(item => {
+    expect(within(item).getByText('Body weight')).toBeInTheDocument();
+    expect(within(item).getByText('30s')).toBeInTheDocument();
+    expect(within(item).queryByText(/kg/)).not.toBeInTheDocument();
   });
 });
