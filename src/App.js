@@ -28,6 +28,8 @@ import {
   normalizeRestTimeSeconds,
   epley,
   roundE1RM,
+  getActualOneRMFromSets,
+  getEstablishedOneRMFromHistoryEntry,
   getRecommendedRestTimeSeconds,
   isTopSetLabel,
   isAttemptSetLabel,
@@ -104,6 +106,22 @@ import {
   isSmartCycleCompleteAfterHistory,
   countFailedOrSkippedSetsFromSnapshot,
 } from './smartTrainingEngine';
+import {
+  buildNextCycleE1RMs,
+  deriveCycleE1RMs,
+  normalizeCycleE1RMs,
+} from './smartCycleBasis';
+import {
+  isSmartIdealRouteEnabled,
+  resolveSmartIdealRouteStartCycle,
+} from './smartIdealRoute';
+import {
+  calculateActualOneRMsFromHistory,
+  deriveOneRMs,
+  mergeHigherOneRMs,
+  normalizeOneRMs,
+  ONE_RM_STATE_VERSION,
+} from './oneRMState';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -214,6 +232,19 @@ export function capRunningBestChart(data = [], key, maximum) {
       ? { ...point, [key]: Math.min(value, numericMaximum) }
       : point;
   });
+}
+
+export function getStatsHistoricalOneRM(entry, candidateOneRM = null) {
+  const setCandidate = candidateOneRM == null
+    ? Number(getHistoryMaxCandidates(entry).oneRM) || 0
+    : Number(candidateOneRM) || 0;
+
+  if (entry?.manualMax) return setCandidate;
+
+  return Math.max(
+    setCandidate,
+    getEstablishedOneRMFromHistoryEntry(entry, entry?.lift)
+  );
 }
 
 export function replaceCurrentChartEndpoint(data = [], updates = {}) {
@@ -408,6 +439,36 @@ export function validateImportedBackup(backup) {
   });
 
   if (!hasValidMainLiftPrs) return false;
+  if (data.cycleE1RMs !== undefined) {
+    if (
+      !data.cycleE1RMs ||
+      typeof data.cycleE1RMs !== 'object' ||
+      Array.isArray(data.cycleE1RMs)
+    ) return false;
+
+    const hasValidCycleE1RMs = LIFT_ORDER.every(lift => {
+      const value = Number(data.cycleE1RMs[lift]);
+      return Number.isFinite(value) && value > 0;
+    });
+    if (!hasValidCycleE1RMs) return false;
+  }
+  if (data.oneRMs !== undefined) {
+    if (
+      !data.oneRMs ||
+      typeof data.oneRMs !== 'object' ||
+      Array.isArray(data.oneRMs)
+    ) return false;
+
+    const hasValidOneRMs = LIFT_ORDER.every(lift => {
+      const value = Number(data.oneRMs[lift]);
+      return Number.isFinite(value) && value > 0;
+    });
+    if (!hasValidOneRMs) return false;
+  }
+  if (data.oneRMStateVersion !== undefined) {
+    const version = Number(data.oneRMStateVersion);
+    if (!Number.isInteger(version) || version < 1) return false;
+  }
   if (data.bodyWeights !== undefined && !Array.isArray(data.bodyWeights)) return false;
 
   if (data.inProgress !== undefined && data.inProgress !== null) {
@@ -418,6 +479,10 @@ export function validateImportedBackup(backup) {
   if (data.currentCycle !== undefined) {
     const currentCycle = Number(data.currentCycle);
     if (!Number.isInteger(currentCycle) || currentCycle < 1) return false;
+  }
+  if (data.smartIdealRouteStartCycle !== undefined) {
+    const startCycle = Number(data.smartIdealRouteStartCycle);
+    if (!Number.isInteger(startCycle) || startCycle < 1) return false;
   }
 
   return true;
@@ -464,6 +529,24 @@ export function canSwitchClassicToSmart(trainingModel, currentWorkout) {
     !isSmartTrainingModel(trainingModel) &&
     !workoutHasAnyUserProgress(currentWorkout)
   );
+}
+
+export function isMeetAttemptPlanLocked(workout = {}) {
+  const directProgress = [
+    ...(workout.meetPrepItems || []),
+    ...(workout.prepItems || []),
+    ...(workout.warmups || []),
+    ...(workout.sets || []),
+  ];
+  const liftProgress = (workout.lifts || []).flatMap(liftBlock => [
+    ...(liftBlock.prepItems || []),
+    ...(liftBlock.warmups || []),
+    ...(liftBlock.sets || []),
+  ]);
+
+  return [...directProgress, ...liftProgress].some(item => (
+    item?.done || item?.failed || item?.skipped
+  ));
 }
 
 export function formatAutomaticBackupTimestamp(value) {
@@ -636,14 +719,153 @@ function responsiveContentScreenStyle(bottomOffset = BOTTOM_NAV_SPACE) {
   };
 }
 
+export function meetDayDashboardScreenStyle() {
+  return {
+    ...responsiveContentScreenStyle(),
+    gridTemplateRows: 'auto minmax(0, 1fr)',
+    alignContent: 'stretch',
+    rowGap: 'clamp(10px, 1.6dvh, 18px)',
+  };
+}
+
+export function meetDayDashboardContentStyle() {
+  return {
+    minHeight: 0,
+    display: 'grid',
+    alignContent: 'center',
+    padding: 'clamp(6px, 1dvh, 10px) 4px clamp(14px, 2.5dvh, 24px)',
+  };
+}
+
+export function MeetDayDashboardPlan({
+  meetPlan,
+  meetTotals,
+  t,
+  weightUnit = WEIGHT_UNITS.KG,
+  onOpenWorkout,
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={t.openWorkout || t.workout}
+      onClick={onOpenWorkout}
+      onKeyDown={event => {
+        if (event.key === 'Enter' || event.key === ' ') onOpenWorkout?.();
+      }}
+      style={{
+        ...meetDayDashboardContentStyle(),
+        cursor: 'pointer',
+      }}
+    >
+      <MeetPlanContent
+        meetPlan={meetPlan}
+        meetTotals={meetTotals}
+        t={t}
+        weightUnit={weightUnit}
+      />
+    </div>
+  );
+}
+
+export function activeWorkoutScreenStyle() {
+  return {
+    ...responsiveContentScreenStyle(),
+  };
+}
+
+export function meetWorkoutScreenStyle() {
+  return {
+    ...responsiveContentScreenStyle(),
+    // A meet contains three full lift blocks plus the completion action.
+    // Let the document scroll naturally instead of stretching the blocks
+    // over one viewport with space-between.
+    display: 'block',
+    paddingBottom: 24,
+  };
+}
+
+export function meetWorkoutLiftBlockStyle() {
+  return {
+    background: 'transparent',
+    border: 'none',
+    borderRadius: 8,
+    overflow: 'visible',
+    margin: '0 0 clamp(16px, 2.2dvh, 22px)',
+  };
+}
+
+export function meetWorkoutGridSpan(itemCount) {
+  const count = Math.max(1, Math.min(12, Number(itemCount) || 1));
+  return Math.max(1, Math.floor(12 / count));
+}
+
+export function activeWorkoutLiftBlockStyle(lift, liftIndex = 0) {
+  const baseMarginBottom = 'clamp(4px, 0.8dvh, 8px)';
+  const liftBench = lift === 'Bench' && liftIndex > 0;
+
+  return {
+    background: 'transparent',
+    border: 'none',
+    borderRadius: 8,
+    overflow: 'hidden',
+    // Move only a following Bench block into the excessive gap above it.
+    // Compensate below so the header, Squat block and completion action keep
+    // their existing positions in the space-between workout grid.
+    marginTop: liftBench ? -40 : undefined,
+    marginBottom: liftBench
+      ? `calc(40px + ${baseMarginBottom})`
+      : baseMarginBottom,
+  };
+}
+
 export function restWorkoutScreenStyle() {
   return {
     ...responsiveContentScreenStyle(),
-    // The rest screen uses space-between for header, information and its
-    // completion action. A little more bottom inset moves both lower items
-    // upward without detaching the Smart label from the header or changing
-    // the layout model on shorter phones.
+    gridTemplateRows: 'auto minmax(0, 1fr) auto',
     paddingBottom: 32,
+  };
+}
+
+export function restWorkoutContentStyle() {
+  return {
+    minHeight: 0,
+    display: 'grid',
+    alignContent: 'center',
+    // Optical centring: the header has more visual weight than the action
+    // below, so the recovery message reads as centred slightly above the
+    // mathematical midpoint.
+    transform: 'translateY(clamp(-28px, -3dvh, -18px))',
+  };
+}
+
+export function restDayCompletedScreenStyle() {
+  return {
+    minHeight: '100%',
+    display: 'grid',
+    gridTemplateRows: 'minmax(0, 1fr) auto',
+    background: 'transparent',
+    border: 'none',
+    borderRadius: 12,
+    // Together with the completed-screen inset, this places the actions at
+    // the same visual height as the completion action on the workout screen.
+    padding: 'clamp(16px, 3dvh, 24px) 24px 26px',
+    boxSizing: 'border-box',
+    textAlign: 'center',
+  };
+}
+
+export function restDayCompletedContentStyle() {
+  return {
+    minHeight: 0,
+    alignSelf: 'center',
+    transform: 'translateY(clamp(-24px, -2.5dvh, -16px))',
+  };
+}
+
+export function restDayCompletedActionsStyle() {
+  return {
+    alignSelf: 'end',
   };
 }
 
@@ -1179,6 +1401,7 @@ function WorkoutCircleItem({
   footer = null,
   testId,
   fullWidth = false,
+  gridSpan = null,
   containerRef = null,
 }) {
   return (
@@ -1193,7 +1416,11 @@ function WorkoutCircleItem({
         alignContent: 'start',
         rowGap: RESPONSIVE_WORKOUT_UI.labelCircleGap,
         minWidth: 0,
-        gridColumn: fullWidth ? '1 / -1' : undefined,
+        gridColumn: fullWidth
+          ? '1 / -1'
+          : gridSpan
+            ? `span ${gridSpan}`
+            : undefined,
       }}
     >
       <div style={{
@@ -1278,13 +1505,13 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t, compact = false }) {
 }
 
 
-export function WorkoutLiftGrid({ children, testId = 'workout-lift-grid' }) {
+export function WorkoutLiftGrid({ children, testId = 'workout-lift-grid', columnCount = 4 }) {
   return (
     <div
       data-testid={testId}
       style={{
         display: 'grid',
-        gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+        gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
         justifyContent: 'start',
         gap: RESPONSIVE_WORKOUT_UI.circleGap,
         padding: `0 ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
@@ -1296,7 +1523,7 @@ export function WorkoutLiftGrid({ children, testId = 'workout-lift-grid' }) {
   );
 }
 
-export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, compactGrid = false, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard', onShowPlateCalculator }) {
+export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, compactGrid = false, gridSpan = null, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard', onShowPlateCalculator }) {
   if (!warmups.length) return null;
 
   return (
@@ -1371,6 +1598,7 @@ export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activ
             <WorkoutCircleItem
               testId={`warmup-row-${index}`}
               label={warmupDescription}
+              gridSpan={gridSpan}
             >
               <WorkoutCircle
                 done={isDone}
@@ -1775,7 +2003,7 @@ export function formatWorkoutSetPercentDisplay(set = {}) {
     : formatSetPercentDisplay(set.pct);
 }
 
-export function SetRow({ set, index, label, isWarmup = false, compactGrid = false, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator }) {
+export function SetRow({ set, index, label, isWarmup = false, compactGrid = false, gridSpan = null, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator }) {
   const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
   const displayPct = formatWorkoutSetPercentDisplay(set);
   const effortLabel = getSetEffortLabel(set.effort, t);
@@ -1982,6 +2210,7 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
           testId="workout-set-circle-item"
           label={circleLabel}
           fullWidth={!compactGrid}
+          gridSpan={gridSpan}
           containerRef={compactGrid ? rowRef : null}
           footer={meta ? (
             <div
@@ -3902,6 +4131,8 @@ export function getSmartMeetdayBlockerDisplayLabels(blockers = [], t = {}, readi
     'opener-readiness': t.smartBlockerOpenerReadiness || 'opener readiness',
     'second-attempt-readiness':
       t.smartBlockerSecondAttemptReadiness || 'second-attempt readiness',
+    'one-rm-readiness':
+      t.smartBlockerOneRMReadiness || '100% real 1RM not reached',
     'meet-plan-not-ready': t.smartBlockerMeetPlanNotReady || 'meet plan',
     'last-workout-hard': t.smartBlockerLastWorkoutHard || 'last workout hard',
     'after-recovery-intervention': t.smartBlockerAfterRecovery || 'after recovery',
@@ -4022,6 +4253,18 @@ function getSmartDecisionReasonDisplayText(summary, t = {}) {
     }
 
     return t.smartReasonFailedSetDeload || `${getSmartFatigueFailedDisplayText(readiness)} → lighter deload day.`;
+  }
+
+  if (summary.reason === SMART_DECISION_REASONS.IDEAL_ROUTE) {
+    if (summary.dayType === SMART_DAY_TYPES.MEET) {
+      return t.smartReasonIdealRouteMeet || 'The optimal route is ready for the Kelani meet.';
+    }
+
+    if (summary.dayType === SMART_DAY_TYPES.RECOVERY) {
+      return t.smartReasonIdealRouteRecovery || 'The optimal route schedules recovery here.';
+    }
+
+    return t.smartReasonIdealRouteTraining || 'The optimal route continues with this training workout.';
   }
 
   if (summary.reason === SMART_DECISION_REASONS.FATIGUE_RECOVERY) {
@@ -4164,7 +4407,7 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
 
   if (topSet) {
     const currentPct = Number(
-      topSet.precisePct ?? topSet.pct ?? topSet.originalPct
+      topSet.pct ?? topSet.originalPct ?? topSet.precisePct
     ) || 0;
     const previousPct = roundPercent(
       Number(
@@ -4289,12 +4532,12 @@ function getFrequencySupplementedLiftPrescriptionPlan(
     return null;
   }
 
-  const formatPct = pct => `${Math.round(roundPercent(Number(pct)) * 100)}%`;
+  const formatPct = pct => `${formatSetPercentDisplay(roundPercent(Number(pct))) || 0}%`;
   const volumeReps = Number(volumeSets[0]?.reps) || 0;
   const volumePct = Number(
-    prescription.plannedVolumePct
+    volumeSets[0]?.pct
+    || prescription.plannedVolumePct
     || prescription.volumeAnchorPct
-    || volumeSets[0]?.pct
   ) || 0;
   const planParts = [
     `${t.smartTopSingle || 'Top single'}: ${formatPct(topSingle.pct)}`,
@@ -4382,7 +4625,7 @@ export function buildSmartDiagnosticText(workout = {}, t = {}, currentE1RMs = {}
     lines.push(`Meet blockers: ${readiness.meetdayBlockers.join(', ')}`);
   }
 
-  const formatDiagnosisPct = value => `${Math.round(roundPercent(value) * 100)}%`;
+  const formatDiagnosisPct = value => `${formatSetPercentDisplay(roundPercent(value)) || 0}%`;
 
   (workout.lifts || []).forEach(liftBlock => {
     const prescription = liftBlock?.smartPrescription || {};
@@ -4479,16 +4722,11 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
         minimumFractionDigits: 0,
         maximumFractionDigits: 1,
       })} kg`;
-    const blockerPhaseText = phase => phase === 'third-attempt'
-      ? (t.smartThirdAttemptNotDemonstrated || 'third attempt not yet demonstrated')
-      : phase === 'second-attempt'
-        ? (t.smartSecondAttemptNotSupported || 'second attempt not yet supported')
-        : (t.smartOpenerNotDemonstrated || 'opener not yet demonstrated');
-    // List every lift still short of full meet demonstration, not just the
-    // single weakest one; it is confusing when e.g. Squat and
-    // Deadlift both had unmet 3rd-attempt potential but only Deadlift was
-    // named as "the" blocker. Grouped by phase (worst first) so two lifts
-    // sharing the same gap read as one line, not a wall of repeats.
+    const oneRMBlockerText =
+      t.smartOneRMNotReached || '100% of the real 1RM not yet reached';
+    const meetReady = Boolean(
+      readiness.meetPlanReady || readiness.meetPlanFullyDemonstrated
+    );
     const phaseSeverity = { opener: 0, 'second-attempt': 1, 'third-attempt': 2 };
     const meetPlanReadinessByLift = readiness.meetPlanReadiness || {};
     const blockingLifts = Object.keys(meetPlanReadinessByLift)
@@ -4500,23 +4738,14 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
         (phaseSeverity[meetPlanReadinessByLift[a]?.readinessPhase] ?? 99) -
         (phaseSeverity[meetPlanReadinessByLift[b]?.readinessPhase] ?? 99)
       );
-    const blockerGroups = [];
-    blockingLifts.forEach(lift => {
-      const phase = meetPlanReadinessByLift[lift]?.readinessPhase;
-      const group = blockerGroups.find(g => g.phase === phase);
-      if (group) group.lifts.push(lift);
-      else blockerGroups.push({ phase, lifts: [lift] });
-    });
-    const statusText = readiness.meetPlanFullyDemonstrated
+    const statusText = meetReady
       ? (t.smartMeetFullyReadyTaper || 'Fully meet-ready: tapering and resting before the meet')
-      : blockerGroups.length > 0
-        ? blockerGroups
-          .map(group => `${group.lifts.join(', ')} (${blockerPhaseText(group.phase)})`)
-          .join('; ')
+      : blockingLifts.length > 0
+        ? `${blockingLifts.join(', ')} (${oneRMBlockerText})`
         : (t.smartMeetPlanNotReady || 'Meet plan not ready');
 
     rows.push({
-      label: readiness.meetPlanFullyDemonstrated
+      label: meetReady
         ? (t.smartMeetStatus || 'Meet status')
         : blockingLifts.length > 1
           ? (t.smartCurrentBlockers || 'Current blockers')
@@ -4524,12 +4753,14 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
       value: statusText,
     });
 
-    if (readiness.primaryBlockerLift || readiness.meetPlanWeakestLift) {
+    if (
+      !meetReady &&
+      (readiness.primaryBlockerLift || readiness.meetPlanWeakestLift)
+    ) {
       const primaryLift = readiness.primaryBlockerLift || readiness.meetPlanWeakestLift;
-      const primaryPhase = readiness.primaryBlockerPhase || readiness.meetPlanWeakestPhase;
       rows.push({
         label: t.smartPrimaryBlocker || 'Primary blocker',
-        value: `${primaryLift} (${blockerPhaseText(primaryPhase)})`,
+        value: `${primaryLift} (${oneRMBlockerText})`,
       });
     }
 
@@ -4540,17 +4771,17 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
     ) {
       rows.push(
         {
-          label: t.smartOpenerReadiness || 'Openers',
+          label: t.smartE1RM90Readiness || '90% e1RM',
           value: `${Number(readiness.meetPlanOpenerReadyCount) || 0}/3`,
           kind: 'metric',
         },
         {
-          label: t.smartSecondAttemptReadiness || '2nd attempts',
+          label: t.smartE1RM95Readiness || '95% e1RM',
           value: `${Number(readiness.meetPlanSecondAttemptReadyCount) || 0}/3`,
           kind: 'metric',
         },
         {
-          label: t.smartThirdAttemptPotential || '3rd potential',
+          label: t.smartOneRMReadiness || '100% real 1RM',
           value: `${Number(readiness.meetPlanThirdAttemptPotentialCount) || 0}/3`,
           kind: 'metric',
         }
@@ -4565,18 +4796,20 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
       const liftReadiness = meetPlanReadinessByLift[lift];
       if (!liftReadiness) return;
 
-      const liftPhase = liftReadiness.readinessPhase || 'opener';
-      // The workout snapshot contains the 5kg readiness value used by the
-      // training engine. That is intentionally stable for planning, but it
-      // is not the live 2.5kg dashboard value and older persisted workouts
-      // can keep that snapshot for days. The modal is presentation UI, so
+      // A workout snapshot can contain an older, coarser readiness value.
+      // That snapshot is intentionally stable, but it is not necessarily
+      // the live 2.5kg dashboard value and persisted workouts can keep it
+      // for days. The modal is presentation UI, so
       // prefer the live dashboard source passed by App; fall back to the
       // snapshot only for isolated helpers/tests that have no app state.
       const liftCycleEstimate =
         Number(currentE1RMs?.[lift]) ||
         Number(liftReadiness.currentCycleBestE1RM) ||
         0;
-      const liftReadinessTarget = Number(liftReadiness.readinessTargetAttempt) || 0;
+      const liftReadinessTarget = Number(
+        liftReadiness.oneRMTargetE1RM || liftReadiness.currentCycleTarget
+          || liftReadiness.readinessTargetAttempt
+      ) || 0;
 
       if (!(liftCycleEstimate > 0 && liftReadinessTarget > 0)) return;
 
@@ -4590,13 +4823,8 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
         liftDisplayReadinessTarget - liftDisplayCycleEstimate,
         0
       );
-      // 'ready' (fully demonstrated) still displays against its final
-      // (third-attempt) target, same label as an in-progress third attempt.
-      const liftTargetLabel = (liftPhase === 'third-attempt' || liftPhase === 'ready')
-        ? (t.smartThirdAttemptSupportShort || '3rd support')
-        : liftPhase === 'second-attempt'
-          ? (t.smartSecondAttemptSupportShort || '2nd support')
-          : (t.smartPlannedOpenerShort || 'Meet opener');
+      const liftTargetLabel =
+        t.smartRealOneRMTarget || 'Real 1RM target';
 
       rows.push(
         {
@@ -4606,12 +4834,7 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
         },
         {
           label: `${lift} (${liftTargetLabel})`,
-          value: (liftPhase === 'second-attempt' || liftPhase === 'third-attempt' || liftPhase === 'ready')
-            ? formatEstimate(liftDisplayReadinessTarget)
-            : formatWeightFromKg(
-              liftDisplayReadinessTarget,
-              WEIGHT_UNITS.KG,
-            ),
+          value: formatEstimate(liftDisplayReadinessTarget),
           kind: 'metric',
         },
         {
@@ -5463,56 +5686,57 @@ function CurrentWorkout({
           subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
         />
 
-        {renderActivateWorkoutCard()}
+        <div style={restWorkoutContentStyle()}>
+          {renderActivateWorkoutCard()}
 
-        <div style={{
-          padding: '8px 0 10px',
-          marginBottom: 10,
-          background: 'transparent',
-          border: 'none',
-          color: THEME.text,
-          textAlign: 'center'
-        }}>
           <div style={{
-            fontSize: 'clamp(42px, 10vw, 52px)',
-            lineHeight: 1,
-            marginBottom: 14
-          }}>
-            ✓
-          </div>
-
-          <h2 style={{
-            margin: '0 0 8px',
+            padding: '8px 0 10px',
+            background: 'transparent',
+            border: 'none',
             color: THEME.text,
-            fontSize: 'clamp(22px, 5.2vw, 27px)',
-            fontWeight: 900
+            textAlign: 'center'
           }}>
-            {t.restAndRecovery || t.deload}
-            {!isReadOnly && (
-              <span style={{
-                fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
-                background: THEME.primary,
-                color: '#ffffff',
-                padding: '1px 6px',
-                borderRadius: 3,
-                marginLeft: 8,
-                verticalAlign: 'middle'
-              }}>
-                {t.now}
-              </span>
-            )}
-          </h2>
+            <div style={{
+              fontSize: 'clamp(42px, 10vw, 52px)',
+              lineHeight: 1,
+              marginBottom: 14
+            }}>
+              ✓
+            </div>
 
-          <p style={{
-            margin: '0 auto',
-            maxWidth: 360,
-            color: THEME.muted,
-            fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
-            fontWeight: 700,
-            lineHeight: 1.4
-          }}>
-            {t.restReadyNextWorkout || 'Rest and recover. No lifting today; complete this rest day when you are ready to continue.'}
-          </p>
+            <h2 style={{
+              margin: '0 0 8px',
+              color: THEME.text,
+              fontSize: 'clamp(22px, 5.2vw, 27px)',
+              fontWeight: 900
+            }}>
+              {t.restAndRecovery || t.deload}
+              {!isReadOnly && (
+                <span style={{
+                  fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
+                  background: THEME.primary,
+                  color: '#ffffff',
+                  padding: '1px 6px',
+                  borderRadius: 3,
+                  marginLeft: 8,
+                  verticalAlign: 'middle'
+                }}>
+                  {t.now}
+                </span>
+              )}
+            </h2>
+
+            <p style={{
+              margin: '0 auto',
+              maxWidth: 360,
+              color: THEME.muted,
+              fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
+              fontWeight: 700,
+              lineHeight: 1.4
+            }}>
+              {t.restReadyNextWorkout || 'Rest and recover. No lifting today; complete this rest day when you are ready to continue.'}
+            </p>
+          </div>
         </div>
 
         {!isReadOnly && (
@@ -5550,7 +5774,7 @@ function CurrentWorkout({
     );
 
     return (
-      <div style={responsiveContentScreenStyle()}>
+      <div style={isMeetDay ? meetWorkoutScreenStyle() : activeWorkoutScreenStyle()}>
         {selectedExerciseGuideLift && (
           <ExerciseGuideModal
             lift={selectedExerciseGuideLift}
@@ -5616,7 +5840,9 @@ function CurrentWorkout({
           return (
             <div
             key={liftBlock.lift}
-              style={{ background: 'transparent', border: 'none', borderRadius: 8, overflow: 'hidden', marginBottom: 'clamp(4px, 0.8dvh, 8px)' }}
+              style={isMeetDay
+                ? meetWorkoutLiftBlockStyle()
+                : activeWorkoutLiftBlockStyle(liftBlock.lift, li)}
             >
               <div style={{
                 padding: '2px 10px 4px',
@@ -5704,10 +5930,16 @@ function CurrentWorkout({
                 </div>
               )}
 
-              <WorkoutLiftGrid testId={`workout-lift-grid-${li}`}>
+              <WorkoutLiftGrid
+                testId={`workout-lift-grid-${li}`}
+                columnCount={isMeetDay ? 12 : 4}
+              >
                 <WarmupGrid
                   compactGrid
                   warmups={liftBlock.warmups || []}
+                  gridSpan={isMeetDay
+                    ? meetWorkoutGridSpan((liftBlock.warmups || []).length)
+                    : null}
                   referenceSets={liftBlock.sets || []}
                   onShowPlateCalculator={onShowPlateCalculator}
                 isReadOnly={isReadOnly}
@@ -5878,6 +6110,9 @@ function CurrentWorkout({
 
                   <SetRow
                     compactGrid
+                    gridSpan={isMeetDay
+                      ? meetWorkoutGridSpan((liftBlock.sets || []).length)
+                      : null}
                     set={set}
                     index={si}
                     label={set.labelKey ? t[set.labelKey] : `${t.set} ${si + 1}`}
@@ -5985,19 +6220,10 @@ function CurrentWorkout({
           }}
           disabled={!allMeetDone || isReadOnly}
           style={{
-            display: 'block',
-            width: 'auto',
-            minHeight: 44,
-            padding: '10px 28px',
-            fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
-            fontWeight: 600,
-            background: THEME.card,
-            color: (allMeetDone && !isReadOnly) ? 'white' : '#666',
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 8,
-            cursor: (allMeetDone && !isReadOnly) ? 'pointer' : 'not-allowed',
-            margin: '0 auto 10px',
-            opacity: 1
+            ...workoutCompletionButtonStyle({
+              enabled: allMeetDone && !isReadOnly,
+            }),
+            margin: '2px auto 18px',
           }}
         >
           {isReadOnly
@@ -6022,7 +6248,7 @@ function CurrentWorkout({
   }
 
   return (
-    <div style={responsiveContentScreenStyle()}>
+    <div style={activeWorkoutScreenStyle()}>
       <h2 style={{
         margin: '12px 0 8px',
         textAlign: 'center',
@@ -6314,16 +6540,10 @@ function CurrentWorkout({
   );
 }
 
-// Meet attempts round to the nearest 5kg like everything else in the app,
-// but at light training maxes (e.g. a Beginner's early cycles) two attempts
-// 7.5 percentage points apart can round to the same 5kg step. Forcing a
-// full 5kg bump to break that tie compounds across opener->second->third
-// and can push a "2nd attempt" past the lifter's actual tested max (see
-// Beginner Bench boundary: 32.5kg e1RM rounding to a 35kg 2nd attempt).
-// Competition
-// plates support 2.5kg jumps (unlike training, which stays on 5kg
-// increments for practical gym plate-loading), so the minimum step to
-// break a tie only needs to be 2.5kg here.
+// All automatic attempts use 2.5kg competition-barbell precision. At light
+// 1RMs two adjacent percentage targets can still collide after rounding, so
+// enforce the smallest valid 2.5kg increase instead of leaving equal or
+// decreasing attempts.
 export function ensureStrictMeetAttempts(attempts) {
   const strict = ensureStrictMeetAttemptKeys(attempts);
   return { ...attempts, opener: strict.opener, second: strict.secondAttempt, third: strict.thirdAttempt };
@@ -6369,7 +6589,7 @@ export function buildSuggestedMeetPlan(bestStatsByLift = {}) {
 // just re-homed into a modal) - the numbers themselves come from
 // buildSuggestedMeetPlan so this and the Dashboard summary can never drift
 // apart.
-function MeetPlanContent({ meetPlan, meetTotals, t, weightUnit = WEIGHT_UNITS.KG }) {
+export function MeetPlanContent({ meetPlan, meetTotals, t, weightUnit = WEIGHT_UNITS.KG }) {
   const statsWeightUnit = normalizeWeightUnit(weightUnit);
 
   return (
@@ -6417,9 +6637,6 @@ function MeetPlanContent({ meetPlan, meetTotals, t, weightUnit = WEIGHT_UNITS.KG
                     </div>
                     <div style={{ width: '100%', boxSizing: 'border-box', padding: '5px 4px', borderRadius: 6, border: `1px solid ${color}`, background: `${color}12`, color, textAlign: 'center', fontSize: 15, fontWeight: 800 }}>
                       {value ? formatWeightFromKg(value, statsWeightUnit) : '—'}
-                    </div>
-                    <div style={{ color: THEME.muted, fontSize: 11, marginTop: 2 }}>
-                      {statsWeightUnit}
                     </div>
                   </div>
                 ))}
@@ -6515,16 +6732,17 @@ sortedHistory.forEach(entry => {
   if (!entry.lift || !LIFT_ORDER.includes(entry.lift) || entry.completionOnly) return;
 
   const candidates = getHistoryMaxCandidates(entry);
+  const historicalOneRM = getStatsHistoricalOneRM(entry, candidates.oneRM);
 
-  if (candidates.oneRM <= 0 && candidates.e1rm <= 0) return;
+  if (historicalOneRM <= 0 && candidates.e1rm <= 0) return;
 
   runningBestPerLift[entry.lift] = entry.manualMax
     ? {
-        oneRM: candidates.oneRM,
+        oneRM: historicalOneRM,
         e1rm: candidates.e1rm,
       }
     : {
-        oneRM: Math.max(runningBestPerLift[entry.lift].oneRM, candidates.oneRM),
+        oneRM: Math.max(runningBestPerLift[entry.lift].oneRM, historicalOneRM),
         e1rm: Math.max(runningBestPerLift[entry.lift].e1rm, candidates.e1rm),
       };
 
@@ -6573,7 +6791,7 @@ LIFT_ORDER.forEach(lift => {
   // This is a running-best chart, so an older raw maximum always floors the
   // endpoint; rounding must never make a 1RM/e1RM line move downward.
   // This also normalizes a just-completed legacy-shaped entry (e.g. W46
-  // Deadlift stored as 181.33 before the new 5kg save boundary) to 180.
+  // Deadlift stored as 181.33) to the canonical 182.5kg value.
   const currentE1RMChartValue = chartWeightFromKg(currentE1RM);
   liftData[lift] = capRunningBestChart(
     liftData[lift],
@@ -7747,7 +7965,10 @@ function isCompletedWorkoutNewCycleBoundary(workout) {
   return Boolean(
     workout.type === 'rest' &&
     workout.smartDayType === recoveryDayType &&
-    workout.smartDecisionSummary?.reason === postMeetRecoveryReason
+    (
+      workout.smartDecisionSummary?.reason === postMeetRecoveryReason ||
+      workout.smartIdealRoute?.stage === 'post-meet'
+    )
   );
 }
 
@@ -7842,6 +8063,39 @@ function AppHeader({ title, subtitle, meta, children, titleStyle = {}, subtitleS
 
       {children}
     </div>
+  );
+}
+
+export function DashboardCycleWorkoutLabel({
+  t,
+  currentCycle,
+  workoutNumber,
+  totalWorkouts,
+  smartModel = false,
+  athleteLevel,
+  eStrengthRatio,
+  eStrengthMax,
+  latestBodyWeight,
+}) {
+  return (
+    <>
+      {formatCycleWorkoutSubtitle({
+        t,
+        currentCycle,
+        workoutNumber,
+        totalWorkouts,
+        smartModel,
+      })}
+      {smartModel && (
+        <AthleteLevelBadge
+          athleteLevel={athleteLevel}
+          eStrengthRatio={eStrengthRatio}
+          eStrengthMax={eStrengthMax}
+          latestBodyWeight={latestBodyWeight}
+          t={t}
+        />
+      )}
+    </>
   );
 }
 
@@ -9060,6 +9314,9 @@ function App() {
   const [currentWorkoutIndex, setCurrentWorkoutIndex] = useState(0);
   const [history, setHistory] = useState([]);
   const [prs, setPrs] = useState({});
+  const [oneRMs, setOneRMs] = useState({});
+  const [cycleE1RMs, setCycleE1RMs] = useState({});
+  const [smartIdealRouteStartCycle, setSmartIdealRouteStartCycle] = useState(1);
   const [accessoryPRs, setAccessoryPRs] = useState({});
   const [showNewCycle, setShowNewCycle] = useState(false);
   const [showMeetPlanModal, setShowMeetPlanModal] = useState(false);
@@ -9204,10 +9461,34 @@ function App() {
 
       const savedHistory = data.history || [];
       const restoredPrs = mergeHigherPrs(savedPrs, calculatePrsFromHistory(savedHistory));
+      const restoredOneRMs = deriveOneRMs({
+        savedOneRMs: data.oneRMs,
+        stateVersion: data.oneRMStateVersion,
+        prs: savedPrs,
+        history: savedHistory,
+      });
       const savedCycle = data.currentCycle || 1;
+      const restoredCycleE1RMs = deriveCycleE1RMs({
+        savedCycleE1RMs: data.cycleE1RMs,
+        prs: restoredPrs,
+        history: savedHistory,
+        currentCycle: savedCycle,
+      });
       const savedTrainingModel = normalizeTrainingModel(
         data.trainingModel || localStorage.getItem('trainingModel')
       );
+      const savedSmartIdealRouteStartCycle = resolveSmartIdealRouteStartCycle({
+        savedStartCycle: data.smartIdealRouteStartCycle,
+        currentCycle: savedCycle,
+        trainingModel: savedTrainingModel,
+      });
+      const savedIdealRouteEnabled = isSmartIdealRouteEnabled({
+        currentCycle: savedCycle,
+        startCycle: savedSmartIdealRouteStartCycle,
+      });
+      const generationMaxes = isSmartTrainingModel(savedTrainingModel)
+        ? restoredCycleE1RMs
+        : restoredPrs;
       const hasSavedProgramProfile = Boolean(data.programProfile);
       const savedProgramProfile = hasSavedProgramProfile
         ? normalizeProgramProfile(data.programProfile)
@@ -9245,9 +9526,9 @@ function App() {
       const completedWorkoutCount = getCompletedWorkoutCount(savedHistory, savedCycle);
       const generatedWorkouts = generateWorkoutsForTrainingModel(savedTrainingModel, {
         programProfile: savedProgramProfile,
-        squat: restoredPrs.Squat,
-        bench: restoredPrs.Bench,
-        deadlift: restoredPrs.Deadlift,
+        squat: generationMaxes.Squat,
+        bench: generationMaxes.Bench,
+        deadlift: generationMaxes.Deadlift,
         accessoryMode: savedAccessoryMode,
         accessoryPRs: data.accessoryPRs || {},
         preparationMode: savedPreparationMode,
@@ -9259,6 +9540,9 @@ function App() {
         history: savedHistory,
         currentIndex: data.inProgress?.currentIndex ?? completedWorkoutCount,
         currentCycle: savedCycle,
+        meetPlannerAttempts: data.meetPlannerAttempts || {},
+        oneRMs: restoredOneRMs,
+        idealRouteEnabled: savedIdealRouteEnabled,
       });
       const savedInProgress = data.inProgress || null;
       const savedMeetPrepChecklist = data.meetPrepChecklist || {};
@@ -9286,11 +9570,14 @@ function App() {
       setWorkouts(cleanedWorkouts);
       setHistory(savedHistory);
       setPrs(restoredPrs);
+      setOneRMs(restoredOneRMs);
+      setCycleE1RMs(restoredCycleE1RMs);
+      setSmartIdealRouteStartCycle(savedSmartIdealRouteStartCycle);
       setAccessoryPRs(data.accessoryPRs || {});
       setCurrentCycle(savedCycle);
       setBodyWeights(normalizeBodyWeights(data));
       setUserProfile(data.userProfile || {});
-      setMeetPlannerAttempts({});
+      setMeetPlannerAttempts(data.meetPlannerAttempts || {});
       setMeetPrepChecklist(savedMeetPrepChecklist);
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
       setTrainingModel(savedTrainingModel);
@@ -9348,6 +9635,10 @@ function App() {
       version: 1,
       history,
       prs,
+      oneRMs,
+      oneRMStateVersion: ONE_RM_STATE_VERSION,
+      cycleE1RMs,
+      smartIdealRouteStartCycle,
       accessoryPRs,
       currentCycle,
       bodyWeights,
@@ -9414,16 +9705,19 @@ function App() {
         });
       }
     }
-  }, [hasLoadedData, history, prs, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
+  }, [hasLoadedData, history, prs, oneRMs, cycleE1RMs, smartIdealRouteStartCycle, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
 
   useEffect(() => {
     if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
 
+    const generationMaxes = isSmartTrainingModel(trainingModel)
+      ? normalizeCycleE1RMs(cycleE1RMs, prs)
+      : prs;
     const generatedWorkouts = generateWorkoutsForTrainingModel(trainingModel, {
       programProfile,
-      squat: prs.Squat,
-      bench: prs.Bench,
-      deadlift: prs.Deadlift,
+      squat: generationMaxes.Squat,
+      bench: generationMaxes.Bench,
+      deadlift: generationMaxes.Deadlift,
       accessoryMode,
       accessoryPRs,
       preparationMode,
@@ -9436,6 +9730,11 @@ function App() {
       currentIndex,
       currentCycle,
       meetPlannerAttempts,
+      oneRMs,
+      idealRouteEnabled: isSmartIdealRouteEnabled({
+        currentCycle,
+        startCycle: smartIdealRouteStartCycle,
+      }),
     });
 
     setWorkouts(prev => {
@@ -9450,7 +9749,7 @@ function App() {
         Number(currentIndex) + 1
       ));
     });
-  }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, athleteLevel, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, history, bodyWeights, currentIndex, currentCycle, meetPlannerAttempts]);
+  }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, athleteLevel, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, oneRMs.Squat, oneRMs.Bench, oneRMs.Deadlift, cycleE1RMs.Squat, cycleE1RMs.Bench, cycleE1RMs.Deadlift, smartIdealRouteStartCycle, history, bodyWeights, currentIndex, currentCycle, meetPlannerAttempts]);
 
   useEffect(() => {
     if (!hasLoadedData || !isSmartTrainingModel(trainingModel)) return;
@@ -9494,11 +9793,21 @@ function App() {
     setDeadliftVariant(defaultDeadliftVariant);
     setCooldownMode(defaultCooldownMode);
 
+    const initialCycleE1RMs = normalizeCycleE1RMs({
+      Squat: s,
+      Bench: b,
+      Deadlift: d,
+    });
+    const initialOneRMs = normalizeOneRMs({
+      Squat: s,
+      Bench: b,
+      Deadlift: d,
+    });
     setWorkouts(generateWorkoutsForTrainingModel(defaultTrainingModel, {
       programProfile: defaultProgramProfile,
-      squat: s,
-      bench: b,
-      deadlift: d,
+      squat: initialCycleE1RMs.Squat,
+      bench: initialCycleE1RMs.Bench,
+      deadlift: initialCycleE1RMs.Deadlift,
       accessoryMode: defaultAccessoryMode,
       accessoryPRs: {},
       preparationMode: defaultPreparationMode,
@@ -9514,6 +9823,8 @@ function App() {
       history: [],
       currentIndex: 0,
       currentCycle: 1,
+      idealRouteEnabled: isSmartTrainingModel(defaultTrainingModel),
+      oneRMs: initialOneRMs,
     }));
     setCurrentWorkoutIndex(0);
     setSelectedIndex(0);
@@ -9553,6 +9864,9 @@ function App() {
     ]);
 
     setPrs({ Squat: s, Bench: b, Deadlift: d });
+    setOneRMs(initialOneRMs);
+    setCycleE1RMs(initialCycleE1RMs);
+    setSmartIdealRouteStartCycle(1);
     setAccessoryPRs({});
     setUserProfile({ ...profile, weightUnit: selectedWeightUnit });
     setMeetPlannerAttempts({});
@@ -9573,6 +9887,10 @@ function App() {
 function switchClassicToSmart() {
   if (!canSwitchClassicToSmart(trainingModel, workouts[currentIndex])) return;
 
+  setCycleE1RMs(normalizeCycleE1RMs(prs));
+  setSmartIdealRouteStartCycle(
+    currentCycle
+  );
   setTrainingModel(TRAINING_MODELS.SMART);
   const safeIndex = Math.max(0, Math.min(currentIndex, Math.max(workouts.length - 1, 0)));
   setSelectedIndex(safeIndex);
@@ -9595,6 +9913,9 @@ function handleResetApp() {
   setSelectedIndex(0);
   setHistory([]);
   setPrs({});
+  setOneRMs({});
+  setCycleE1RMs({});
+  setSmartIdealRouteStartCycle(1);
   setAccessoryPRs({});
   setUserProfile({});
   setMeetPlannerAttempts({});
@@ -9624,11 +9945,16 @@ function handleStartNewCycle() {
   }
 
   const nextCycle = currentCycle + 1;
+  const nextCycleE1RMs = buildNextCycleE1RMs({
+    prs,
+    history,
+    nextCycle,
+  });
   const newWorkouts = generateWorkoutsForTrainingModel(trainingModel, {
     programProfile,
-    squat: prs.Squat,
-    bench: prs.Bench,
-    deadlift: prs.Deadlift,
+    squat: isSmartTrainingModel(trainingModel) ? nextCycleE1RMs.Squat : prs.Squat,
+    bench: isSmartTrainingModel(trainingModel) ? nextCycleE1RMs.Bench : prs.Bench,
+    deadlift: isSmartTrainingModel(trainingModel) ? nextCycleE1RMs.Deadlift : prs.Deadlift,
     accessoryMode,
     accessoryPRs,
     preparationMode,
@@ -9641,9 +9967,15 @@ function handleStartNewCycle() {
     currentIndex: 0,
     currentCycle: nextCycle,
     meetPlannerAttempts: {},
+    oneRMs,
+    idealRouteEnabled: isSmartIdealRouteEnabled({
+      currentCycle: nextCycle,
+      startCycle: smartIdealRouteStartCycle,
+    }),
   });
 
   setCurrentCycle(nextCycle);
+  setCycleE1RMs(nextCycleE1RMs);
   setMeetPlannerAttempts({});
   setWorkouts(newWorkouts);
   setCurrentWorkoutIndex(0);
@@ -10310,6 +10642,7 @@ function changeMeetWeight(liftIndex, setIndex, val) {
   setWorkouts(prev =>
     prev.map((w, wi) => {
       if (wi !== selectedIndex) return w;
+      if (isMeetAttemptPlanLocked(w)) return w;
 
       return {
         ...w,
@@ -10318,32 +10651,46 @@ function changeMeetWeight(liftIndex, setIndex, val) {
 
           return {
             ...liftBlock,
-            sets: liftBlock.sets.map((s, si) => {
-              if (si !== setIndex) return s;
+            sets: (() => {
+              const requestedWeights = liftBlock.sets.map((set, index) => (
+                index === setIndex
+                  ? roundedVal
+                  : roundMeetWeight(set.weight)
+              ));
+              const strictWeights = requestedWeights.reduce((weights, weight, index) => {
+                const previousWeight = Number(weights[index - 1]) || 0;
+                weights.push(index === 0
+                  ? weight
+                  : Math.max(weight, previousWeight + 2.5));
+                return weights;
+              }, []);
 
-              const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
-              const originalPct = Number(s.originalPct ?? s.pct) || 0;
-              const nextPct = getSetPctForWeight(
-                { ...s, originalWeight, originalPct },
-                roundedVal
-              );
+              return liftBlock.sets.map((s, si) => {
+                const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
+                const originalPct = Number(s.originalPct ?? s.pct) || 0;
+                const nextWeight = strictWeights[si];
+                const nextPct = getSetPctForWeight(
+                  { ...s, originalWeight, originalPct },
+                  nextWeight
+                );
 
-              return {
-                ...s,
-                weight: roundedVal,
-                pct: nextPct || s.pct,
-                done: false,
-                failed: false,
-                skipped: false,
-                failedAttempts: 0,
-                failedWeight: null,
-                adjustedWeight: null,
-                originalWeight,
-                originalPct,
-                adjustedFromFailedSet: false,
-                adjustedFromOriginal: Number(roundedVal) !== originalWeight,
-              };
-            }),
+                return {
+                  ...s,
+                  weight: nextWeight,
+                  pct: nextPct || s.pct,
+                  done: false,
+                  failed: false,
+                  skipped: false,
+                  failedAttempts: 0,
+                  failedWeight: null,
+                  adjustedWeight: null,
+                  originalWeight,
+                  originalPct,
+                  adjustedFromFailedSet: false,
+                  adjustedFromOriginal: Number(nextWeight) !== originalWeight,
+                };
+              });
+            })(),
           };
         }),
       };
@@ -10515,6 +10862,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     finishedWorkout,
     nextWorkoutIndex,
     nextPrs = prs,
+    nextOneRMs = oneRMs,
   }) {
     return regenerateSmartWorkoutsAfterCompletion({
       workouts,
@@ -10525,9 +10873,9 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       nextWorkoutIndex,
       generationOptions: {
         programProfile,
-        squat: nextPrs.Squat,
-        bench: nextPrs.Bench,
-        deadlift: nextPrs.Deadlift,
+        squat: cycleE1RMs.Squat,
+        bench: cycleE1RMs.Bench,
+        deadlift: cycleE1RMs.Deadlift,
         accessoryMode,
         accessoryPRs,
         preparationMode,
@@ -10544,6 +10892,11 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         squatVariant,
         cooldownMode,
         meetPlannerAttempts,
+        oneRMs: nextOneRMs,
+        idealRouteEnabled: isSmartIdealRouteEnabled({
+          currentCycle,
+          startCycle: smartIdealRouteStartCycle,
+        }),
       },
     });
   }
@@ -10590,6 +10943,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     const completedFailedOrSkippedSetCount = countFailedOrSkippedSetsFromSnapshot(finishedWorkout);
     let completedTrainingHistory = null;
     let completedTrainingPrs = prs;
+    let completedTrainingOneRMs = oneRMs;
 
     if (workout.type === 'rest') {
       const restWorkoutEffort = finishedWorkout.workoutEffort || 'easy';
@@ -10697,9 +11051,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         )
       : null;
 
-    const oneRMToday = sets.length
-      ? Math.max(...sets.map(s => Number(s.weight) || 0))
-      : 0;
+    const oneRMToday = getActualOneRMFromSets(sets);
 
     const e1RMToday = sets.length
       ? roundE1RM(oneRMToday)
@@ -10715,7 +11067,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       ...previousLiftHistory.map(h => getHistoryMaxCandidates(h).e1rm || 0)
     );
 
-    const previousBest1RM = Math.max(
+    const previousBest1RM = Number(oneRMs?.[liftBlock.lift]) || Math.max(
       0,
       ...previousLiftHistory.map(h => getHistoryMaxCandidates(h).oneRM || 0)
     );
@@ -10772,6 +11124,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     lift: result.lift,
     topWeight: result.oneRMToday,
     topReps: 1,
+    oneRMToday: result.oneRMToday,
     e1rm: result.e1RMToday,
     date: today,
     workoutEffort: finishedWorkout.workoutEffort,
@@ -10786,8 +11139,13 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     prs,
     calculatePrsFromHistory(nextHistory)
   );
+  const nextOneRMs = mergeHigherOneRMs(
+    oneRMs,
+    calculateActualOneRMsFromHistory(nextHistory)
+  );
   setHistory(nextHistory);
   setPrs(nextPrs);
+  setOneRMs(nextOneRMs);
 
   setCompletedWorkout(finishedWorkout);
   setCompletedWorkoutIndex(selectedIndex);
@@ -10807,6 +11165,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         finishedWorkout,
         nextWorkoutIndex,
         nextPrs,
+        nextOneRMs,
       })
       : workouts.map((item, index) =>
         index === selectedIndex ? finishedWorkout : item
@@ -10849,9 +11208,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
             )
           : null;
 
-        const oneRMToday = sets.length
-          ? Math.max(...sets.map(s => Number(s.weight) || 0))
-          : 0;
+        const oneRMToday = getActualOneRMFromSets(sets);
 
         const e1RMToday = sets.length
           ? roundE1RM(Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0))))
@@ -10867,7 +11224,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
           ...previousLiftHistory.map(h => getHistoryMaxCandidates(h).e1rm || 0)
         );
 
-        const previousBest1RM = Math.max(
+        const previousBest1RM = Number(oneRMs?.[liftBlock.lift]) || Math.max(
           0,
           ...previousLiftHistory.map(h => getHistoryMaxCandidates(h).oneRM || 0)
         );
@@ -10920,8 +11277,11 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         smartDecisionSummary: completedSmartDecisionSummary,
         failedOrSkippedSetCount: completedFailedOrSkippedSetCount,
         lift: result.lift,
-        topWeight: result.trackStrength === false ? 0 : result.oneRMToday,
+        topWeight: result.trackStrength === false
+          ? 0
+          : Number(result.topSet?.weight) || 0,
         topReps: result.trackStrength === false ? 0 : (result.topSet?.reps || 0),
+        oneRMToday: result.trackStrength === false ? 0 : result.oneRMToday,
         e1rm: result.trackStrength === false ? 0 : result.e1RMToday,
         date: today,
         workoutEffort: finishedWorkout.workoutEffort,
@@ -10933,11 +11293,17 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         prs,
         calculatePrsFromHistory(nextHistory)
       );
+      const nextOneRMs = mergeHigherOneRMs(
+        oneRMs,
+        calculateActualOneRMsFromHistory(nextHistory)
+      );
 
       completedTrainingHistory = nextHistory;
       completedTrainingPrs = nextPrs;
+      completedTrainingOneRMs = nextOneRMs;
       setHistory(nextHistory);
       setPrs(nextPrs);
+      setOneRMs(nextOneRMs);
     }
 
 
@@ -10981,9 +11347,7 @@ const topSet = sets.reduce(
   sets[0]
 );
 
-const oneRMToday = sets.length
-  ? Math.max(...sets.map(s => Number(s.weight) || 0))
-  : 0;
+const oneRMToday = getActualOneRMFromSets(sets);
 
 const e1RMToday = sets.length
   ? roundE1RM(Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0))))
@@ -10991,7 +11355,7 @@ const e1RMToday = sets.length
 
 const previousBestE1RM = prs[workout.lift] || 0;
 
-const previousBest1RM = Math.max(
+const previousBest1RM = Number(oneRMs?.[workout.lift]) || Math.max(
   0,
   ...history
     .filter(h => h.lift === workout.lift)
@@ -11039,6 +11403,9 @@ setCompletedSummary(nextCompletedSummary);
   const current = prev[workout.lift] || 0;
   return e1RMToday > current ? { ...prev, [workout.lift]: e1RMToday } : prev;
 });
+  setOneRMs(prev => mergeHigherOneRMs(prev, {
+    [workout.lift]: oneRMToday,
+  }));
 
     setHistory(prev => {
   const existingIndex = prev.findIndex(
@@ -11056,8 +11423,9 @@ setCompletedSummary(nextCompletedSummary);
           : SMART_DAY_TYPES.TRAINING)
       : null,
     lift: workout.lift,
-    topWeight: oneRMToday,
-    topReps: sets.find(s => Number(s.weight) === oneRMToday)?.reps || topSet.reps,
+    topWeight: Number(topSet?.weight) || 0,
+    topReps: Number(topSet?.reps) || 0,
+    oneRMToday,
     e1rm: e1RMToday,
     date: new Date().toLocaleDateString('nl-NL'),
     workoutEffort: finishedWorkout.workoutEffort,
@@ -11100,6 +11468,7 @@ setCompletedSummary(nextCompletedSummary);
         finishedWorkout,
         nextWorkoutIndex,
         nextPrs: completedTrainingPrs,
+        nextOneRMs: completedTrainingOneRMs,
       })
       : workouts.map((item, index) =>
         index === selectedIndex ? finishedWorkout : item
@@ -11210,6 +11579,7 @@ const __kelaniSmartDebug = () => {
       lift: workout.lift,
       smartDayType: workout.smartDayType,
       smartOverride: workout.smartOverride,
+      idealRoute: workout.smartIdealRoute || null,
       reason: workout.smartDecisionSummary?.reason,
       readiness: workout.smartDecisionSummary?.readiness || null,
       autoregulated: Boolean(workout.smartAutoregulatedTraining),
@@ -11374,11 +11744,17 @@ const __kelaniSmartPreviewNextDay = (options = {}) => {
     ];
 
     const nextCurrentIndex = currentIndex + 1;
+    const persistedCycleE1RMs = deriveCycleE1RMs({
+      savedCycleE1RMs: data.cycleE1RMs,
+      prs: data.prs,
+      history: data.history,
+      currentCycle,
+    });
     const generated = generateWorkoutsForTrainingModel(data.trainingModel || TRAINING_MODELS.SMART, {
       programProfile: data.programProfile,
-      squat: data.prs?.Squat,
-      bench: data.prs?.Bench,
-      deadlift: data.prs?.Deadlift,
+      squat: persistedCycleE1RMs.Squat,
+      bench: persistedCycleE1RMs.Bench,
+      deadlift: persistedCycleE1RMs.Deadlift,
       accessoryMode: data.accessoryMode,
       accessoryPRs: data.accessoryPRs,
       preparationMode: data.preparationMode,
@@ -11395,6 +11771,16 @@ const __kelaniSmartPreviewNextDay = (options = {}) => {
       currentIndex: nextCurrentIndex,
       currentCycle,
       meetPlannerAttempts: data.meetPlannerAttempts || {},
+      oneRMs: deriveOneRMs({
+        savedOneRMs: data.oneRMs,
+        stateVersion: data.oneRMStateVersion,
+        prs: data.prs,
+        history: nextHistory,
+      }),
+      idealRouteEnabled: isSmartIdealRouteEnabled({
+        currentCycle,
+        startCycle: data.smartIdealRouteStartCycle,
+      }),
     });
 
     const nextWorkout = generated[nextCurrentIndex] || generated[generated.length - 1] || null;
@@ -11412,6 +11798,7 @@ const __kelaniSmartPreviewNextDay = (options = {}) => {
         number: nextWorkout.number,
         type: nextWorkout.type,
         smartDayType: nextWorkout.smartDayType,
+        idealRoute: nextWorkout.smartIdealRoute || null,
         reason: nextWorkout.smartDecisionSummary?.reason,
         readiness: nextWorkout.smartDecisionSummary?.readiness || null,
         autoregulated: Boolean(nextWorkout.smartAutoregulatedTraining),
@@ -11507,12 +11894,18 @@ const __kelaniSmartPreviewRegression = () => {
         entry?.manualMax ||
         Number(entry?.cycle) !== currentCycle
       );
+      const persistedCycleE1RMs = deriveCycleE1RMs({
+        savedCycleE1RMs: data.cycleE1RMs,
+        prs,
+        history: data.history,
+        currentCycle,
+      });
 
       const generated = generateWorkoutsForTrainingModel(data.trainingModel || TRAINING_MODELS.SMART, {
         programProfile: data.programProfile,
-        squat: prs.Squat,
-        bench: prs.Bench,
-        deadlift: prs.Deadlift,
+        squat: persistedCycleE1RMs.Squat,
+        bench: persistedCycleE1RMs.Bench,
+        deadlift: persistedCycleE1RMs.Deadlift,
         accessoryMode: data.accessoryMode,
         accessoryPRs: data.accessoryPRs,
         preparationMode: data.preparationMode,
@@ -11529,6 +11922,12 @@ const __kelaniSmartPreviewRegression = () => {
         currentIndex,
         currentCycle,
         meetPlannerAttempts: data.meetPlannerAttempts || {},
+        oneRMs: deriveOneRMs({
+          savedOneRMs: data.oneRMs,
+          stateVersion: data.oneRMStateVersion,
+          prs,
+          history: [...preservedHistory, ...syntheticHistory],
+        }),
       });
 
       const nextWorkout = generated[currentIndex] || generated[generated.length - 1] || null;
@@ -11796,16 +12195,19 @@ const __kelaniSmartResetToW1 = () => {
     const resetHistory = (Array.isArray(data.history) ? data.history : history || []).filter(entry =>
       entry?.seedMax || Number(entry?.workoutNumber) === 0
     );
+    const resetCycleE1RMs = buildNextCycleE1RMs({
+      prs: resolvedPrs,
+      history: resetHistory,
+      nextCycle: resetCycle,
+    });
 
-    const existingWorkouts = data.inProgress?.workouts || [];
-
-    const generatedWorkouts = existingWorkouts.length
-      ? existingWorkouts
-      : generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
+    const generatedWorkouts = generateWorkoutsForTrainingModel(
+      TRAINING_MODELS.SMART,
+      {
         programProfile: data.programProfile || programProfile,
-        squat: resolvedPrs.Squat,
-        bench: resolvedPrs.Bench,
-        deadlift: resolvedPrs.Deadlift,
+        squat: resetCycleE1RMs.Squat,
+        bench: resetCycleE1RMs.Bench,
+        deadlift: resetCycleE1RMs.Deadlift,
         accessoryMode: data.accessoryMode || accessoryMode,
         accessoryPRs: data.accessoryPRs || accessoryPRs || {},
         preparationMode: data.preparationMode || preparationMode,
@@ -11822,7 +12224,15 @@ const __kelaniSmartResetToW1 = () => {
         currentIndex: 0,
         currentCycle: resetCycle,
         meetPlannerAttempts: {},
-      });
+        oneRMs: deriveOneRMs({
+          savedOneRMs: data.oneRMs,
+          stateVersion: data.oneRMStateVersion,
+          prs: resolvedPrs,
+          history: resetHistory,
+        }),
+        idealRouteEnabled: true,
+      }
+    );
 
     const resetWorkouts = (generatedWorkouts || []).map((workout, index) => ({
       ...workout,
@@ -11868,6 +12278,15 @@ const __kelaniSmartResetToW1 = () => {
 
     data.trainingModel = TRAINING_MODELS.SMART;
     data.prs = resolvedPrs;
+    data.oneRMs = deriveOneRMs({
+      savedOneRMs: data.oneRMs,
+      stateVersion: data.oneRMStateVersion,
+      prs: resolvedPrs,
+      history: resetHistory,
+    });
+    data.oneRMStateVersion = ONE_RM_STATE_VERSION;
+    data.cycleE1RMs = resetCycleE1RMs;
+    data.smartIdealRouteStartCycle = resetCycle;
     data.history = resetHistory;
     data.currentCycle = resetCycle;
     data.completedWorkout = null;
@@ -11893,6 +12312,7 @@ const __kelaniSmartResetToW1 = () => {
       workoutCount: resetWorkouts.length,
       currentWorkout: resetWorkouts[0]?.number,
       smartDayType: resetWorkouts[0]?.smartDayType,
+      idealRoute: resetWorkouts[0]?.smartIdealRoute || null,
       type: resetWorkouts[0]?.type,
     };
 };
@@ -12210,9 +12630,9 @@ const bestMaxesFromHistory = calculateBestMaxesFromHistory(history);
 const achievedMaxesFromHistory = calculateAchievedMaxesFromHistory(history);
 
 const best1RMs = {
-  Squat: bestMaxesFromHistory.Squat.oneRM || 0,
-  Bench: bestMaxesFromHistory.Bench.oneRM || 0,
-  Deadlift: bestMaxesFromHistory.Deadlift.oneRM || 0,
+  Squat: Number(oneRMs.Squat) || bestMaxesFromHistory.Squat.oneRM || 0,
+  Bench: Number(oneRMs.Bench) || bestMaxesFromHistory.Bench.oneRM || 0,
+  Deadlift: Number(oneRMs.Deadlift) || bestMaxesFromHistory.Deadlift.oneRM || 0,
 };
 
 const bestE1RMs = {
@@ -12271,10 +12691,12 @@ function buildCompletedSummaryForRender(workout) {
       : null;
 
     const oneRMToday = entry
-      ? Number(entry.topWeight) || 0
-      : successfulSets.length
-        ? Math.max(...successfulSets.map(set => Number(set.weight) || 0))
-        : 0;
+      ? Number(entry.oneRMToday) || (
+          Number(entry.topReps) === 1
+            ? Number(entry.topWeight) || 0
+            : 0
+        )
+      : getActualOneRMFromSets(successfulSets);
 
     const e1RMToday = entry
       ? roundE1RM(entry.e1rm)
@@ -12287,7 +12709,7 @@ function buildCompletedSummaryForRender(workout) {
       !(Number(item.cycle) === Number(currentCycle) && Number(item.workoutNumber) === workoutNumber)
     );
 
-    const previousBest1RM = Math.max(
+    const previousBest1RM = Number(oneRMs?.[lift]) || Math.max(
       0,
       ...previousLiftHistory.map(item => getHistoryMaxCandidates(item).oneRM || 0)
     );
@@ -12622,18 +13044,14 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
 
       {screen === 'dashboard' && (
   <div
-    role={dashboardMeetState.isMeetDay ? 'button' : undefined}
-    tabIndex={dashboardMeetState.isMeetDay ? 0 : undefined}
-    aria-label={dashboardMeetState.isMeetDay ? (t.openWorkout || t.workout) : undefined}
-    onClick={dashboardMeetState.isMeetDay ? () => changeScreen('current') : undefined}
-    onKeyDown={dashboardMeetState.isMeetDay ? event => {
-      if (event.key === 'Enter' || event.key === ' ') changeScreen('current');
-    } : undefined}
     style={{
-      ...responsiveContentScreenStyle(),
-      alignContent: 'start',
-      rowGap: 'clamp(14px, 2.2dvh, 24px)',
-      cursor: dashboardMeetState.isMeetDay ? 'pointer' : undefined,
+      ...(dashboardMeetState.isMeetDay
+        ? meetDayDashboardScreenStyle()
+        : {
+          ...responsiveContentScreenStyle(),
+          alignContent: 'start',
+          rowGap: 'clamp(14px, 2.2dvh, 24px)',
+        }),
     }}
   >
     <AppHeader
@@ -12641,39 +13059,31 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       title={dashboardMeetState.isMeetDay
         ? (t.sbdMeetDay || t.meetDay || 'SBD Meet Day')
         : (t.appName || 'Kelani SBD Tracker')}
-      subtitle={!dashboardMeetState.isMeetDay ? (
-        <>
-          {formatCycleWorkoutSubtitle({
-            t,
-            currentCycle,
-            workoutNumber: Math.min(currentIndex + 1, workouts.length),
-            totalWorkouts: workouts.length,
-            smartModel: isSmartTrainingModel(trainingModel),
-          })}
-          {isSmartTrainingModel(trainingModel) && (
-            <AthleteLevelBadge
-              athleteLevel={athleteLevel}
-              eStrengthRatio={eStrengthRatio}
-              eStrengthMax={eStrengthMax}
-              latestBodyWeight={latestBodyWeight}
-              t={t}
-            />
-          )}
-        </>
-      ) : null}
+      subtitle={(
+        <DashboardCycleWorkoutLabel
+          t={t}
+          currentCycle={currentCycle}
+          workoutNumber={Math.min(currentIndex + 1, workouts.length)}
+          totalWorkouts={workouts.length}
+          smartModel={isSmartTrainingModel(trainingModel)}
+          athleteLevel={athleteLevel}
+          eStrengthRatio={eStrengthRatio}
+          eStrengthMax={eStrengthMax}
+          latestBodyWeight={latestBodyWeight}
+        />
+      )}
       titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
       subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
     />
 
     {dashboardMeetState.isMeetDay && (
-      <div style={{ marginTop: 20, padding: '0 4px 8px' }}>
-        <MeetPlanContent
-          meetPlan={dashboardSuggestedMeetPlan.meetPlan}
-          meetTotals={dashboardSuggestedMeetPlan.meetTotals}
-          t={t}
-          weightUnit={weightUnit}
-        />
-      </div>
+      <MeetDayDashboardPlan
+        meetPlan={dashboardSuggestedMeetPlan.meetPlan}
+        meetTotals={dashboardSuggestedMeetPlan.meetTotals}
+        t={t}
+        weightUnit={weightUnit}
+        onOpenWorkout={() => changeScreen('current')}
+      />
     )}
 
     {!dashboardMeetState.isMeetDay && workouts[currentIndex] && (() => {
@@ -12778,12 +13188,15 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       const cycleE1RM = roundBarbellWeight(
         Number(primaryBlockerReadiness?.currentCycleBestE1RM) || 0,
         'nearest',
-        5
+        2.5
       );
       const readinessTarget = roundBarbellWeight(
-        Number(primaryBlockerReadiness?.readinessTargetAttempt) || 0,
+        Number(
+          primaryBlockerReadiness?.oneRMTargetE1RM ||
+          primaryBlockerReadiness?.currentCycleTarget
+        ) || 0,
         'nearest',
-        5
+        2.5
       );
       const readinessGap = Math.max(readinessTarget - cycleE1RM, 0);
       const blockerRouteText = primaryBlockerLift && cycleE1RM > 0 && readinessTarget > 0
@@ -13457,7 +13870,12 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         </button>
       </div>
     ) : (
-      <div style={{ background: 'transparent', border: 'none', borderRadius: 12, padding: '8px 24px 12px', textAlign: 'center' }}>
+      <div style={completedWorkout?.type === 'rest'
+        ? restDayCompletedScreenStyle()
+        : { background: 'transparent', border: 'none', borderRadius: 12, padding: '8px 24px 12px', textAlign: 'center' }}>
+        <div style={completedWorkout?.type === 'rest'
+          ? restDayCompletedContentStyle()
+          : { display: 'contents' }}>
         <div style={{ fontSize: 40, marginBottom: 6 }}>🎉</div>
 
         <h2 style={{ margin: '0 0 6px', color: THEME.brown }}>
@@ -13785,74 +14203,79 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           </div>
         )}
         {/* FORCE_MULTI_LIFT_COMPLETED_SETS_END */}
+        </div>
 
-        {completedWorkoutCanStartNewCycle && (
-          <button
-            onClick={handleStartNewCycle}
-            style={{
-              width: '100%',
-              padding: 14,
-              fontSize: 16,
-              fontWeight: 800,
-              background: THEME.primary,
-              color: '#ffffff',
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 8,
-              cursor: 'pointer',
-              marginBottom: 10
-            }}
-          >
-            {t.startNewCycle} 🚀
-          </button>
-        )}
+        <div style={completedWorkout?.type === 'rest'
+          ? restDayCompletedActionsStyle()
+          : { display: 'contents' }}>
+          {completedWorkoutCanStartNewCycle && (
+            <button
+              onClick={handleStartNewCycle}
+              style={{
+                width: '100%',
+                padding: 14,
+                fontSize: 16,
+                fontWeight: 800,
+                background: THEME.primary,
+                color: '#ffffff',
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                marginBottom: 10
+              }}
+            >
+              {t.startNewCycle} 🚀
+            </button>
+          )}
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-          gap: 8
-        }}>
-          <button
-            onClick={() => setScreen('stats')}
-            style={{
-              width: '100%',
-              minWidth: 0,
-              padding: '11px 8px',
-              fontSize: 14,
-              fontWeight: 700,
-              background: completedWorkoutCanStartNewCycle ? 'transparent' : THEME.primary,
-              color: '#ffffff',
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 8,
-              cursor: 'pointer'
-            }}
-          >
-            {t.stats || t.viewProgress}
-          </button>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: 8
+          }}>
+            <button
+              onClick={() => setScreen('stats')}
+              style={{
+                width: '100%',
+                minWidth: 0,
+                padding: '11px 8px',
+                fontSize: 14,
+                fontWeight: 700,
+                background: completedWorkoutCanStartNewCycle ? 'transparent' : THEME.primary,
+                color: '#ffffff',
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.stats || t.viewProgress}
+            </button>
 
-          <button
-            onClick={() => {
-              const targetIndex = Number.isInteger(completedWorkoutIndex)
-                ? completedWorkoutIndex
-                : Math.max(0, (completedWorkout?.number || 1) - 1);
+            <button
+              onClick={() => {
+                const targetIndex = Number.isInteger(completedWorkoutIndex)
+                  ? completedWorkoutIndex
+                  : Math.max(0, (completedWorkout?.number || 1) - 1);
 
-              setSelectedIndex(targetIndex);
-              setScreen('current');
-            }}
-            style={{
-              width: '100%',
-              minWidth: 0,
-              padding: '11px 8px',
-              fontSize: 14,
-              fontWeight: 700,
-              background: 'transparent',
-              color: '#ffffff',
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 8,
-              cursor: 'pointer'
-            }}
-          >
-            {t.back || t.backToWorkout}
-          </button>
+                setSelectedIndex(targetIndex);
+                setScreen('current');
+              }}
+              style={{
+                width: '100%',
+                minWidth: 0,
+                padding: '11px 8px',
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'transparent',
+                color: '#ffffff',
+                border: `1px solid ${THEME.primary}`,
+                borderRadius: 8,
+                cursor: 'pointer'
+              }}
+            >
+              {t.back || t.backToWorkout}
+            </button>
+          </div>
         </div>
       </div>
     )}

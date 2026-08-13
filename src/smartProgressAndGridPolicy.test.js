@@ -48,7 +48,7 @@ test('a full C3W43-style medium Squat block reaches a real medium dose near 70%'
 
   expect(reshaped).toHaveLength(6);
   expect(reshaped.every(set => set.reps === 4)).toBe(true);
-  expect(reshaped.every(set => set.weight === 100)).toBe(true);
+  expect(reshaped.every(set => set.weight === 102.5)).toBe(true);
   expect(getSmartIntensityRole({ sets: reshaped })).toBe('medium');
 });
 

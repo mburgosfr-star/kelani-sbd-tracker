@@ -17,6 +17,7 @@ export const SMART_DECISION_REASONS = {
   FAILED_SET_DELOAD: 'failed-set-deload',
   MEETDAY_READY: 'meetday-ready',
   POST_MEET_RECOVERY: 'post-meet-recovery',
+  IDEAL_ROUTE: 'ideal-route',
 
   FREQUENCY_RECOVERY: 'frequency-recovery',
 };

@@ -28,7 +28,7 @@ test('keeps reps visible inside a completed set circle', () => {
   );
 
   const item = view.getByTestId('workout-set-circle-item');
-  expect(item.firstElementChild).toHaveTextContent('140 kg80%');
+  expect(item.firstElementChild).toHaveTextContent('140 kg77.5%');
   expect(view.getByTestId('workout-circle-reps')).toHaveTextContent('2');
   expect(view.getByTestId('workout-circle-status')).toHaveTextContent('✓');
   expect(view.getByTestId('workout-set-effort-label')).toHaveTextContent('Hard');

@@ -165,9 +165,9 @@ export const SMART_FREQUENCY_POLICY = Object.freeze({
 
 export const SMART_FREQUENCY_RECOVERY_REASON = 'frequency-recovery';
 
-export function roundBarbellWeight(weight, mode = 'nearest', incrementKg = 5) {
+export function roundBarbellWeight(weight, mode = 'nearest', incrementKg = 2.5) {
   const numericWeight = Number(weight) || 0;
-  const numericIncrement = Number(incrementKg) || 5;
+  const numericIncrement = Number(incrementKg) || 2.5;
   const scaledWeight = numericWeight / numericIncrement;
 
   if (mode === 'up') {
@@ -674,9 +674,9 @@ function normalizeSupplementalHeavyLiftBlock(liftBlock, realTrainingMax = 0) {
 
   // When the athlete's real training max is known, use it directly instead
   // of back-deriving a training max from the static template's own top
-  // single. Either way, the displayed percentage always lands on a 5% step
+  // single. Either way, the displayed percentage lands on a 2.5% step
   // (matching every other Smart Training prescription) while the template's
-  // own finer-grained percentage is kept as `precisePct` so a future top-set
+  // own exact percentage is kept as `precisePct` so a future top-set
   // exposure that chains off this one anchors at full precision.
   const precisePct = Number(topSingle.pct) || 0;
   const usesRealTrainingMax = Number(realTrainingMax) > 0;

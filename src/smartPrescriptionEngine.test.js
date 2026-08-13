@@ -103,14 +103,14 @@ test('generates the same relative beginner prescription at different strength le
   expect(lighter.validation.valid).toBe(true);
   expect(stronger.validation.valid).toBe(true);
 
-  expect(lighter.sets.map(set => set.pct))
-    .toEqual(stronger.sets.map(set => set.pct));
+  expect(lighter.sets.map(set => set.precisePct))
+    .toEqual(stronger.sets.map(set => set.precisePct));
 
   expect(lighter.sets[0]).toMatchObject({
     labelKey: 'topTriple',
     reps: 3,
     pct: 0.70,
-    weight: 40,
+    weight: 42.5,
   });
 
   expect(stronger.sets[0]).toMatchObject({
@@ -119,6 +119,8 @@ test('generates the same relative beginner prescription at different strength le
     pct: 0.70,
     weight: 125,
   });
+  expect(lighter.sets.slice(1).every(set => set.pct === 0.575)).toBe(true);
+  expect(stronger.sets.slice(1).every(set => set.pct === 0.6)).toBe(true);
 });
 
 test('progresses a successful good top double instead of moving backwards', () => {
@@ -147,8 +149,8 @@ test('progresses a successful good top double instead of moving backwards', () =
   expect(prescription.sets[0]).toMatchObject({
     labelKey: 'topDouble',
     reps: 2,
-    pct: 0.85,
-    weight: 155,
+    pct: 0.825,
+    weight: 147.5,
   });
 
   const backoffs = prescription.sets.slice(1);
@@ -159,7 +161,7 @@ test('progresses a successful good top double instead of moving backwards', () =
     expect(set).toMatchObject({
       labelKey: 'backoff',
       reps: 4,
-      pct: 0.75,
+      pct: 0.725,
     });
   });
 });
@@ -224,7 +226,7 @@ test('a top single past the old flat 90% cap keeps climbing while backoffs stay 
   expect(prescription.sets[0]).toMatchObject({
     labelKey: 'topSingle',
     reps: 1,
-    pct: 0.95,
+    pct: 0.925,
   });
 
   const backoffs = prescription.sets.slice(1);
@@ -463,7 +465,7 @@ test('keeps beginner C1W10 single-lift Bench back-offs below top work', () => {
     labelKey: 'topTriple',
     reps: 3,
     pct: 0.70,
-    weight: 25,
+    weight: 22.5,
   });
 
   const backoffs = prescription.sets.slice(1);
@@ -472,7 +474,7 @@ test('keeps beginner C1W10 single-lift Bench back-offs below top work', () => {
     expect(set).toMatchObject({
       labelKey: 'backoff',
       reps: 6,
-      pct: 0.60,
+      pct: 0.625,
       weight: 20,
     });
     expect(set.pct).toBeLessThan(prescription.sets[0].pct);
@@ -501,10 +503,9 @@ test('progresses a hard successful top double without treating hard as failure',
     });
 
   expect(prescription.validation.valid).toBe(true);
-  // Raw progression lands on 0.825 (0.80 anchor + a 2.5% hard-still-progresses
-  // step), which is an exact tie between the 5% display steps and rounds up.
+  // Raw progression lands on the exact 2.5% display step.
   expect(prescription.sets[0].precisePct).toBe(0.825);
-  expect(prescription.sets[0].pct).toBe(0.85);
+  expect(prescription.sets[0].pct).toBe(0.825);
   expect(prescription.regressionReason).toBeNull();
 });
 
@@ -531,7 +532,7 @@ test('allows regression only after a concrete lift-specific failure', () => {
     });
 
   expect(prescription.validation.valid).toBe(true);
-  expect(prescription.sets[0].pct).toBe(0.8);
+  expect(prescription.sets[0].pct).toBe(0.775);
   expect(prescription.regressionReason)
     .toBe('failed-skipped');
 });
@@ -647,8 +648,8 @@ test('creates a normal secondary lift with four to six work sets and reps', () =
     expect(set).toMatchObject({
       labelKey: 'workSets',
       reps: 5,
-      pct: 0.7,
-      weight: 70,
+      pct: 0.675,
+      weight: 67.5,
     });
   });
 });
@@ -899,7 +900,7 @@ test.each(['good', 'easy', 'hard'])(
     expect(prescription.sets[0]).toMatchObject({
       labelKey: 'topTriple',
       reps: 3,
-      pct: 0.8,
+      pct: 0.775,
       weight: 25,
     });
 
@@ -909,7 +910,7 @@ test.each(['good', 'easy', 'hard'])(
       expect(set).toMatchObject({
         reps: 5,
         pct: 0.7,
-        weight: 25,
+        weight: 22.5,
       });
     });
   }

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import App, { SettingsListRow, StatsScreen, buildDashboardE1RMMetrics, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, formatWorkoutSetPercentDisplay, getDashboardE1RMPrGain, getDashboardE1RMValue, getDashboardMeetState, isDashboardE1RMPR, preparationGridStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, restWorkoutScreenStyle, settingsModalPanelStyle, shouldShowAutomaticBackupStatus, statsScreenStyle, workoutCompletionButtonStyle } from './App';
+import App, { DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, SettingsListRow, StatsScreen, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, buildDashboardE1RMMetrics, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, formatWorkoutSetPercentDisplay, getDashboardE1RMPrGain, getDashboardE1RMValue, getDashboardMeetState, getStatsHistoricalOneRM, isDashboardE1RMPR, isMeetAttemptPlanLocked, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, restDayCompletedActionsStyle, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, settingsModalPanelStyle, shouldShowAutomaticBackupStatus, statsScreenStyle, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
 test('dashboard e1RM PR gain compares against the real 1RM on the same card', () => {
@@ -49,11 +49,74 @@ test('rest and training completion actions share the same compact button style',
   });
 });
 
-test('rest information and completion action sit slightly higher', () => {
+test('active workout screen preserves its original balanced height', () => {
+  expect(activeWorkoutScreenStyle()).toMatchObject({
+    display: 'grid',
+    alignContent: 'space-between',
+  });
+  expect(activeWorkoutScreenStyle().transform).toBeUndefined();
+});
+
+test('only a following Bench block moves into the gap above it', () => {
+  expect(activeWorkoutLiftBlockStyle('Bench', 1)).toMatchObject({
+    marginTop: -40,
+    marginBottom: 'calc(40px + clamp(4px, 0.8dvh, 8px))',
+  });
+  expect(activeWorkoutLiftBlockStyle('Squat', 0)).toMatchObject({
+    marginTop: undefined,
+    marginBottom: 'clamp(4px, 0.8dvh, 8px)',
+  });
+  expect(activeWorkoutLiftBlockStyle('Bench', 0).marginTop).toBeUndefined();
+});
+
+test('meet workout scrolls naturally with equal compact lift spacing', () => {
+  expect(meetWorkoutScreenStyle()).toMatchObject({
+    display: 'block',
+    paddingBottom: 24,
+  });
+  expect(meetWorkoutLiftBlockStyle()).toMatchObject({
+    overflow: 'visible',
+    margin: '0 0 clamp(16px, 2.2dvh, 22px)',
+  });
+  expect(meetWorkoutLiftBlockStyle().marginTop).toBeUndefined();
+});
+
+test('meet warmups and attempts each consume one complete 12-column row', () => {
+  expect(meetWorkoutGridSpan(2) * 2).toBe(12);
+  expect(meetWorkoutGridSpan(3) * 3).toBe(12);
+  expect(meetWorkoutGridSpan(4) * 4).toBe(12);
+});
+
+test('rest information sits optically above centre with its completion action below', () => {
   expect(restWorkoutScreenStyle()).toMatchObject({
     display: 'grid',
     alignContent: 'space-between',
+    gridTemplateRows: 'auto minmax(0, 1fr) auto',
     paddingBottom: 32,
+  });
+
+  expect(restWorkoutContentStyle()).toMatchObject({
+    display: 'grid',
+    alignContent: 'center',
+    transform: 'translateY(clamp(-28px, -3dvh, -18px))',
+  });
+});
+
+test('completed rest day content is distributed over the available screen height', () => {
+  expect(restDayCompletedScreenStyle()).toMatchObject({
+    minHeight: '100%',
+    display: 'grid',
+    gridTemplateRows: 'minmax(0, 1fr) auto',
+    boxSizing: 'border-box',
+  });
+
+  expect(restDayCompletedContentStyle()).toMatchObject({
+    alignSelf: 'center',
+    transform: 'translateY(clamp(-24px, -2.5dvh, -16px))',
+  });
+
+  expect(restDayCompletedActionsStyle()).toMatchObject({
+    alignSelf: 'end',
   });
 });
 
@@ -171,6 +234,51 @@ test('the canonical current e1RM permanently caps older raw running-best points'
   ]);
 });
 
+test('stats places established meet 1RMs in historical data instead of inventing a current jump', () => {
+  const historicalWorkout = {
+    lift: 'Squat',
+    workoutNumber: 25,
+    cycle: 2,
+    topWeight: 100,
+    topReps: 4,
+    workoutSnapshot: {
+      completedSummary: {
+        results: [
+          {
+            lift: 'Squat',
+            previousBest1RM: 145,
+            best1RM: 145,
+            topSet: { weight: 100, reps: 4 },
+          },
+          {
+            lift: 'Bench',
+            previousBest1RM: 97.5,
+            best1RM: 100,
+            topSet: { weight: 95, reps: 2 },
+          },
+          {
+            lift: 'Deadlift',
+            previousBest1RM: 180,
+            best1RM: 180,
+            topSet: { weight: 170, reps: 2 },
+          },
+        ],
+      },
+    },
+  };
+
+  expect(getStatsHistoricalOneRM(historicalWorkout, 100)).toBe(145);
+  expect(getStatsHistoricalOneRM({ ...historicalWorkout, lift: 'Bench' }, 95)).toBe(97.5);
+  expect(getStatsHistoricalOneRM({ ...historicalWorkout, lift: 'Deadlift' }, 170)).toBe(180);
+
+  const runningSquatLine = [
+    { label: 'C2W25', oneRM: getStatsHistoricalOneRM(historicalWorkout, 100) },
+    { label: 'C3W43', oneRM: 145 },
+  ];
+  expect(replaceCurrentChartEndpoint(runningSquatLine, { oneRM: 145 }))
+    .toEqual(runningSquatLine);
+});
+
 test('stats tabs keep the same chart frame size, including empty charts', () => {
   const statsTranslations = {
     stats: 'Stats', cycle: 'Cycle', workoutProgress: 'Workout',
@@ -225,11 +333,98 @@ test('meet day focuses the dashboard and hides route to meet', () => {
   });
 });
 
+test('meet-day dashboard keeps the cycle, workout and Smart level label', () => {
+  render(
+    <DashboardCycleWorkoutLabel
+      t={translations.nl}
+      currentCycle={3}
+      workoutNumber={45}
+      totalWorkouts={45}
+      smartModel
+      athleteLevel="intermediate"
+      eStrengthRatio={5}
+      eStrengthMax={5.1}
+      latestBodyWeight={80}
+    />
+  );
+
+  expect(screen.getByText(/Cyclus 3 · Workout 45/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Ervaringsniveau: Intermediate/i }))
+    .toBeInTheDocument();
+});
+
+test('only the meet-plan card opens the meet workout, not the level badge', () => {
+  const onOpenWorkout = jest.fn();
+  render(
+    <>
+      <DashboardCycleWorkoutLabel
+        t={translations.nl}
+        currentCycle={3}
+        workoutNumber={45}
+        totalWorkouts={45}
+        smartModel
+        athleteLevel="intermediate"
+        eStrengthRatio={5}
+        eStrengthMax={5.1}
+        latestBodyWeight={80}
+      />
+      <MeetDayDashboardPlan
+        meetPlan={[{
+          lift: 'Bench',
+          oneRM: 97.5,
+          opener: 87.5,
+          second: 95,
+          third: 100,
+        }]}
+        meetTotals={{ opener: 87.5, second: 95, third: 100 }}
+        t={translations.nl}
+        onOpenWorkout={onOpenWorkout}
+      />
+    </>
+  );
+
+  fireEvent.click(screen.getByRole('button', {
+    name: /Ervaringsniveau: Intermediate/i,
+  }));
+  expect(onOpenWorkout).not.toHaveBeenCalled();
+  expect(screen.getByText(translations.nl.athleteLevelModalTitle))
+    .toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', {
+    name: translations.nl.openWorkout || translations.nl.workout,
+  }));
+  expect(onOpenWorkout).toHaveBeenCalledTimes(1);
+});
+
+test('meet-day dashboard centers the plan in the available vertical space', () => {
+  expect(meetDayDashboardScreenStyle()).toMatchObject({
+    gridTemplateRows: 'auto minmax(0, 1fr)',
+    alignContent: 'stretch',
+  });
+  expect(meetDayDashboardContentStyle()).toMatchObject({
+    minHeight: 0,
+    display: 'grid',
+    alignContent: 'center',
+  });
+});
+
 test('post-meet recovery restores the dashboard but keeps route to meet hidden', () => {
   expect(getDashboardMeetState({
     type: 'rest',
     smartDayType: 'recovery',
     smartDecisionSummary: { reason: 'post-meet-recovery' },
+  })).toEqual({
+    isMeetDay: false,
+    hideRouteToMeet: true,
+  });
+});
+
+test('ideal-route post-meet recovery also keeps route to meet hidden', () => {
+  expect(getDashboardMeetState({
+    type: 'rest',
+    smartDayType: 'recovery',
+    smartDecisionSummary: { reason: 'ideal-route' },
+    smartIdealRoute: { stage: 'post-meet' },
   })).toEqual({
     isMeetDay: false,
     hideRouteToMeet: true,
@@ -250,6 +445,44 @@ test('meet attempts show their exact percentages instead of rounded duplicate 10
   expect(formatWorkoutSetPercentDisplay({ labelKey: 'opener', pct: 0.9 })).toBe('90');
   expect(formatWorkoutSetPercentDisplay({ labelKey: 'secondAttempt', pct: 0.975 })).toBe('97.5');
   expect(formatWorkoutSetPercentDisplay({ labelKey: 'thirdAttempt', pct: 1.025 })).toBe('102.5');
+});
+
+test('meet attempt weights lock as soon as meet execution has started', () => {
+  expect(isMeetAttemptPlanLocked({
+    type: 'meet',
+    lifts: [{
+      warmups: [{ done: false }],
+      sets: [{ done: false, failed: false, skipped: false }],
+    }],
+  })).toBe(false);
+
+  expect(isMeetAttemptPlanLocked({
+    type: 'meet',
+    lifts: [{
+      warmups: [{ done: true }],
+      sets: [{ done: false, failed: false, skipped: false }],
+    }],
+  })).toBe(true);
+});
+
+test('meet planner shows the weight unit inside the attempt value only', () => {
+  render(
+    <MeetPlanContent
+      meetPlan={[{
+        lift: 'Squat',
+        oneRM: 145,
+        opener: 130,
+        second: 140,
+        third: 150,
+      }]}
+      meetTotals={{ opener: 130, second: 140, third: 150 }}
+      t={translations.nl}
+      weightUnit="kg"
+    />
+  );
+
+  expect(screen.getAllByText('130 kg').length).toBeGreaterThan(0);
+  expect(screen.queryByText('kg')).not.toBeInTheDocument();
 });
 
 beforeAll(() => {
@@ -335,8 +568,65 @@ test('finishing the compact setup creates a Smart user with body weight and star
     const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
     expect(saved.trainingModel).toBe('smart');
     expect(saved.userProfile).toEqual({ weightUnit: 'kg', trainingModel: 'smart' });
-    expect(saved.prs.Squat).toBe(115);
+    expect(saved.prs.Squat).toBe(117.5);
+    expect(saved.cycleE1RMs).toEqual({
+      Squat: 117.5,
+      Bench: 75,
+      Deadlift: 125,
+    });
+    expect(saved.smartIdealRouteStartCycle).toBe(1);
+    expect(saved.inProgress.workouts[0].smartIdealRoute).toMatchObject({
+      workoutNumber: 1,
+      stage: 'normal',
+      phase: 'triple',
+    });
     expect(saved.bodyWeights[0].bodyWeight).toBe(80);
+  });
+});
+
+test('a legacy Smart save freezes the reconstructed cycle-start e1RMs on reload', async () => {
+  localStorage.clear();
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1,
+    trainingModel: 'smart',
+    currentCycle: 1,
+    prs: { Squat: 112.5, Bench: 75, Deadlift: 125 },
+    history: [
+      { workoutNumber: 0, cycle: 0, seedMax: true, lift: 'Squat', topWeight: 100, topReps: 1, e1rm: 100 },
+      { workoutNumber: 0, cycle: 0, seedMax: true, lift: 'Bench', topWeight: 75, topReps: 1, e1rm: 75 },
+      { workoutNumber: 0, cycle: 0, seedMax: true, lift: 'Deadlift', topWeight: 125, topReps: 1, e1rm: 125 },
+      {
+        workoutNumber: 1,
+        cycle: 1,
+        lift: 'Squat',
+        topWeight: 105,
+        topReps: 2,
+        e1rm: 112,
+        workoutEffort: 'good',
+        workoutSnapshot: {
+          number: 1,
+          type: 'training',
+          lifts: [{
+            lift: 'Squat',
+            sets: [{ weight: 105, reps: 2, done: true, failed: false, skipped: false }],
+          }],
+        },
+      },
+    ],
+  }));
+
+  render(<App />);
+
+  await waitFor(() => {
+    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    expect(saved.prs.Squat).toBe(112.5);
+    expect(saved.cycleE1RMs).toEqual({
+      Squat: 100,
+      Bench: 75,
+      Deadlift: 125,
+    });
+    expect(saved.smartIdealRouteStartCycle).toBe(1);
+    expect(saved.inProgress.workouts[1]?.smartIdealRoute).toBeFalsy();
   });
 });
 

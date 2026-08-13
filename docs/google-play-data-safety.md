@@ -4,7 +4,7 @@ Last updated: 2026-06-02
 
 App: Kelani SBD Tracker  
 Package name: com.kelani.sbdtracker
-Privacy policy URL: https://mburgosfr-star.github.io/kelani-site/#privacy
+Privacy policy URL: https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/docs/privacy-policy.md
 
 ## App privacy model
 
@@ -66,7 +66,7 @@ Reason: The app has no account creation, login or registration.
 
 Use:
 
-https://mburgosfr-star.github.io/kelani-site/#privacy
+https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/docs/privacy-policy.md
 
 The privacy policy states that the app works offline, uses no accounts, ads, analytics or tracking, and stores training data locally unless the user chooses to export or share it.
 

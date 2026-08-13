@@ -2,6 +2,7 @@ import {
   buildSmartLiftPrescription,
   buildSmartLiftStates,
   rankSmartLiftPriorities,
+  roundPercent,
   EXPOSURE_TARGETS_BY_LEVEL,
   SMART_LIFTS,
 } from './smartPrescriptionEngine';
@@ -51,6 +52,10 @@ import {
 } from './accessoryGeneration';
 import { generateProgramForProfile } from './classicProgramTemplates';
 import { buildMeetAttemptsFromOneRM } from './meetAttemptPlanning';
+import {
+  SMART_IDEAL_ROUTE_VERSION,
+  getSmartIdealRouteWorkout,
+} from './smartIdealRoute';
 
 export function regenerateSmartWorkoutsAfterCompletion({
   workouts = [],
@@ -390,8 +395,166 @@ function getSmartPostMeetRecoveryReason(day = {}) {
   return `meet-effort-${effort}`;
 }
 
+function getUniqueCompletedSmartWorkoutSnapshots(history = [], currentCycle = 1) {
+  const cycle = Number(currentCycle) || 1;
+  const byWorkoutNumber = new Map();
+
+  (Array.isArray(history) ? history : []).forEach(entry => {
+    if (
+      Number(getEntryCycle(entry)) !== cycle ||
+      entry?.manualMax ||
+      entry?.seedMax
+    ) {
+      return;
+    }
+
+    const workoutNumber = Number(entry?.workoutNumber);
+    const snapshot = entry?.workoutSnapshot;
+    if (!Number.isInteger(workoutNumber) || workoutNumber < 1 || !snapshot) {
+      return;
+    }
+
+    byWorkoutNumber.set(workoutNumber, snapshot);
+  });
+
+  return [...byWorkoutNumber.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([workoutNumber, snapshot]) => ({ workoutNumber, snapshot }));
+}
+
+export function isSmartIdealRoutePristine({
+  history = [],
+  currentCycle = 1,
+} = {}) {
+  return getUniqueCompletedSmartWorkoutSnapshots(history, currentCycle)
+    .every(({ snapshot }) => {
+      if (!snapshot?.smartIdealRoute) return false;
+
+      if (countFailedOrSkippedSetsFromSnapshot(snapshot) > 0) return false;
+
+      if (snapshot.type === 'rest') return true;
+
+      const effort = String(snapshot.workoutEffort || '')
+        .trim()
+        .toLowerCase();
+
+      return effort === 'good' || effort === 'normal';
+    });
+}
+
+function isSuccessfulSmartIdealRouteSnapshot(snapshot = {}) {
+  if (countFailedOrSkippedSetsFromSnapshot(snapshot) > 0) return false;
+  if (snapshot.type === 'rest') return true;
+
+  const effort = String(snapshot.workoutEffort || '')
+    .trim()
+    .toLowerCase();
+
+  return effort === 'good' || effort === 'normal';
+}
+
+export function shouldFollowSmartIdealRoute({
+  history = [],
+  currentCycle = 1,
+  readiness = {},
+} = {}) {
+  const completed = getUniqueCompletedSmartWorkoutSnapshots(
+    history,
+    currentCycle
+  );
+
+  if (completed.length === 0) return true;
+
+  const lastInvalidIdealIndex = completed.findLastIndex(({ snapshot }) => (
+    snapshot?.smartIdealRoute &&
+    !isSuccessfulSmartIdealRouteSnapshot(snapshot)
+  ));
+  const hasUnmarkedWorkout = completed.some(({ snapshot }) => (
+    !snapshot?.smartIdealRoute
+  ));
+
+  if (lastInvalidIdealIndex < 0) {
+    return !hasUnmarkedWorkout;
+  }
+
+  const invalidIdealSnapshot = completed[lastInvalidIdealIndex]?.snapshot;
+
+  // A failed or non-GOOD meet is a different cycle outcome, not a small
+  // detour that should be erased by resuming the fixed post-meet schedule.
+  // Let the existing post-meet/failed-meet controller own that cycle.
+  if (invalidIdealSnapshot?.type === 'meet') return false;
+
+  const completedAfterDeviation = completed.slice(lastInvalidIdealIndex + 1);
+  const adaptiveWorkouts = completedAfterDeviation.filter(({ snapshot }) => (
+    !snapshot?.smartIdealRoute
+  ));
+  const latestAdaptiveSnapshot = adaptiveWorkouts.at(-1)?.snapshot || null;
+
+  if (
+    !latestAdaptiveSnapshot ||
+    !isSuccessfulSmartIdealRouteSnapshot(latestAdaptiveSnapshot)
+  ) {
+    return false;
+  }
+
+  // At least one non-route workout has now absorbed the deviation. Rejoin
+  // only once the existing readiness engine says no fatigue/failure signal
+  // is still active; from that point onward subsequent successful ideal
+  // workouts remain on-route until a new deviation occurs.
+  return (
+    Number(readiness.recentFatigueScore) === 0 &&
+    Number(readiness.recentFailedOrSkippedSetCount) === 0
+  );
+}
+
+function getSmartIdealPostMeetCompletion(history = [], currentCycle = 1) {
+  const completed = getUniqueCompletedSmartWorkoutSnapshots(
+    history,
+    currentCycle
+  );
+  const idealMeet = completed.find(({ snapshot }) => (
+    snapshot?.type === 'meet' &&
+    snapshot?.smartIdealRoute?.stage === 'meet'
+  ));
+
+  if (!idealMeet) return null;
+
+  const idealPostMeetRests = completed.filter(({ workoutNumber, snapshot }) => (
+    workoutNumber > idealMeet.workoutNumber &&
+    snapshot?.type === 'rest' &&
+    snapshot?.smartIdealRoute?.stage === 'post-meet'
+  ));
+  const latestRouteMetadata = idealPostMeetRests.at(-1)?.snapshot?.smartIdealRoute
+    || idealMeet.snapshot.smartIdealRoute;
+  const target = Math.max(
+    Number(latestRouteMetadata?.postMeetRecoveryTarget) || 0,
+    1
+  );
+
+  return {
+    target,
+    completed: idealPostMeetRests.length,
+    complete: idealPostMeetRests.length >= target,
+  };
+}
+
+function hasCompletedSuccessfulSmartIdealMeet(
+  history = [],
+  currentCycle = 1
+) {
+  return getUniqueCompletedSmartWorkoutSnapshots(history, currentCycle)
+    .some(({ snapshot }) => (
+      snapshot?.type === 'meet' &&
+      snapshot?.smartIdealRoute?.stage === 'meet' &&
+      isSuccessfulSmartIdealRouteSnapshot(snapshot)
+    ));
+}
+
 
 export function isSmartCycleCompleteAfterHistory(history = [], currentCycle = 1) {
+  const idealPostMeet = getSmartIdealPostMeetCompletion(history, currentCycle);
+  if (idealPostMeet) return idealPostMeet.complete;
+
   const readiness = buildSmartReadinessSignals({
     history,
     currentCycle,
@@ -410,6 +573,7 @@ export function buildSmartReadinessSignals(context = {}) {
   const smartMeetPlanReadiness = buildSmartMeetPlanReadiness({
     history: context.history || [],
     prs: context.prs || {},
+    oneRMs: context.oneRMs || {},
     meetPlannerAttempts: context.meetPlannerAttempts || {},
     currentCycle: targetCycle,
   });
@@ -885,10 +1049,11 @@ export function buildSmartReadinessSignals(context = {}) {
     recentHeavyDeadliftDayCount: recentHeavyDeadliftDays.length,
     recentSquatMaxPct,
     meetPlanReady: Boolean(smartMeetPlanReadiness.ready),
-    // Stricter than meetPlanReady - stays false until every lift has also
-    // indirectly demonstrated its third attempt, so the diagnosis keeps
-    // pointing at that instead of going silent once the meet itself is
-    // already schedulable.
+    meetPlanOneRMReady: Boolean(smartMeetPlanReadiness.ready),
+    meetPlanOneRMReadyCount:
+      smartMeetPlanReadiness.thirdAttemptPotentialCount || 0,
+    // Backward-compatible snapshot name; the 100%-of-real-1RM rule makes it
+    // equivalent to meetPlanReady.
     meetPlanFullyDemonstrated: Boolean(smartMeetPlanReadiness.fullyDemonstrated),
     meetPlanOpenerReady: Boolean(smartMeetPlanReadiness.openerReady),
     meetPlanSecondAttemptReady: Boolean(
@@ -1222,6 +1387,7 @@ function getSmartMeetProgressionEvidence(entries = [], lift = null) {
 export function buildSmartMeetPlanReadiness({
   history = [],
   prs = {},
+  oneRMs = {},
   meetPlannerAttempts = {},
   currentCycle = 1,
 } = {}) {
@@ -1250,14 +1416,14 @@ export function buildSmartMeetPlanReadiness({
     // which barely happens in training by design (near-meet singles are
     // avoided there) - so attempts naturally stay stable through a cycle
     // and only really move after a genuine new max, e.g. at the meet
-    // itself. bestMaxes(...).oneRM already includes the onboarding-seeded
-    // starting max in normal use, so this works from cycle 1 with no
-    // training history yet. prs is only a fallback for the rare case where
-    // no real single has ever been recorded at all (never a Math.max floor
-    // - once a real oneRM exists, a later e1RM-only PR must not pull this
-    // back up, or the exact "moving target" problem this exists to solve
-    // comes right back).
-    const bestOneRM = Number(bestMaxes?.[lift]?.oneRM) || Number(prs?.[lift]) || 0;
+    // itself. oneRMs is the persisted established-max source of truth. The
+    // history single and prs fallbacks keep older/direct engine callers
+    // compatible, but once oneRMs exists an e1RM-only PR can no longer pull
+    // the attempt plan upward.
+    const bestOneRM = Number(oneRMs?.[lift]) ||
+      Number(bestMaxes?.[lift]?.oneRM) ||
+      Number(prs?.[lift]) ||
+      0;
 
     const suggestedAttempts = buildMeetAttemptsFromOneRM(bestOneRM);
     const attempts = MEET_ATTEMPT_KEYS.reduce((attemptAcc, key) => {
@@ -1282,37 +1448,37 @@ export function buildSmartMeetPlanReadiness({
     const thirdAttemptPotentialTarget =
       (Number(attempts.thirdAttempt) || 0) *
       SMART_THRESHOLDS.MEETDAY_THIRD_ATTEMPT_POTENTIAL_RATIO;
+    const phase90TargetE1RM = roundBarbellWeight(
+      bestOneRM * 0.90,
+      'nearest',
+      2.5
+    );
+    const phase95TargetE1RM = roundBarbellWeight(
+      bestOneRM * 0.95,
+      'nearest',
+      2.5
+    );
+    const oneRMTargetE1RM = bestOneRM;
     const hasCurrentCycleEvidence = currentCycleBestE1RM > 0;
-    const openerReadinessRatio = openerTargetAttempt > 0
-      ? currentCycleBestE1RM / openerTargetAttempt
+    const openerReadinessRatio = phase90TargetE1RM > 0
+      ? currentCycleBestE1RM / phase90TargetE1RM
       : 0;
-    const secondAttemptReadinessRatio = secondAttemptSupportTarget > 0
-      ? currentCycleBestE1RM / secondAttemptSupportTarget
+    const secondAttemptReadinessRatio = phase95TargetE1RM > 0
+      ? currentCycleBestE1RM / phase95TargetE1RM
       : 0;
-    const thirdAttemptPotentialRatio = thirdAttemptPotentialTarget > 0
-      ? currentCycleBestE1RM / thirdAttemptPotentialTarget
+    const thirdAttemptPotentialRatio = oneRMTargetE1RM > 0
+      ? currentCycleBestE1RM / oneRMTargetE1RM
       : 0;
-    // A real but sub-barbell-increment shortfall (e.g. 0.45kg) isn't a
-    // meaningful training target and made the diagnosis show "Cycle e1RM:
-    // 170 kg, 2nd support: 170 kg" while still calling the lift a blocker -
-    // a flat contradiction between what's shown and what's claimed. Round
-    // the GAP itself (not each side independently - rounding both sides
-    // separately gives each up to 2.5kg of slack, so two values up to just
-    // under 5kg apart could still land in the same bucket and look
-    // "equal", which is too coarse for lighter lifters/lower target
-    // weights) to the same 5kg step used everywhere else; a gap that
-    // rounds to zero counts as met.
-    const isEffectivelyMet = (current, target) =>
-      target > 0 && roundBarbellWeight(target - current, 'nearest', 5) <= 0;
-    const openerReady = isEffectivelyMet(
-      currentCycleBestE1RM, openerTargetAttempt
-    );
-    const secondAttemptReady = isEffectivelyMet(
-      currentCycleBestE1RM, secondAttemptSupportTarget
-    );
-    const thirdAttemptPotential = isEffectivelyMet(
-      currentCycleBestE1RM, thirdAttemptPotentialTarget
-    );
+    // Readiness is independent of the attempt plan. The meet becomes
+    // available only after the athlete has achieved a current-cycle e1RM of
+    // at least 100% of the confirmed real 1RM for every lift. The 90% and
+    // 95% milestones remain internal progression phases, but supporting an
+    // opener or second attempt can never satisfy the actual meet gate.
+    const targetIsMet = target =>
+      target > 0 && currentCycleBestE1RM >= target;
+    const openerReady = targetIsMet(phase90TargetE1RM);
+    const secondAttemptReady = targetIsMet(phase95TargetE1RM);
+    const thirdAttemptPotential = targetIsMet(oneRMTargetE1RM);
     const readinessPhase = !openerReady
       ? 'opener'
       : !secondAttemptReady
@@ -1321,28 +1487,25 @@ export function buildSmartMeetPlanReadiness({
           ? 'third-attempt'
           : 'ready';
     const readinessTargetAttempt = readinessPhase === 'opener'
-      ? openerTargetAttempt
+      ? phase90TargetE1RM
       : readinessPhase === 'second-attempt'
-        ? secondAttemptSupportTarget
-        : thirdAttemptPotentialTarget;
-    const readinessRatio = readinessTargetAttempt > 0
-      ? bestE1RM / readinessTargetAttempt
+        ? phase95TargetE1RM
+        : oneRMTargetE1RM;
+    const readinessRatio = oneRMTargetE1RM > 0
+      ? bestE1RM / oneRMTargetE1RM
       : 0;
-    const currentCycleReadinessRatio = readinessTargetAttempt > 0
-      ? currentCycleBestE1RM / readinessTargetAttempt
+    const currentCycleReadinessRatio = oneRMTargetE1RM > 0
+      ? currentCycleBestE1RM / oneRMTargetE1RM
       : 0;
-    const currentCycleTarget = readinessTargetAttempt;
+    const currentCycleTarget = oneRMTargetE1RM;
     const currentCycleShortfall = hasCurrentCycleEvidence
       ? Math.max(0, currentCycleTarget - currentCycleBestE1RM)
       : null;
     const openerShortfall = hasCurrentCycleEvidence
-      ? Math.max(0, openerTargetAttempt - currentCycleBestE1RM)
+      ? Math.max(0, phase90TargetE1RM - currentCycleBestE1RM)
       : null;
     const meetReadinessShortfall = hasCurrentCycleEvidence
-      ? Math.max(
-        0,
-        secondAttemptSupportTarget - currentCycleBestE1RM
-      )
+      ? Math.max(0, oneRMTargetE1RM - currentCycleBestE1RM)
       : null;
     const progressionEvidence = getSmartMeetProgressionEvidence(
       currentCycleEntries,
@@ -1379,9 +1542,9 @@ export function buildSmartMeetPlanReadiness({
     // to third-attempt potential. Walk the phases in order and carry the
     // projected gains forward between them.
     const projectedPhaseTargets = [
-      openerTargetAttempt,
-      secondAttemptSupportTarget,
-      thirdAttemptPotentialTarget,
+      phase90TargetE1RM,
+      phase95TargetE1RM,
+      oneRMTargetE1RM,
     ];
     let projectedReadiness = currentCycleBestE1RM;
     let projectedExposureCount = 0;
@@ -1393,6 +1556,17 @@ export function buildSmartMeetPlanReadiness({
       );
       projectedExposureCount += exposures;
       projectedReadiness += exposures * projectedGainPerExposure;
+    });
+    let projectedMeetReadyE1RM = currentCycleBestE1RM;
+    let projectedMeetReadyExposureCount = 0;
+    [phase90TargetE1RM, phase95TargetE1RM, oneRMTargetE1RM].forEach(target => {
+      if (!(target > projectedMeetReadyE1RM)) return;
+      const exposures = Math.max(
+        1,
+        Math.ceil((target - projectedMeetReadyE1RM) / projectedGainPerExposure)
+      );
+      projectedMeetReadyExposureCount += exposures;
+      projectedMeetReadyE1RM += exposures * projectedGainPerExposure;
     });
 
     return {
@@ -1406,6 +1580,9 @@ export function buildSmartMeetPlanReadiness({
         openerTargetAttempt,
         secondAttemptSupportTarget,
         thirdAttemptPotentialTarget,
+        phase90TargetE1RM,
+        phase95TargetE1RM,
+        oneRMTargetE1RM,
         openerReadinessRatio,
         secondAttemptReadinessRatio,
         thirdAttemptPotentialRatio,
@@ -1428,8 +1605,10 @@ export function buildSmartMeetPlanReadiness({
           progressionEvidence.observedGainPerExposure,
         projectedGainPerExposure,
         projectedOpenerExposureCount,
+        projectedMeetReadyExposureCount,
         projectedExposureCount,
-        ready: openerReady && secondAttemptReady && thirdAttemptPotential,
+        ready: thirdAttemptPotential,
+        fullyDemonstrated: thirdAttemptPotential,
       },
     };
   }, {});
@@ -1446,16 +1625,10 @@ export function buildSmartMeetPlanReadiness({
   const thirdAttemptPotentialReady = LIFT_ORDER.every(
     lift => byLift[lift]?.thirdAttemptPotential
   );
-  // Meet-day readiness deliberately stops at opener+second-attempt (the
-  // third attempt is proven live at the meet, never rehearsed in training)
-  // - this stays unchanged so it keeps controlling when the app actually
-  // offers the meet day and schedules the taper.
-  const ready = openerReady && secondAttemptReady;
-  // A separate, stricter signal for the diagnosis/blocker display only: once
-  // openers and second attempts are all met, the diagnosis should keep
-  // pointing at whichever lift hasn't indirectly demonstrated its third
-  // attempt yet, instead of going silent.
-  const fullyDemonstrated = ready && thirdAttemptPotentialReady;
+  const ready = thirdAttemptPotentialReady;
+  // Compatibility alias retained for persisted workout snapshots and the
+  // taper pipeline. Under the real-1RM rule these now mean the same thing.
+  const fullyDemonstrated = ready;
   const weakestPhase = !openerReady
     ? 'opener'
     : !secondAttemptReady
@@ -1484,8 +1657,8 @@ export function buildSmartMeetPlanReadiness({
   // The first unmet readiness phase is the primary current blocker. This is
   // separate from the projection limiter, which may need more total future
   // exposures and therefore be a different lift.
-  const primaryBlockerLift = weakestLift;
-  const primaryBlockerPhase = weakestPhase;
+  const primaryBlockerLift = ready ? null : weakestLift;
+  const primaryBlockerPhase = ready ? 'ready' : weakestPhase;
 
   return {
     byLift,
@@ -1553,7 +1726,7 @@ export function buildSmartMeetWorkoutProjection({
     const liftReadiness = byLift[lift] || {};
     const requiredExposures = Math.max(
       0,
-      Number(liftReadiness.projectedExposureCount) || 0
+      Number(liftReadiness.projectedMeetReadyExposureCount) || 0
     );
     const hasProgressionFrequency = rollingProgressionExposureCounts !== null;
     const observedExposureCounts = hasProgressionFrequency
@@ -1608,7 +1781,7 @@ export function buildSmartMeetWorkoutProjection({
   )[0] || null;
   const taperWorkouts = lastWasRecoveryIntervention
     ? 0
-    : meetPlanReadiness.fullyDemonstrated
+    : meetPlanReadiness.ready
       ? lastTrainingDayWasLightOnly
         ? 1
         : 2
@@ -1640,10 +1813,10 @@ export function buildSmartMeetWorkoutProjection({
     // under the successful-progression model. The calendar calculation still
     // uses the exposure-based limiter below, but that is not the athlete's
     // primary readiness blocker and must not be shown as one.
-    limitingLift: meetPlanReadiness.fullyDemonstrated
+    limitingLift: meetPlanReadiness.ready
       ? null
       : meetPlanReadiness.weakestLift || limiter?.lift || null,
-    limitingPhase: meetPlanReadiness.fullyDemonstrated
+    limitingPhase: meetPlanReadiness.ready
       ? 'ready'
       : meetPlanReadiness.weakestPhase || limiter?.phase || null,
     scheduleLimitingLift: limiter?.lift || null,
@@ -1676,7 +1849,7 @@ function getSmartMeetdayBlockers(readiness = {}) {
 
   if (
     readiness.lastWasRecoveryIntervention &&
-    readiness.meetPlanFullyDemonstrated &&
+    readiness.meetPlanReady &&
     isClean
   ) {
     return [];
@@ -1698,20 +1871,10 @@ function getSmartMeetdayBlockers(readiness = {}) {
     blockers.push('missing-lift-exposure');
   }
 
-  // Meet-day readiness now requires every lift to have also indirectly
-  // demonstrated its third attempt (see meetPlanFullyDemonstrated), not
-  // just openers and second attempts - competing without that evidence
-  // isn't the concern (the third attempt is proven live at the meet), but
-  // *tapering* before it is: there's still real, useful training work left
-  // (more reps at a proven-or-higher weight) until it's shown.
-  if (!readiness.meetPlanFullyDemonstrated) {
-    if (!readiness.meetPlanOpenerReady) {
-      blockers.push('opener-readiness');
-    } else if (!readiness.meetPlanSecondAttemptReady) {
-      blockers.push('second-attempt-readiness');
-    } else {
-      blockers.push('third-attempt-potential');
-    }
+  // Attempt support is not the readiness gate. Every lift must have reached
+  // at least 100% of its confirmed real 1RM as a current-cycle e1RM.
+  if (!readiness.meetPlanReady) {
+    blockers.push('one-rm-readiness');
   }
 
   if (hasUnrecoveredSmartHardEffort(readiness)) {
@@ -1745,10 +1908,7 @@ export function isSmartMeetdayReady(readiness = {}) {
     ? readiness.meetdayBlockers
     : [];
 
-  // Requires meetPlanFullyDemonstrated (opener + second attempt + every
-  // lift's third-attempt potential), not just meetPlanReady - see the
-  // comment on the third-attempt-potential blocker above for why.
-  return Boolean(readiness.meetPlanFullyDemonstrated) &&
+  return Boolean(readiness.meetPlanReady) &&
     blockers.length === 0 &&
     getSmartMeetCompletedTrainingDays(readiness) >= SMART_THRESHOLDS.MEETDAY_MIN_ACTIVE_BLOCK_DAYS;
 }
@@ -2234,7 +2394,7 @@ export function buildSmartMeetAttemptSets(lift = '', readiness = {}, fallbackSet
 
   return attemptKeys.map((labelKey, index) => {
     const plannedWeight = Number(plannedAttempts[labelKey]) || fallbackByKey[labelKey] || 0;
-    let weight = roundBarbellWeight(plannedWeight, 'nearest', 5);
+    let weight = roundBarbellWeight(plannedWeight, 'nearest', 2.5);
     if (weight > 0 && weight <= previousWeight) weight = previousWeight + 2.5;
     previousWeight = weight;
 
@@ -3046,7 +3206,7 @@ export function reshapeSmartTopSetBackoffReps({ sets = [], trainingMax = 0 } = {
     );
     const targetWeight = Number(trainingMax) > 0 && targetPct > 0
       ? roundBarbellWeight(Number(trainingMax) * targetPct)
-      : Math.floor((Number(set.weight) || 0) / 5) * 5;
+      : Math.floor((Number(set.weight) || 0) / 2.5) * 2.5;
 
     return {
       ...set,
@@ -3073,11 +3233,11 @@ export function constrainExplicitLightLiftDose({ sets = [], trainingMax = 0 } = 
     4,
     Math.min(6, Math.floor(SMART_LIGHT_MAX_TOTAL_WORK_REPS / volumeSetCount))
   );
-  // Round the actual load down to a valid 5kg increment. Nearest rounding
+  // Round the actual load down to a valid 2.5kg increment. Nearest rounding
   // could put the bar above the promised 70% ceiling.
   const maxLoadedWeight = Math.floor(
-    (Number(trainingMax) * SMART_LIGHT_MAX_LOADED_PCT) / 5
-  ) * 5;
+    (Number(trainingMax) * SMART_LIGHT_MAX_LOADED_PCT) / 2.5
+  ) * 2.5;
 
   let remainingWorkReps = SMART_LIGHT_MAX_TOTAL_WORK_REPS;
 
@@ -3245,6 +3405,370 @@ export function completeSmartLiftGrid({
   }
 
   return completedSets;
+}
+
+function buildSmartIdealSet({
+  lift,
+  labelKey,
+  reps,
+  pct,
+  trainingMax,
+  groupKey,
+  weightOverride = null,
+} = {}) {
+  const precisePct = Number(pct) || 0;
+  const numericTrainingMax = Number(trainingMax) || 0;
+  const explicitWeight = Number(weightOverride);
+  const weight = Number.isFinite(explicitWeight) && explicitWeight > 0
+    ? explicitWeight
+    : roundBarbellWeight(numericTrainingMax * precisePct);
+  const displayPct = numericTrainingMax > 0
+    ? roundPercent(weight / numericTrainingMax)
+    : roundPercent(precisePct);
+
+  return {
+    lift,
+    labelKey,
+    groupKey,
+    groupLabelKey: labelKey,
+    reps,
+    pct: displayPct,
+    precisePct,
+    weight,
+    originalPct: displayPct,
+    originalWeight: weight,
+    done: false,
+    failed: false,
+    skipped: false,
+    smartGeneratedPrescription: true,
+  };
+}
+
+function getSmartIdealHeavyTopWeight({
+  trainingMax = 0,
+  routeWorkout = {},
+  pct = 0,
+} = {}) {
+  const numericTrainingMax = Number(trainingMax) || 0;
+  const target = roundBarbellWeight(numericTrainingMax * (Number(pct) || 0));
+
+  if (routeWorkout.stage !== 'normal') return target;
+
+  const phasePctByKey = {
+    triple: 0.90,
+    double: 0.95,
+    single: 1.00,
+  };
+  const phaseOrder = ['triple', 'double', 'single'];
+  const phaseIndex = phaseOrder.indexOf(routeWorkout.phase);
+  if (phaseIndex <= 0) return target;
+
+  let minimum = roundBarbellWeight(
+    numericTrainingMax * phasePctByKey[phaseOrder[0]]
+  );
+  for (let index = 1; index <= phaseIndex; index += 1) {
+    const phaseTarget = roundBarbellWeight(
+      numericTrainingMax * phasePctByKey[phaseOrder[index]]
+    );
+    minimum = Math.max(phaseTarget, minimum + 2.5);
+  }
+
+  const cycleCap = roundBarbellWeight(numericTrainingMax);
+  return Math.min(Math.max(target, minimum), cycleCap);
+}
+
+function padSmartIdealWarmupsToGrid(warmups = [], sets = []) {
+  const nextWarmups = (warmups || []).map(item => ({ ...item }));
+  const remainder = (nextWarmups.length + (sets || []).length) % SMART_LIFT_GRID_COLUMNS;
+  const addCount = (SMART_LIFT_GRID_COLUMNS - remainder) % SMART_LIFT_GRID_COLUMNS;
+
+  if (addCount === 0) return nextWarmups;
+
+  const lightestWorkWeight = Math.min(
+    ...(sets || [])
+      .map(set => Number(set?.weight) || 0)
+      .filter(weight => weight > 0)
+  );
+  const safeFallbackWeight = Number.isFinite(lightestWorkWeight)
+    ? Math.max(
+      2.5,
+      Math.floor((lightestWorkWeight * 0.5) / 2.5) * 2.5
+    )
+    : 20;
+  const template = nextWarmups[0] || {
+    reps: 5,
+    weight: safeFallbackWeight,
+    originalWeight: safeFallbackWeight,
+    done: false,
+  };
+
+  for (let index = 0; index < addCount; index += 1) {
+    nextWarmups.unshift({
+      ...template,
+      done: false,
+    });
+  }
+
+  return nextWarmups;
+}
+
+function distributeSmartIdealTaperReps(sets = [], targetTotalReps = 12) {
+  const count = sets.length;
+  if (count === 0) return sets;
+
+  const baseReps = Math.max(1, Math.floor(targetTotalReps / count));
+  let remainder = Math.max(targetTotalReps - baseReps * count, 0);
+
+  return sets.map(set => {
+    const reps = baseReps + (remainder > 0 ? 1 : 0);
+    remainder = Math.max(remainder - 1, 0);
+    return { ...set, reps };
+  });
+}
+
+function getSmartIdealTopSetLabel(reps) {
+  if (Number(reps) === 1) return 'topSingle';
+  if (Number(reps) === 2) return 'topDouble';
+  return 'topTriple';
+}
+
+function buildSmartIdealRouteMetadata(routeWorkout, athleteLevel) {
+  if (!routeWorkout) return null;
+
+  return {
+    version: SMART_IDEAL_ROUTE_VERSION,
+    workoutNumber: routeWorkout.workoutNumber,
+    athleteLevel: normalizeAthleteLevel(athleteLevel),
+    stage: routeWorkout.stage,
+    phase: routeWorkout.phase,
+    postMeetRecoveryTarget:
+      Number(routeWorkout.postMeetRecoveryTarget) || null,
+    nextCycleWorkout: Number(routeWorkout.nextCycleWorkout) || null,
+  };
+}
+
+function applySmartIdealRouteMetadata(
+  workout,
+  routeWorkout,
+  athleteLevel
+) {
+  if (!workout || !routeWorkout) return workout;
+
+  const lifts = (workout.lifts || []).map(liftBlock => {
+    const warmups = padSmartIdealWarmupsToGrid(
+      liftBlock.warmups || [],
+      liftBlock.sets || []
+    );
+
+    return {
+      ...liftBlock,
+      warmups,
+      smartPrescription: {
+        ...(liftBlock.smartPrescription || {}),
+        completeGrid: true,
+        gridItemCount: warmups.length + (liftBlock.sets || []).length,
+      },
+    };
+  });
+  const primaryLiftBlock = lifts[0] || null;
+
+  return {
+    ...workout,
+    lifts,
+    warmups: primaryLiftBlock?.warmups || workout.warmups || [],
+    sets: primaryLiftBlock?.sets || workout.sets || [],
+    prepItems: primaryLiftBlock?.prepItems || workout.prepItems || [],
+    smartIdealRoute: buildSmartIdealRouteMetadata(
+      routeWorkout,
+      athleteLevel
+    ),
+  };
+}
+
+export function buildSmartIdealTrainingWorkout({
+  sourceWorkout = {},
+  routeWorkout = null,
+  athleteLevel = 'intermediate',
+  squat = 0,
+  bench = 0,
+  deadlift = 0,
+  accessoryMode = 'off',
+  accessoryPRs = {},
+  preparationMode = 'basicFirst',
+  deadliftVariant = 'standard',
+  benchPressVariant = 'standard',
+  squatVariant = 'standard',
+  history = [],
+} = {}) {
+  if (routeWorkout?.type !== 'training') return null;
+
+  const trainingMaxes = {
+    Squat: Number(squat) || 0,
+    Bench: Number(bench) || 0,
+    Deadlift: Number(deadlift) || 0,
+  };
+  const normalizedPreparationMode = normalizePreparationMode(preparationMode);
+  const isTaper = routeWorkout.stage === 'taper';
+
+  const liftBlocks = routeWorkout.lifts.map((routeLift, liftIndex) => {
+    const trainingMax = trainingMaxes[routeLift.lift];
+    const prescription = routeLift.prescription || {};
+    const isHeavy = routeLift.intensityRole === 'heavy';
+    let sets;
+
+    if (isHeavy) {
+      const topSet = prescription.topSet || {};
+      sets = [buildSmartIdealSet({
+        lift: routeLift.lift,
+        labelKey: getSmartIdealTopSetLabel(topSet.reps),
+        reps: topSet.reps,
+        pct: topSet.pct,
+        trainingMax,
+        groupKey: `${routeLift.lift}-top`,
+        weightOverride: getSmartIdealHeavyTopWeight({
+          trainingMax,
+          routeWorkout,
+          pct: topSet.pct,
+        }),
+      })];
+
+      if (prescription.backoff) {
+        sets.push(...Array.from({ length: 3 }, () => buildSmartIdealSet({
+          lift: routeLift.lift,
+          labelKey: 'backoff',
+          reps: prescription.backoff.reps,
+          pct: prescription.backoff.pct,
+          trainingMax,
+          groupKey: `${routeLift.lift}-backoff`,
+        })));
+      }
+    } else {
+      sets = Array.from({ length: 3 }, () => buildSmartIdealSet({
+        lift: routeLift.lift,
+        labelKey: 'workSets',
+        reps: 4,
+        pct: prescription.pct,
+        trainingMax,
+        groupKey: `${routeLift.lift}-worksets`,
+      }));
+    }
+
+    let warmups = generateWarmups(
+      sets,
+      routeLift.lift,
+      routeWorkout.lifts.length === 1
+    );
+
+    if (sets.some(set => ['backoff', 'workSets'].includes(set.labelKey))) {
+      sets = completeSmartLiftGrid({
+        sets,
+        warmups,
+        minimumVolumeSets: 3,
+      });
+
+      if (isTaper && !isHeavy) {
+        sets = distributeSmartIdealTaperReps(
+          sets,
+          Number(prescription.targetTotalWorkReps) || 12
+        );
+      }
+
+      warmups = generateWarmups(
+        sets,
+        routeLift.lift,
+        routeWorkout.lifts.length === 1
+      );
+    }
+
+    warmups = padSmartIdealWarmupsToGrid(warmups, sets);
+
+    const role = liftIndex === 0
+      ? 'primary'
+      : liftIndex === 1
+        ? 'secondary'
+        : 'tertiary';
+    const includePreparation =
+      liftIndex === 0 || normalizedPreparationMode === 'basicAll';
+    const liftBlock = {
+      lift: routeLift.lift,
+      role,
+      intensityRole: routeLift.intensityRole,
+      sets,
+      warmups,
+      prepItems: includePreparation
+        ? generatePrepItems(routeLift.lift, normalizedPreparationMode)
+        : [],
+      smartPrescription: {
+        role,
+        intensityRole: routeLift.intensityRole,
+        idealRouteStage: routeWorkout.stage,
+        idealRoutePhase: routeWorkout.phase,
+        completeGrid: true,
+        gridItemCount: warmups.length + sets.length,
+      },
+    };
+
+    if (routeLift.lift === 'Squat') {
+      liftBlock.squatVariant = normalizeSquatVariant(squatVariant);
+    }
+    if (routeLift.lift === 'Bench') {
+      liftBlock.benchPressVariant = normalizeBenchPressVariant(
+        benchPressVariant
+      );
+    }
+    if (routeLift.lift === 'Deadlift') {
+      liftBlock.deadliftVariant = normalizeDeadliftVariant(deadliftVariant);
+    }
+
+    return liftBlock;
+  });
+
+  const primaryBlock = liftBlocks[0] || null;
+  const accessories = routeWorkout.accessoriesAllowed
+    ? selectSmartAccessoriesForWorkout(
+      routeWorkout.lifts.map(routeLift => generateAccessoriesForLift(
+        routeLift.lift,
+        accessoryMode,
+        accessoryPRs,
+        trainingMaxes
+      )),
+      { history }
+    )
+    : [];
+
+  return applySmartIdealRouteMetadata({
+    ...resetSmartWorkoutProgress(sourceWorkout),
+    number: routeWorkout.workoutNumber,
+    type: 'training',
+    label: null,
+    labelKey: 'practice',
+    lift: primaryBlock?.lift || null,
+    lifts: liftBlocks,
+    sets: primaryBlock?.sets || [],
+    warmups: primaryBlock?.warmups || [],
+    prepItems: primaryBlock?.prepItems || [],
+    accessories,
+    cooldownItems: [],
+    preparationMode: normalizedPreparationMode,
+    smartSourceWorkoutNumber: null,
+    smartGeneratedPrescription: true,
+    smartGeneratedPrescriptionVersion: SMART_PRESCRIPTION_VERSION,
+    smartFrequencyValidated: true,
+    smartTrainingSelectionSummary: {
+      sourceWorkoutNumber: null,
+      candidateLifts: routeWorkout.lifts.map(item => item.lift),
+      primaryLift: primaryBlock?.lift || null,
+      secondaryLift: liftBlocks[1]?.lift || null,
+      generatedFromHistory: false,
+      templateIndependent: true,
+      reasonFlags: [
+        'ideal-route',
+        `ideal-route-${routeWorkout.stage}`,
+        routeWorkout.phase ? `ideal-route-${routeWorkout.phase}` : null,
+      ].filter(Boolean),
+    },
+    [SMART_GENERATED_FLAGS.TRAINING]: true,
+  }, routeWorkout, athleteLevel);
 }
 
 export function buildGeneratedSmartTrainingWorkout({
@@ -3440,12 +3964,13 @@ export function buildGeneratedSmartTrainingWorkout({
   if (!primaryPriority) return null;
 
   const primaryLift = primaryPriority.lift;
-  // meetWeakestPriority is an urgent meet-readiness override - it always
-  // gets a genuine heavy exposure regardless of the weekly heavy quota,
-  // same as before this change.
+  // Meet readiness may decide which eligible lift goes first, but it must
+  // not bypass that lift's weekly heavy quota. Doing so only makes the
+  // legacy hard-cap pass reject the lift completely, losing even the
+  // medium/light exposure it still had room for.
   const primaryLiftDueForHeavy = Boolean(
     !readiness.lastWorkoutWasHeavyTraining &&
-    (primaryPriority === meetWeakestPriority || isDueForHeavy(primaryLift))
+    isDueForHeavy(primaryLift)
   );
 
   const secondaryCandidates = configuredPriorities
@@ -3950,6 +4475,8 @@ function generateSmartWorkouts({
   currentIndex = 0,
   currentCycle = 1,
   meetPlannerAttempts = {},
+  oneRMs = {},
+  idealRouteEnabled = false,
 }) {
   const smartContext = buildSmartTrainingContext({
     history,
@@ -3994,6 +4521,7 @@ function generateSmartWorkouts({
       Bench: bench,
       Deadlift: deadlift,
     },
+    oneRMs,
     meetPlannerAttempts,
   }, generatedWorkouts);
   const visibleThroughIndex = Math.min(
@@ -4004,6 +4532,78 @@ function generateSmartWorkouts({
   const decisionWorkoutNumber = Number(
     generatedWorkouts[visibleThroughIndex]?.number
   ) || visibleThroughIndex + 1;
+  const candidateIdealRouteWorkout = (
+    idealRouteEnabled &&
+    shouldFollowSmartIdealRoute({
+      history,
+      currentCycle,
+      readiness: smartDecision.readiness,
+    })
+  )
+    ? getSmartIdealRouteWorkout({
+      workoutNumber: decisionWorkoutNumber,
+      athleteLevel,
+    })
+    : null;
+  const idealRouteWorkout = (
+    candidateIdealRouteWorkout?.type === 'meet' &&
+    !smartDecision.readiness?.meetPlanReady
+  )
+    ? null
+    : candidateIdealRouteWorkout?.stage === 'post-meet' &&
+      !hasCompletedSuccessfulSmartIdealMeet(history, currentCycle)
+      ? null
+      : candidateIdealRouteWorkout;
+  const hasActiveIdealRouteWorkout = [
+    'training',
+    'rest',
+    'meet',
+  ].includes(idealRouteWorkout?.type);
+
+  if (hasActiveIdealRouteWorkout) {
+    smartDecision.dayType = idealRouteWorkout.type === 'training'
+      ? SMART_DAY_TYPES.TRAINING
+      : idealRouteWorkout.type === 'meet'
+        ? SMART_DAY_TYPES.MEET
+        : SMART_DAY_TYPES.RECOVERY;
+    smartDecision.reason = SMART_DECISION_REASONS.IDEAL_ROUTE;
+    smartDecision.overrideType = idealRouteWorkout.type === 'rest'
+      ? 'rest'
+      : null;
+
+    if (decisionWorkoutNumber <= 28) {
+      const workoutsBeforeMeet = Math.max(28 - decisionWorkoutNumber, 0);
+      const meetPlanReady = Boolean(smartDecision.readiness?.meetPlanReady);
+      smartDecision.readiness = {
+        ...smartDecision.readiness,
+        // On the ideal route the third attempt is the place to make the PR,
+        // not a prerequisite that must already be demonstrated in training.
+        // Keep its potential metrics, but stop presenting it as the primary
+        // blocker once opener and second-attempt readiness are established.
+        meetPlanWeakestLift: meetPlanReady
+          ? null
+          : smartDecision.readiness?.meetPlanWeakestLift || null,
+        meetPlanWeakestPhase: meetPlanReady
+          ? 'ready'
+          : smartDecision.readiness?.meetPlanWeakestPhase || null,
+        meetProjection: {
+          ...(smartDecision.readiness?.meetProjection || {}),
+          available: true,
+          cycle: Number(currentCycle) || 1,
+          currentWorkoutNumber: decisionWorkoutNumber,
+          minimumWorkoutNumber: 28,
+          maximumWorkoutNumber: 28,
+          label: `C${Number(currentCycle) || 1}W28`,
+          minimumWorkoutsBeforeMeet: workoutsBeforeMeet,
+          maximumWorkoutsBeforeMeet: workoutsBeforeMeet,
+          taperWorkouts: decisionWorkoutNumber < 22 ? 6 : Math.max(28 - decisionWorkoutNumber, 0),
+          projectedByIdealRoute: true,
+          assumedSuccessfulFutureWorkouts: true,
+        },
+      };
+    }
+  }
+
   const projectedFrequencyEligibility = getProjectedSmartLiftEligibility({
     history,
     currentCycle,
@@ -4025,6 +4625,7 @@ function generateSmartWorkouts({
   // the six-day window forward naturally.
   if (
     smartDecision.dayType === SMART_DAY_TYPES.TRAINING &&
+    !hasActiveIdealRouteWorkout &&
     allProjectedFrequencyTargetsMet
   ) {
     smartDecision.dayType = SMART_DAY_TYPES.RECOVERY;
@@ -4034,7 +4635,34 @@ function generateSmartWorkouts({
 
   let generatedSmartTrainingWorkout = null;
 
-  if (smartDecision.dayType === SMART_DAY_TYPES.TRAINING) {
+  if (
+    hasActiveIdealRouteWorkout &&
+    idealRouteWorkout.type === 'training'
+  ) {
+    generatedSmartTrainingWorkout = buildSmartIdealTrainingWorkout({
+      sourceWorkout:
+        generatedWorkouts[visibleThroughIndex] || {
+          number: visibleThroughIndex + 1,
+        },
+      routeWorkout: idealRouteWorkout,
+      athleteLevel,
+      squat,
+      bench,
+      deadlift,
+      accessoryMode,
+      accessoryPRs,
+      preparationMode,
+      deadliftVariant,
+      benchPressVariant,
+      squatVariant,
+      history,
+    });
+  }
+
+  if (
+    smartDecision.dayType === SMART_DAY_TYPES.TRAINING &&
+    !generatedSmartTrainingWorkout
+  ) {
     const smartWorkoutArgs = {
       sourceWorkout:
         generatedWorkouts[visibleThroughIndex] || {
@@ -4221,9 +4849,15 @@ function generateSmartWorkouts({
       smartDecision.dayType === SMART_DAY_TYPES.TRAINING &&
       workout.type === 'meet';
 
-    const hasEffectiveTrainingCandidate =
-      fallbackTrainingCandidate?.type === 'training' &&
-      hasEffectiveSmartTrainingStimulus(fallbackTrainingCandidate);
+    const hasEffectiveTrainingCandidate = Boolean(
+      (
+        generatedSmartTrainingWorkout?.type === 'training' &&
+        hasEffectiveSmartTrainingStimulus(generatedSmartTrainingWorkout)
+      ) || (
+        fallbackTrainingCandidate?.type === 'training' &&
+        hasEffectiveSmartTrainingStimulus(fallbackTrainingCandidate)
+      )
+    );
 
     const repeatsRecentTrainingPrescription =
       workout?.type === 'training' &&
@@ -4296,7 +4930,16 @@ function generateSmartWorkouts({
         )
         : generatedPrescriptionWorkout;
 
-    const finalSmartWorkout = adjustedSmartWorkout;
+    const finalSmartWorkout = (
+      isDecisionWorkout &&
+      hasActiveIdealRouteWorkout
+    )
+      ? applySmartIdealRouteMetadata(
+        adjustedSmartWorkout,
+        idealRouteWorkout,
+        athleteLevel
+      )
+      : adjustedSmartWorkout;
 
     const effectiveSmartDayType = shouldBuildNoEffectiveTrainingRecovery
       ? SMART_DAY_TYPES.RECOVERY
@@ -4329,6 +4972,11 @@ function generateSmartWorkouts({
             recentSquatMaxPct:
               smartDecision.readiness.recentSquatMaxPct || 0,
             meetPlanReady: Boolean(smartDecision.readiness.meetPlanReady),
+            meetPlanOneRMReady: Boolean(
+              smartDecision.readiness.meetPlanOneRMReady
+            ),
+            meetPlanOneRMReadyCount:
+              smartDecision.readiness.meetPlanOneRMReadyCount || 0,
             meetPlanFullyDemonstrated: Boolean(
               smartDecision.readiness.meetPlanFullyDemonstrated
             ),
@@ -4442,6 +5090,8 @@ export function generateWorkoutsForTrainingModelUnconstrained(model, args = {}) 
     currentIndex: args.currentIndex ?? 0,
     currentCycle: args.currentCycle ?? 1,
     meetPlannerAttempts: args.meetPlannerAttempts || {},
+    oneRMs: args.oneRMs || args.data?.oneRMs || {},
+    idealRouteEnabled: Boolean(args.idealRouteEnabled),
   };
 
   if (isSmartTrainingModel(model)) {
@@ -4494,7 +5144,7 @@ function normalizeGeneratedMeetSet(set = {}) {
   const roundedWeight = roundBarbellWeight(
     currentWeight,
     'nearest',
-    5,
+    2.5,
   );
   const originalWeight =
     Number(set.originalWeight ?? set.weight) || currentWeight;
@@ -4505,7 +5155,7 @@ function normalizeGeneratedMeetSet(set = {}) {
     originalWeight: roundBarbellWeight(
       originalWeight,
       'nearest',
-      5,
+      2.5,
     ),
   };
 }

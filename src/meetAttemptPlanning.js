@@ -30,8 +30,8 @@ export function buildMeetAttemptsFromOneRM(oneRM = 0) {
   }
 
   return ensureStrictMeetAttempts({
-    opener: roundBarbellWeight(base * 0.9, 'nearest', 5),
-    secondAttempt: roundBarbellWeight(base * 0.975, 'nearest', 5),
-    thirdAttempt: roundBarbellWeight(base * 1.025, 'nearest', 5),
+    opener: roundBarbellWeight(base * 0.9, 'nearest', 2.5),
+    secondAttempt: roundBarbellWeight(base * 0.975, 'nearest', 2.5),
+    thirdAttempt: roundBarbellWeight(base * 1.025, 'nearest', 2.5),
   });
 }

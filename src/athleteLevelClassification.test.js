@@ -19,9 +19,9 @@ test('preserves raw historical graph values while current e1RM can be rounded se
   expect(current.Squat.e1rm).toBe(148);
   expect(current.Bench.e1rm).toBe(99);
   expect(current.Deadlift.e1rm).toBe(182.49);
-  expect(roundE1RM(current.Squat.e1rm)).toBe(150);
+  expect(roundE1RM(current.Squat.e1rm)).toBe(147.5);
   expect(roundE1RM(current.Bench.e1rm)).toBe(100);
-  expect(roundE1RM(current.Deadlift.e1rm)).toBe(180);
+  expect(roundE1RM(current.Deadlift.e1rm)).toBe(182.5);
 });
 
 describe('classifyAthleteLevel', () => {

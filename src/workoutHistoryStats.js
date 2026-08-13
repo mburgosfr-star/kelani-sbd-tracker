@@ -46,13 +46,13 @@ export function epley(weight, reps) {
 }
 
 // e1RM is an actionable barbell estimate, not a lab measurement. Keep one
-// canonical 5kg value everywhere it is stored, displayed or compared by
-// Smart Training. Actual lifted 1RM values remain untouched.
+// canonical 2.5kg barbell value everywhere it is stored, displayed or
+// compared by Smart Training. Actual lifted 1RM values remain untouched.
 export function roundE1RM(value) {
   const numeric = Number(value) || 0;
   if (numeric <= 0) return 0;
 
-  return Math.round(numeric / 5) * 5;
+  return Math.round(numeric / 2.5) * 2.5;
 }
 
 // Set-label classification. Small and dependency-free, but needed both here
@@ -137,6 +137,47 @@ export function getSmartLiftSetsFromSnapshot(snapshot = {}, lift = null) {
   return [];
 }
 
+export function getActualOneRMFromSets(sets = []) {
+  return Math.max(
+    0,
+    ...(Array.isArray(sets) ? sets : [])
+      .filter(set => (
+        set?.done !== false &&
+        !set?.failed &&
+        !set?.skipped &&
+        !set?.warmup &&
+        !set?.isWarmup &&
+        Number(set?.reps) === 1 &&
+        Number(set?.weight) > 0
+      ))
+      .map(set => Number(set.weight) || 0)
+  );
+}
+
+// Legacy completed summaries retain the real 1RM that was already
+// established before that workout. This is distinct from `best1RM`: older
+// training summaries could accidentally let a heavy multi-rep weight raise
+// that field. The previous value is the stable historical baseline and lets
+// migrations and running-best charts place an older meet result at an older
+// history point instead of inventing a jump at today's endpoint.
+export function getEstablishedOneRMFromHistoryEntry(entry, lift = entry?.lift) {
+  if (!LIFT_ORDER.includes(lift)) return 0;
+
+  const summary = entry?.workoutSnapshot?.completedSummary;
+  const summaryResults = Array.isArray(summary?.results)
+    ? summary.results
+    : summary?.lift
+      ? [summary]
+      : [];
+
+  return Math.max(
+    entry?.lift === lift ? Number(entry.previousBest1RM) || 0 : 0,
+    ...summaryResults
+      .filter(summaryResult => summaryResult?.lift === lift)
+      .map(summaryResult => Number(summaryResult.previousBest1RM) || 0)
+  );
+}
+
 export function getHistoryMaxCandidates(entry) {
   if (!entry || !LIFT_ORDER.includes(entry.lift)) {
     return { oneRM: 0, e1rm: 0 };
@@ -152,11 +193,18 @@ export function getHistoryMaxCandidates(entry) {
     return { oneRM: manualOneRM, e1rm: manualE1RM };
   }
 
+  const snapshot = entry.workoutSnapshot || entry;
+  const snapshotSets = getSmartLiftSetsFromSnapshot(snapshot, entry.lift);
+  const hasStructuredSetEvidence = snapshotSets.length > 0;
+  const entryTopReps = Number(entry.topReps) || 0;
+  const legacyTopWeight = !hasStructuredSetEvidence && entryTopReps <= 0
+    ? Number(entry.topWeight) || Number(entry.oneRMToday) || 0
+    : 0;
   const oneRMCandidates = [
-    Number(entry.topWeight) || 0,
-    Number(entry.oneRMToday) || 0,
-    Number(entry.best1RM) || 0,
-    Number(entry.previousBest1RM) || 0,
+    getActualOneRMFromSets(snapshotSets),
+    entryTopReps === 1 ? Number(entry.topWeight) || 0 : 0,
+    entryTopReps === 1 ? Number(entry.oneRMToday) || 0 : 0,
+    legacyTopWeight,
   ];
 
   const e1RMCandidates = [
@@ -166,7 +214,7 @@ export function getHistoryMaxCandidates(entry) {
     Number(entry.previousBestE1RM) || 0,
   ];
 
-  const summary = entry.workoutSnapshot?.completedSummary;
+  const summary = snapshot?.completedSummary;
   const summaryResults = Array.isArray(summary?.results)
     ? summary.results
     : summary?.lift
@@ -176,10 +224,9 @@ export function getHistoryMaxCandidates(entry) {
   summaryResults
     .filter(result => result?.lift === entry.lift)
     .forEach(result => {
+      const resultTopReps = Number(result?.topSet?.reps) || 0;
       oneRMCandidates.push(
-        Number(result.oneRMToday) || 0,
-        Number(result.best1RM) || 0,
-        Number(result.previousBest1RM) || 0
+        resultTopReps === 1 ? Number(result.oneRMToday) || 0 : 0
       );
       e1RMCandidates.push(
         Number(result.e1RMToday) || 0,
@@ -191,8 +238,8 @@ export function getHistoryMaxCandidates(entry) {
   return {
     oneRM: Math.max(0, ...oneRMCandidates),
     // Historical charts must retain the value that was actually stored at
-    // the time. Five-kilogram rounding belongs at the current/readiness
-    // boundary, never retroactively in the history reader.
+    // the time. Barbell rounding belongs at the current/readiness boundary,
+    // never retroactively in the history reader.
     e1rm: Math.max(0, ...e1RMCandidates),
   };
 }
@@ -266,13 +313,16 @@ export function getAchievedHistoryMaxCandidates(entry = {}) {
     result => result?.lift === entry.lift
   );
 
+  const entryTopReps = Number(entry.topReps) || 0;
   const oneRMCandidates = [
-    Number(entry.oneRMToday) || 0,
-    Number(entry.topWeight) || 0,
-    ...matchingSummaryResults.map(
-      result => Number(result.oneRMToday) || 0
-    ),
-    ...successfulSets.map(set => Number(set.weight) || 0),
+    getActualOneRMFromSets(successfulSets),
+    entryTopReps === 1 ? Number(entry.oneRMToday) || 0 : 0,
+    entryTopReps === 1 ? Number(entry.topWeight) || 0 : 0,
+    ...matchingSummaryResults.map(result => (
+      Number(result?.topSet?.reps) === 1
+        ? Number(result.oneRMToday) || 0
+        : 0
+    )),
   ];
 
   const e1RMCandidates = [
@@ -533,14 +583,14 @@ export function formatSetPercentDisplay(pct) {
 
   if (!Number.isFinite(value) || value <= 0) return null;
 
-  // App-wide display convention: percentages always round to the nearest
-  // 5%, matching the 5kg barbell-plate rounding convention - never 2.5%.
+  // App-wide display convention: percentages round to the nearest 2.5%
+  // while the exact ratio remains available internally.
   const percent = value * 100;
-  const roundedStep = Math.round(percent / 5) * 5;
+  const roundedStep = Math.round(percent / 2.5) * 2.5;
 
   return formatDecimalDisplay(roundedStep, {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 1,
   });
 }
 

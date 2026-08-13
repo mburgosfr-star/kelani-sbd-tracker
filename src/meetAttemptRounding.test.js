@@ -1,7 +1,7 @@
 import { ensureStrictMeetAttempts, buildSuggestedMeetPlan } from './App';
 
 // Beginner C1W20 boundary: 90/97.5/102.5% of
-// e1RM rounded to the nearest 5kg produces these pre-tiebreak numbers.
+// real 1RM rounded to the nearest 2.5kg produces these pre-tiebreak numbers.
 // Before the fix, colliding attempts got bumped a full 5kg, which pushed
 // Bench's 2nd attempt (35kg) above her actual tested max (32.5kg e1RM).
 test('breaks a tied attempt with a 2.5kg nudge instead of a full 5kg jump', () => {
@@ -33,13 +33,13 @@ test('buildSuggestedMeetPlan produces the expected beginner meet plan from the s
   });
 
   expect(meetPlan.find(row => row.lift === 'Squat'))
-    .toMatchObject({ opener: 40, second: 42.5, third: 45 });
+    .toMatchObject({ opener: 37.5, second: 42.5, third: 45 });
   expect(meetPlan.find(row => row.lift === 'Bench'))
     .toMatchObject({ opener: 30, second: 32.5, third: 35 });
   expect(meetPlan.find(row => row.lift === 'Deadlift'))
-    .toMatchObject({ opener: 55, second: 60, third: 62.5 });
+    .toMatchObject({ opener: 55, second: 57.5, third: 62.5 });
 
-  expect(meetTotals).toEqual({ opener: 125, second: 135, third: 142.5 });
+  expect(meetTotals).toEqual({ opener: 122.5, second: 132.5, third: 142.5 });
 });
 
 test('buildSuggestedMeetPlan returns zeroed attempts for a lift with no 1RM yet', () => {

@@ -241,10 +241,9 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
     }
 
     if (targetReps === 2) {
-      // Never 2 reps for a warmup step - it reads as "almost a top double"
-      // rather than a genuine warm-up. Matches the 1/3/5 ladder every other
-      // rep scheme already uses below.
-      if (distanceToTarget <= 35) return 1;
+      // A top double needs enough rehearsal to establish the movement and
+      // brace without turning its final warm-up into a competing single.
+      // Keep the whole ladder at 5/3 reps; never prescribe 1 or 2 reps.
       if (distanceToTarget <= 60) return 3;
       return 5;
     }
@@ -379,16 +378,17 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
     return repsForWarmup(weight, isFinalWarmup);
   });
 
-  // Two invariants, enforced here regardless of which branch above computed
-  // each individual step: a warmup is never exactly 2 reps (reads as
-  // "almost a top double", not a genuine warm-up), and reps never increase
-  // as weight climbs toward the top set (each step is capped by the
-  // previous, lighter step's rep count).
+  // Invariants enforced here regardless of which branch above computed each
+  // step: a warm-up is never exactly 2 reps, every warm-up before a top
+  // double is at least 3 reps, and reps never increase as weight climbs.
   const normalizedReps = computedReps.reduce((result, rawReps, index) => {
     const withoutTwo = rawReps === 2 ? 3 : rawReps;
-    const capped = index > 0
-      ? Math.min(withoutTwo, result[index - 1])
+    const withTopDoubleMinimum = targetReps === 2
+      ? Math.max(withoutTwo, 3)
       : withoutTwo;
+    const capped = index > 0
+      ? Math.min(withTopDoubleMinimum, result[index - 1])
+      : withTopDoubleMinimum;
 
     result.push(capped);
     return result;
@@ -403,7 +403,7 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
 }
 
 export function roundMeetWeight(weight) {
-  return roundBarbellWeight(weight, 'nearest', 0.5);
+  return roundBarbellWeight(weight, 'nearest', 2.5);
 }
 
 export function getSetTrainingMax(set) {

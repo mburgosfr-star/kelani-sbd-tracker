@@ -6,6 +6,9 @@ const baseOptions = {
   squat: 145,
   bench: 101.33333333333333,
   deadlift: 180,
+  // Keep this frequency-boundary fixture below meet readiness. Its purpose
+  // is to exercise candidate eligibility, not the meet transition.
+  oneRMs: { Squat: 157.5, Bench: 110, Deadlift: 195 },
   accessoryMode: 'off',
   preparationMode: 'off',
   cooldownMode: 'off',

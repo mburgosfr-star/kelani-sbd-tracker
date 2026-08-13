@@ -164,6 +164,20 @@ test('rejects malformed manual backup data before it can replace saved data', ()
     ...validEnvelope,
     data: { ...validEnvelope.data, currentCycle: 0 },
   })).toBe(false);
+  expect(validateImportedBackup({
+    ...validEnvelope,
+    data: {
+      ...validEnvelope.data,
+      cycleE1RMs: { Squat: 145, Bench: 97.5 },
+    },
+  })).toBe(false);
+  expect(validateImportedBackup({
+    ...validEnvelope,
+    data: {
+      ...validEnvelope.data,
+      smartIdealRouteStartCycle: 0,
+    },
+  })).toBe(false);
 });
 
 test('does not treat failures, manual exports or unverified records as automatic backups', () => {

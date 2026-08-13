@@ -110,6 +110,24 @@ test('generates complete deadlift warmups below a close backoff', () => {
   ]);
 });
 
+test('C3W45 squat keeps the final warmup at 3 reps before its top double', () => {
+  const sets = [
+    { labelKey: 'topDouble', reps: 2, weight: 140 },
+    ...Array.from({ length: 4 }, () => ({
+      labelKey: 'backoff', reps: 5, weight: 95,
+    })),
+  ];
+
+  const warmups = generateWarmups(sets, 'Squat');
+
+  expect(warmups.map(({ reps, weight }) => ({ reps, weight }))).toEqual([
+    { reps: 5, weight: 20 },
+    { reps: 5, weight: 70 },
+    { reps: 3, weight: 120 },
+  ]);
+  expect(warmups.every(warmup => warmup.reps >= 3)).toBe(true);
+});
+
 test('drops the redundant middle bridge warmup on a single-lift day', () => {
   const sets = [
     { labelKey: 'topSingle', reps: 1, weight: 90 },

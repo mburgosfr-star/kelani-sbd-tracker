@@ -127,13 +127,13 @@ test.each([100, 200])(
     expect(prescription.sets[0]).toMatchObject({
       labelKey: 'topTriple',
       reps: 3,
-      pct: 0.75,
+      pct: 0.725,
     });
     prescription.sets.slice(1).forEach(set => {
       expect(set).toMatchObject({
         labelKey: 'backoff',
         reps: 5,
-        pct: 0.7,
+        pct: 0.675,
       });
     });
   }
@@ -176,7 +176,7 @@ test('keeps successful secondary work as an explicit volume anchor', () => {
   expect(prescription.plannedVolumePct).toBe(0.675);
 });
 
-test('names the cycle estimate and opener separately in the Smart modal', () => {
+test('names the cycle estimate and real 1RM target separately in the Smart modal', () => {
   expect(
     getSmartModalDetailRows({
       smartDecisionSummary: {
@@ -194,6 +194,7 @@ test('names the cycle estimate and opener separately in the Smart modal', () => 
           meetPlanReadiness: {
             Squat: {
               currentCycleBestE1RM: 116.16666666666666,
+              oneRMTargetE1RM: 145,
               readinessTargetAttempt: 130,
               readinessPhase: 'opener',
               openerReady: false,
@@ -206,25 +207,25 @@ test('names the cycle estimate and opener separately in the Smart modal', () => 
             limitingLift: 'Squat',
             limitingPhase: 'opener',
           },
-          meetdayBlockers: ['opener-readiness'],
+          meetdayBlockers: ['one-rm-readiness'],
         },
       },
     })
   ).toEqual([
     {
       label: 'Current blocker',
-      value: 'Squat (opener not yet demonstrated)',
+      value: 'Squat (100% of the real 1RM not yet reached)',
     },
     {
       label: 'Primary blocker',
-      value: 'Squat (opener not yet demonstrated)',
+      value: 'Squat (100% of the real 1RM not yet reached)',
     },
-    { label: 'Openers', value: '0/3', kind: 'metric' },
-    { label: '2nd attempts', value: '0/3', kind: 'metric' },
-    { label: '3rd potential', value: '0/3', kind: 'metric' },
+    { label: '90% e1RM', value: '0/3', kind: 'metric' },
+    { label: '95% e1RM', value: '0/3', kind: 'metric' },
+    { label: '100% real 1RM', value: '0/3', kind: 'metric' },
     { label: 'Squat (Cycle e1RM)', value: '115 kg', kind: 'metric' },
-    { label: 'Squat (Meet opener)', value: '130 kg', kind: 'metric' },
-    { label: 'Squat (Gap)', value: '15 kg', kind: 'metric' },
+    { label: 'Squat (Real 1RM target)', value: '145 kg', kind: 'metric' },
+    { label: 'Squat (Gap)', value: '30 kg', kind: 'metric' },
     { label: 'Projected meet', value: 'C3W27–C3W29' },
     {
       label: 'Readiness basis',
@@ -241,7 +242,7 @@ test('names the cycle estimate and opener separately in the Smart modal', () => 
 
 
 
-test('shows the second-attempt support phase in the Smart modal', () => {
+test('shows the real 1RM readiness target in the Smart modal', () => {
   const rows = getSmartModalDetailRows({
     smartDecisionSummary: {
       dayType: 'training',
@@ -258,6 +259,7 @@ test('shows the second-attempt support phase in the Smart modal', () => {
         meetPlanReadiness: {
           Deadlift: {
             currentCycleBestE1RM: 167.5,
+            oneRMTargetE1RM: 180,
             readinessTargetAttempt: 170.625,
             readinessPhase: 'second-attempt',
             openerReady: true,
@@ -275,11 +277,11 @@ test('shows the second-attempt support phase in the Smart modal', () => {
 
   expect(rows[0]).toEqual({
     label: 'Current blocker',
-    value: 'Deadlift (second attempt not yet supported)',
+    value: 'Deadlift (100% of the real 1RM not yet reached)',
   });
   expect(rows).toContainEqual({
-    label: 'Deadlift (2nd support)',
-    value: '170 kg',
+    label: 'Deadlift (Real 1RM target)',
+    value: '180 kg',
     kind: 'metric',
   });
   expect(rows).toContainEqual({

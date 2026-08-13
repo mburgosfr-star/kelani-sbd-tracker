@@ -174,7 +174,7 @@ test.each([
     expectedSpacing: 0,
     expectedDirection: 'progress',
     expectedReason: 'good-progress',
-    expectedTopPct: 0.8,
+    expectedTopPct: 0.775,
     expectedVolumePct: 0.7,
   },
   {
@@ -184,7 +184,7 @@ test.each([
     expectedSpacing: 0,
     expectedDirection: 'progress',
     expectedReason: 'easy-progress',
-    expectedTopPct: 0.8,
+    expectedTopPct: 0.775,
     expectedVolumePct: 0.7,
   },
   {
@@ -194,7 +194,7 @@ test.each([
     expectedSpacing: 0,
     expectedDirection: 'progress',
     expectedReason: 'hard-progress',
-    expectedTopPct: 0.8,
+    expectedTopPct: 0.775,
     expectedVolumePct: 0.7,
   },
   {
@@ -204,7 +204,7 @@ test.each([
     expectedSpacing: 1,
     expectedDirection: 'progress',
     expectedReason: 'hard-progress',
-    expectedTopPct: 0.8,
+    expectedTopPct: 0.775,
     expectedVolumePct: 0.7,
   },
   {
@@ -214,7 +214,7 @@ test.each([
     expectedSpacing: 2,
     expectedDirection: 'progress',
     expectedReason: 'hard-progress',
-    expectedTopPct: 0.8,
+    expectedTopPct: 0.775,
     expectedVolumePct: 0.7,
   },
   {
@@ -225,7 +225,7 @@ test.each([
     expectedSpacing: 2,
     expectedDirection: 'progress',
     expectedReason: 'hard-progress',
-    expectedTopPct: 0.8,
+    expectedTopPct: 0.775,
     expectedVolumePct: 0.7,
   },
 ])('$name', ({
@@ -268,7 +268,7 @@ test('a recovery day alone does not invent an intervening training exposure, and
     direction: 'progress',
     reason: 'hard-progress',
   });
-  expect(top.pct).toBe(0.8);
+  expect(top.pct).toBe(0.775);
 });
 
 test.each([

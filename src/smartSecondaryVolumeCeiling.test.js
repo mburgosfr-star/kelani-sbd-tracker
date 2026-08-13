@@ -71,12 +71,9 @@ test("a secondary-role volume set's intensity never exceeds its own 60-72.5% cei
 
   // The precise, internal ceiling really is held at 72.5%...
   expect(prescription.plannedVolumePct).toBeLessThanOrEqual(0.725);
-  // ...though the actual generated set's displayed/loaded weight still goes
-  // through the app's universal round-to-nearest-5% step, and 72.5% sits
-  // exactly on that boundary (rounds up, not down) - so 75% is the real
-  // effective ceiling an athlete ever sees here, not 72.5%. Either way,
-  // this is a world away from the 77.5-80% that actually caused the
-  // failure; the pre-existing round-half-up quirk is not this bug.
+  // The actual weight then uses 2.5kg barbell precision and its displayed
+  // percentage is derived from that load. Even for a small training max it
+  // must stay far below the 77.5-80% range that caused the regression.
   prescription.sets.forEach(set => {
     expect(set.pct).toBeLessThanOrEqual(0.75);
   });

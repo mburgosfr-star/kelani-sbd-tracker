@@ -82,7 +82,7 @@ test('supplemented heavy Bench has a visible complete plan and technical diagnos
   expect(diagnosis).toContain('gridItems=6');
 });
 
-test('generated meet-day weights start on five-kilogram increments', () => {
+test('generated meet-day weights use 2.5-kilogram increments', () => {
   const [workout] = normalizeSmartMeetWorkoutWeights([
     {
       type: 'meet',
@@ -101,9 +101,9 @@ test('generated meet-day weights start on five-kilogram increments', () => {
   ]);
 
   expect(workout.sets[0]).toMatchObject({
-    weight: 105,
-    originalWeight: 105,
+    weight: 102.5,
+    originalWeight: 102.5,
   });
   expect(workout.lifts[0].sets.map(({ weight }) => weight))
-    .toEqual([105, 110]);
+    .toEqual([102.5, 107.5]);
 });

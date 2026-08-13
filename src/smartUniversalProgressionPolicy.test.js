@@ -147,8 +147,8 @@ test('beginner Squat stimulus progresses beyond C1W11 even when C1W15 has anothe
   expect(prescription.sets[0]).toMatchObject({
     labelKey: 'topTriple',
     reps: 3,
-    pct: 0.8,
-    weight: 35,
+    pct: 0.775,
+    weight: 32.5,
   });
 
   const initialWarmups = generateWarmups(
@@ -236,7 +236,7 @@ test.each([
     expect(base.sets[0].pct).toBeGreaterThanOrEqual(0.75);
     expect(progressed.sets[0]).toMatchObject({
       reps: 3,
-      pct: 0.8,
+      precisePct: 0.775,
     });
     expect(progressed.repeatVariationApplied).toBe(true);
   }
@@ -357,7 +357,7 @@ test('beginner Deadlift stimulus progresses beyond C1W9 at C1W14', () => {
   expect(prescription.sets[0]).toMatchObject({
     labelKey: 'topDouble',
     reps: 2,
-    pct: 0.85,
+    pct: 0.825,
     weight: 50,
   });
 
@@ -483,7 +483,7 @@ test.each([
     expect(progressed.validation.valid).toBe(true);
     expect(progressed.sets[0]).toMatchObject({
       reps: 2,
-      pct: 0.85,
+      precisePct: 0.825,
     });
     expect(progressed.repeatVariationApplied).toBe(true);
   }

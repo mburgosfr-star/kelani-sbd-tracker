@@ -162,9 +162,10 @@ test.each(LIFTS)(
       direction: 'progress',
       reason: 'hard-progress',
     });
-    expect(top.pct).toBe(0.8);
+    expect(top.pct).toBe(0.775);
+    expect(top.precisePct).toBe(0.775);
     expect(volume.length).toBeGreaterThan(0);
-    volume.forEach(set => expect(set.pct).toBe(0.7));
+    volume.forEach(set => expect(set.precisePct).toBe(0.675));
   }
 );
 
@@ -181,9 +182,10 @@ test.each(LIFTS)(
       reason: 'hard-progress',
     });
     expect(prescription.validation.valid).toBe(true);
-    expect(top.pct).toBe(0.8);
+    expect(top.pct).toBe(0.775);
+    expect(top.precisePct).toBe(0.775);
     expect(volume.length).toBeGreaterThan(0);
-    volume.forEach(set => expect(set.pct).toBe(0.7));
+    volume.forEach(set => expect(set.precisePct).toBe(0.675));
   }
 );
 
@@ -203,7 +205,7 @@ test.each(LIFTS)(
     });
     expect(prescription.validation.valid).toBe(true);
     expect(volume).toHaveLength(3);
-    volume.forEach(set => expect(set.pct).toBe(0.7));
+    volume.forEach(set => expect(set.precisePct).toBe(0.675));
   }
 );
 

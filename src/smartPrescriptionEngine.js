@@ -79,7 +79,7 @@ function roundPct(value) {
   return Math.round(value * 1000) / 1000;
 }
 
-export function roundSmartWeight(weight, increment = 5) {
+export function roundSmartWeight(weight, increment = 2.5) {
   const numericWeight = Number(weight);
   const numericIncrement = Number(increment);
 
@@ -95,11 +95,10 @@ export function roundSmartWeight(weight, increment = 5) {
   return Math.round(numericWeight / numericIncrement) * numericIncrement;
 }
 
-// Rounds a fraction to the nearest 5% step for display/weight purposes.
-// Progression itself still advances in finer (2.5%) steps internally -
-// see `precisePct` on generated sets - so the athlete's pace doesn't change,
-// only the percentage and weight shown ever land on a clean 5% multiple.
-export function roundPercent(value, increment = 0.05) {
+// Rounds a fraction to the nearest 2.5% step for display and ordinary
+// prescription weights. `precisePct` still retains the exact internal ratio
+// when barbell rounding produces a value between those display steps.
+export function roundPercent(value, increment = 0.025) {
   const numericValue = Number(value);
   const numericIncrement = Number(increment);
 
@@ -112,7 +111,7 @@ export function roundPercent(value, increment = 0.05) {
     return 0;
   }
 
-  // Plain float division (e.g. 0.825 / 0.05) can land a hair below an exact
+  // Plain float division (e.g. 0.8125 / 0.025) can land a hair below an exact
   // half-step (16.499999999999996 instead of 16.5) and silently round the
   // wrong way. Scaling to integers first removes that float noise so ties
   // round consistently.
@@ -206,8 +205,8 @@ function isUsableCompletedSet(set = {}) {
 }
 
 function getSetPct(set = {}, trainingMax = 0) {
-  // A set generated after the 5% display-rounding change carries its true,
-  // finer-grained (2.5%-step) percentage in `precisePct`. Progression must
+  // A generated set can carry its true, finer-grained percentage in
+  // `precisePct`. Progression must
   // anchor on that, not the rounded `pct` the athlete saw, or progression
   // pace would silently double (every rounded step would always round up).
   const precisePct = Number(set.precisePct) || 0;
@@ -753,7 +752,7 @@ function buildGeneratedSet({
   if (useBarbellPrecision) {
     // Meet-specific top sets (second/third-attempt phases) target a real,
     // specific attempt weight. Rounding the percentage itself to the
-    // nearest 5% bucket FIRST, then deriving the weight from that bucket,
+    // nearest percentage bucket FIRST, then deriving the weight from it,
     // can permanently trap progression when the true ceiling falls
     // mid-bucket - e.g. a 96.1% ceiling always rounds down to 95%, so the
     // athlete can never reach a third attempt's e1RM no matter how many
@@ -766,10 +765,12 @@ function buildGeneratedSet({
       ? weight / Number(trainingMax)
       : precisePct;
   } else {
-    displayPct = roundPercent(precisePct);
     weight = roundSmartWeight(
-      Number(trainingMax) * displayPct
+      Number(trainingMax) * roundPercent(precisePct)
     );
+    displayPct = Number(trainingMax) > 0
+      ? roundPercent(weight / Number(trainingMax))
+      : roundPercent(precisePct);
   }
 
   return {
@@ -782,8 +783,8 @@ function buildGeneratedSet({
     weight,
     originalPct: displayPct,
     originalWeight: weight,
-    // The true (2.5%-step) progression anchor, so future exposures keep
-    // advancing at the same pace the rounded 5% display doesn't reveal.
+    // The true progression anchor, so future exposures keep advancing at
+    // the same pace even when the displayed percentage is rounded.
     precisePct,
     done: false,
     failed: false,
@@ -896,7 +897,7 @@ function getNextPrimaryTop(state = {}) {
       pct = Math.max(pct, anchorPct);
     }
 
-    // A Smart progress decision must also be visible at the app's 5%
+    // A Smart progress decision must also be visible at the app's 2.5%
     // display precision. Without this floor, a real kg increase could still
     // read "90% to 90%", which is not an intensity progression.
     if (
@@ -904,7 +905,7 @@ function getNextPrimaryTop(state = {}) {
       roundPercent(pct) <= roundPercent(anchorPct)
     ) {
       pct = clamp(
-        roundPercent(anchorPct) + 0.05,
+        roundPercent(anchorPct) + 0.025,
         TOP_PCT_LIMITS[2].min,
         thirdAttemptDoublePct
       );
@@ -973,7 +974,7 @@ function getNextPrimaryTop(state = {}) {
     meetSpecificProgression: readinessPhase === 'second-attempt',
     // Only once this ratchet has actually reached a single is the ceiling
     // (effectiveMax above) a real meet-target-derived value
-    // (secondAttemptPct) instead of a generic, already-5%-aligned
+    // (secondAttemptPct) instead of a generic, already-2.5%-aligned
     // TOP_PCT_LIMITS bucket - barbell-precision rounding is only meaningful
     // (and only correct) once there's a real target ceiling to round toward.
     useBarbellPrecision: reps === 1 && readinessPhase === 'second-attempt',
@@ -1112,7 +1113,7 @@ export function buildSmartLiftPrescription({
     // below, e.g. a deload or failed feedback) - always make real
     // progress unless there's a reason not to. The % anchor above already
     // guards the *percentage*, but converting % to a barbell-loadable
-    // weight (5kg steps) can still round the actual kg down below the last
+    // weight (2.5kg steps) can still round the actual kg down below the last
     // proven top - especially right after a rep-scheme change (e.g. a
     // single carried into a double-only phase), where a lower %1RM can
     // still be a "valid" double even though it's a lower absolute weight.
@@ -1146,14 +1147,14 @@ export function buildSmartLiftPrescription({
       // - useBarbellPrecision only: the opener/second-attempt ratchet's
       //   fixed 2.5pp TOP_PCT_LIMITS steps are already tuned (and covered
       //   by the recovery-matrix tests) to produce real weight changes at
-      //   typical training maxes - a flat +5kg floor there would be a
+      //   typical training maxes - a flat increment floor there can be a
       //   wildly oversized jump for a lighter lift's training max (e.g.
-      //   +5kg on a 32.5kg Bench max is +15 percentage points, not +2.5).
+      //   large jump for a light Bench training max.
       // - same rep scheme only: a rep-scheme change (e.g. a single anchor
       //   converting into this phase's double) already gets its own
       //   Epley-style conversion upstream, and can legitimately land on
       //   the exact same "floor" weight as the anchor without that being a
-      //   stall - forcing +5kg on top of an already-converted rep-scheme
+      //   stall - forcing another increment after a converted rep scheme
       //   change overshoots what real progress from that anchor means.
       const sameRepScheme = Number(state.lastSuccessfulTop?.reps) === Number(top.reps);
       const minimumWeight = (
@@ -1161,14 +1162,14 @@ export function buildSmartLiftPrescription({
         top.useBarbellPrecision &&
         sameRepScheme
       )
-        ? provenWeight + 5
+        ? provenWeight + 2.5
         : provenWeight;
 
       if (projectedWeight < minimumWeight) {
         let flooredWeight = projectedWeight;
 
         while (flooredWeight < minimumWeight) {
-          flooredWeight = roundSmartWeight(flooredWeight + 5);
+          flooredWeight = roundSmartWeight(flooredWeight + 2.5);
         }
 
         top = { ...top, pct: flooredWeight / state.trainingMax };
@@ -1378,8 +1379,8 @@ export function validateSmartLiftPrescription(
     });
   });
 
-  // Use the true, finer-grained precisePct, not the display-rounded pct
-  // (nearest 5%) - a genuinely-held-or-higher precise value (e.g. 0.974,
+  // Use the true, finer-grained precisePct, not the display-rounded pct - a
+  // genuinely-held-or-higher precise value (e.g. 0.974,
   // exactly matching a real proven anchor) can round DOWN for display
   // (0.95), which made the validator compare a rounded current value
   // against an unrounded anchor and see a "regression" that never actually

@@ -46,7 +46,7 @@ test('meet attempts use readiness rather than the stale template and remain stri
     { labelKey: 'thirdAttempt', weight: 100 },
   ]);
 
-  expect(sets.map(set => set.weight)).toEqual([90, 95, 100]);
+  expect(sets.map(set => set.weight)).toEqual([87.5, 95, 100]);
   expect(sets.map(set => set.pct)).toEqual([0.9, 0.975, 1.025]);
 });
 
@@ -122,9 +122,9 @@ test('generates a beginner Deadlift 80/70 prescription consistently from a 60 kg
     labelKey: 'topDouble',
     reps: 2,
     pct: 0.8,
-    weight: 50,
+    weight: 47.5,
     originalPct: 0.8,
-    originalWeight: 50,
+    originalWeight: 47.5,
   });
 
   deadlift.sets.slice(1).forEach(set => {
@@ -132,9 +132,9 @@ test('generates a beginner Deadlift 80/70 prescription consistently from a 60 kg
       labelKey: 'backoff',
       reps: 4,
       pct: 0.7,
-      weight: 40,
+      weight: 42.5,
       originalPct: 0.7,
-      originalWeight: 40,
+      originalWeight: 42.5,
     });
   });
 });
@@ -336,7 +336,7 @@ test('gives Ultra Bench Strength three Deadlift work sets', () => {
       labelKey: 'workSets',
       reps: 3,
       pct: 0.625,
-      weight: 115,
+      weight: 112.5,
     });
   });
 });
@@ -1443,8 +1443,8 @@ test('generates progressive C3W18 training without template prescriptions', () =
     decisionWorkout.lifts.map(liftBlock => liftBlock.lift)
   ).toEqual(['Squat', 'Bench']);
   // Meet attempts remain based on real 1RM, while readiness compares the
-  // newly canonical 5kg-rounded e1RMs. At this boundary Deadlift is the
-  // genuine remaining limiter; this does not change the frequency-gated
+  // newly canonical 2.5kg-rounded e1RMs. At this boundary Deadlift is the
+  // remaining readiness limiter; this does not change the frequency-gated
   // Squat + Bench selection asserted above.
   expect(
     decisionWorkout.smartDecisionSummary.readiness
