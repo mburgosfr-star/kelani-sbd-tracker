@@ -348,7 +348,7 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
   }
 );
 
-test('elite ideal route reaches W28 meet and requires four post-meet recovery workouts', () => {
+test('elite ideal route reaches W28 meet and requires one post-meet recovery workout', () => {
   let history = [];
 
   for (let index = 0; index < 28; index += 1) {
@@ -362,8 +362,8 @@ test('elite ideal route reaches W28 meet and requires four post-meet recovery wo
       expect(workout.type).toBe('meet');
       expect(workout.smartIdealRoute).toMatchObject({
         stage: 'meet',
-        postMeetRecoveryTarget: 4,
-        nextCycleWorkout: 33,
+        postMeetRecoveryTarget: 1,
+        nextCycleWorkout: 30,
       });
       expectFullLiftGrids(workout);
     }
@@ -373,7 +373,7 @@ test('elite ideal route reaches W28 meet and requires four post-meet recovery wo
 
   expect(isSmartCycleCompleteAfterHistory(history, 1)).toBe(false);
 
-  for (let index = 28; index < 32; index += 1) {
+  for (let index = 28; index < 29; index += 1) {
     const recovery = generateCurrent({
       history,
       currentIndex: index,
@@ -382,10 +382,10 @@ test('elite ideal route reaches W28 meet and requires four post-meet recovery wo
     expect(recovery.type).toBe('rest');
     expect(recovery.smartIdealRoute).toMatchObject({
       stage: 'post-meet',
-      postMeetRecoveryTarget: 4,
+      postMeetRecoveryTarget: 1,
     });
     history = completeWorkout(history, recovery);
-    expect(isSmartCycleCompleteAfterHistory(history, 1)).toBe(index === 31);
+    expect(isSmartCycleCompleteAfterHistory(history, 1)).toBe(true);
   }
 });
 

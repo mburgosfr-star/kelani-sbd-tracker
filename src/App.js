@@ -165,13 +165,6 @@ export function roundDashboardWeightKg(value) {
   return roundToStep(Number(value) || 0, 2.5);
 }
 
-export function getDashboardE1RMPrGain(e1RM, oneRM) {
-  const displayedE1RM = roundDashboardWeightKg(e1RM);
-  const displayedOneRM = roundDashboardWeightKg(oneRM);
-
-  return Math.max(0, displayedE1RM - displayedOneRM);
-}
-
 export function buildDashboardE1RMMetrics(oneRMs = {}, e1RMs = {}) {
   const lifts = Object.fromEntries(LIFT_ORDER.map(lift => {
     const oneRM = roundDashboardWeightKg(oneRMs[lift]);
@@ -183,14 +176,12 @@ export function buildDashboardE1RMMetrics(oneRMs = {}, e1RMs = {}) {
     return [lift, {
       oneRM,
       e1RM,
-      prGain: getDashboardE1RMPrGain(e1RM, oneRM),
     }];
   }));
   const total = LIFT_ORDER.reduce((result, lift) => ({
     oneRM: result.oneRM + lifts[lift].oneRM,
     e1RM: result.e1RM + lifts[lift].e1RM,
-    prGain: result.prGain + lifts[lift].prGain,
-  }), { oneRM: 0, e1RM: 0, prGain: 0 });
+  }), { oneRM: 0, e1RM: 0 });
 
   return { lifts, total };
 }
@@ -206,16 +197,65 @@ export function getDashboardE1RMValue(oneRM, achievedE1RM) {
 // A rounded seed/max estimate is not a new training PR. The dashboard may
 // still show the all-time best e1RM, but the PR badge requires an achieved
 // training estimate to exceed the real 1RM basis.
-export function isDashboardE1RMPR({
-  achievedE1RM = 0,
-  displayedE1RM = achievedE1RM,
-  oneRM = 0,
-} = {}) {
-  return (
-    Number(oneRM) > 0 &&
-    Number(achievedE1RM) > Number(oneRM) &&
-    getDashboardE1RMPrGain(displayedE1RM, oneRM) > 0
+export function buildDashboardRecentPrEvents(history = []) {
+  const entries = Array.isArray(history) ? history : [];
+  const latestStrengthEntry = [...entries].reverse().find(entry => (
+    LIFT_ORDER.includes(entry?.lift) &&
+    !entry?.seedMax &&
+    !entry?.manualMax &&
+    !entry?.completionOnly &&
+    !entry?.restDay
+  ));
+
+  const emptyLifts = Object.fromEntries(
+    LIFT_ORDER.map(lift => [lift, { oneRMGain: 0, e1RMGain: 0 }])
   );
+
+  if (!latestStrengthEntry) {
+    return { lifts: emptyLifts, total: { oneRMGain: 0 } };
+  }
+
+  const latestCycle = Number(latestStrengthEntry.cycle) || 1;
+  const latestWorkoutNumber = Number(latestStrengthEntry.workoutNumber) || 0;
+  const historyBeforeLatestStrengthWorkout = entries.filter(entry => !(
+    Number(entry?.cycle || 1) === latestCycle &&
+    Number(entry?.workoutNumber || 0) === latestWorkoutNumber
+  ));
+
+  const previousOneRMs = calculateActualOneRMsFromHistory(historyBeforeLatestStrengthWorkout);
+  const currentOneRMs = calculateActualOneRMsFromHistory(entries);
+  const previousAchievedMaxes = calculateAchievedMaxesFromHistory(historyBeforeLatestStrengthWorkout);
+  const currentAchievedMaxes = calculateAchievedMaxesFromHistory(entries);
+
+  const lifts = Object.fromEntries(LIFT_ORDER.map(lift => {
+    const previousOneRM = roundDashboardWeightKg(previousOneRMs[lift]);
+    const currentOneRM = roundDashboardWeightKg(currentOneRMs[lift]);
+    const previousE1RM = roundDashboardWeightKg(Math.max(
+      previousOneRM,
+      Number(previousAchievedMaxes?.[lift]?.e1rm) || 0
+    ));
+    const currentE1RM = roundDashboardWeightKg(Math.max(
+      currentOneRM,
+      Number(currentAchievedMaxes?.[lift]?.e1rm) || 0
+    ));
+
+    return [lift, {
+      oneRMGain: Math.max(0, currentOneRM - previousOneRM),
+      e1RMGain: Math.max(0, currentE1RM - previousE1RM),
+    }];
+  }));
+
+  return {
+    lifts,
+    total: {
+      oneRMGain: LIFT_ORDER.reduce(
+        (gain, lift) => gain + lifts[lift].oneRMGain,
+        0
+      ),
+    },
+    cycle: latestCycle,
+    workoutNumber: latestWorkoutNumber,
+  };
 }
 
 export function shouldShowAutomaticBackupStatus(isNativePlatform) {
@@ -722,9 +762,40 @@ function responsiveContentScreenStyle(bottomOffset = BOTTOM_NAV_SPACE) {
 export function meetDayDashboardScreenStyle() {
   return {
     ...responsiveContentScreenStyle(),
+    gridTemplateRows: 'auto minmax(min-content, 1fr)',
+    alignContent: 'stretch',
+    rowGap: 'clamp(4px, 0.8dvh, 10px)',
+  };
+}
+
+export function regularDashboardScreenStyle() {
+  return {
+    ...responsiveContentScreenStyle(),
     gridTemplateRows: 'auto minmax(0, 1fr)',
     alignContent: 'stretch',
-    rowGap: 'clamp(10px, 1.6dvh, 18px)',
+    rowGap: 'clamp(14px, 2.2dvh, 24px)',
+  };
+}
+
+export function regularDashboardContentStyle({ spreadContent = false } = {}) {
+  return {
+    minHeight: 0,
+    display: 'grid',
+    alignContent: spreadContent ? 'space-evenly' : 'start',
+    rowGap: spreadContent
+      ? 'clamp(10px, 1.4dvh, 16px)'
+      : 'clamp(14px, 2.2dvh, 24px)',
+    ...(spreadContent ? {
+      paddingBottom: 'clamp(24px, 3.5dvh, 36px)',
+    } : {}),
+  };
+}
+
+export function programScreenStyle() {
+  return {
+    ...responsiveContentScreenStyle(),
+    display: 'flex',
+    flexDirection: 'column',
   };
 }
 
@@ -732,8 +803,10 @@ export function meetDayDashboardContentStyle() {
   return {
     minHeight: 0,
     display: 'grid',
-    alignContent: 'center',
-    padding: 'clamp(6px, 1dvh, 10px) 4px clamp(14px, 2.5dvh, 24px)',
+    gridTemplateRows: 'auto auto minmax(min-content, 1fr) auto',
+    alignContent: 'stretch',
+    rowGap: 'clamp(4px, 0.8dvh, 8px)',
+    padding: 'clamp(2px, 0.4dvh, 4px) 4px clamp(4px, 0.8dvh, 8px)',
   };
 }
 
@@ -763,6 +836,7 @@ export function MeetDayDashboardPlan({
         meetTotals={meetTotals}
         t={t}
         weightUnit={weightUnit}
+        dashboardLayout
       />
     </div>
   );
@@ -843,7 +917,7 @@ export function restDayCompletedScreenStyle() {
   return {
     minHeight: '100%',
     display: 'grid',
-    gridTemplateRows: 'minmax(0, 1fr) auto',
+    gridTemplateRows: 'minmax(0, 1fr)',
     background: 'transparent',
     border: 'none',
     borderRadius: 12,
@@ -863,10 +937,42 @@ export function restDayCompletedContentStyle() {
   };
 }
 
-export function restDayCompletedActionsStyle() {
+export function completedWorkoutScreenStyle() {
   return {
-    alignSelf: 'end',
+    width: '100%',
+    maxWidth: 500,
+    minHeight: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
+    margin: '0 auto',
+    padding: '20px clamp(10px, 3vw, 16px) 16px',
+    boxSizing: 'border-box',
+    background: THEME.bg,
+    color: THEME.text,
+    fontFamily: 'sans-serif',
+    overflowX: 'hidden',
   };
+}
+
+export function meetCompletedAchievedWeightStyle() {
+  return {
+    color: '#ffffff',
+    fontSize: 'clamp(18px, 2.8dvh, 22px)',
+    fontWeight: 900,
+    lineHeight: 1.1,
+    whiteSpace: 'nowrap',
+  };
+}
+
+export function isCompletedSuccessfulThirdAttempt(set) {
+  return Boolean(
+    set?.done &&
+    !set?.failed &&
+    !set?.skipped &&
+    set?.labelKey === 'thirdAttempt'
+  );
+}
+
+export function shouldShowCompletedWorkoutMetadata(workout, isMeet = false) {
+  return !isMeet && (workout?.lifts || []).length > 0;
 }
 
 export function statsScreenStyle() {
@@ -1731,233 +1837,6 @@ function getWorkoutEffortText(effort, t) {
   return t.workoutEffortFelt
     ? t.workoutEffortFelt.replace('{effort}', label)
     : label;
-}
-
-function getCompletedFailedSetFeedbackMessage(set, t) {
-  if (!set?.failed && !set?.skipped) return null;
-
-  if (set.labelKey === 'opener') {
-    return t.completedFailedOpenerFeedback || 'Opener was missed. Use this as attempt-selection feedback for next time.';
-  }
-
-  if (set.labelKey === 'secondAttempt') {
-    return t.completedFailedSecondAttemptFeedback || 'Second attempt was missed. Review the jump from opener to second attempt.';
-  }
-
-  if (set.labelKey === 'thirdAttempt') {
-    return t.completedFailedThirdAttemptFeedback || 'Third attempt was missed. Useful limit data for future attempt planning.';
-  }
-
-  if (isTopSetLabel(set.labelKey)) {
-    return t.completedFailedTopSetFeedback || 'Top set was missed. Treat this as load and readiness feedback for today.';
-  }
-
-  return null;
-}
-
-function getCompletedWorkoutSuggestions(workout, t, benchPressVariant = 'standard') {
-  if (!workout) return [];
-
-  const suggestions = [];
-  const lifts = (workout.lifts || []).length
-    ? workout.lifts
-    : [{ lift: workout.lift, sets: workout.sets || [] }];
-
-  function isAttemptSet(set) {
-    return ['opener', 'secondAttempt', 'thirdAttempt'].includes(set?.labelKey);
-  }
-
-  function setSubject(liftName, set, index) {
-    const setLabel = set?.labelKey ? t[set.labelKey] : set?.label || `${t.set} ${index + 1}`;
-    return `${liftName} ${String(setLabel).toLowerCase()}`;
-  }
-
-  function pushTrainingSetSuggestion(subject, effort, attemptSet) {
-    if (effort === 'max') {
-      suggestions.push(
-        (attemptSet
-          ? t.attemptEffortReviewHigh || '{set} felt maximal. Your attempt plan may be too aggressive; review Meet Planner or your attempt choices.'
-          : t.setEffortReviewMaxesHigh || '{set} felt maximal. This is useful max/readiness feedback for future training.'
-        ).replace('{set}', subject)
-      );
-      return;
-    }
-
-    if (effort === 'easy') {
-      suggestions.push(
-        (attemptSet
-          ? t.attemptEffortReviewLow || '{set} felt easy. Your attempt plan may be conservative; review Meet Planner or your attempt choices.'
-          : t.setEffortReviewMaxesLow || '{set} felt easy. This may indicate your e1RM is ready to rise through training.'
-        ).replace('{set}', subject)
-      );
-      return;
-    }
-
-    if (effort === 'hard') {
-      suggestions.push(
-        (attemptSet
-          ? t.attemptEffortReviewHard || '{set} felt hard but manageable. That can be appropriate for attempt practice.'
-          : t.setEffortReviewHard || '{set} felt hard but manageable. Keep the plan, and pay attention to technique and recovery.'
-        ).replace('{set}', subject)
-      );
-      return;
-    }
-
-    if (effort === 'good') {
-      suggestions.push(
-        (attemptSet
-          ? t.attemptEffortReviewGood || '{set} looked appropriate. Keep the attempt plan.'
-          : t.setEffortReviewGood || '{set} feedback looks good. Keep following the plan.'
-        ).replace('{set}', subject)
-      );
-    }
-  }
-
-  function pushMeetSetSuggestion(subject, set) {
-    if (set.failed) {
-      if (set.labelKey === 'opener') {
-        suggestions.push((t.meetAttemptFailedOpener || '{set} was missed. The opener may have been too aggressive, or execution on meet day was off. Review opener selection for your next meet.').replace('{set}', subject));
-        return;
-      }
-
-      if (set.labelKey === 'secondAttempt') {
-        suggestions.push((t.meetAttemptFailedSecond || '{set} was missed. Review the jump from opener to second attempt for future meets.').replace('{set}', subject));
-        return;
-      }
-
-      if (set.labelKey === 'thirdAttempt') {
-        suggestions.push((t.meetAttemptFailedThird || '{set} was missed. This is useful limit data, but it may have been beyond today’s capacity.').replace('{set}', subject));
-        return;
-      }
-
-      suggestions.push((t.meetAttemptFailedGeneric || '{set} was missed. Review attempt selection and execution for the next meet.').replace('{set}', subject));
-      return;
-    }
-
-    if (set.effort === 'easy') {
-      suggestions.push((t.meetAttemptEasy || '{set} looked conservative. That can be a good opener or safe attempt choice.').replace('{set}', subject));
-      return;
-    }
-
-    if (set.effort === 'good') {
-      suggestions.push((t.meetAttemptGood || '{set} looked well chosen. Keep this as useful attempt-planning data.').replace('{set}', subject));
-      return;
-    }
-
-    if (set.effort === 'hard') {
-      suggestions.push((t.meetAttemptHard || '{set} was hard but successful. Good information for future meet attempt jumps.').replace('{set}', subject));
-      return;
-    }
-
-    if (set.effort === 'max') {
-      suggestions.push((t.meetAttemptMax || '{set} was near your limit. Be careful using this as a future jump reference.').replace('{set}', subject));
-    }
-  }
-
-  lifts.forEach(liftBlock => {
-    const liftName = workoutLiftBlockLabel(liftBlock, t, benchPressVariant);
-    const completedSets = (liftBlock.sets || [])
-      .map((set, index) => ({ set, index }))
-      .filter(({ set }) =>
-        workout.type === 'meet'
-          ? (set.done || set.failed) && isAttemptSet(set)
-          : (set.done || set.failed || set.skipped)
-      );
-
-    if (!completedSets.length) return;
-
-    if (workout.type === 'meet') {
-      completedSets
-        .filter(({ set }) => isAttemptSet(set))
-        .forEach(({ set, index }) => pushMeetSetSuggestion(setSubject(liftName, set, index), set));
-      return;
-    }
-
-    if (workout.type !== 'training') return;
-
-    const attemptSets = completedSets.filter(({ set }) =>
-      isAttemptSet(set) && (set.failed || set.skipped || set.effort)
-    );
-
-    if (attemptSets.length > 0) {
-      attemptSets.forEach(({ set, index }) => {
-        if (set.failed || set.skipped) {
-          const message = getCompletedFailedSetFeedbackMessage(set, t);
-          if (message) suggestions.push(`${setSubject(liftName, set, index)}: ${message}`);
-          return;
-        }
-
-        pushTrainingSetSuggestion(setSubject(liftName, set, index), set.effort, true);
-      });
-      return;
-    }
-
-    completedSets
-      .filter(({ set }) =>
-        (set.failed || set.skipped) &&
-        isTopSetLabel(set.labelKey)
-      )
-      .forEach(({ set, index }) => {
-        const message = getCompletedFailedSetFeedbackMessage(set, t);
-        if (message) suggestions.push(`${setSubject(liftName, set, index)}: ${message}`);
-      });
-
-    const effortSets = completedSets.filter(({ set }) => set.effort);
-
-    const priority =
-      effortSets.find(({ set }) => set.effort === 'max') ||
-      effortSets.find(({ set }) => set.effort === 'easy') ||
-      effortSets.find(({ set }) => set.effort === 'hard') ||
-      effortSets.find(({ set }) => set.effort === 'good');
-
-    if (!priority) return;
-
-    pushTrainingSetSuggestion(
-      setSubject(liftName, priority.set, priority.index),
-      priority.set.effort,
-      false
-    );
-  });
-
-  if (workout.type === 'meet') {
-    if (workout.workoutEffort === 'easy') {
-      suggestions.push(t.meetWorkoutEffortEasy || 'The whole meet felt easy. Your attempt selection may have been too conservative for today.');
-    }
-
-    if (workout.workoutEffort === 'good') {
-      suggestions.push(t.meetWorkoutEffortGood || 'The whole meet felt good. Solid execution; review whether there was room for a slightly bigger total.');
-    }
-
-    if (workout.workoutEffort === 'hard') {
-      suggestions.push(t.meetWorkoutEffortHard || 'The whole meet felt hard. That is normal for meet day; use the attempts as useful planning data.');
-    }
-
-    if (workout.workoutEffort === 'tooMuch') {
-      suggestions.push(t.meetWorkoutEffortTooMuch || 'The whole meet felt too much. That can happen on meet day; review attempt jumps, recovery and execution.');
-    }
-
-    return suggestions;
-  }
-
-  if (workout.type === 'training') {
-    if (workout.workoutEffort === 'easy') {
-      suggestions.push(t.workoutEffortRecoveryEasy || 'The whole workout felt easy. Keep the plan; if this happens often, review rest time or training frequency.');
-    }
-
-    if (workout.workoutEffort === 'good') {
-      suggestions.push(t.workoutEffortRecoveryGood || 'The whole workout felt good. This is the target: keep following the plan.');
-    }
-
-    if (workout.workoutEffort === 'hard') {
-      suggestions.push(t.workoutEffortRecoveryHard || 'The whole workout felt hard. That can be okay; keep the plan, but pay attention to recovery.');
-    }
-
-    if (workout.workoutEffort === 'tooMuch') {
-      suggestions.push(t.workoutEffortRecoveryTooMuch || 'The whole workout felt too much. Consider more rest between sets or more recovery between workouts.');
-    }
-  }
-
-  return suggestions;
 }
 
 function SetActionButton({ title, onClick, borderColor, disabled = false, children }) {
@@ -4133,6 +4012,8 @@ export function getSmartMeetdayBlockerDisplayLabels(blockers = [], t = {}, readi
       t.smartBlockerSecondAttemptReadiness || 'second-attempt readiness',
     'one-rm-readiness':
       t.smartBlockerOneRMReadiness || '100% real 1RM not reached',
+    'deadlift-taper-recovery':
+      t.smartBlockerDeadliftTaperRecovery || 'Deadlift taper recovery',
     'meet-plan-not-ready': t.smartBlockerMeetPlanNotReady || 'meet plan',
     'last-workout-hard': t.smartBlockerLastWorkoutHard || 'last workout hard',
     'after-recovery-intervention': t.smartBlockerAfterRecovery || 'after recovery',
@@ -4231,7 +4112,7 @@ function getKelaniWarmupJumpIssues(workout = {}) {
   });
 }
 
-function getSmartDecisionReasonDisplayText(summary, t = {}) {
+export function getSmartDecisionReasonDisplayText(summary, t = {}, workout = {}) {
   if (!summary?.reason) return null;
 
   const readiness = summary.readiness || {};
@@ -4261,10 +4142,20 @@ function getSmartDecisionReasonDisplayText(summary, t = {}) {
     }
 
     if (summary.dayType === SMART_DAY_TYPES.RECOVERY) {
+      if (workout?.smartIdealRoute?.stage === 'post-meet') {
+        return t.smartReasonIdealRoutePostMeetRecovery ||
+          'The meet is complete. This recovery day lets fatigue settle before you start the next cycle.';
+      }
+
       return t.smartReasonIdealRouteRecovery || 'The optimal route schedules recovery here.';
     }
 
     return t.smartReasonIdealRouteTraining || 'The optimal route continues with this training workout.';
+  }
+
+  if (summary.reason === SMART_DECISION_REASONS.DEADLIFT_TAPER_RECOVERY) {
+    return t.smartReasonDeadliftTaperRecovery ||
+      'A failed heavy Deadlift requires two final recovery days before the meet.';
   }
 
   if (summary.reason === SMART_DECISION_REASONS.FATIGUE_RECOVERY) {
@@ -4343,10 +4234,22 @@ function getSmartDecisionReasonDisplayText(summary, t = {}) {
   if (summary.reason === SMART_DECISION_REASONS.POST_MEET_RECOVERY) {
     const target = Number(readiness.postMeetRecoveryTarget) || 0;
     const completed = Number(readiness.postMeetRecoveryDaysCompleted) || 0;
-    return t.smartReasonPostMeetRecovery || `Post-meet recovery ${Math.min(completed + 1, target)}/${target} → rest day.`;
+    if (target > 0) {
+      return (t.smartReasonPostMeetRecovery ||
+        'Recovery after the meet {current}/{target}. Rest lets fatigue settle before the next cycle begins.')
+        .replace('{current}', Math.min(completed + 1, target))
+        .replace('{target}', target);
+    }
+
+    return t.smartReasonIdealRoutePostMeetRecovery ||
+      'The meet is complete. This recovery day lets fatigue settle before you start the next cycle.';
   }
 
   return null;
+}
+
+export function shouldShowSmartReasonWithStructuredDetails(dayType) {
+  return [SMART_DAY_TYPES.RECOVERY, SMART_DAY_TYPES.DELOAD].includes(dayType);
 }
 
 function getSmartTrainingSelectionDisplayText(workout, t = {}) {
@@ -4679,6 +4582,14 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
   const readiness = summary.readiness || {};
   const rows = [];
   const isMeetDay = workout?.type === 'meet' || summary.dayType === SMART_DAY_TYPES.MEET;
+  const isPostMeetRecovery = Boolean(
+    summary.reason === SMART_DECISION_REASONS.POST_MEET_RECOVERY ||
+    workout?.smartIdealRoute?.stage === 'post-meet' ||
+    (
+      Number(readiness.lastMeetWorkoutNumber) > 0 &&
+      readiness.inPostMeetRecovery
+    )
+  );
 
   if (isMeetDay) {
     return [
@@ -4694,6 +4605,43 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
       },
     ];
   }
+
+  if (isPostMeetRecovery) {
+    const recoveryTarget = Number(readiness.postMeetRecoveryTarget) ||
+      Number(workout?.smartIdealRoute?.postMeetRecoveryTarget) || 0;
+    const completedRecoveryDays = Number(readiness.postMeetRecoveryDaysCompleted) || 0;
+    const recoveryDay = recoveryTarget > 0
+      ? Math.min(completedRecoveryDays + 1, recoveryTarget)
+      : 0;
+    const recoveryPlanText = recoveryTarget > 0
+      ? (t.smartPostMeetRecoveryPlanText || 'Recovery day {current} of {target}.')
+        .replace('{current}', recoveryDay)
+        .replace('{target}', recoveryTarget)
+      : (t.smartPostMeetRecoveryPlanFallback || 'Take the recovery you need after the meet.');
+
+    return [
+      {
+        label: t.smartPostMeetStatus || 'Meet complete',
+        value: t.smartPostMeetStatusText ||
+          'The meet is done. Kelani is scheduling recovery.',
+      },
+      {
+        label: t.smartPostMeetRecoveryPlan || 'Recovery plan',
+        value: recoveryPlanText,
+      },
+      {
+        label: t.smartPostMeetRecoveryReason || 'Why this recovery',
+        value: t.smartPostMeetRecoveryAfterMeet ||
+          'Recover from the meet before starting the next cycle.',
+      },
+      {
+        label: t.smartPostMeetNextStep || 'Next step',
+        value: t.smartPostMeetNextStepText ||
+          'After these recovery days, this cycle ends and you start a new one.',
+      },
+    ];
+  }
+
   const isFatigueRecovery =
     summary.dayType === SMART_DAY_TYPES.RECOVERY &&
     summary.reason === SMART_DECISION_REASONS.FATIGUE_RECOVERY;
@@ -4771,17 +4719,17 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
     ) {
       rows.push(
         {
-          label: t.smartE1RM90Readiness || '90% e1RM',
+          label: t.smartE1RM90Readiness || 'Opener: 90% of real 1RM',
           value: `${Number(readiness.meetPlanOpenerReadyCount) || 0}/3`,
           kind: 'metric',
         },
         {
-          label: t.smartE1RM95Readiness || '95% e1RM',
+          label: t.smartE1RM95Readiness || 'Second attempt: 95% of real 1RM',
           value: `${Number(readiness.meetPlanSecondAttemptReadyCount) || 0}/3`,
           kind: 'metric',
         },
         {
-          label: t.smartOneRMReadiness || '100% real 1RM',
+          label: t.smartOneRMReadiness || 'Meet minimum: 100% of real 1RM',
           value: `${Number(readiness.meetPlanThirdAttemptPotentialCount) || 0}/3`,
           kind: 'metric',
         }
@@ -4924,7 +4872,7 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
   return rows;
 }
 
-function SmartDayTypeInline({
+export function SmartDayTypeInline({
   workout,
   t,
   weightUnit = WEIGHT_UNITS.KG,
@@ -4944,7 +4892,13 @@ function SmartDayTypeInline({
       .replace(/(^|[.!?]\s+)([a-z])/g, (_, prefix, letter) => `${prefix}${letter.toUpperCase()}`);
   }
 
-  const reasonText = formatSmartInfoText(getSmartDecisionReasonDisplayText(workout?.smartDecisionSummary, t));
+  const reasonText = formatSmartInfoText(
+    getSmartDecisionReasonDisplayText(workout?.smartDecisionSummary, t, workout)
+  );
+  const hasDedicatedPostMeetRecoveryExplanation = Boolean(
+    workout?.smartDecisionSummary?.reason === SMART_DECISION_REASONS.POST_MEET_RECOVERY ||
+    workout?.smartIdealRoute?.stage === 'post-meet'
+  );
   const selectionText = formatSmartInfoText(getSmartTrainingSelectionDisplayText(workout, t));
   const meetDayProjectedTotal = workout?.type === 'meet'
     ? (workout.lifts || []).reduce(
@@ -4961,6 +4915,9 @@ function SmartDayTypeInline({
     }] : []),
   ];
   const usesStructuredSmartDetails = detailRows.length > 0;
+  const showReasonWithStructuredDetails = shouldShowSmartReasonWithStructuredDetails(
+    workout?.smartDayType || workout?.smartDecisionSummary?.dayType
+  );
 
   const limiterMatch = selectionText?.match(/^e1RM limiter:\s*(.+)$/i);
   const infoRows = [
@@ -4970,7 +4927,9 @@ function SmartDayTypeInline({
       emphasis: true,
     },
     ...detailRows,
-    !usesStructuredSmartDetails && reasonText ? {
+    reasonText &&
+    !hasDedicatedPostMeetRecoveryExplanation &&
+    (!usesStructuredSmartDetails || showReasonWithStructuredDetails) ? {
       label: t.smartReason || 'Reason',
       value: reasonText,
     } : null,
@@ -5063,12 +5022,15 @@ function SmartDayTypeInline({
         <button
           type="button"
           aria-label={`Smart: ${label}. ${t.smartWorkoutInfo || 'Open workout information'}`}
+          aria-expanded={showSmartInfo}
           onClick={() => {
             setSmartCopyStatus(null);
             setShowSmartInfo(true);
           }}
           style={{
             appearance: 'none',
+            position: 'relative',
+            zIndex: 2,
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -5084,6 +5046,7 @@ function SmartDayTypeInline({
             fontWeight: 900,
             lineHeight: 1.2,
             cursor: 'pointer',
+            touchAction: 'manipulation',
             textDecoration: 'none',
           }}
         >
@@ -6589,35 +6552,83 @@ export function buildSuggestedMeetPlan(bestStatsByLift = {}) {
 // just re-homed into a modal) - the numbers themselves come from
 // buildSuggestedMeetPlan so this and the Dashboard summary can never drift
 // apart.
-export function MeetPlanContent({ meetPlan, meetTotals, t, weightUnit = WEIGHT_UNITS.KG }) {
+export function MeetPlanContent({
+  meetPlan,
+  meetTotals,
+  t,
+  weightUnit = WEIGHT_UNITS.KG,
+  dashboardLayout = false,
+}) {
   const statsWeightUnit = normalizeWeightUnit(weightUnit);
 
   return (
     <>
-      <p style={{ margin: '0 0 14px', color: THEME.muted, fontSize: 14, lineHeight: 1.4, textAlign: 'center' }}>
+      <p style={{
+        margin: dashboardLayout ? 0 : '0 0 14px',
+        color: THEME.muted,
+        fontSize: dashboardLayout ? 'clamp(14px, 3.5vw, 16px)' : 14,
+        lineHeight: 1.4,
+        textAlign: 'center',
+      }}>
         {t.basedOnBest1RM}
       </p>
 
-      <div style={{ textAlign: 'center', marginBottom: 16 }}>
-        <div style={{ color: THEME.meet, fontSize: 12, fontWeight: 800, marginBottom: 4 }}>
+      <div style={{ textAlign: 'center', marginBottom: dashboardLayout ? 0 : 16 }}>
+        <div style={{
+          color: THEME.meet,
+          fontSize: dashboardLayout ? 'clamp(13px, 3.2vw, 15px)' : 12,
+          fontWeight: 800,
+          marginBottom: 4,
+        }}>
           {t.projectedTotal}
         </div>
-        <div style={{ color: THEME.text, fontSize: 24, fontWeight: 900, lineHeight: 1 }}>
+        <div style={{
+          color: THEME.text,
+          fontSize: dashboardLayout ? 'clamp(28px, 7vw, 36px)' : 24,
+          fontWeight: 900,
+          lineHeight: 1,
+        }}>
           {meetTotals.third ? formatWeightFromKg(meetTotals.third, statsWeightUnit) : '—'}
         </div>
       </div>
 
-      <div style={{ display: 'grid', gap: 10 }}>
+      <div style={{
+        minHeight: 0,
+        display: 'grid',
+        gridTemplateRows: dashboardLayout
+          ? 'repeat(3, minmax(min-content, 1fr))'
+          : undefined,
+        gap: dashboardLayout ? 'clamp(6px, 1dvh, 10px)' : 10,
+      }}>
         {meetPlan.map(row => {
           const color = getLiftThemeColor(row.lift);
 
           return (
-            <div key={row.lift} style={{ padding: '8px 0 6px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 9 }}>
-                <strong style={{ color, fontSize: 18 }}>
+            <div key={row.lift} style={{
+              minHeight: 0,
+              display: dashboardLayout ? 'grid' : undefined,
+              alignContent: dashboardLayout ? 'center' : undefined,
+              padding: dashboardLayout ? 'clamp(4px, 0.7dvh, 8px) 0' : '8px 0 6px',
+            }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 12,
+                marginBottom: dashboardLayout ? 'clamp(6px, 0.9dvh, 9px)' : 9,
+              }}>
+                <strong style={{
+                  color,
+                  fontSize: dashboardLayout ? 'clamp(19px, 4.8vw, 23px)' : 18,
+                }}>
                   {liftLabel(row.lift, t)}
                 </strong>
-                <span style={{ color: THEME.muted, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                <span style={{
+                  color: THEME.muted,
+                  fontSize: dashboardLayout ? 'clamp(13px, 3.2vw, 15px)' : 13,
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                }}>
                   {t.oneRM} {row.oneRM ? formatWeightFromKg(row.oneRM, statsWeightUnit) : '—'}
                 </span>
               </div>
@@ -6629,13 +6640,38 @@ export function MeetPlanContent({ meetPlan, meetTotals, t, weightUnit = WEIGHT_U
                   ['third', t.thirdAttempt, '102.5%', row.third],
                 ].map(([key, label, pct, value]) => (
                   <div key={key} style={{ padding: '1px 3px', textAlign: 'center' }}>
-                    <div style={{ color: THEME.text, fontSize: 12, fontWeight: 800, lineHeight: 1.15, minHeight: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{
+                      color: THEME.text,
+                      fontSize: dashboardLayout ? 'clamp(12px, 3.1vw, 14px)' : 12,
+                      fontWeight: 800,
+                      lineHeight: 1.15,
+                      minHeight: dashboardLayout ? 'clamp(18px, 2.6dvh, 22px)' : 18,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
                       {label}
                     </div>
-                    <div style={{ color: THEME.muted, fontSize: 11, fontWeight: 700, margin: '2px 0 4px' }}>
+                    <div style={{
+                      color: THEME.muted,
+                      fontSize: dashboardLayout ? 12 : 11,
+                      fontWeight: 700,
+                      margin: '2px 0 4px',
+                    }}>
                       {pct}
                     </div>
-                    <div style={{ width: '100%', boxSizing: 'border-box', padding: '5px 4px', borderRadius: 6, border: `1px solid ${color}`, background: `${color}12`, color, textAlign: 'center', fontSize: 15, fontWeight: 800 }}>
+                    <div style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: dashboardLayout ? 'clamp(6px, 0.9dvh, 9px) 4px' : '5px 4px',
+                      borderRadius: 6,
+                      border: `1px solid ${color}`,
+                      background: `${color}12`,
+                      color,
+                      textAlign: 'center',
+                      fontSize: dashboardLayout ? 'clamp(17px, 4.2vw, 20px)' : 15,
+                      fontWeight: 800,
+                    }}>
                       {value ? formatWeightFromKg(value, statsWeightUnit) : '—'}
                     </div>
                   </div>
@@ -6646,7 +6682,14 @@ export function MeetPlanContent({ meetPlan, meetTotals, t, weightUnit = WEIGHT_U
         })}
       </div>
 
-      <div style={{ marginTop: 6, marginBottom: 18, padding: '8px 0 0', display: 'grid', gap: 4, fontSize: 14 }}>
+      <div style={{
+        marginTop: dashboardLayout ? 0 : 6,
+        marginBottom: dashboardLayout ? 0 : 18,
+        padding: dashboardLayout ? 'clamp(4px, 0.7dvh, 8px) 0 0' : '8px 0 0',
+        display: 'grid',
+        gap: dashboardLayout ? 'clamp(4px, 0.6dvh, 6px)' : 4,
+        fontSize: dashboardLayout ? 'clamp(14px, 3.5vw, 16px)' : 14,
+      }}>
         {[
           [t.totalAfterOpener, meetTotals.opener],
           [t.totalAfterSecond, meetTotals.second],
@@ -8394,7 +8437,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
   }
 
   return (
-    <div style={{ ...balancedVerticalScreenStyle(), display: 'flex', flexDirection: 'column', maxWidth: 500, margin: '0 auto', padding: '10px 14px 16px', fontFamily: 'sans-serif' }}>
+    <div style={programScreenStyle()}>
       <AppHeader
         t={t}
         title={
@@ -8451,6 +8494,8 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
             )}
           </>
         )}
+        titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
+        subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
       />
 
       {!smartModel && showProgramInfo && (
@@ -12655,6 +12700,7 @@ const dashboardE1RMMetrics = buildDashboardE1RMMetrics(
   best1RMs,
   bestE1RMs
 );
+const dashboardRecentPrEvents = buildDashboardRecentPrEvents(history);
 
 const latestBodyDataEntry = [...bodyWeights].slice(-1)[0];
 const latestBodyWeightEntry = [...bodyWeights].filter(entry => entry.bodyWeight).slice(-1)[0];
@@ -12779,12 +12825,29 @@ const completedSummaryForRender =
     isCompletedWorkoutNewCycleBoundary(completedWorkout)
   );
 
-  const completedWorkoutIsMeetCycleEnd = Boolean(
-    completedWorkoutCanStartNewCycle &&
-    (
-      completedWorkout?.type === 'meet' ||
-      completedWorkout?.smartDayType === (typeof SMART_DAY_TYPES !== 'undefined' ? SMART_DAY_TYPES.MEET : 'meet')
-    )
+  const completedWorkoutIsMeet = Boolean(
+    completedWorkout?.type === 'meet' ||
+    completedWorkout?.smartDayType === (typeof SMART_DAY_TYPES !== 'undefined' ? SMART_DAY_TYPES.MEET : 'meet')
+  );
+  const completedMeetAchievedLiftResults = completedWorkoutIsMeet
+    ? (completedWorkout?.lifts || []).map(liftBlock => {
+        const successfulSets = (liftBlock.sets || []).filter(set =>
+          set.done && !set.failed && !set.skipped
+        );
+        const bestSet = successfulSets.reduce((best, set) => {
+          if (!best) return set;
+          return Number(set.weight) > Number(best.weight) ? set : best;
+        }, null);
+
+        return {
+          lift: liftBlock.lift,
+          weight: Number(bestSet?.weight) || 0,
+        };
+      })
+    : [];
+  const completedMeetAchievedTotal = completedMeetAchievedLiftResults.reduce(
+    (total, result) => total + result.weight,
+    0
   );
 
 
@@ -12972,6 +13035,9 @@ const latestBodyDataRows = [
 
 const dashboardCurrentWorkout = workouts[currentIndex] || null;
 const dashboardMeetState = getDashboardMeetState(dashboardCurrentWorkout);
+const dashboardUsesExpandedPostMeetLayout = Boolean(
+  !dashboardMeetState.isMeetDay && dashboardMeetState.hideRouteToMeet
+);
 const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
   Squat: { oneRM: best1RMs.Squat },
   Bench: { oneRM: best1RMs.Bench },
@@ -13047,11 +13113,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
     style={{
       ...(dashboardMeetState.isMeetDay
         ? meetDayDashboardScreenStyle()
-        : {
-          ...responsiveContentScreenStyle(),
-          alignContent: 'start',
-          rowGap: 'clamp(14px, 2.2dvh, 24px)',
-        }),
+        : regularDashboardScreenStyle()),
     }}
   >
     <AppHeader
@@ -13086,6 +13148,11 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       />
     )}
 
+    {!dashboardMeetState.isMeetDay && (
+    <div style={regularDashboardContentStyle({
+      spreadContent: dashboardUsesExpandedPostMeetLayout,
+    })}>
+
     {!dashboardMeetState.isMeetDay && workouts[currentIndex] && (() => {
       const nextWorkout = workouts[currentIndex];
       const isNextMeetDay = nextWorkout.type === 'meet';
@@ -13109,7 +13176,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         >
           <div style={{
             color: isNextMeetDay ? THEME.meet : THEME.text,
-            fontSize: 'clamp(24px, 6vw, 30px)',
+            fontSize: dashboardUsesExpandedPostMeetLayout
+              ? 'clamp(28px, 7vw, 34px)'
+              : 'clamp(24px, 6vw, 30px)',
             fontWeight: 900,
             marginBottom: planLines.length ? 'clamp(8px, 1.2dvh, 12px)' : 0
           }}>
@@ -13144,7 +13213,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           {planLines.length > 0 && (
             <div style={{
               color: THEME.muted,
-              fontSize: 'clamp(14px, 3.4vw, 17px)',
+              fontSize: dashboardUsesExpandedPostMeetLayout
+                ? 'clamp(16px, 3.8vw, 19px)'
+                : 'clamp(14px, 3.4vw, 17px)',
               fontWeight: 800,
               lineHeight: 1.45
             }}>
@@ -13263,8 +13334,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             color: THEME.red,
             background: 'rgba(255, 92, 69, 0.12)',
             ...dashboardE1RMMetrics.lifts.Squat,
-            prBaseline: dashboardE1RMMetrics.lifts.Squat.oneRM,
-            achievedE1RM: achievedMaxesFromHistory.Squat.e1rm,
+            recentPr: dashboardRecentPrEvents.lifts.Squat,
             statsTab: 'lifts',
           },
           {
@@ -13273,8 +13343,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             color: THEME.primary,
             background: 'rgba(255, 138, 61, 0.12)',
             ...dashboardE1RMMetrics.lifts.Bench,
-            prBaseline: dashboardE1RMMetrics.lifts.Bench.oneRM,
-            achievedE1RM: achievedMaxesFromHistory.Bench.e1rm,
+            recentPr: dashboardRecentPrEvents.lifts.Bench,
             statsTab: 'lifts',
           },
           {
@@ -13283,8 +13352,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             color: THEME.yellow,
             background: 'rgba(255, 209, 102, 0.12)',
             ...dashboardE1RMMetrics.lifts.Deadlift,
-            prBaseline: dashboardE1RMMetrics.lifts.Deadlift.oneRM,
-            achievedE1RM: achievedMaxesFromHistory.Deadlift.e1rm,
+            recentPr: dashboardRecentPrEvents.lifts.Deadlift,
             statsTab: 'lifts',
           },
           {
@@ -13293,7 +13361,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             color: THEME.meet,
             background: `${THEME.meet}20`,
             ...dashboardE1RMMetrics.total,
-            prBaseline: dashboardE1RMMetrics.total.oneRM,
+            recentPr: dashboardRecentPrEvents.total,
             isTotal: true,
             statsTab: 'totaal',
           },
@@ -13328,7 +13396,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                 >
                   <div style={{
                     color: card.color,
-                    fontSize: 'clamp(19px, 4.6vw, 23px)',
+                    fontSize: dashboardUsesExpandedPostMeetLayout
+                      ? 'clamp(21px, 5vw, 25px)'
+                      : 'clamp(19px, 4.6vw, 23px)',
                     fontWeight: 900,
                     marginBottom: 'clamp(7px, 1dvh, 10px)',
                     lineHeight: 1.1
@@ -13342,38 +13412,74 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                     gap: 'clamp(7px, 0.9dvh, 10px) 10px',
                     alignItems: 'baseline'
                   }}>
-                    <span style={{ color: THEME.muted, fontSize: 'clamp(13px, 3.2vw, 16px)', fontWeight: 900 }}>
+                    <span style={{
+                      color: THEME.muted,
+                      fontSize: dashboardUsesExpandedPostMeetLayout
+                        ? 'clamp(14px, 3.4vw, 17px)'
+                        : 'clamp(13px, 3.2vw, 16px)',
+                      fontWeight: 900
+                    }}>
                       {t.oneRM}
                     </span>
-                    <strong style={{ color: card.color, fontSize: 'clamp(17px, 4.2vw, 21px)', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {value(card.oneRM)}
-                    </strong>
+                    <div style={{ textAlign: 'right', minWidth: 0 }}>
+                      <strong style={{
+                        display: 'block',
+                        color: card.color,
+                        fontSize: dashboardUsesExpandedPostMeetLayout
+                          ? 'clamp(19px, 4.6vw, 23px)'
+                          : 'clamp(17px, 4.2vw, 21px)',
+                        fontWeight: 900,
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {value(card.oneRM)}
+                      </strong>
+                      {card.recentPr?.oneRMGain > 0 && (
+                        <div style={{
+                          color: THEME.green,
+                          fontSize: 'clamp(11px, 2.7vw, 14px)',
+                          fontWeight: 900,
+                          marginTop: 2,
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {t.new1RMPR || 'New 1RM PR'} +{formatWeightFromKg(card.recentPr.oneRMGain, weightUnit)}
+                        </div>
+                      )}
+                    </div>
 
-                    <span style={{ color: THEME.muted, fontSize: 'clamp(13px, 3.2vw, 16px)', fontWeight: 900 }}>
+                    <span style={{
+                      color: THEME.muted,
+                      fontSize: dashboardUsesExpandedPostMeetLayout
+                        ? 'clamp(14px, 3.4vw, 17px)'
+                        : 'clamp(13px, 3.2vw, 16px)',
+                      fontWeight: 900
+                    }}>
                       {t.e1RM || 'e1RM'}
                     </span>
-                    <strong style={{ color: card.color, fontSize: 'clamp(17px, 4.2vw, 21px)', fontWeight: 900, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {value(card.e1RM)}
-                    </strong>
-                  </div>
-
-                  {(card.isTotal
-                    ? card.prGain > 0
-                    : isDashboardE1RMPR({
-                      achievedE1RM: card.achievedE1RM,
-                      displayedE1RM: card.e1RM,
-                      oneRM: card.prBaseline,
-                    })) && (
-                    <div style={{
-                      color: THEME.green,
-                      fontSize: 'clamp(11px, 2.7vw, 14px)',
-                      fontWeight: 900,
-                      textAlign: 'right',
-                      marginTop: 4
-                    }}>
-                      {t.newPR || 'New PR'} +{formatWeightFromKg(card.prGain, weightUnit)}
+                    <div style={{ textAlign: 'right', minWidth: 0 }}>
+                      <strong style={{
+                        display: 'block',
+                        color: card.color,
+                        fontSize: dashboardUsesExpandedPostMeetLayout
+                          ? 'clamp(19px, 4.6vw, 23px)'
+                          : 'clamp(17px, 4.2vw, 21px)',
+                        fontWeight: 900,
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {value(card.e1RM)}
+                      </strong>
+                      {!card.isTotal && card.recentPr?.e1RMGain > 0 && (
+                        <div style={{
+                          color: THEME.green,
+                          fontSize: 'clamp(11px, 2.7vw, 14px)',
+                          fontWeight: 900,
+                          marginTop: 2,
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {t.newE1RMPR || 'New e1RM PR'} +{formatWeightFromKg(card.recentPr.e1RMGain, weightUnit)}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -13417,7 +13523,13 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   cursor: 'pointer',
                 }}
               >
-                <span style={{ color: THEME.text, fontWeight: 800, fontSize: 'clamp(16px, 3.8vw, 19px)' }}>
+                <span style={{
+                  color: THEME.text,
+                  fontWeight: 800,
+                  fontSize: dashboardUsesExpandedPostMeetLayout
+                    ? 'clamp(18px, 4.2vw, 21px)'
+                    : 'clamp(16px, 3.8vw, 19px)'
+                }}>
                   {row.label}
                 </span>
 
@@ -13425,7 +13537,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   textAlign: 'right',
                   whiteSpace: 'nowrap',
                   minWidth: 70,
-                  fontSize: 'clamp(16px, 3.8vw, 19px)',
+                  fontSize: dashboardUsesExpandedPostMeetLayout
+                    ? 'clamp(18px, 4.2vw, 21px)'
+                    : 'clamp(16px, 3.8vw, 19px)',
                   color: row.status?.color || THEME.primary
                 }}>
                   {row.value}
@@ -13446,6 +13560,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         </div>
       );
     })()}
+    </div>
+    )}
   </div>
 )}
 
@@ -13578,321 +13694,90 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
 </div>
       )}
     {screen === 'completed' && (
-  <div style={{
-    maxWidth: 500,
-    margin: '0 auto',
-    padding: '20px 24px 16px',
-    boxSizing: 'border-box',
-    height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
-    background: THEME.bg,
-    color: THEME.text,
-    fontFamily: 'sans-serif',
-    overflowX: 'hidden',
-    overflowY: 'auto'
-  }}>
-    {completedWorkoutIsMeetCycleEnd ? (
-      <div style={{
-        background: 'transparent',
-        border: 'none',
-        borderRadius: 12,
-        padding: 24,
-        textAlign: 'center'
-      }}>
-        <div style={{ fontSize: 40, marginBottom: 10 }}>🎉</div>
-
-        <h2 style={{ margin: '0 0 8px', color: THEME.brown }}>
-          {t.workoutAndCycleCompleted}
-        </h2>
-
-        <p style={{ color: THEME.muted, margin: '0 0 16px' }}>
-          {t.workoutAndCycleSaved}
-        </p>
-
-        {getCompletedWorkoutSuggestions(completedWorkout, t, 'standard').length > 0 && (
-          <div style={{
-            margin: '0 auto 16px',
-            padding: '12px 14px',
-            borderRadius: 10,
-            border: 'none',
-            background: THEME.bg,
-            textAlign: 'left'
-          }}>
-            <div style={{
-              color: THEME.primary,
-              fontSize: 13,
-              fontWeight: 900,
-              marginBottom: 7
-            }}>
-              {t.kelaniSuggestion || 'Kelani suggestion'}
-            </div>
-
-            <div style={{ display: 'grid', gap: 7 }}>
-              {getCompletedWorkoutSuggestions(completedWorkout, t, 'standard').map((suggestion, index) => (
-                <div
-                  key={`meet-suggestion-${index}`}
-                  style={{
-                    color: THEME.text,
-                    fontSize: 14,
-                    fontWeight: 800,
-                    lineHeight: 1.4
-                  }}
-                >
-                  {suggestion}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {(() => {
-          const achievedLiftResults = (completedWorkout?.lifts || []).map(liftBlock => {
-            const successfulSets = (liftBlock.sets || []).filter(set =>
-              set.done && !set.failed && !set.skipped
-            );
-
-            const bestSet = successfulSets.reduce((best, set) => {
-              if (!best) return set;
-              return Number(set.weight) > Number(best.weight) ? set : best;
-            }, null);
-
-            return {
-              lift: liftBlock.lift,
-              weight: Number(bestSet?.weight) || 0,
-            };
-          });
-
-          const achievedTotal = achievedLiftResults.reduce(
-            (total, result) => total + result.weight,
-            0
-          );
-
-          return (
-            <div style={{
-              background: 'transparent',
-              border: 'none',
-              color: THEME.text,
-              borderRadius: 10,
-              padding: 16,
-              marginBottom: 16,
-              textAlign: 'center'
-            }}>
-              <div style={{
-                color: THEME.muted,
-                fontSize: 13,
-                fontWeight: 800,
-                marginBottom: 4
-              }}>
-                {t.achievedTotal || t.total}
-              </div>
-
-              <div style={{
-                color: THEME.primary,
-                fontSize: 28,
-                fontWeight: 900,
-                lineHeight: 1,
-                marginBottom: 12
-              }}>
-                {achievedTotal ? formatWeightFromKg(achievedTotal, weightUnit) : '—'}
-              </div>
-
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr',
-                gap: 8
-              }}>
-                {achievedLiftResults.map(result => (
-                  <div
-                    key={`achieved-${result.lift}`}
-                    style={{
-                      padding: '8px 6px',
-                      borderRadius: 8,
-                      border: 'none',
-                      background: 'transparent'
-                    }}
-                  >
-                    <div style={{
-                      color: THEME.muted,
-                      fontSize: 11,
-                      fontWeight: 800,
-                      marginBottom: 3
-                    }}>
-                      {liftLabel(result.lift, t)}
-                    </div>
-                    <div style={{
-                      color: '#ffffff',
-                      fontSize: 13,
-                      fontWeight: 900
-                    }}>
-                      {result.weight ? formatWeightFromKg(result.weight, weightUnit) : '—'}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
-
-        <div style={{
-          background: 'transparent',
-          border: 'none',
-          color: THEME.text,
-          borderRadius: 8,
-          padding: 16,
-          marginBottom: 16,
-          textAlign: 'left'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.lift}</span>
-            <strong>{completedWorkout?.lift || 'SBD'}</strong>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.workout}</span>
-            <strong>{completedWorkout?.number || '—'}</strong>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
-            <span style={{ color: THEME.text, fontWeight: 700 }}>{t.cycle}</span>
-            <strong>{currentCycle}</strong>
-          </div>
-
-          <div style={{
-            fontSize: 16,
-            fontWeight: 900,
-            color: THEME.primary,
-            marginBottom: 10,
-            textAlign: 'center'
-          }}>
-            {t.meetAttemptsCompleted}
-          </div>
-
-          {(completedWorkout?.lifts || []).map(liftBlock => (
-            <div key={liftBlock.lift} style={{ marginBottom: 14 }}>
-              <div style={{
-                color: THEME.primary,
-                fontWeight: 900,
-                marginBottom: 6
-              }}>
-                {workoutLiftBlockLabel(liftBlock, t, benchPressVariant)}
-              </div>
-
-              {(liftBlock.sets || []).map((set, i) => {
-                const setLabel = set.labelKey ? t[set.labelKey] : `${t.set} ${i + 1}`;
-                const isInvalidSet = set.failed || set.skipped || !set.done;
-
-                return (
-                  <div
-                    key={`${liftBlock.lift}-${i}`}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                      padding: `8px ${WORKOUT_WORK_ROW_PADDING_X}px`,
-                      color: '#ffffff',
-                      opacity: isInvalidSet ? 0.8 : 1,
-                      borderLeft: isInvalidSet ? '3px solid #e74c3c' : '3px solid transparent'
-                    }}
-                  >
-                    <span style={{ color: '#ffffff', fontWeight: 700 }}>
-                      {isInvalidSet ? '✕ ' : '✓ '}
-                      {setLabel}
-                    </span>
-
-                    <strong style={{ color: isInvalidSet ? '#e74c3c' : '#ffffff', whiteSpace: 'nowrap' }}>
-                      {formatWeightFromKg(set.weight, weightUnit)}
-                    </strong>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-
-        <button
-          onClick={handleStartNewCycle}
-          style={{
-            width: '100%',
-            padding: 14,
-            fontSize: 16,
-            fontWeight: 800,
-            background: THEME.primary,
-            color: '#ffffff',
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 8,
-            cursor: 'pointer',
-            marginBottom: 10
-          }}
-        >
-          {t.startNewCycle} 🚀
-        </button>
-
-        <button
-          onClick={() => setScreen('stats')}
-          style={{
-            width: '100%',
-            padding: 14,
-            fontSize: 16,
-            fontWeight: 600,
-            background: 'transparent',
-            color: '#ffffff',
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 8,
-            cursor: 'pointer',
-            marginBottom: 10
-          }}
-        >
-          {t.viewProgress}
-        </button>
-
-        <button
-          onClick={() => {
-            const targetIndex = Number.isInteger(completedWorkoutIndex)
-              ? completedWorkoutIndex
-              : Math.max(0, (completedWorkout?.number || 1) - 1);
-
-            setSelectedIndex(targetIndex);
-            setScreen('current');
-          }}
-          style={{
-            width: '100%',
-            padding: 14,
-            fontSize: 16,
-            fontWeight: 600,
-            marginBottom: 0,
-            background: 'transparent',
-            color: '#ffffff',
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 8,
-            cursor: 'pointer'
-          }}
-        >
-          {t.backToWorkout}
-        </button>
-      </div>
-    ) : (
+  <div style={completedWorkoutScreenStyle()}>
       <div style={completedWorkout?.type === 'rest'
         ? restDayCompletedScreenStyle()
-        : { background: 'transparent', border: 'none', borderRadius: 12, padding: '8px 24px 12px', textAlign: 'center' }}>
+        : { background: 'transparent', border: 'none', borderRadius: 12, padding: '8px 0 12px', textAlign: 'center' }}>
         <div style={completedWorkout?.type === 'rest'
           ? restDayCompletedContentStyle()
           : { display: 'contents' }}>
         <div style={{ fontSize: 40, marginBottom: 6 }}>🎉</div>
 
         <h2 style={{ margin: '0 0 6px', color: THEME.brown }}>
-          {completedWorkoutCanStartNewCycle ? (t.cycleCompleted || 'Cycle complete')
+          {completedWorkoutIsMeet ? t.meetCompleted
+            : completedWorkoutCanStartNewCycle ? (t.cycleCompleted || 'Cycle complete')
             : completedWorkout?.type === 'rest'
               ? 'Rest day complete'
               : t.workoutCompleted}
         </h2>
 
-        <p style={{ color: THEME.muted, margin: '0 0 8px' }}>
-          {completedWorkoutCanStartNewCycle ? (t.workoutAndCycleSaved || 'Cycle saved. Start the next cycle when ready.')
+        <p style={{
+          color: THEME.muted,
+          lineHeight: 1.3,
+          margin: '0 0 8px',
+          padding: '0 2px',
+        }}>
+          {completedWorkoutIsMeet ? t.meetCompletedSaved
+            : completedWorkoutCanStartNewCycle ? (t.workoutAndCycleSaved || 'Cycle saved. Start the next cycle when ready.')
             : completedWorkout?.type === 'rest'
               ? 'Rest day saved. You can continue to the next workout.'
               : t.goodJobSaved}
         </p>
 
-        {(completedWorkout?.lifts || []).length > 0 && (() => {
+        {completedWorkoutIsMeet && (
+          <div style={{
+            background: 'transparent',
+            border: 'none',
+            color: THEME.text,
+            borderRadius: 8,
+            padding: '6px 4px',
+            marginBottom: 6,
+            textAlign: 'center'
+          }}>
+            <div style={{
+              color: THEME.muted,
+              fontSize: 13,
+              fontWeight: 800,
+              marginBottom: 3
+            }}>
+              {t.achievedTotal || t.total}
+            </div>
+            <div style={{
+              color: THEME.primary,
+              fontSize: 28,
+              fontWeight: 900,
+              lineHeight: 1,
+              marginBottom: 8
+            }}>
+              {completedMeetAchievedTotal
+                ? formatWeightFromKg(completedMeetAchievedTotal, weightUnit)
+                : '—'}
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+              gap: 6
+            }}>
+              {completedMeetAchievedLiftResults.map(result => (
+                <div key={`standard-achieved-${result.lift}`} style={{ padding: '3px 2px' }}>
+                  <div style={{
+                    color: THEME.muted,
+                    fontSize: 13,
+                    fontWeight: 800,
+                    marginBottom: 3
+                  }}>
+                    {liftLabel(result.lift, t)}
+                  </div>
+                  <div style={meetCompletedAchievedWeightStyle()}>
+                    {result.weight ? formatWeightFromKg(result.weight, weightUnit) : '—'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {shouldShowCompletedWorkoutMetadata(completedWorkout, completedWorkoutIsMeet) && (() => {
           const liftNames = (completedWorkout.lifts || [])
             .map(liftBlock => workoutLiftBlockLabel(liftBlock, t, benchPressVariant))
             .filter(Boolean)
@@ -13975,44 +13860,6 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           </div>
         )}
 
-        {!isSmartTrainingModel(trainingModel) && getCompletedWorkoutSuggestions(completedWorkout, t, benchPressVariant).length > 0 && (
-          <div style={{
-            margin: '0 auto 16px',
-            padding: '12px 14px',
-            borderRadius: 10,
-            border: 'none',
-            background: THEME.bg,
-            textAlign: 'left'
-          }}>
-            <div style={{
-              color: THEME.primary,
-              fontSize: 13,
-              fontWeight: 900,
-              marginBottom: 7
-            }}>
-              {t.kelaniSuggestion || 'Kelani suggestion'}
-            </div>
-
-            <div style={{
-              display: 'grid',
-              gap: 7
-            }}>
-              {getCompletedWorkoutSuggestions(completedWorkout, t, benchPressVariant).map((suggestion, index) => (
-                <div
-                  key={`completed-suggestion-${index}`}
-                  style={{
-                    color: THEME.text,
-                    fontSize: 14,
-                    fontWeight: 800,
-                    lineHeight: 1.4
-                  }}
-                >
-                  {suggestion}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
         <div style={{
           display: (
             completedWorkout?.type === 'meet' ||
@@ -14096,7 +13943,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             border: 'none',
             color: THEME.text,
             borderRadius: 8,
-            padding: '4px 12px 8px',
+            padding: '4px 4px 8px',
             marginBottom: 8,
             textAlign: 'left'
           }}>
@@ -14127,6 +13974,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   (liftBlock.sets || []).forEach((set, i) => {
                     const setLabel = set.labelKey ? t[set.labelKey] : set.label || `${t.set} ${i + 1}`;
                     const isInvalidSet = set.failed || set.skipped || !set.done;
+                    const isSuccessfulThirdAttempt = completedWorkoutIsMeet && isCompletedSuccessfulThirdAttempt(set);
                     const effortLabel = getSetEffortLabel(set.effort, t);
                     const weightText = `${formatWorkoutWeightFromKg(
                       set.weight,
@@ -14140,6 +13988,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                       set.reps,
                       weightText,
                       isInvalidSet ? 'invalid' : 'done',
+                      isSuccessfulThirdAttempt ? 'successful-third' : '',
                       effortLabel || '',
                     ].join('|');
 
@@ -14155,6 +14004,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                       reps: set.reps,
                       weightText,
                       isInvalidSet,
+                      isSuccessfulThirdAttempt,
                       effortLabel,
                       count: 1,
                     });
@@ -14167,12 +14017,20 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                         display: 'grid',
                         gridTemplateColumns: '1fr auto',
                         gap: 12,
-                        padding: '5px 0',
-                        opacity: group.isInvalidSet ? 0.75 : 1
+                        padding: '5px 0 5px 8px',
+                        opacity: group.isInvalidSet ? 0.75 : 1,
+                        borderLeft: group.isInvalidSet && completedWorkoutIsMeet
+                          ? '3px solid #e74c3c'
+                          : group.isSuccessfulThirdAttempt
+                            ? `3px solid ${THEME.green}`
+                            : '3px solid transparent'
                       }}
                     >
                       <div>
-                        <div style={{ color: THEME.text, fontWeight: 800 }}>
+                        <div style={{
+                          color: group.isSuccessfulThirdAttempt ? THEME.green : THEME.text,
+                          fontWeight: 800
+                        }}>
                           {group.isInvalidSet ? '✕ ' : '✓ '}
                           {group.label}
                         </div>
@@ -14190,7 +14048,11 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                       </div>
 
                       <strong style={{
-                        color: group.isInvalidSet ? '#e74c3c' : '#ffffff',
+                        color: group.isInvalidSet
+                          ? '#e74c3c'
+                          : group.isSuccessfulThirdAttempt
+                            ? THEME.green
+                            : '#ffffff',
                         whiteSpace: 'nowrap'
                       }}>
                         {group.count}×{group.reps}×{group.weightText}
@@ -14205,80 +14067,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         {/* FORCE_MULTI_LIFT_COMPLETED_SETS_END */}
         </div>
 
-        <div style={completedWorkout?.type === 'rest'
-          ? restDayCompletedActionsStyle()
-          : { display: 'contents' }}>
-          {completedWorkoutCanStartNewCycle && (
-            <button
-              onClick={handleStartNewCycle}
-              style={{
-                width: '100%',
-                padding: 14,
-                fontSize: 16,
-                fontWeight: 800,
-                background: THEME.primary,
-                color: '#ffffff',
-                border: `1px solid ${THEME.primary}`,
-                borderRadius: 8,
-                cursor: 'pointer',
-                marginBottom: 10
-              }}
-            >
-              {t.startNewCycle} 🚀
-            </button>
-          )}
-
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-            gap: 8
-          }}>
-            <button
-              onClick={() => setScreen('stats')}
-              style={{
-                width: '100%',
-                minWidth: 0,
-                padding: '11px 8px',
-                fontSize: 14,
-                fontWeight: 700,
-                background: completedWorkoutCanStartNewCycle ? 'transparent' : THEME.primary,
-                color: '#ffffff',
-                border: `1px solid ${THEME.primary}`,
-                borderRadius: 8,
-                cursor: 'pointer'
-              }}
-            >
-              {t.stats || t.viewProgress}
-            </button>
-
-            <button
-              onClick={() => {
-                const targetIndex = Number.isInteger(completedWorkoutIndex)
-                  ? completedWorkoutIndex
-                  : Math.max(0, (completedWorkout?.number || 1) - 1);
-
-                setSelectedIndex(targetIndex);
-                setScreen('current');
-              }}
-              style={{
-                width: '100%',
-                minWidth: 0,
-                padding: '11px 8px',
-                fontSize: 14,
-                fontWeight: 700,
-                background: 'transparent',
-                color: '#ffffff',
-                border: `1px solid ${THEME.primary}`,
-                borderRadius: 8,
-                cursor: 'pointer'
-              }}
-            >
-              {t.back || t.backToWorkout}
-            </button>
-          </div>
-        </div>
       </div>
-    )}
   </div>
 )}
 

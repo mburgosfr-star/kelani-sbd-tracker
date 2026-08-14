@@ -151,9 +151,9 @@ export const SMART_IDEAL_TAPER_ROUTE = Object.freeze({
 
 export const SMART_IDEAL_POST_MEET = Object.freeze({
   beginner: Object.freeze({ recoveryWorkouts: 1, nextCycleWorkout: 30 }),
-  intermediate: Object.freeze({ recoveryWorkouts: 2, nextCycleWorkout: 31 }),
-  advanced: Object.freeze({ recoveryWorkouts: 3, nextCycleWorkout: 32 }),
-  elite: Object.freeze({ recoveryWorkouts: 4, nextCycleWorkout: 33 }),
+  intermediate: Object.freeze({ recoveryWorkouts: 1, nextCycleWorkout: 30 }),
+  advanced: Object.freeze({ recoveryWorkouts: 1, nextCycleWorkout: 30 }),
+  elite: Object.freeze({ recoveryWorkouts: 1, nextCycleWorkout: 30 }),
 });
 
 export const SMART_IDEAL_ROUTE_VERSION = 1;

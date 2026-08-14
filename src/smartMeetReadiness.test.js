@@ -3,6 +3,7 @@ import {
   buildSmartMeetWorkoutProjection,
   buildSmartReadinessSignals,
   generateWorkoutsForTrainingModel,
+  isSmartCycleCompleteAfterHistory,
 } from './smartTrainingEngine';
 import {
   calculateAchievedMaxesFromHistory,
@@ -135,11 +136,159 @@ const attempts = values => ({
   thirdAttempt: values[2],
 });
 
+function makeCompletedMeetEntries({
+  workoutNumber = 10,
+  workoutEffort = 'tooMuch',
+  failedOrSkippedSetCount = 1,
+  failAllAttempts = false,
+  smartIdealRoute = null,
+} = {}) {
+  const failed = labelKey => failAllAttempts || (
+    failedOrSkippedSetCount > 0 &&
+    labelKey === 'thirdAttempt' &&
+    !failAllAttempts
+  );
+  const attemptSet = (labelKey, weight) => ({
+    labelKey,
+    weight,
+    reps: 1,
+    done: true,
+    failed: failed(labelKey),
+    skipped: failed(labelKey),
+  });
+  const snapshot = {
+    number: workoutNumber,
+    type: 'meet',
+    smartDayType: 'meet',
+    workoutEffort,
+    ...(smartIdealRoute ? { smartIdealRoute } : {}),
+    lifts: [
+      {
+        lift: 'Squat',
+        sets: [
+          attemptSet('opener', 90),
+          attemptSet('secondAttempt', 97.5),
+          attemptSet('thirdAttempt', 100),
+        ],
+      },
+      {
+        lift: 'Bench',
+        sets: [
+          attemptSet('opener', 72.5),
+          attemptSet('secondAttempt', 77.5),
+          attemptSet('thirdAttempt', 80),
+        ],
+      },
+      {
+        lift: 'Deadlift',
+        sets: [
+          attemptSet('opener', 125),
+          attemptSet('secondAttempt', 135),
+          attemptSet('thirdAttempt', 140),
+        ],
+      },
+    ],
+  };
+
+  return ['Squat', 'Bench', 'Deadlift'].map(lift => ({
+    cycle: 1,
+    workoutNumber,
+    lift,
+    smartDayType: 'meet',
+    workoutEffort,
+    failedOrSkippedSetCount,
+    workoutSnapshot: snapshot,
+  }));
+}
+
+function makePostMeetRecoveryEntry(workoutNumber) {
+  return {
+    cycle: 1,
+    workoutNumber,
+    restDay: true,
+    completionOnly: true,
+    smartDayType: 'recovery',
+    workoutEffort: 'easy',
+    workoutSnapshot: {
+      number: workoutNumber,
+      type: 'rest',
+      smartDayType: 'recovery',
+      workoutEffort: 'easy',
+    },
+  };
+}
+
 test('rounds every e1RM to the nearest 2.5kg barbell value', () => {
   expect(roundE1RM(180)).toBe(180);
   expect(roundE1RM(182.49)).toBe(182.5);
   expect(roundE1RM(182.5)).toBe(182.5);
   expect(roundE1RM(184.9)).toBe(185);
+});
+
+test('a completed meet suppresses another same-cycle meet projection and ends after its recovery days', () => {
+  const meetHistory = makeCompletedMeetEntries();
+  const readiness = buildSmartReadinessSignals({
+    history: meetHistory,
+    currentCycle: 1,
+    prs: { Squat: 100, Bench: 80, Deadlift: 140 },
+    oneRMs: { Squat: 100, Bench: 80, Deadlift: 140 },
+  });
+
+  expect(readiness).toMatchObject({
+    completedMeetInCurrentCycle: true,
+    lastMeetWorkoutNumber: 10,
+    inPostMeetRecovery: true,
+    postMeetRecoveryTarget: 2,
+    meetProjection: {
+      available: false,
+      reason: 'meet-completed',
+      completedMeetWorkoutNumber: 10,
+    },
+  });
+
+  const recoveryHistory = [
+    ...meetHistory,
+    makePostMeetRecoveryEntry(11),
+    makePostMeetRecoveryEntry(12),
+  ];
+  expect(isSmartCycleCompleteAfterHistory(recoveryHistory, 1)).toBe(true);
+});
+
+test('post-meet recovery is one day plus each missed attempt, capped at ten days', () => {
+  const context = {
+    currentCycle: 1,
+    prs: { Squat: 100, Bench: 80, Deadlift: 140 },
+    oneRMs: { Squat: 100, Bench: 80, Deadlift: 140 },
+  };
+
+  expect(buildSmartReadinessSignals({
+    ...context,
+    history: makeCompletedMeetEntries({
+      workoutEffort: 'tooMuch',
+      failedOrSkippedSetCount: 0,
+    }),
+  }).postMeetRecoveryTarget).toBe(1);
+
+  expect(buildSmartReadinessSignals({
+    ...context,
+    history: makeCompletedMeetEntries({
+      failedOrSkippedSetCount: 9,
+      failAllAttempts: true,
+    }),
+  }).postMeetRecoveryTarget).toBe(10);
+});
+
+test('a failed ideal-route meet uses adaptive recovery and can still complete the cycle', () => {
+  const history = [
+    ...makeCompletedMeetEntries({
+      failedOrSkippedSetCount: 1,
+      smartIdealRoute: { stage: 'meet', postMeetRecoveryTarget: 1 },
+    }),
+    makePostMeetRecoveryEntry(11),
+    makePostMeetRecoveryEntry(12),
+  ];
+
+  expect(isSmartCycleCompleteAfterHistory(history, 1)).toBe(true);
 });
 
 test('uses only achieved current-cycle performance for a lighter lifter', () => {
@@ -351,6 +500,189 @@ test('a clean taper after enough work offers the meet with the restored attempt 
   });
   expect(meet.lifts.find(block => block.lift === 'Squat').sets.map(set => set.weight))
     .toEqual([130, 142.5, 147.5]);
+});
+
+test('a failed heavy Deadlift proof keeps its strength evidence but requires two final recovery days', () => {
+  const failedHeavyDeadlift = {
+    cycle: 3,
+    workoutNumber: 3,
+    lift: 'Deadlift',
+    topWeight: 170,
+    topReps: 2,
+    e1rm: 180,
+    workoutEffort: 'tooMuch',
+    failedOrSkippedSetCount: 3,
+    workoutSnapshot: {
+      number: 3,
+      type: 'training',
+      smartDayType: 'training',
+      workoutEffort: 'tooMuch',
+      lifts: [{
+        lift: 'Deadlift',
+        role: 'primary',
+        sets: [
+          { labelKey: 'topDouble', reps: 2, weight: 170, pct: 170 / 180, done: true, failed: false, skipped: false },
+          { labelKey: 'backoff', reps: 4, weight: 145, pct: 145 / 180, done: true, failed: false, skipped: false },
+          ...Array.from({ length: 3 }, () => ({
+            labelKey: 'backoff',
+            reps: 4,
+            weight: 145,
+            pct: 145 / 180,
+            done: true,
+            failed: true,
+            skipped: true,
+          })),
+        ],
+      }],
+    },
+  };
+  const recovery = workoutNumber => ({
+    cycle: 3,
+    workoutNumber,
+    restDay: true,
+    completionOnly: true,
+    smartDayType: 'recovery',
+    workoutEffort: 'easy',
+    failedOrSkippedSetCount: 0,
+    workoutSnapshot: {
+      number: workoutNumber,
+      type: 'rest',
+      smartDayType: 'recovery',
+      workoutEffort: 'easy',
+    },
+  });
+  const history = [
+    makeTrainingEntry({ cycle: 3, workoutNumber: 1, lift: 'Squat', weight: 135, reps: 2, e1rm: 145 }),
+    makeTrainingEntry({ cycle: 3, workoutNumber: 2, lift: 'Bench', weight: 95, reps: 2, e1rm: 101.33 }),
+    failedHeavyDeadlift,
+    recovery(4),
+    makeTrainingEntry({ cycle: 3, workoutNumber: 5, lift: 'Bench', weight: 70, reps: 5, e1rm: 81.67 }),
+    makeTrainingEntry({ cycle: 3, workoutNumber: 6, lift: 'Deadlift', weight: 115, reps: 4, e1rm: 130 }),
+    makeTrainingEntry({ cycle: 3, workoutNumber: 7, lift: 'Squat', weight: 100, reps: 5, e1rm: 116.67 }),
+    makeTrainingEntry({ cycle: 3, workoutNumber: 8, lift: 'Bench', weight: 70, reps: 5, e1rm: 81.67 }),
+    recovery(9),
+  ];
+  const options = {
+    programProfile: 'kelaniSbdUltra',
+    squat: 142.5,
+    bench: 92.5,
+    deadlift: 175,
+    oneRMs: { Squat: 145, Bench: 97.5, Deadlift: 180 },
+    currentCycle: 3,
+  };
+  const firstDecision = generateWorkoutsForTrainingModel('smart', {
+    ...options,
+    history,
+    currentIndex: 9,
+  }).find(workout => workout?.smartDecisionSummary);
+
+  expect(firstDecision).toMatchObject({
+    type: 'rest',
+    smartDayType: 'recovery',
+    smartDecisionSummary: {
+      reason: 'deadlift-taper-recovery',
+      readiness: {
+        meetPlanReady: true,
+        preMeetHeavyDeadliftFailureWorkoutNumber: 3,
+        preMeetHeavyDeadliftRecoveryDaysCompleted: 1,
+        preMeetHeavyDeadliftRecoveryDaysRequired: 2,
+        needsPreMeetHeavyDeadliftRecovery: true,
+        meetProjection: {
+          label: 'C3W11',
+          projectedBySimulation: true,
+        },
+      },
+    },
+  });
+  expect(firstDecision.smartDecisionSummary.readiness.meetdayBlockers)
+    .toContain('deadlift-taper-recovery');
+
+  const meet = generateWorkoutsForTrainingModel('smart', {
+    ...options,
+    history: [...history, recovery(10)],
+    currentIndex: 10,
+  }).find(workout => workout?.smartDecisionSummary);
+
+  expect(meet).toMatchObject({
+    type: 'meet',
+    smartDayType: 'meet',
+    smartDecisionSummary: {
+      reason: 'meetday-ready',
+      readiness: {
+        meetPlanReady: true,
+        preMeetHeavyDeadliftRecoveryDaysCompleted: 2,
+        needsPreMeetHeavyDeadliftRecovery: false,
+        meetdayBlockers: [],
+      },
+    },
+  });
+});
+
+test('a later clean heavy Deadlift clears an earlier heavy-failure taper debt', () => {
+  const heavyDeadliftEntry = ({ workoutNumber, failed }) => ({
+    cycle: 1,
+    workoutNumber,
+    lift: 'Deadlift',
+    topWeight: 135,
+    topReps: 2,
+    e1rm: 144,
+    workoutEffort: failed ? 'tooMuch' : 'good',
+    failedOrSkippedSetCount: failed ? 1 : 0,
+    workoutSnapshot: {
+      number: workoutNumber,
+      type: 'training',
+      smartDayType: 'training',
+      workoutEffort: failed ? 'tooMuch' : 'good',
+      lifts: [{
+        lift: 'Deadlift',
+        role: 'primary',
+        sets: [
+          { labelKey: 'topDouble', reps: 2, weight: 135, pct: 135 / 140, done: true, failed: false, skipped: false },
+          ...(failed ? [{ labelKey: 'backoff', reps: 4, weight: 110, pct: 110 / 140, done: true, failed: true, skipped: true }] : []),
+        ],
+      }],
+    },
+  });
+  const history = [
+    makeTrainingEntry({ workoutNumber: 1, lift: 'Squat', weight: 97, reps: 2, e1rm: 103.47 }),
+    makeTrainingEntry({ workoutNumber: 2, lift: 'Bench', weight: 77.5, reps: 2, e1rm: 82.67 }),
+    heavyDeadliftEntry({ workoutNumber: 3, failed: true }),
+    makeTrainingEntry({ workoutNumber: 4, lift: 'Squat', weight: 70, reps: 5, e1rm: 81.67 }),
+    makeTrainingEntry({ workoutNumber: 5, lift: 'Bench', weight: 55, reps: 5, e1rm: 64.17 }),
+    makeTrainingEntry({ workoutNumber: 6, lift: 'Squat', weight: 70, reps: 5, e1rm: 81.67 }),
+    makeTrainingEntry({ workoutNumber: 7, lift: 'Bench', weight: 55, reps: 5, e1rm: 64.17 }),
+    heavyDeadliftEntry({ workoutNumber: 8, failed: false }),
+    {
+      cycle: 1,
+      workoutNumber: 9,
+      restDay: true,
+      completionOnly: true,
+      smartDayType: 'recovery',
+      workoutEffort: 'easy',
+      workoutSnapshot: { number: 9, type: 'rest', smartDayType: 'recovery', workoutEffort: 'easy' },
+    },
+  ];
+  const next = generateWorkoutsForTrainingModel('smart', {
+    programProfile: 'kelaniSbdUltra',
+    squat: 100,
+    bench: 80,
+    deadlift: 140,
+    oneRMs: { Squat: 100, Bench: 80, Deadlift: 140 },
+    currentCycle: 1,
+    history,
+    currentIndex: 9,
+  }).find(workout => workout?.smartDecisionSummary);
+
+  expect(next).toMatchObject({
+    type: 'meet',
+    smartDayType: 'meet',
+    smartDecisionSummary: {
+      readiness: {
+        needsPreMeetHeavyDeadliftRecovery: false,
+        meetdayBlockers: [],
+      },
+    },
+  });
 });
 
 test('ignores failed top work and keeps successful multi-rep work as e1RM-only evidence', () => {

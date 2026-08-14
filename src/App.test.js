@@ -1,15 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import App, { DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, SettingsListRow, StatsScreen, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, buildDashboardE1RMMetrics, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, formatWorkoutSetPercentDisplay, getDashboardE1RMPrGain, getDashboardE1RMValue, getDashboardMeetState, getStatsHistoricalOneRM, isDashboardE1RMPR, isMeetAttemptPlanLocked, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, restDayCompletedActionsStyle, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, settingsModalPanelStyle, shouldShowAutomaticBackupStatus, statsScreenStyle, workoutCompletionButtonStyle } from './App';
+import App, { DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, SettingsListRow, SmartDayTypeInline, StatsScreen, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, isMeetAttemptPlanLocked, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, settingsModalPanelStyle, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
-test('dashboard e1RM PR gain compares against the real 1RM on the same card', () => {
-  expect(getDashboardE1RMPrGain(100, 97.5)).toBe(2.5);
-  expect(getDashboardE1RMPrGain(150, 142.5)).toBe(7.5);
-  expect(getDashboardE1RMPrGain(180, 180)).toBe(0);
-  expect(getDashboardE1RMPrGain(101.3333333333, 97.5)).toBe(5);
-});
-
-test('dashboard total PR is always the sum of the same displayed lift gains', () => {
+test('dashboard metrics contain values without treating the e1RM and 1RM difference as a new PR', () => {
   const metrics = buildDashboardE1RMMetrics(
     { Squat: 145, Bench: 97.5, Deadlift: 180 },
     {
@@ -20,21 +13,124 @@ test('dashboard total PR is always the sum of the same displayed lift gains', ()
   );
 
   expect(metrics.lifts).toEqual({
-    Squat: { oneRM: 145, e1RM: 145, prGain: 0 },
-    Bench: { oneRM: 97.5, e1RM: 102.5, prGain: 5 },
-    Deadlift: { oneRM: 180, e1RM: 182.5, prGain: 2.5 },
+    Squat: { oneRM: 145, e1RM: 145 },
+    Bench: { oneRM: 97.5, e1RM: 102.5 },
+    Deadlift: { oneRM: 180, e1RM: 182.5 },
   });
   expect(metrics.total).toEqual({
     oneRM: 422.5,
     e1RM: 430,
-    prGain: 7.5,
   });
-  expect(metrics.total.prGain).toBe(
-    Object.values(metrics.lifts).reduce(
-      (sum, lift) => sum + lift.prGain,
-      0
-    )
-  );
+});
+
+function dashboardPrHistory() {
+  const seed = (lift, weight) => ({
+    cycle: 0,
+    workoutNumber: 0,
+    lift,
+    seedMax: true,
+    topWeight: weight,
+    topReps: 1,
+    e1rm: weight,
+  });
+  const training = (workoutNumber, lift, weight, reps, e1rm) => ({
+    cycle: 3,
+    workoutNumber,
+    lift,
+    topWeight: weight,
+    topReps: reps,
+    e1rm,
+    workoutSnapshot: {
+      type: 'training',
+      completed: true,
+      lift,
+      sets: [{ weight, reps, done: true, failed: false, skipped: false }],
+    },
+  });
+  const meetSnapshot = {
+    type: 'meet',
+    completed: true,
+    lifts: [
+      { lift: 'Squat', sets: [{ weight: 147.5, reps: 1, done: true, failed: false, skipped: false }] },
+      { lift: 'Bench', sets: [{ weight: 100, reps: 1, done: true, failed: false, skipped: false }] },
+      { lift: 'Deadlift', sets: [{ weight: 175, reps: 1, done: true, failed: false, skipped: false }] },
+    ],
+  };
+
+  return [
+    seed('Squat', 145),
+    seed('Bench', 97.5),
+    seed('Deadlift', 180),
+    training(39, 'Squat', 135, 2, 145),
+    training(40, 'Bench', 90, 4, 102.5),
+    training(41, 'Deadlift', 170, 2, 180),
+    ...[
+      ['Squat', 147.5],
+      ['Bench', 100],
+      ['Deadlift', 175],
+    ].map(([lift, weight]) => ({
+      cycle: 3,
+      workoutNumber: 45,
+      lift,
+      topWeight: weight,
+      topReps: 1,
+      oneRMToday: weight,
+      e1rm: weight,
+      workoutSnapshot: meetSnapshot,
+    })),
+  ];
+}
+
+test('dashboard shows only PRs created by the latest strength workout', () => {
+  const events = buildDashboardRecentPrEvents(dashboardPrHistory());
+
+  expect(events.lifts).toEqual({
+    Squat: { oneRMGain: 2.5, e1RMGain: 2.5 },
+    Bench: { oneRMGain: 2.5, e1RMGain: 0 },
+    Deadlift: { oneRMGain: 0, e1RMGain: 0 },
+  });
+  expect(events.total).toEqual({ oneRMGain: 5 });
+});
+
+test('recent dashboard PRs survive recovery days and expire after the next strength workout', () => {
+  const historyAfterRecovery = [
+    ...dashboardPrHistory(),
+    { cycle: 3, workoutNumber: 46, restDay: true, completionOnly: true },
+  ];
+  expect(buildDashboardRecentPrEvents(historyAfterRecovery).total.oneRMGain).toBe(5);
+
+  const historyAfterNextTraining = [
+    ...historyAfterRecovery,
+    {
+      cycle: 4,
+      workoutNumber: 1,
+      lift: 'Squat',
+      topWeight: 100,
+      topReps: 3,
+      e1rm: 110,
+      workoutSnapshot: {
+        type: 'training',
+        completed: true,
+        lift: 'Squat',
+        sets: [{ weight: 100, reps: 3, done: true, failed: false, skipped: false }],
+      },
+    },
+  ];
+  expect(buildDashboardRecentPrEvents(historyAfterNextTraining)).toMatchObject({
+    lifts: {
+      Squat: { oneRMGain: 0, e1RMGain: 0 },
+      Bench: { oneRMGain: 0, e1RMGain: 0 },
+      Deadlift: { oneRMGain: 0, e1RMGain: 0 },
+    },
+    total: { oneRMGain: 0 },
+  });
+});
+
+test.each(['nl', 'en', 'ca'])('dashboard PR labels are translated in %s', language => {
+  expect(translations[language]).toMatchObject({
+    new1RMPR: expect.any(String),
+    newE1RMPR: expect.any(String),
+  });
 });
 
 test('rest and training completion actions share the same compact button style', () => {
@@ -55,6 +151,18 @@ test('active workout screen preserves its original balanced height', () => {
     alignContent: 'space-between',
   });
   expect(activeWorkoutScreenStyle().transform).toBeUndefined();
+});
+
+test('program screen uses the same responsive header alignment as other content screens', () => {
+  expect(programScreenStyle()).toMatchObject({
+    width: '100%',
+    maxWidth: 500,
+    margin: '0 auto',
+    padding: 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px',
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
+  });
 });
 
 test('only a following Bench block moves into the gap above it', () => {
@@ -106,7 +214,7 @@ test('completed rest day content is distributed over the available screen height
   expect(restDayCompletedScreenStyle()).toMatchObject({
     minHeight: '100%',
     display: 'grid',
-    gridTemplateRows: 'minmax(0, 1fr) auto',
+    gridTemplateRows: 'minmax(0, 1fr)',
     boxSizing: 'border-box',
   });
 
@@ -114,9 +222,57 @@ test('completed rest day content is distributed over the available screen height
     alignSelf: 'center',
     transform: 'translateY(clamp(-24px, -2.5dvh, -16px))',
   });
+});
 
-  expect(restDayCompletedActionsStyle()).toMatchObject({
-    alignSelf: 'end',
+test('completed workouts use natural page overflow instead of a permanent scroll container', () => {
+  expect(completedWorkoutScreenStyle()).toMatchObject({
+    minHeight: 'calc(100dvh - 52px)',
+    overflowX: 'hidden',
+  });
+  expect(completedWorkoutScreenStyle().height).toBeUndefined();
+  expect(completedWorkoutScreenStyle().overflowY).toBeUndefined();
+});
+
+test('meet completion keeps achieved lift weights prominent', () => {
+  expect(meetCompletedAchievedWeightStyle()).toMatchObject({
+    fontSize: 'clamp(18px, 2.8dvh, 22px)',
+    fontWeight: 900,
+    whiteSpace: 'nowrap',
+  });
+});
+
+test('meet completion omits the ordinary workout metadata card', () => {
+  const workout = { lifts: [{ lift: 'Squat' }] };
+
+  expect(shouldShowCompletedWorkoutMetadata(workout, true)).toBe(false);
+  expect(shouldShowCompletedWorkoutMetadata(workout, false)).toBe(true);
+});
+
+test('meet feedback highlights only successful third attempts', () => {
+  expect(isCompletedSuccessfulThirdAttempt({
+    labelKey: 'thirdAttempt',
+    done: true,
+    failed: false,
+    skipped: false,
+  })).toBe(true);
+  expect(isCompletedSuccessfulThirdAttempt({
+    labelKey: 'secondAttempt',
+    done: true,
+    failed: false,
+    skipped: false,
+  })).toBe(false);
+  expect(isCompletedSuccessfulThirdAttempt({
+    labelKey: 'thirdAttempt',
+    done: false,
+    failed: true,
+    skipped: false,
+  })).toBe(false);
+});
+
+test.each(['nl', 'en', 'ca'])('meet completion feedback is translated in %s', language => {
+  expect(translations[language]).toMatchObject({
+    meetCompleted: expect.any(String),
+    meetCompletedSaved: expect.any(String),
   });
 });
 
@@ -137,17 +293,6 @@ test('ordinary settings move up without changing the Start over layout slot', ()
   });
 });
 
-test('rounded seed e1RMs do not create a false dashboard PR', () => {
-  expect(isDashboardE1RMPR({ achievedE1RM: 38.5, oneRM: 42.5 })).toBe(false);
-  expect(isDashboardE1RMPR({ achievedE1RM: 43, oneRM: 42.5 })).toBe(false);
-  expect(isDashboardE1RMPR({ achievedE1RM: 44, oneRM: 42.5 })).toBe(true);
-  expect(isDashboardE1RMPR({
-    achievedE1RM: 181.3333333333,
-    displayedE1RM: 180,
-    oneRM: 180,
-  })).toBe(false);
-});
-
 test('dashboard totals exclude inherited rounded planning maxes that were never achieved', () => {
   const oneRMs = { Squat: 42.5, Bench: 32.5, Deadlift: 60 };
   const achievedE1RMs = { Squat: 45, Bench: 30, Deadlift: 55 };
@@ -163,7 +308,6 @@ test('dashboard totals exclude inherited rounded planning maxes that were never 
   expect(displayedE1RMs).toEqual({ Squat: 45, Bench: 32.5, Deadlift: 60 });
   expect(total1RM).toBe(135);
   expect(totalE1RM).toBe(137.5);
-  expect(getDashboardE1RMPrGain(totalE1RM, total1RM)).toBe(2.5);
 });
 
 test('modals use the available dynamic viewport before enabling internal scrolling', () => {
@@ -394,17 +538,22 @@ test('only the meet-plan card opens the meet workout, not the level badge', () =
     name: translations.nl.openWorkout || translations.nl.workout,
   }));
   expect(onOpenWorkout).toHaveBeenCalledTimes(1);
+  expect(screen.getByText(translations.nl.projectedTotal).style.fontSize)
+    .toBe('clamp(13px, 3.2vw, 15px)');
 });
 
-test('meet-day dashboard centers the plan in the available vertical space', () => {
+test('meet-day dashboard spreads the plan across the available vertical space', () => {
   expect(meetDayDashboardScreenStyle()).toMatchObject({
-    gridTemplateRows: 'auto minmax(0, 1fr)',
+    gridTemplateRows: 'auto minmax(min-content, 1fr)',
     alignContent: 'stretch',
+    rowGap: 'clamp(4px, 0.8dvh, 10px)',
   });
   expect(meetDayDashboardContentStyle()).toMatchObject({
     minHeight: 0,
     display: 'grid',
-    alignContent: 'center',
+    gridTemplateRows: 'auto auto minmax(min-content, 1fr) auto',
+    alignContent: 'stretch',
+    rowGap: 'clamp(4px, 0.8dvh, 8px)',
   });
 });
 
@@ -419,6 +568,25 @@ test('post-meet recovery restores the dashboard but keeps route to meet hidden',
   });
 });
 
+test('post-meet dashboard distributes space between and around its cards', () => {
+  expect(regularDashboardScreenStyle()).toMatchObject({
+    display: 'grid',
+    gridTemplateRows: 'auto minmax(0, 1fr)',
+    alignContent: 'stretch',
+    rowGap: 'clamp(14px, 2.2dvh, 24px)',
+  });
+  expect(regularDashboardContentStyle({ spreadContent: true })).toMatchObject({
+    display: 'grid',
+    alignContent: 'space-evenly',
+    rowGap: 'clamp(10px, 1.4dvh, 16px)',
+    paddingBottom: 'clamp(24px, 3.5dvh, 36px)',
+  });
+  expect(regularDashboardContentStyle()).toMatchObject({
+    alignContent: 'start',
+    rowGap: 'clamp(14px, 2.2dvh, 24px)',
+  });
+});
+
 test('ideal-route post-meet recovery also keeps route to meet hidden', () => {
   expect(getDashboardMeetState({
     type: 'rest',
@@ -429,6 +597,134 @@ test('ideal-route post-meet recovery also keeps route to meet hidden', () => {
     isMeetDay: false,
     hideRouteToMeet: true,
   });
+});
+
+test.each(['nl', 'en', 'ca'])('ideal-route post-meet recovery explains why the workout is rest in %s', language => {
+  const t = translations[language];
+  const workout = {
+    type: 'rest',
+    smartDayType: 'recovery',
+    smartDecisionSummary: {
+      reason: 'ideal-route',
+      dayType: 'recovery',
+    },
+    smartIdealRoute: { stage: 'post-meet' },
+  };
+
+  expect(t.smartReasonIdealRoutePostMeetRecovery).toBeTruthy();
+  expect(getSmartDecisionReasonDisplayText(workout.smartDecisionSummary, t, workout))
+    .toBe(t.smartReasonIdealRoutePostMeetRecovery);
+});
+
+test.each(['nl', 'en', 'ca'])('post-meet recovery includes its progress and purpose in %s', language => {
+  const t = translations[language];
+  const reason = getSmartDecisionReasonDisplayText({
+    reason: 'post-meet-recovery',
+    dayType: 'recovery',
+    readiness: {
+      postMeetRecoveryTarget: 3,
+      postMeetRecoveryDaysCompleted: 0,
+    },
+  }, t);
+
+  expect(reason).toBe(
+    t.smartReasonPostMeetRecovery
+      .replace('{current}', '1')
+      .replace('{target}', '3')
+  );
+  expect(reason).not.toContain('{');
+});
+
+test.each(['nl', 'en', 'ca'])('post-meet Smart details replace obsolete meet-readiness and projection data in %s', language => {
+  const t = translations[language];
+  const rows = getSmartModalDetailRows({
+    type: 'rest',
+    smartDayType: 'recovery',
+    smartDecisionSummary: {
+      reason: 'post-meet-recovery',
+      dayType: 'recovery',
+      readiness: {
+        lastMeetWorkoutNumber: 45,
+        inPostMeetRecovery: true,
+        postMeetRecoveryTarget: 3,
+        postMeetRecoveryDaysCompleted: 0,
+        lastMeetFailedOrSkippedSetCount: 1,
+        meetPlanReady: true,
+        meetPlanReadiness: {
+          Squat: { readinessPhase: 'ready' },
+        },
+        meetProjection: { available: true, label: 'C3W48' },
+      },
+    },
+  }, t);
+
+  expect(rows).toEqual([
+    { label: t.smartPostMeetStatus, value: t.smartPostMeetStatusText },
+    {
+      label: t.smartPostMeetRecoveryPlan,
+      value: t.smartPostMeetRecoveryPlanText
+        .replace('{current}', '1')
+        .replace('{target}', '3'),
+    },
+    { label: t.smartPostMeetRecoveryReason, value: t.smartPostMeetRecoveryAfterMeet },
+    { label: t.smartPostMeetNextStep, value: t.smartPostMeetNextStepText },
+  ]);
+  expect(rows.some(row => row.label === t.smartMeetStatus)).toBe(false);
+  expect(rows.some(row => row.label === t.smartProjectedMeet)).toBe(false);
+});
+
+test.each(['nl', 'en', 'ca'])('meet-readiness labels explain the 90, 95 and 100 percent thresholds in %s', language => {
+  const t = translations[language];
+
+  expect(t.smartE1RM90Readiness).not.toBe('90% e1RM');
+  expect(t.smartE1RM95Readiness).not.toBe('95% e1RM');
+  expect(t.smartOneRMReadiness).toMatch(/100%/);
+  expect(t.smartReadinessBasisText).toMatch(/e1RM/i);
+});
+
+test('recovery and deload reasons stay visible beside structured Smart details', () => {
+  expect(shouldShowSmartReasonWithStructuredDetails('recovery')).toBe(true);
+  expect(shouldShowSmartReasonWithStructuredDetails('deload')).toBe(true);
+  expect(shouldShowSmartReasonWithStructuredDetails('training')).toBe(false);
+  expect(shouldShowSmartReasonWithStructuredDetails('meet')).toBe(false);
+});
+
+test('Smart recovery status stays above the shifted recovery content and opens its information', () => {
+  render(
+    <SmartDayTypeInline
+      workout={{
+        type: 'rest',
+        smartDayType: 'recovery',
+        smartDecisionSummary: {
+          reason: 'post-meet-recovery',
+          dayType: 'recovery',
+          readiness: {
+            postMeetRecoveryTarget: 3,
+            postMeetRecoveryDaysCompleted: 0,
+          },
+        },
+      }}
+      t={translations.en}
+    />
+  );
+
+  const button = screen.getByRole('button', {
+    name: /Smart: Rest & recovery/i,
+  });
+  expect(button).toHaveStyle({
+    position: 'relative',
+    zIndex: '2',
+    touchAction: 'manipulation',
+  });
+
+  fireEvent.click(button);
+
+  expect(screen.getByRole('dialog', { name: 'Smart workout info' }))
+    .toBeInTheDocument();
+  expect(button).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByText(/Recovery day 1 of 3/i))
+    .toBeInTheDocument();
+  expect(screen.queryByText('Reason')).not.toBeInTheDocument();
 });
 
 test('a normal workout in the new cycle restores route to meet', () => {

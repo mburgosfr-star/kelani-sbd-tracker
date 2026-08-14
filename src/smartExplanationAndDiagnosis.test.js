@@ -179,9 +179,9 @@ test('fully demonstrated meet readiness remains visible during taper', () => {
     value: 'Volledig wedstrijdklaar: taperen en rusten voor de meet',
   });
   expect(rows).toEqual(expect.arrayContaining([
-    { label: '90% e1RM', value: '3/3', kind: 'metric' },
-    { label: '95% e1RM', value: '3/3', kind: 'metric' },
-    { label: '100% real 1RM', value: '3/3', kind: 'metric' },
+    { label: 'Opener: 90% of real 1RM', value: '3/3', kind: 'metric' },
+    { label: 'Second attempt: 95% of real 1RM', value: '3/3', kind: 'metric' },
+    { label: 'Meet minimum: 100% of real 1RM', value: '3/3', kind: 'metric' },
   ]));
 });
 
@@ -239,7 +239,7 @@ test('shows the full readiness/blocker/fatigue detail on a deload or rest day to
       value: 'Deadlift (100% of the real 1RM not yet reached)',
     },
     {
-      label: '90% e1RM',
+      label: 'Opener: 90% of real 1RM',
       value: '1/3',
       kind: 'metric',
     },

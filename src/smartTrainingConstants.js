@@ -13,6 +13,7 @@ export const SMART_DAY_TYPES = {
 export const SMART_DECISION_REASONS = {
   FATIGUE_RECOVERY: 'fatigue-recovery',
   TRAINING_STREAK_RECOVERY: 'training-streak-recovery',
+  DEADLIFT_TAPER_RECOVERY: 'deadlift-taper-recovery',
   TRAINING_FALLBACK: 'training-fallback',
   FAILED_SET_DELOAD: 'failed-set-deload',
   MEETDAY_READY: 'meetday-ready',
@@ -34,6 +35,8 @@ export const SMART_THRESHOLDS = {
   ROLLING_TRAINING_DAYS: 6,
   RECENT_PRESCRIPTION_TRAINING_DAYS: 3,
   HEAVY_DEADLIFT_LOOKBACK_DAYS: 4,
+  PRE_MEET_HEAVY_DEADLIFT_MIN_WORKOUT_GAP: 5,
+  PRE_MEET_HEAVY_DEADLIFT_RECOVERY_DAYS: 2,
   FATIGUE_RECOVERY_SCORE: 2,
   TRAINING_STREAK_RECOVERY_DAYS: 3,
   FAILED_SET_FATIGUE_CAP: 2,
@@ -46,7 +49,9 @@ export const SMART_THRESHOLDS = {
   MEET_PROJECTION_MIN_GAIN_KG: 1.25,
   MEET_PROJECTION_RANGE_LOW_FACTOR: 0.85,
   MEET_PROJECTION_RANGE_HIGH_FACTOR: 1.25,
-  POST_MEET_RECOVERY_MAX_DAYS: 3,
+  // One recovery day follows every meet, plus one per missed attempt.
+  // A full 3-lift meet has nine attempts, so the maximum is 10 days.
+  POST_MEET_RECOVERY_MAX_DAYS: 10,
   POST_MEET_MIN_TRAINING_DAYS: 8,
   POST_FAILED_MEET_MIN_TRAINING_DAYS: 12,
 };

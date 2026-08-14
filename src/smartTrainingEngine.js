@@ -364,21 +364,10 @@ export function shouldVaryRepeatedSmartPrescription(
 }
 
 function getSmartPostMeetRecoveryTarget(day = {}) {
-  const effort = day?.workoutEffort;
   const failedCount = Number(day?.failedOrSkippedSetCount) || 0;
 
-  let target = 1;
-
-  if (effort === 'easy') target = 0;
-  if (effort === 'good') target = 1;
-  if (effort === 'hard') target = 2;
-  if (effort === 'tooMuch') target = 3;
-
-  if (failedCount >= 2) target = 3;
-  else if (failedCount >= 1) target = Math.max(target, 2);
-
   return Math.min(
-    Math.max(target, 0),
+    Math.max(1 + failedCount, 1),
     SMART_THRESHOLDS.POST_MEET_RECOVERY_MAX_DAYS
   );
 }
@@ -393,6 +382,89 @@ function getSmartPostMeetRecoveryReason(day = {}) {
   if (failedCount >= 1) return 'failed-skipped-1';
 
   return `meet-effort-${effort}`;
+}
+
+function getPreMeetHeavyDeadliftRecoveryStatus({
+  workoutDays = [],
+  currentCycle = 1,
+  currentWorkoutNumber = 1,
+  meetPlanReady = false,
+} = {}) {
+  const cycle = Number(currentCycle) || 1;
+  const cycleDays = (workoutDays || []).filter(day =>
+    Number(day?.cycle) === cycle
+  );
+  let unresolvedFailureDay = null;
+
+  cycleDays.forEach(day => {
+    if (
+      day?.restDay ||
+      day?.smartDayType === SMART_DAY_TYPES.RECOVERY ||
+      day?.smartDayType === SMART_DAY_TYPES.DELOAD ||
+      day?.smartDayType === SMART_DAY_TYPES.MEET ||
+      day?.type === 'meet' ||
+      !day?.heavyLiftByLift?.Deadlift
+    ) {
+      return;
+    }
+
+    const deadliftFailedCount = Number(
+      day?.failedOrSkippedSetCountsByLift?.Deadlift
+    ) || 0;
+
+    if (deadliftFailedCount > 0) {
+      unresolvedFailureDay = day;
+      return;
+    }
+
+    // A later clean heavy Deadlift exposure is stronger recovery evidence
+    // than the older failed session. It supersedes that taper debt without
+    // asking the athlete to repeat another near-maximal proof.
+    if (unresolvedFailureDay) {
+      unresolvedFailureDay = null;
+    }
+  });
+
+  const recoveryDaysCompleted = [...cycleDays]
+    .reverse()
+    .findIndex(day => !(
+      day?.restDay || day?.smartDayType === SMART_DAY_TYPES.RECOVERY
+    ));
+  const trailingRecoveryDays = recoveryDaysCompleted === -1
+    ? cycleDays.length
+    : recoveryDaysCompleted;
+  const failedWorkoutNumber = Number(
+    unresolvedFailureDay?.workoutNumber
+  ) || 0;
+  const workoutsSinceFailure = failedWorkoutNumber > 0
+    ? Math.max(
+      Number(currentWorkoutNumber) - failedWorkoutNumber,
+      0
+    )
+    : 0;
+  const minimumWorkoutGap =
+    SMART_THRESHOLDS.PRE_MEET_HEAVY_DEADLIFT_MIN_WORKOUT_GAP;
+  const recoveryDaysRequired =
+    SMART_THRESHOLDS.PRE_MEET_HEAVY_DEADLIFT_RECOVERY_DAYS;
+  const minimumWorkoutGapMet = Boolean(
+    failedWorkoutNumber > 0 && workoutsSinceFailure >= minimumWorkoutGap
+  );
+  const recoveryDaysMet = trailingRecoveryDays >= recoveryDaysRequired;
+  const needsRecovery = Boolean(
+    meetPlanReady &&
+    failedWorkoutNumber > 0 &&
+    (!minimumWorkoutGapMet || !recoveryDaysMet)
+  );
+
+  return {
+    preMeetHeavyDeadliftFailureWorkoutNumber: failedWorkoutNumber,
+    preMeetHeavyDeadliftWorkoutsSinceFailure: workoutsSinceFailure,
+    preMeetHeavyDeadliftMinimumWorkoutGap: minimumWorkoutGap,
+    preMeetHeavyDeadliftMinimumWorkoutGapMet: minimumWorkoutGapMet,
+    preMeetHeavyDeadliftRecoveryDaysCompleted: trailingRecoveryDays,
+    preMeetHeavyDeadliftRecoveryDaysRequired: recoveryDaysRequired,
+    needsPreMeetHeavyDeadliftRecovery: needsRecovery,
+  };
 }
 
 function getUniqueCompletedSmartWorkoutSnapshots(history = [], currentCycle = 1) {
@@ -514,7 +586,8 @@ function getSmartIdealPostMeetCompletion(history = [], currentCycle = 1) {
   );
   const idealMeet = completed.find(({ snapshot }) => (
     snapshot?.type === 'meet' &&
-    snapshot?.smartIdealRoute?.stage === 'meet'
+    snapshot?.smartIdealRoute?.stage === 'meet' &&
+    isSuccessfulSmartIdealRouteSnapshot(snapshot)
   ));
 
   if (!idealMeet) return null;
@@ -753,6 +826,9 @@ export function buildSmartReadinessSignals(context = {}) {
     }), {}),
     lifts: getWorkoutLiftNames(lastMeetHistoryItem.entry?.workoutSnapshot || lastMeetHistoryItem.entry),
   } : null);
+  const completedMeetInCurrentCycle = Boolean(
+    lastMeetDay && Number(lastMeetDay.cycle) === targetCycle
+  );
 
   const postMeetDaysFromWorkoutDays = lastMeetDayIndex >= 0
     ? workoutDays.slice(lastMeetDayIndex + 1)
@@ -1016,21 +1092,40 @@ export function buildSmartReadinessSignals(context = {}) {
     ...targets,
     [lift]: Number(frequencyScoreTargets?.[lift]?.defaultMix?.heavy) || 0,
   }), {});
-  const meetProjection = buildSmartMeetWorkoutProjection({
-    meetPlanReadiness: smartMeetPlanReadiness,
-    currentCycle: targetCycle,
-    currentWorkoutNumber: Math.max(
-      1,
-      (Number(context.currentIndex) || 0) + 1
-    ),
-    rollingLiftExposureCounts: projectionLiftExposureCounts,
-    rollingProgressionExposureCounts: projectionProgressionExposureCounts,
-    rollingTrainingDayCount: projectionTrainingDays.length,
-    profileExposureTargets,
-    profileProgressionExposureTargets,
-    lastWasRecoveryIntervention,
-    lastTrainingDayWasLightOnly,
-  });
+  const currentDecisionWorkoutNumber = Math.max(
+    1,
+    (Number(context.currentIndex) || 0) + 1
+  );
+  const preMeetHeavyDeadliftRecovery =
+    getPreMeetHeavyDeadliftRecoveryStatus({
+      workoutDays,
+      currentCycle: targetCycle,
+      currentWorkoutNumber: currentDecisionWorkoutNumber,
+      meetPlanReady: Boolean(smartMeetPlanReadiness.ready),
+    });
+  // A meet already completed in this cycle closes the route to meet. The
+  // post-meet controller owns the remaining recovery days and then hands
+  // off to a new cycle, so a pre-meet projection here would be both false
+  // and misleading (for example, projecting a second meet two workouts
+  // after the completed one).
+  const meetProjection = completedMeetInCurrentCycle
+    ? {
+      available: false,
+      reason: 'meet-completed',
+      completedMeetWorkoutNumber: Number(lastMeetDay?.workoutNumber) || 0,
+    }
+    : buildSmartMeetWorkoutProjection({
+      meetPlanReadiness: smartMeetPlanReadiness,
+      currentCycle: targetCycle,
+      currentWorkoutNumber: currentDecisionWorkoutNumber,
+      rollingLiftExposureCounts: projectionLiftExposureCounts,
+      rollingProgressionExposureCounts: projectionProgressionExposureCounts,
+      rollingTrainingDayCount: projectionTrainingDays.length,
+      profileExposureTargets,
+      profileProgressionExposureTargets,
+      lastWasRecoveryIntervention,
+      lastTrainingDayWasLightOnly,
+    });
 
   return {
     completedCount: workoutDays.length,
@@ -1072,6 +1167,7 @@ export function buildSmartReadinessSignals(context = {}) {
     meetPlanWeakestRatio: smartMeetPlanReadiness.weakestRatio || 0,
     meetPlanWeakestTarget: smartMeetPlanReadiness.weakestTarget || 0,
     meetPlanWeakestBestE1RM: smartMeetPlanReadiness.weakestBestE1RM || 0,
+    ...preMeetHeavyDeadliftRecovery,
     meetProjection,
     meetdayBlockers: getSmartMeetdayBlockers({
       completedCount: activeBlockDays.length,
@@ -1097,9 +1193,11 @@ export function buildSmartReadinessSignals(context = {}) {
       postMeetMinimumTrainingTarget,
       postMeetMinimumTrainingTargetReached,
       inPostMeetTrainingCooldown,
+      ...preMeetHeavyDeadliftRecovery,
     }),
     lastWorkoutNumber: Number(lastDay?.workoutNumber) || 0,
     lastMeetWorkoutNumber: Number(lastMeetDay?.workoutNumber) || 0,
+    completedMeetInCurrentCycle,
     lastWorkoutEffort: lastDay?.workoutEffort || null,
     lastWorkoutLifts: lastTrainingDay?.lifts || [],
     lastWorkoutPrimaryLift: (lastTrainingDay?.lifts || [])[0] || null,
@@ -1850,7 +1948,8 @@ function getSmartMeetdayBlockers(readiness = {}) {
   if (
     readiness.lastWasRecoveryIntervention &&
     readiness.meetPlanReady &&
-    isClean
+    isClean &&
+    !readiness.needsPreMeetHeavyDeadliftRecovery
   ) {
     return [];
   }
@@ -1865,6 +1964,10 @@ function getSmartMeetdayBlockers(readiness = {}) {
 
   if (Number(readiness.recentFailedOrSkippedSetCount) > 0) {
     blockers.push('failed-skipped');
+  }
+
+  if (readiness.needsPreMeetHeavyDeadliftRecovery) {
+    blockers.push('deadlift-taper-recovery');
   }
 
   if (missingLifts.length > 0) {
@@ -1970,6 +2073,13 @@ function decideSmartNextDayType(readiness = {}) {
     return SMART_DAY_TYPES.RECOVERY;
   }
 
+  if (
+    readiness.needsPreMeetHeavyDeadliftRecovery &&
+    readiness.preMeetHeavyDeadliftMinimumWorkoutGapMet
+  ) {
+    return SMART_DAY_TYPES.RECOVERY;
+  }
+
   if (shouldScheduleSmartGoodMeetTaper(readiness)) {
     return SMART_DAY_TYPES.RECOVERY;
   }
@@ -2004,6 +2114,9 @@ function decideSmartNextWorkoutIndex(context, generatedWorkouts = []) {
       : dayType === SMART_DAY_TYPES.RECOVERY
         ? readiness.inPostMeetRecovery
           ? SMART_DECISION_REASONS.POST_MEET_RECOVERY
+          : readiness.needsPreMeetHeavyDeadliftRecovery &&
+            readiness.preMeetHeavyDeadliftMinimumWorkoutGapMet
+            ? SMART_DECISION_REASONS.DEADLIFT_TAPER_RECOVERY
           : Number(readiness.recentFatigueScore) >= SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE
             ? SMART_DECISION_REASONS.FATIGUE_RECOVERY
             : SMART_DECISION_REASONS.TRAINING_STREAK_RECOVERY
@@ -5000,6 +5113,22 @@ function generateSmartWorkouts({
             meetPlanWeakestRatio: smartDecision.readiness.meetPlanWeakestRatio || 0,
             meetPlanWeakestTarget: smartDecision.readiness.meetPlanWeakestTarget || 0,
             meetPlanWeakestBestE1RM: smartDecision.readiness.meetPlanWeakestBestE1RM || 0,
+            preMeetHeavyDeadliftFailureWorkoutNumber:
+              smartDecision.readiness.preMeetHeavyDeadliftFailureWorkoutNumber || 0,
+            preMeetHeavyDeadliftWorkoutsSinceFailure:
+              smartDecision.readiness.preMeetHeavyDeadliftWorkoutsSinceFailure || 0,
+            preMeetHeavyDeadliftMinimumWorkoutGap:
+              smartDecision.readiness.preMeetHeavyDeadliftMinimumWorkoutGap || 0,
+            preMeetHeavyDeadliftMinimumWorkoutGapMet: Boolean(
+              smartDecision.readiness.preMeetHeavyDeadliftMinimumWorkoutGapMet
+            ),
+            preMeetHeavyDeadliftRecoveryDaysCompleted:
+              smartDecision.readiness.preMeetHeavyDeadliftRecoveryDaysCompleted || 0,
+            preMeetHeavyDeadliftRecoveryDaysRequired:
+              smartDecision.readiness.preMeetHeavyDeadliftRecoveryDaysRequired || 0,
+            needsPreMeetHeavyDeadliftRecovery: Boolean(
+              smartDecision.readiness.needsPreMeetHeavyDeadliftRecovery
+            ),
             meetProjection: smartDecision.readiness.meetProjection || null,
             meetdayBlockers: smartDecision.readiness.meetdayBlockers || [],
             lastWorkoutNumber: smartDecision.readiness.lastWorkoutNumber || 0,

@@ -1090,6 +1090,13 @@ test('explains fatigue with score and previous workout effort', () => {
     'fatigue 1/2 (previous workout HARD)',
     'meet plan',
   ]);
+
+  expect(
+    getSmartMeetdayBlockerDisplayLabels(
+      ['deadlift-taper-recovery'],
+      { smartBlockerDeadliftTaperRecovery: 'Deadlift taper recovery' }
+    )
+  ).toEqual(['Deadlift taper recovery']);
 });
 
 
