@@ -4,6 +4,8 @@
 
 **Adaptive powerlifting training that stays on your device.**
 
+> **Official Kelani project:** this repository, `mburgosfr-star/kelani-sbd-tracker`, is the official Kelani SBD Tracker source and GitHub release location. The current Android package is `com.kelani.sbdtracker`. Official Android distribution is through this repository's GitHub Releases and IzzyOnDroid. See [VERIFY.md](VERIFY.md) to verify an APK and [BRANDING.md](BRANDING.md) for project-identity guidance.
+
 Kelani is an offline-first Android app for Squat, Bench and Deadlift. Its main training model, Smart Training, does not give you a long static calendar. It plans one next workout at a time from the training you actually completed and how that work affected your readiness.
 
 After every completed workout, Kelani interprets your recent training load, lift frequency, successful and failed work, skipped sets, workout difficulty, current strength and progress toward your planned meet attempts. It uses those signals to choose what to train next and to prescribe the sets, reps and barbell-loadable weights.
@@ -45,6 +47,8 @@ Both channels distribute the current Kelani 2.x Android app (`com.kelani.sbdtrac
 
 - [Kelani 2.x APK from GitHub Releases](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases/latest)
 - [Kelani 2.x on IzzyOnDroid](https://apt.izzysoft.de/packages/com.kelani.sbdtracker)
+
+For authenticity checks, including the official Android signing-certificate SHA-256 fingerprint, see [VERIFY.md](VERIFY.md).
 
 ## Android app identities and migration
 
@@ -92,4 +96,4 @@ Report bugs or suggest improvements through [GitHub Issues](https://github.com/m
 
 ## License
 
-Kelani is released under the [MIT License](LICENSE) and maintained by [Kel](https://github.com/mburgosfr-star).
+Kelani is released under the [MIT License](LICENSE) and maintained by [Kel](https://github.com/mburgosfr-star). Open-source licensing and official project identity are separate concerns; see [BRANDING.md](BRANDING.md) for clarification.
