@@ -60,12 +60,22 @@ function parseArguments(argv, { localVersion } = {}) {
 }
 
 async function fetchResponse(url, options = {}) {
+  const headers = {
+    'User-Agent': 'kelani-distribution-integrity-check',
+    Accept: options.accept || '*/*',
+  };
+
+  const parsedUrl = new URL(url);
+  const githubToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+
+  if (parsedUrl.hostname === 'api.github.com' && githubToken) {
+    headers.Authorization = `Bearer ${githubToken}`;
+    headers['X-GitHub-Api-Version'] = '2022-11-28';
+  }
+
   const response = await fetch(url, {
     redirect: 'follow',
-    headers: {
-      'User-Agent': 'kelani-distribution-integrity-check',
-      Accept: options.accept || '*/*',
-    },
+    headers,
   });
 
   if (!response.ok) {

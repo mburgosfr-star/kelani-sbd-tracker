@@ -29,4 +29,6 @@ jobs:
           package-manager-cache: false
 
       - name: Compare public release channels
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: npm run distribution:check
