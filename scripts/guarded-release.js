@@ -18,7 +18,29 @@ const {
   releaseScriptHashes,
   assertReleasePreparationProof,
   assertVerifiedReleaseCommits,
+  releaseCertificateSha256,
 } = require('./release-common');
+
+// Appended to the hand-written release notes, not replacing them - every
+// release must self-document how to verify it without relying on a human
+// to remember to type this out per release. Values are computed fresh at
+// publish time from the actual APK being published, not hardcoded.
+function buildVerificationSection({ apkFileName, apkSha256, packageName, versionName }) {
+  const repoSlug = 'mburgosfr-star/kelani-sbd-tracker';
+
+  return [
+    '',
+    '## Verify this release',
+    '',
+    `- APK SHA-256: \`${apkSha256}\``,
+    `- Android package: \`${packageName}\``,
+    `- Signing-certificate SHA-256: \`${releaseCertificateSha256}\``,
+    `- Build provenance attestation: \`gh attestation verify ${apkFileName} --repo ${repoSlug}\``,
+    '',
+    `Full verification steps: https://github.com/${repoSlug}/blob/v${versionName}/VERIFY.md`,
+    '',
+  ].join('\n');
+}
 
 const releaseMode = process.argv.includes('--release');
 const checkOnly =
@@ -273,6 +295,20 @@ function main() {
     run('git', ['push', 'origin', tag]);
   }
 
+  const publishedNotesPath = path.join(
+    root,
+    `release/release-notes-v${expected.versionName}-published.md`
+  );
+  fs.writeFileSync(
+    publishedNotesPath,
+    notes.text + '\n' + buildVerificationSection({
+      apkFileName: path.basename(publicApk),
+      apkSha256: publicHash,
+      packageName: expected.packageName,
+      versionName: expected.versionName,
+    })
+  );
+
   run('gh', [
     'release',
     'create',
@@ -283,7 +319,7 @@ function main() {
     '--title',
     `Kelani SBD Tracker ${tag}`,
     '--notes-file',
-    notes.fullPath,
+    publishedNotesPath,
   ]);
 
   console.log(`\n✅ GitHub Release ${tag} created`);
