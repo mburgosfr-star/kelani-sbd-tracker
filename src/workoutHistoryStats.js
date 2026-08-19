@@ -137,6 +137,17 @@ export function getSmartLiftSetsFromSnapshot(snapshot = {}, lift = null) {
   return [];
 }
 
+// Some generators (the Smart ideal route) mirror the primary lift onto the
+// flat workout.lift/workout.sets fields for backward compatibility, even
+// though workout.lifts already fully describes the day. A completion
+// handler must only treat a workout as flat-legacy when workout.lifts is
+// genuinely empty - otherwise a legacy single-lift completion path can run
+// after the multi-lift one and silently overwrite its result with a single
+// (primary-only) lift.
+export function isFlatLegacyTrainingWorkout(workout = {}) {
+  return workout?.type === 'training' && (workout?.lifts || []).length === 0;
+}
+
 export function getActualOneRMFromSets(sets = []) {
   return Math.max(
     0,
@@ -161,6 +172,60 @@ export function getActualOneRMFromSets(sets = []) {
 export function getTopWeightFromSets(sets = []) {
   const weights = (Array.isArray(sets) ? sets : []).map(set => Number(set?.weight) || 0);
   return weights.length ? Math.max(...weights) : 0;
+}
+
+// The workout-complete screen shows one 1RM/e1RM section per trackable lift
+// of the day, not only the primary one - a workout can mix intensities
+// across its lifts, so every trackable lift needs its own real numbers.
+export function buildCompletedWorkoutLiftSummaries({
+  completedSummary,
+  completedWorkout,
+  best1RMs = {},
+  bestE1RMs = {},
+  prs = {},
+} = {}) {
+  const getSetsForLift = (lift) => {
+    const liftBlock = (completedWorkout?.lifts || []).find(block => block?.lift === lift);
+    const rawSets = liftBlock
+      ? liftBlock.sets
+      : completedWorkout?.lift === lift
+        ? completedWorkout?.sets
+        : [];
+
+    return (rawSets || []).filter(set => set.done && !set.failed && !set.skipped);
+  };
+
+  const trackableResults = (completedSummary?.results || []).filter(
+    result => result.trackStrength !== false
+  );
+
+  return trackableResults.map(result => {
+    const sets = getSetsForLift(result.lift);
+
+    const calculatedOneRMToday = getTopWeightFromSets(sets);
+    const calculatedE1RMToday = sets.length
+      ? roundE1RM(Math.max(...sets.map(set => epley(Number(set.weight) || 0, Number(set.reps) || 0))))
+      : 0;
+
+    const oneRMToday = result?.oneRMToday ?? calculatedOneRMToday;
+    const e1RMToday = result?.e1RMToday ?? calculatedE1RMToday;
+
+    const previousBest1RM = Number(best1RMs?.[result.lift]) || 0;
+    const previousBestE1RM = Number(bestE1RMs?.[result.lift]) || Number(prs?.[result.lift]) || 0;
+
+    const best1RM = Math.max(previousBest1RM, oneRMToday || 0);
+    const bestE1RM = Math.max(previousBestE1RM, e1RMToday || 0);
+
+    return {
+      lift: result.lift,
+      oneRMToday,
+      e1RMToday,
+      best1RM,
+      bestE1RM,
+      is1RMPR: oneRMToday > previousBest1RM && oneRMToday > 0,
+      isE1RMPR: e1RMToday > previousBestE1RM && e1RMToday > 0,
+    };
+  });
 }
 
 // Legacy completed summaries retain the real 1RM that was already

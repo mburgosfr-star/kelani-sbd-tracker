@@ -30,6 +30,8 @@ import {
   roundE1RM,
   getActualOneRMFromSets,
   getTopWeightFromSets,
+  buildCompletedWorkoutLiftSummaries,
+  isFlatLegacyTrainingWorkout,
   getEstablishedOneRMFromHistoryEntry,
   getRecommendedRestTimeSeconds,
   isTopSetLabel,
@@ -11346,7 +11348,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     }
 
 
-    if (workout.type === 'training' && LIFT_ORDER.includes(workout.lift) && !shouldTrackWorkoutStrength(workout.lift, benchPressVariant)) {
+    if (isFlatLegacyTrainingWorkout(workout) && LIFT_ORDER.includes(workout.lift) && !shouldTrackWorkoutStrength(workout.lift, benchPressVariant)) {
   finishedWorkout.completedSummary = null;
   setCompletedSummary(null);
 
@@ -11376,7 +11378,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   });
 }
 
-if (workout.type === 'training' && LIFT_ORDER.includes(workout.lift) && shouldTrackWorkoutStrength(workout.lift, benchPressVariant)) {
+if (isFlatLegacyTrainingWorkout(workout) && LIFT_ORDER.includes(workout.lift) && shouldTrackWorkoutStrength(workout.lift, benchPressVariant)) {
     const sets = (workout.sets || []).filter(s => s.done && !s.failed && !s.skipped);
 
 if (sets.length > 0) {
@@ -13864,20 +13866,6 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           marginBottom: 6,
           textAlign: 'left'
         }}>
-          <div style={{
-            color: ({
-              Squat: THEME.red,
-              Bench: THEME.primary,
-              Deadlift: THEME.yellow,
-            }[(completedSummaryForRender?.results || []).find(result => result.trackStrength !== false)?.lift || completedWorkout?.lift] || THEME.primary),
-            fontSize: 16,
-            fontWeight: 900,
-            marginBottom: 6,
-            textAlign: 'center'
-          }}>
-            {liftLabel((completedSummaryForRender?.results || []).find(result => result.trackStrength !== false)?.lift || completedWorkout?.lift, t)} · 1RM / e1RM
-          </div>
-
           {(() => {
             const row = (label, value, isPR) => (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
@@ -13888,39 +13876,36 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
               </div>
             );
 
-            const primaryResult = (completedSummaryForRender?.results || []).find(result => result.trackStrength !== false);
-            if (!primaryResult) return null;
+            const liftSummaries = buildCompletedWorkoutLiftSummaries({
+              completedSummary: completedSummaryForRender,
+              completedWorkout,
+              best1RMs,
+              bestE1RMs,
+              prs,
+            });
 
-            const sets = (completedWorkout?.sets || []).filter(s => s.done && !s.failed && !s.skipped);
+            return liftSummaries.map((summary, index) => (
+              <div key={summary.lift} style={{ marginTop: index === 0 ? 0 : 10 }}>
+                <div style={{
+                  color: ({
+                    Squat: THEME.red,
+                    Bench: THEME.primary,
+                    Deadlift: THEME.yellow,
+                  }[summary.lift] || THEME.primary),
+                  fontSize: 16,
+                  fontWeight: 900,
+                  marginBottom: 6,
+                  textAlign: 'center'
+                }}>
+                  {liftLabel(summary.lift, t)} · 1RM / e1RM
+                </div>
 
-            const calculatedOneRMToday = getTopWeightFromSets(sets);
-
-            const calculatedE1RMToday = sets.length
-              ? roundE1RM(Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0))))
-              : 0;
-
-            const oneRMToday = primaryResult?.oneRMToday ?? calculatedOneRMToday;
-            const e1RMToday = primaryResult?.e1RMToday ?? calculatedE1RMToday;
-
-            const primaryLift = primaryResult?.lift || completedWorkout?.lift;
-
-            const previousBest1RM = Number(best1RMs?.[primaryLift]) || 0;
-            const previousBestE1RM = Number(bestE1RMs?.[primaryLift]) || Number(prs?.[primaryLift]) || 0;
-
-            const best1RM = Math.max(previousBest1RM, oneRMToday || 0);
-            const bestE1RM = Math.max(previousBestE1RM, e1RMToday || 0);
-
-            const is1RMPR = oneRMToday > previousBest1RM && oneRMToday > 0;
-            const isE1RMPR = e1RMToday > previousBestE1RM && e1RMToday > 0;
-
-            return (
-              <>
-                {row(t.oneRMToday, oneRMToday, is1RMPR)}
-                {row(t.e1RMToday, e1RMToday, isE1RMPR)}
-                {row(t.best1RM, best1RM, is1RMPR)}
-                {row(t.bestE1RM, bestE1RM, isE1RMPR)}
-              </>
-            );
+                {row(t.oneRMToday, summary.oneRMToday, summary.is1RMPR)}
+                {row(t.e1RMToday, summary.e1RMToday, summary.isE1RMPR)}
+                {row(t.best1RM, summary.best1RM, summary.is1RMPR)}
+                {row(t.bestE1RM, summary.bestE1RM, summary.isE1RMPR)}
+              </div>
+            ));
           })()}
         </div>
 

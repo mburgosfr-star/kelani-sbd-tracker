@@ -3,6 +3,8 @@ import {
   calculateBestMaxesFromHistory,
   getActualOneRMFromSets,
   getTopWeightFromSets,
+  buildCompletedWorkoutLiftSummaries,
+  isFlatLegacyTrainingWorkout,
 } from './workoutHistoryStats';
 import { buildSmartMeetPlanReadiness } from './smartTrainingEngine';
 
@@ -51,6 +53,83 @@ test('workout-complete "1RM today" shows the heaviest weight lifted, not just a 
   // screen's "1RM today" must still show today's top weight, not 0 kg.
   expect(getActualOneRMFromSets(sets)).toBe(0);
   expect(getTopWeightFromSets(sets)).toBe(120);
+});
+
+test('workout-complete summary includes every trackable lift of the day, not only the first', () => {
+  const completedWorkout = {
+    type: 'training',
+    number: 5,
+    lifts: [
+      { lift: 'Squat', sets: [{ weight: 100, reps: 5, done: true, failed: false, skipped: false }] },
+      { lift: 'Bench', sets: [{ weight: 60, reps: 8, done: true, failed: false, skipped: false }] },
+    ],
+  };
+  const completedSummary = {
+    type: 'multiTraining',
+    results: [
+      { lift: 'Squat', trackStrength: true, oneRMToday: 100, e1RMToday: 116.7 },
+      { lift: 'Bench', trackStrength: true, oneRMToday: 60, e1RMToday: 76 },
+    ],
+  };
+
+  const summaries = buildCompletedWorkoutLiftSummaries({
+    completedSummary,
+    completedWorkout,
+    best1RMs: { Squat: 110, Bench: 65, Deadlift: 150 },
+    bestE1RMs: { Squat: 120, Bench: 78, Deadlift: 170 },
+    prs: {},
+  });
+
+  expect(summaries).toHaveLength(2);
+  expect(summaries.map(s => s.lift)).toEqual(['Squat', 'Bench']);
+  expect(summaries[0]).toMatchObject({ lift: 'Squat', oneRMToday: 100, e1RMToday: 116.7 });
+  expect(summaries[1]).toMatchObject({ lift: 'Bench', oneRMToday: 60, e1RMToday: 76 });
+});
+
+test('workout-complete summary skips lifts that are not strength-tracked', () => {
+  const completedWorkout = {
+    type: 'training',
+    number: 5,
+    lifts: [
+      { lift: 'Squat', sets: [{ weight: 100, reps: 5, done: true, failed: false, skipped: false }] },
+      { lift: 'Bench', sets: [] },
+    ],
+  };
+  const completedSummary = {
+    type: 'multiTraining',
+    results: [
+      { lift: 'Squat', trackStrength: true, oneRMToday: 100, e1RMToday: 116.7 },
+      { lift: 'Bench', trackStrength: false, oneRMToday: 0, e1RMToday: 0 },
+    ],
+  };
+
+  const summaries = buildCompletedWorkoutLiftSummaries({
+    completedSummary,
+    completedWorkout,
+    best1RMs: { Squat: 110, Bench: 65, Deadlift: 150 },
+    bestE1RMs: { Squat: 120, Bench: 78, Deadlift: 170 },
+    prs: {},
+  });
+
+  expect(summaries.map(s => s.lift)).toEqual(['Squat']);
+});
+
+test('a workout already described by workout.lifts is never treated as flat-legacy', () => {
+  // The Smart ideal route mirrors its primary lift onto workout.lift for
+  // backward compatibility even on a genuine multi-lift day (e.g. Squat
+  // heavy + Bench light). A completion handler that used workout.lift alone
+  // to decide "is this a single-lift workout" would wrongly re-complete an
+  // already-handled multi-lift day and collapse its result to one lift.
+  expect(isFlatLegacyTrainingWorkout({
+    type: 'training',
+    lift: 'Squat',
+    lifts: [{ lift: 'Squat' }, { lift: 'Bench' }],
+  })).toBe(false);
+
+  expect(isFlatLegacyTrainingWorkout({ type: 'training', lift: 'Squat', lifts: [] })).toBe(true);
+  expect(isFlatLegacyTrainingWorkout({ type: 'training', lift: 'Squat' })).toBe(true);
+  expect(isFlatLegacyTrainingWorkout({ type: 'meet', lift: 'Squat', lifts: [] })).toBe(false);
+  expect(isFlatLegacyTrainingWorkout({ type: 'rest' })).toBe(false);
 });
 
 test('a heavier double raises e1RM without moving meet attempts based on real 1RM', () => {
