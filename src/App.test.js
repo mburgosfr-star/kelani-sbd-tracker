@@ -165,16 +165,11 @@ test('program screen uses the same responsive header alignment as other content 
   });
 });
 
-test('only a following Bench block moves into the gap above it', () => {
-  expect(activeWorkoutLiftBlockStyle('Bench', 1)).toMatchObject({
-    marginTop: -40,
-    marginBottom: 'calc(40px + clamp(4px, 0.8dvh, 8px))',
-  });
-  expect(activeWorkoutLiftBlockStyle('Squat', 0)).toMatchObject({
-    marginTop: undefined,
+test('activeWorkoutLiftBlockStyle uses normal margins', () => {
+  expect(activeWorkoutLiftBlockStyle()).toMatchObject({
+    background: 'transparent',
     marginBottom: 'clamp(4px, 0.8dvh, 8px)',
   });
-  expect(activeWorkoutLiftBlockStyle('Bench', 0).marginTop).toBeUndefined();
 });
 
 test('meet workout scrolls naturally with equal compact lift spacing', () => {

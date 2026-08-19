@@ -874,22 +874,13 @@ export function meetWorkoutGridSpan(itemCount) {
   return Math.max(1, Math.floor(12 / count));
 }
 
-export function activeWorkoutLiftBlockStyle(lift, liftIndex = 0) {
-  const baseMarginBottom = 'clamp(4px, 0.8dvh, 8px)';
-  const liftBench = lift === 'Bench' && liftIndex > 0;
-
+export function activeWorkoutLiftBlockStyle() {
   return {
     background: 'transparent',
     border: 'none',
     borderRadius: 8,
     overflow: 'hidden',
-    // Move only a following Bench block into the excessive gap above it.
-    // Compensate below so the header, Squat block and completion action keep
-    // their existing positions in the space-between workout grid.
-    marginTop: liftBench ? -40 : undefined,
-    marginBottom: liftBench
-      ? `calc(40px + ${baseMarginBottom})`
-      : baseMarginBottom,
+    marginBottom: 'clamp(4px, 0.8dvh, 8px)',
   };
 }
 
@@ -5453,7 +5444,7 @@ export function SmartDayTypeInline({
   );
 }
 
-function CurrentWorkout({
+export function CurrentWorkout({
   trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight, currentE1RMs = {} }) {
   const smartModel = isSmartTrainingModel(trainingModel);
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
@@ -5792,7 +5783,8 @@ function CurrentWorkout({
 
         {renderActivateWorkoutCard()}
 
-        {(workout.lifts || []).map((liftBlock, li) => {
+        <div style={isMeetDay ? undefined : { display: 'flex', flexDirection: 'column' }}>
+          {(workout.lifts || []).map((liftBlock, li) => {
           const visiblePrepItems = getVisiblePrepItems(liftBlock, li);
           const firstIncompletePrepItem = visiblePrepItems.findIndex(item => !item.done);
           const firstIncompleteWarmup = (liftBlock.warmups || []).findIndex(w => !w.done);
@@ -5805,7 +5797,7 @@ function CurrentWorkout({
             key={liftBlock.lift}
               style={isMeetDay
                 ? meetWorkoutLiftBlockStyle()
-                : activeWorkoutLiftBlockStyle(liftBlock.lift, li)}
+                : activeWorkoutLiftBlockStyle()}
             >
               <div style={{
                 padding: '2px 10px 4px',
@@ -6114,6 +6106,7 @@ function CurrentWorkout({
             </div>
           );
         })}
+        </div>
 
         {!isMeetDay && (workout.accessories || []).length > 0 && (
           <div style={{
