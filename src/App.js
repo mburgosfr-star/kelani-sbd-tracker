@@ -8610,11 +8610,16 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
       {renderWorkoutListToggleButton('top')}
 
       <div data-kelani-program-list-spacer style={{
-        flex: smartModel && visibleWorkoutEntries.length === 1 ? 1 : undefined,
+        // Center within whatever room is left below the header, not only
+        // for a single visible workout - a short list (e.g. early in a
+        // cycle, or a few workouts left after the compact window) must not
+        // stay pinned to the top with empty space below it. A list long
+        // enough to fill the space centers itself out naturally.
+        flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: smartModel && visibleWorkoutEntries.length === 1 ? 'center' : 'flex-start',
-        marginTop: smartModel && visibleWorkoutEntries.length === 1 ? 0 : 'clamp(14px, 2dvh, 22px)',
+        justifyContent: 'center',
+        marginTop: 'clamp(14px, 2dvh, 22px)',
       }}>
 {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
