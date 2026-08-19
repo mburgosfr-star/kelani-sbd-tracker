@@ -909,7 +909,15 @@ export function restWorkoutContentStyle() {
 
 export function restDayCompletedScreenStyle() {
   return {
-    minHeight: '100%',
+    // An absolute viewport-relative height, not a percentage: this div's own
+    // ancestors only set minHeight (never a definite height), so a
+    // percentage here would never resolve and the grid row below would
+    // collapse to content size instead of centering within free space.
+    // completedWorkoutScreenStyle() (the direct parent) has its own 20px +
+    // 16px vertical padding, which must be subtracted here too - otherwise
+    // this screen claims more height than its parent actually has left,
+    // forcing an unnecessary scroll despite ample visual space.
+    minHeight: `calc(100dvh - ${BOTTOM_NAV_SPACE}px - 36px)`,
     display: 'grid',
     gridTemplateRows: 'minmax(0, 1fr)',
     background: 'transparent',

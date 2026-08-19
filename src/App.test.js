@@ -206,8 +206,15 @@ test('rest information sits optically above centre with its completion action be
 });
 
 test('completed rest day content is distributed over the available screen height', () => {
+  // Must be an absolute viewport-relative height, not a percentage: every
+  // ancestor of this screen only sets minHeight (never a definite height),
+  // so a percentage here can never resolve, collapsing the centering grid
+  // row to content size and leaving the content stuck at the top. Must also
+  // subtract the parent's own 36px of vertical padding, or this screen
+  // claims more height than its parent has left and forces an unnecessary
+  // scroll.
   expect(restDayCompletedScreenStyle()).toMatchObject({
-    minHeight: '100%',
+    minHeight: 'calc(100dvh - 52px - 36px)',
     display: 'grid',
     gridTemplateRows: 'minmax(0, 1fr)',
     boxSizing: 'border-box',
