@@ -81,10 +81,14 @@ test('capacitor.config.ts declares the canonical package ID', () => {
   expectOnlyPackageId('capacitor.config.ts');
 });
 
-test('the synced Capacitor asset config has not drifted from capacitor.config.ts', () => {
-  const synced = JSON.parse(read('android/app/src/main/assets/capacitor.config.json'));
-  expect(synced.appId).toBe(packageName);
-});
+// The synced android/app/src/main/assets/capacitor.config.json is generated
+// by `npx cap sync android` and gitignored - it does not exist in a
+// pristine checkout, so it cannot be checked from this unit suite (which
+// runs before sync in every pipeline). That check now runs as
+// assertCapacitorConfigSynced() in scripts/release-common.js, called right
+// after `cap sync` in scripts/build-release-apk.js and
+// scripts/test-izzy-build.js - the only points where the file is
+// guaranteed to exist.
 
 test('README, VERIFY and BRANDING only ever mention the canonical package ID', () => {
   expectOnlyPackageId('README.md');

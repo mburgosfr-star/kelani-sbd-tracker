@@ -9,6 +9,7 @@ const {
   assertReleasePreparationProof,
   assertVerifiedReleaseCommits,
   assertSignedV2,
+  assertCapacitorConfigSynced,
   findAndroidSdk,
   packageName,
 } = require('./release-common');
@@ -142,6 +143,7 @@ run('npm', ['test', '--', '--runInBand'], {
 });
 run('npm', ['run', 'build']);
 run('npx', ['cap', 'sync', 'android']);
+assertCapacitorConfigSynced();
 
 assertCleanSourceTreeExceptRelease();
 

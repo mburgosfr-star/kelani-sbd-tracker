@@ -14,6 +14,7 @@ const {
   readVersionInfo,
   getHeadCommit,
   assertCleanSourceTreeExceptRelease,
+  assertCapacitorConfigSynced,
   findAndroidSdk,
   assertApkMetadata,
   assertUnsigned,
@@ -98,6 +99,7 @@ function main() {
     cwd: cloneDir,
     env,
   });
+  assertCapacitorConfigSynced(cloneDir);
 
   run('./gradlew', [
     'clean',
