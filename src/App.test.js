@@ -959,3 +959,51 @@ test('an existing Classic user keeps Classic and can make the one-way switch to 
     expect(saved.trainingModel).toBe('smart');
   });
 });
+
+test('settings shows the official app identity and links to VERIFY.md', async () => {
+  localStorage.clear();
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1,
+    trainingModel: 'classic',
+    currentCycle: 1,
+    prs: { Squat: 100, Bench: 75, Deadlift: 125 },
+    history: [
+      { workoutNumber: 0, cycle: 0, seedMax: true, lift: 'Squat', topWeight: 100, topReps: 1, e1rm: 100 },
+      { workoutNumber: 0, cycle: 0, seedMax: true, lift: 'Bench', topWeight: 75, topReps: 1, e1rm: 75 },
+      { workoutNumber: 0, cycle: 0, seedMax: true, lift: 'Deadlift', topWeight: 125, topReps: 1, e1rm: 125 },
+    ],
+  }));
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole(
+    'button',
+    { name: 'Settings' },
+    { timeout: 3000 }
+  ));
+
+  // The identity facts must not sit directly on the settings screen -
+  // only a compact row with a button that opens them in a modal.
+  expect(screen.queryByText(/mburgosfr-star\/kelani-sbd-tracker/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/com\.kelani\.sbdtracker/)).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'View' }));
+
+  expect(screen.getByText(/mburgosfr-star\/kelani-sbd-tracker/)).toBeInTheDocument();
+  expect(screen.getByText(/com\.kelani\.sbdtracker/)).toBeInTheDocument();
+  expect(screen.getByText(/GitHub Releases.*IzzyOnDroid/)).toBeInTheDocument();
+  expect(screen.getByText(
+    /15d23f2e5ee95ebc2a530b48be6f27dad7a568f722bc819f4571b3470a2ff39d/
+  )).toBeInTheDocument();
+
+  const openSpy = jest.spyOn(window, 'open').mockImplementation(() => {});
+  fireEvent.click(screen.getByRole('button', { name: 'Verify release' }));
+  expect(openSpy).toHaveBeenCalledWith(
+    'https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/VERIFY.md',
+    '_blank',
+    'noopener,noreferrer'
+  );
+  openSpy.mockRestore();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  expect(screen.queryByText(/mburgosfr-star\/kelani-sbd-tracker/)).not.toBeInTheDocument();
+});

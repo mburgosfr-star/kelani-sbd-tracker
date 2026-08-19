@@ -2756,6 +2756,81 @@ function SupportSection({ t }) {
   );
 }
 
+function AboutSection({ t }) {
+  const [showAbout, setShowAbout] = useState(false);
+
+  function openLink(url) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  const facts = [
+    [t.aboutRepository || 'Repository', 'mburgosfr-star/kelani-sbd-tracker'],
+    [t.aboutPackage || 'Package', 'com.kelani.sbdtracker'],
+    [t.aboutDistribution || 'Distribution', 'GitHub Releases · IzzyOnDroid'],
+    [t.aboutSigningSha256 || 'Signing SHA-256', '15d23f2e5ee95ebc2a530b48be6f27dad7a568f722bc819f4571b3470a2ff39d'],
+  ];
+
+  return (
+    <>
+      <SettingsListRow
+        label={t.about || 'About'}
+        actionLabel={t.view || 'View'}
+        onAction={() => setShowAbout(true)}
+      />
+
+      {showAbout && (
+        <SettingsModal
+          title={t.about || 'About'}
+          onClose={() => setShowAbout(false)}
+        >
+          <div style={{ display: 'grid', gap: 10, marginBottom: 4 }}>
+            {facts.map(([label, value]) => (
+              <div key={label}>
+                <div style={{
+                  color: THEME.muted,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.3,
+                }}>
+                  {label}
+                </div>
+                <div style={{
+                  color: THEME.text,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  lineHeight: 1.35,
+                  overflowWrap: 'anywhere',
+                  marginTop: 2,
+                }}>
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={modalActionRowStyle()}>
+            <button
+              type="button"
+              onClick={() => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/VERIFY.md')}
+              style={modalActionButtonStyle('primary')}
+            >
+              {t.verifyRelease || 'Verify release'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAbout(false)}
+              style={modalActionButtonStyle('secondary')}
+            >
+              {t.close || 'Close'}
+            </button>
+          </div>
+        </SettingsModal>
+      )}
+    </>
+  );
+}
+
 function ProfileSection({ userProfile, onSave, weightUnit, setWeightUnit, t }) {
   const [isEditing, setIsEditing] = useState(false);
   const [birthDate, setBirthDate] = useState(userProfile?.birthDate || '');
@@ -13653,6 +13728,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       />
 
       <SupportSection t={t} />
+
+      <AboutSection t={t} />
     </div>
 
     <div data-testid="start-over-settings-row">
