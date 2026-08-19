@@ -29,6 +29,7 @@ import {
   epley,
   roundE1RM,
   getActualOneRMFromSets,
+  getTopWeightFromSets,
   getEstablishedOneRMFromHistoryEntry,
   getRecommendedRestTimeSeconds,
   isTopSetLabel,
@@ -11246,7 +11247,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
             )
           : null;
 
-        const oneRMToday = getActualOneRMFromSets(sets);
+        const oneRMToday = getTopWeightFromSets(sets);
 
         const e1RMToday = sets.length
           ? roundE1RM(Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0))))
@@ -11385,7 +11386,7 @@ const topSet = sets.reduce(
   sets[0]
 );
 
-const oneRMToday = getActualOneRMFromSets(sets);
+const oneRMToday = getTopWeightFromSets(sets);
 
 const e1RMToday = sets.length
   ? roundE1RM(Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0))))
@@ -12730,12 +12731,8 @@ function buildCompletedSummaryForRender(workout) {
       : null;
 
     const oneRMToday = entry
-      ? Number(entry.oneRMToday) || (
-          Number(entry.topReps) === 1
-            ? Number(entry.topWeight) || 0
-            : 0
-        )
-      : getActualOneRMFromSets(successfulSets);
+      ? Number(entry.oneRMToday) || Number(entry.topWeight) || 0
+      : getTopWeightFromSets(successfulSets);
 
     const e1RMToday = entry
       ? roundE1RM(entry.e1rm)
@@ -13896,9 +13893,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
 
             const sets = (completedWorkout?.sets || []).filter(s => s.done && !s.failed && !s.skipped);
 
-            const calculatedOneRMToday = sets.length
-              ? Math.max(...sets.map(s => Number(s.weight) || 0))
-              : 0;
+            const calculatedOneRMToday = getTopWeightFromSets(sets);
 
             const calculatedE1RMToday = sets.length
               ? roundE1RM(Math.max(...sets.map(s => epley(Number(s.weight) || 0, Number(s.reps) || 0))))

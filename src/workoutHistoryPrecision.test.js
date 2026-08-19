@@ -2,6 +2,7 @@ import {
   calculateAchievedMaxesFromHistory,
   calculateBestMaxesFromHistory,
   getActualOneRMFromSets,
+  getTopWeightFromSets,
 } from './workoutHistoryStats';
 import { buildSmartMeetPlanReadiness } from './smartTrainingEngine';
 
@@ -37,6 +38,19 @@ test('only a successful single counts as an actually achieved 1RM', () => {
   expect(getActualOneRMFromSets(sets)).toBe(102.5);
   expect(calculateAchievedMaxesFromHistory([trainingEntry(sets)]).Squat)
     .toMatchObject({ oneRM: 102.5 });
+});
+
+test('workout-complete "1RM today" shows the heaviest weight lifted, not just a literal single', () => {
+  const sets = [
+    { weight: 120, reps: 3, done: true, failed: false, skipped: false },
+    { weight: 100, reps: 5, done: true, failed: false, skipped: false },
+  ];
+
+  // A normal training day rarely includes a literal single. The demonstrated
+  // (meet-readiness) 1RM correctly stays 0 here, but the workout-complete
+  // screen's "1RM today" must still show today's top weight, not 0 kg.
+  expect(getActualOneRMFromSets(sets)).toBe(0);
+  expect(getTopWeightFromSets(sets)).toBe(120);
 });
 
 test('a heavier double raises e1RM without moving meet attempts based on real 1RM', () => {

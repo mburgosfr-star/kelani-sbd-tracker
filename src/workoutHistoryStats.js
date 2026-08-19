@@ -154,6 +154,15 @@ export function getActualOneRMFromSets(sets = []) {
   );
 }
 
+// Unlike getActualOneRMFromSets, this is not gated to literal singles: it is
+// the heaviest weight actually put on the bar that day, at any rep count.
+// Used for the "1RM today" workout-complete display, which is distinct from
+// the strictly-demonstrated 1RM tracked for meet readiness.
+export function getTopWeightFromSets(sets = []) {
+  const weights = (Array.isArray(sets) ? sets : []).map(set => Number(set?.weight) || 0);
+  return weights.length ? Math.max(...weights) : 0;
+}
+
 // Legacy completed summaries retain the real 1RM that was already
 // established before that workout. This is distinct from `best1RM`: older
 // training summaries could accidentally let a heavy multi-rep weight raise
