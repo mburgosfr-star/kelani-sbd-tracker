@@ -1,0 +1,56 @@
+name: APK release attestation
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to attest (e.g. v2.0.14)'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: attest-release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  attest-apk:
+    name: Attest published release APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Download release APK
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p attest
+          gh release download "${{ github.event.release.tag_name || inputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern '*.apk' \
+            --dir attest
+
+      # Binds the downloaded APK's digest to this repository, this workflow
+      # and the commit it ran at via Sigstore/OIDC. This does not sign or
+      # touch the Android release key - it attests the exact bytes of the
+      # already-published, already-signed public APK asset.
+      - name: Attest build provenance
+        id: attest
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: attest/*.apk
+
+      - name: Verify the attestation just created
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          for apk in attest/*.apk; do
+            gh attestation verify "$apk" --repo "${{ github.repository }}"
+          done

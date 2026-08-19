@@ -37,5 +37,6 @@ For the Kelani 2.x Android line, users should check all of the following when au
 2. Release source: the official GitHub repository or IzzyOnDroid package listed above.
 3. APK SHA-256 checksum published with the GitHub release.
 4. Android signing-certificate SHA-256 fingerprint published in [VERIFY.md](VERIFY.md).
+5. GitHub build provenance attestation, verifiable with `gh attestation verify`; see [VERIFY.md](VERIFY.md).
 
 If a project or download uses the Kelani name but fails these checks, it should be treated as an independent third-party distribution unless explicitly confirmed otherwise by the official repository.

@@ -46,6 +46,18 @@ Compare the resulting SHA-256 value with the value in the matching `.apk.sha256`
 
 A matching checksum proves that the downloaded APK is byte-for-byte identical to the APK published in that GitHub release. The signing-certificate check independently confirms the Kelani 2.x signing identity.
 
+## Build provenance attestation
+
+Every official GitHub release is additionally attested with a [GitHub build provenance attestation](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds). This cryptographically binds the published APK to this repository, the `attest-release` GitHub Actions workflow, and the exact commit it ran at - independently of the checksum and signing-certificate checks above.
+
+With the GitHub CLI installed:
+
+```bash
+gh attestation verify kelani-sbd-tracker-vX.Y.Z.apk --repo mburgosfr-star/kelani-sbd-tracker
+```
+
+A successful verification confirms the APK was published by this repository's release workflow and has not been altered or re-uploaded elsewhere. This check is additional to, not a replacement for, the checksum and signing-certificate checks above.
+
 ## Distribution integrity
 
 The repository also runs an automated distribution-integrity check that compares the public GitHub and IzzyOnDroid APKs for the current release. It checks their SHA-256 hash, Android package/version metadata and signing certificate.
