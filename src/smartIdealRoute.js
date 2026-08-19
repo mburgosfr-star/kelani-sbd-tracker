@@ -174,9 +174,9 @@ export function resolveSmartIdealRouteStartCycle({
   // Activate the controller immediately for existing Smart records. A
   // partially completed legacy cycle keeps its existing workout numbering;
   // shouldFollowSmartIdealRoute protects those already-created workouts from
-  // retroactive remapping. The exact W1-W33 route starts naturally at the
-  // next cycle boundary, while all compatible current-cycle decisions can
-  // already use the new policy.
+  // retroactive remapping and provides a mid-cycle rejoin path once one
+  // clean workout absorbs the legacy/unmarked history -- the fixed route is
+  // not required to wait for a cycle boundary to resume.
   return cycle;
 }
 

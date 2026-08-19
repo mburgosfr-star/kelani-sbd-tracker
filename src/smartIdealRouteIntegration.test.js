@@ -82,6 +82,25 @@ function completeWorkout(history, workout, effort = 'good') {
   ];
 }
 
+function legacyEntry({ workoutNumber, type = 'training', effort = 'good' }) {
+  return {
+    cycle: 1,
+    workoutNumber,
+    lift: 'Squat',
+    workoutEffort: effort,
+    smartDayType: type === 'meet' ? SMART_DAY_TYPES.MEET : SMART_DAY_TYPES.TRAINING,
+    workoutSnapshot: {
+      number: workoutNumber,
+      type,
+      workoutEffort: effort,
+      lifts: [{
+        lift: 'Squat',
+        sets: [{ weight: 100, reps: 5, done: true, failed: false, skipped: false }],
+      }],
+    },
+  };
+}
+
 function expectFullLiftGrids(workout) {
   (workout.lifts || []).forEach(liftBlock => {
     expect(liftBlock.warmups.length + liftBlock.sets.length).toBeGreaterThan(0);
@@ -218,6 +237,85 @@ test('a safe successful adaptive workout rejoins the ideal route as soon as poss
     stage: 'normal',
   });
   expect(rejoinedW3.type).toBe('rest');
+});
+
+test('a legacy unmarked history recovers and rejoins the ideal route after one clean adaptive workout', () => {
+  let history = [legacyEntry({ workoutNumber: 1, effort: 'good' })];
+
+  const adaptiveW2 = generateCurrent({ history, currentIndex: 1 });
+  expect(adaptiveW2.smartIdealRoute).toBeFalsy();
+  history = completeWorkout(history, adaptiveW2, 'good');
+
+  expect(shouldFollowSmartIdealRoute({
+    history,
+    currentCycle: 1,
+    readiness: {
+      recentFatigueScore: 0,
+      recentFailedOrSkippedSetCount: 0,
+    },
+  })).toBe(true);
+
+  const rejoinedW3 = generateCurrent({ history, currentIndex: 2 });
+  expect(rejoinedW3.smartIdealRoute).toBeTruthy();
+});
+
+test('a legacy unmarked history never rejoins while fatigue/failure readiness stays active', () => {
+  let history = [legacyEntry({ workoutNumber: 1, effort: 'good' })];
+
+  const adaptiveW2 = generateCurrent({ history, currentIndex: 1 });
+  history = completeWorkout(history, adaptiveW2, 'good');
+
+  expect(shouldFollowSmartIdealRoute({
+    history,
+    currentCycle: 1,
+    readiness: {
+      recentFatigueScore: 1,
+      recentFailedOrSkippedSetCount: 0,
+    },
+  })).toBe(false);
+
+  expect(shouldFollowSmartIdealRoute({
+    history,
+    currentCycle: 1,
+    readiness: {
+      recentFatigueScore: 0,
+      recentFailedOrSkippedSetCount: 1,
+    },
+  })).toBe(false);
+});
+
+test('a legacy user who keeps performing well is guaranteed a rejoin within one workout, regardless of how much unmarked history exists', () => {
+  const history = [1, 2, 3, 4, 5].map(workoutNumber => (
+    legacyEntry({ workoutNumber, effort: 'good' })
+  ));
+
+  expect(shouldFollowSmartIdealRoute({
+    history,
+    currentCycle: 1,
+    readiness: {
+      recentFatigueScore: 0,
+      recentFailedOrSkippedSetCount: 0,
+    },
+  })).toBe(true);
+
+  const rejoinedW6 = generateCurrent({ history, currentIndex: 5 });
+  expect(rejoinedW6.smartIdealRoute).toBeTruthy();
+});
+
+test('an unmarked meet-type deviation still blocks the fixed route for the rest of the cycle', () => {
+  const history = [
+    legacyEntry({ workoutNumber: 1, type: 'meet', effort: 'good' }),
+    legacyEntry({ workoutNumber: 2, type: 'training', effort: 'good' }),
+  ];
+
+  expect(shouldFollowSmartIdealRoute({
+    history,
+    currentCycle: 1,
+    readiness: {
+      recentFatigueScore: 0,
+      recentFailedOrSkippedSetCount: 0,
+    },
+  })).toBe(false);
 });
 
 test('the pristine route reaches the double phase and keeps every generated grid full', () => {

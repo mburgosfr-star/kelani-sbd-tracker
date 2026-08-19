@@ -537,27 +537,28 @@ export function shouldFollowSmartIdealRoute({
 
   if (completed.length === 0) return true;
 
-  const lastInvalidIdealIndex = completed.findLastIndex(({ snapshot }) => (
-    snapshot?.smartIdealRoute &&
-    !isSuccessfulSmartIdealRouteSnapshot(snapshot)
+  // The last point at which the user was demonstrably on the fixed route
+  // and succeeding. This is -1 both when the most recent on-route attempt
+  // failed AND when there is no on-route attempt at all yet (a legacy or
+  // freshly-migrated cycle) -- unifying what used to be two separate cases.
+  const lastOnRouteSuccessIndex = completed.findLastIndex(({ snapshot }) => (
+    snapshot?.smartIdealRoute && isSuccessfulSmartIdealRouteSnapshot(snapshot)
   ));
-  const hasUnmarkedWorkout = completed.some(({ snapshot }) => (
-    !snapshot?.smartIdealRoute
-  ));
 
-  if (lastInvalidIdealIndex < 0) {
-    return !hasUnmarkedWorkout;
-  }
+  // Fully caught up: the most recent completed workout was itself an
+  // on-route success, so there is no deviation left to absorb.
+  if (lastOnRouteSuccessIndex === completed.length - 1) return true;
 
-  const invalidIdealSnapshot = completed[lastInvalidIdealIndex]?.snapshot;
+  const deviationSnapshot = completed[lastOnRouteSuccessIndex + 1]?.snapshot;
 
-  // A failed or non-GOOD meet is a different cycle outcome, not a small
-  // detour that should be erased by resuming the fixed post-meet schedule.
-  // Let the existing post-meet/failed-meet controller own that cycle.
-  if (invalidIdealSnapshot?.type === 'meet') return false;
+  // A failed or non-GOOD meet -- marked or not -- is a different cycle
+  // outcome, not a small detour that should be erased by resuming the fixed
+  // schedule. Let the existing post-meet/failed-meet controller own that
+  // cycle.
+  if (deviationSnapshot?.type === 'meet') return false;
 
-  const completedAfterDeviation = completed.slice(lastInvalidIdealIndex + 1);
-  const adaptiveWorkouts = completedAfterDeviation.filter(({ snapshot }) => (
+  const recoveryZone = completed.slice(lastOnRouteSuccessIndex + 2);
+  const adaptiveWorkouts = recoveryZone.filter(({ snapshot }) => (
     !snapshot?.smartIdealRoute
   ));
   const latestAdaptiveSnapshot = adaptiveWorkouts.at(-1)?.snapshot || null;
