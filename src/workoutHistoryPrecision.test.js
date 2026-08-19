@@ -5,6 +5,7 @@ import {
   getTopWeightFromSets,
   buildCompletedWorkoutLiftSummaries,
   isFlatLegacyTrainingWorkout,
+  getCurrentCycleBestMaxes,
 } from './workoutHistoryStats';
 import { buildSmartMeetPlanReadiness } from './smartTrainingEngine';
 
@@ -158,6 +159,31 @@ test('a heavier double raises e1RM without moving meet attempts based on real 1R
     secondAttempt: 97.5,
     thirdAttempt: 102.5,
   });
+});
+
+test('the current-cycle best e1RM never leaks in an all-time PR from a previous cycle', () => {
+  // The Smart modal must show meet-readiness numbers scoped to what has
+  // actually been achieved within the active cycle. An all-time best e1RM
+  // set in a previous cycle must not make this cycle's "Gap" read as
+  // resolved (0 kg) while the blocker list - which is scoped the same way -
+  // still names the lift, or the two visibly contradict each other.
+  const history = [
+    { cycle: 3, workoutNumber: 20, lift: 'Squat', topWeight: 145, topReps: 2, e1rm: 155 },
+    { cycle: 4, workoutNumber: 1, lift: 'Squat', topWeight: 100, topReps: 5, e1rm: 116.7 },
+  ];
+
+  expect(getCurrentCycleBestMaxes(history, 4).Squat.e1rm).toBeCloseTo(116.7, 1);
+  expect(calculateBestMaxesFromHistory(history).Squat.e1rm).toBe(155);
+});
+
+test('seed/manual maxes and other cycles never count toward the current cycle e1RM', () => {
+  const history = [
+    { cycle: 0, workoutNumber: 0, seedMax: true, lift: 'Bench', topWeight: 90, topReps: 1, e1rm: 90 },
+    { cycle: 3, workoutNumber: 12, lift: 'Bench', topWeight: 95, topReps: 3, e1rm: 103.75 },
+    { cycle: 4, workoutNumber: 2, lift: 'Bench', topWeight: 92.5, topReps: 3, e1rm: 101 },
+  ];
+
+  expect(getCurrentCycleBestMaxes(history, 4).Bench.e1rm).toBeCloseTo(101, 1);
 });
 
 test('a genuinely heavier single immediately updates automatic meet attempts', () => {

@@ -26,7 +26,7 @@ import {
   getSmartLiftSetsFromSnapshot,
   calculateBestMaxesFromHistory,
   getAchievedHistoryMaxCandidates,
-  calculateAchievedMaxesFromHistory,
+  getCurrentCycleBestMaxes,
   getEntryCycle,
   getCompletedWorkoutNumbers,
   roundE1RM,
@@ -1496,8 +1496,7 @@ export function buildSmartMeetPlanReadiness({
     !entry?.manualMax &&
     !entry?.seedMax
   );
-  const currentCycleBestMaxes =
-    calculateAchievedMaxesFromHistory(currentCycleEntries);
+  const currentCycleBestMaxes = getCurrentCycleBestMaxes(history, currentCycle);
 
   const byLift = LIFT_ORDER.reduce((acc, lift) => {
     const bestE1RM = roundE1RM(Math.max(

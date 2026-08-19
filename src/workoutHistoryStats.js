@@ -436,6 +436,24 @@ export function calculateAchievedMaxesFromHistory(history = []) {
   return best;
 }
 
+// The same current-cycle filter buildSmartMeetPlanReadiness uses internally
+// to decide meet-plan blockers. Exported so any live UI (the dashboard, the
+// Smart modal) can compute the identical cycle-scoped best e1RM directly
+// from history instead of a workout snapshot, which can go stale for days
+// and - critically - must never be substituted with an all-time best, or a
+// past cycle's PR can make this cycle look "blocker-free" while the
+// blocker list (computed from this same scoped value) still lists it.
+export function getCurrentCycleBestMaxes(history = [], currentCycle) {
+  const currentCycleEntries = (history || []).filter(entry =>
+    Number(entry?.cycle) === Number(currentCycle) &&
+    Number(entry?.workoutNumber) > 0 &&
+    !entry?.manualMax &&
+    !entry?.seedMax
+  );
+
+  return calculateAchievedMaxesFromHistory(currentCycleEntries);
+}
+
 export function calculatePrsFromHistory(history = []) {
   const best = calculateBestMaxesFromHistory(history);
 

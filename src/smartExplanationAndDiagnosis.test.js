@@ -178,11 +178,6 @@ test('fully demonstrated meet readiness remains visible during taper', () => {
     label: 'Meetstatus',
     value: 'Volledig wedstrijdklaar: taperen en rusten voor de meet',
   });
-  expect(rows).toEqual(expect.arrayContaining([
-    { label: 'Opener: 90% of real 1RM', value: '3/3', kind: 'metric' },
-    { label: 'Second attempt: 95% of real 1RM', value: '3/3', kind: 'metric' },
-    { label: 'Meet minimum: 100% of real 1RM', value: '3/3', kind: 'metric' },
-  ]));
 });
 
 test('a ready-phase Bench prescription explains taper instead of recovery or blocked progression', () => {
@@ -199,7 +194,7 @@ test('a ready-phase Bench prescription explains taper instead of recovery or blo
   expect(rows[0].value).not.toContain('Recovery or blocked.');
 });
 
-test('distinguishes the current blocker from the projected limiter', () => {
+test('names the current blocker once, not duplicated as a separate primary-blocker row', () => {
   const rows = getSmartModalDetailRows(workoutWith([
     smartLift({ lift: 'Deadlift' }),
   ]));
@@ -209,11 +204,8 @@ test('distinguishes the current blocker from the projected limiter', () => {
       label: 'Current blocker',
       value: 'Deadlift (100% of the real 1RM not yet reached)',
     },
-    {
-      label: 'Primary blocker',
-      value: 'Deadlift (100% of the real 1RM not yet reached)',
-    },
   ]));
+  expect(rows.filter(row => row.label === 'Primary blocker')).toHaveLength(0);
 });
 
 test('shows the full readiness/blocker/fatigue detail on a deload or rest day too, not just on training-fallback days', () => {
@@ -239,14 +231,9 @@ test('shows the full readiness/blocker/fatigue detail on a deload or rest day to
       value: 'Deadlift (100% of the real 1RM not yet reached)',
     },
     {
-      label: 'Opener: 90% of real 1RM',
-      value: '1/3',
-      kind: 'metric',
-    },
-    {
-      label: 'Deadlift (Cycle e1RM)',
-      value: '157.5 kg',
-      kind: 'metric',
+      label: 'Deadlift',
+      value: 'e1RM 157.5 kg → 180 kg (Gap 22.5 kg)',
+      kind: 'lift-readiness',
     },
     {
       label: 'Fatigue',
@@ -280,13 +267,9 @@ test('the Gap is always exactly (displayed target) - (displayed current) - simpl
   workout.smartDecisionSummary.readiness.meetPlanWeakestPhase = 'third-attempt';
 
   const rows = getSmartModalDetailRows(workout);
-  const gapRow = rows.find(row => row.label === 'Deadlift (Gap)');
-  const cycleRow = rows.find(row => row.label === 'Deadlift (Cycle e1RM)');
-  const targetRow = rows.find(row => row.label === 'Deadlift (Real 1RM target)');
+  const liftRow = rows.find(row => row.label === 'Deadlift');
 
-  expect(cycleRow.value).toBe('170 kg');
-  expect(targetRow.value).toBe('185 kg');
-  expect(gapRow.value).toBe('15 kg');
+  expect(liftRow.value).toBe('e1RM 170 kg → 185 kg (Gap 15 kg)');
 });
 
 function secondaryLiftBlock(lift, { volumePct = 0.75, volumeReps = 6, volumeCount = 6 } = {}) {
@@ -387,20 +370,14 @@ test('lists every lift still short of its real 1RM as a blocker, not just the si
   // Bench is fully ready and must not be listed as a blocker.
   expect(blockerRow.value).not.toContain('Bench');
 
-  // Showing numbers for only the single weakest lift
-  // (Deadlift) while naming Squat as a blocker too was inconsistent - all
-  // 3 lifts get their own Cycle e1RM/target/Gap rows now, including Bench
-  // even though it's already fully ready (0 kg gap, not omitted).
+  // Showing a row for only the single weakest lift (Deadlift) while naming
+  // Squat as a blocker too was inconsistent - all 3 lifts still get their
+  // own row, including Bench even though it's already fully ready (not
+  // omitted), just compacted to one line each instead of three cells.
   expect(rows).toEqual(expect.arrayContaining([
-    { label: 'Deadlift (Cycle e1RM)', value: '170 kg', kind: 'metric' },
-    { label: 'Deadlift (Real 1RM target)', value: '185 kg', kind: 'metric' },
-    { label: 'Deadlift (Gap)', value: '15 kg', kind: 'metric' },
-    { label: 'Squat (Cycle e1RM)', value: '137.5 kg', kind: 'metric' },
-    { label: 'Squat (Real 1RM target)', value: '147.5 kg', kind: 'metric' },
-    { label: 'Squat (Gap)', value: '10 kg', kind: 'metric' },
-    { label: 'Bench (Cycle e1RM)', value: '102.5 kg', kind: 'metric' },
-    { label: 'Bench (Real 1RM target)', value: '100 kg', kind: 'metric' },
-    { label: 'Bench (Gap)', value: '0 kg', kind: 'metric' },
+    { label: 'Deadlift', value: 'e1RM 170 kg → 185 kg (Gap 15 kg)', kind: 'lift-readiness' },
+    { label: 'Squat', value: 'e1RM 137.5 kg → 147.5 kg (Gap 10 kg)', kind: 'lift-readiness' },
+    { label: 'Bench', value: 'Ready (e1RM 102.5 kg)', kind: 'lift-readiness' },
   ]));
 });
 
@@ -427,12 +404,8 @@ test('live dashboard e1RMs override stale 5kg workout snapshots in the Smart mod
   });
 
   expect(rows).toEqual(expect.arrayContaining([
-    { label: 'Bench (Cycle e1RM)', value: '102.5 kg', kind: 'metric' },
-    { label: 'Bench (Real 1RM target)', value: '105 kg', kind: 'metric' },
-    { label: 'Bench (Gap)', value: '2.5 kg', kind: 'metric' },
-    { label: 'Deadlift (Cycle e1RM)', value: '182.5 kg', kind: 'metric' },
-    { label: 'Deadlift (Real 1RM target)', value: '185 kg', kind: 'metric' },
-    { label: 'Deadlift (Gap)', value: '2.5 kg', kind: 'metric' },
+    { label: 'Bench', value: 'e1RM 102.5 kg → 105 kg (Gap 2.5 kg)', kind: 'lift-readiness' },
+    { label: 'Deadlift', value: 'e1RM 182.5 kg → 185 kg (Gap 2.5 kg)', kind: 'lift-readiness' },
   ]));
 });
 

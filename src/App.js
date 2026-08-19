@@ -39,6 +39,7 @@ import {
   getHistoryMaxCandidates,
   calculateBestMaxesFromHistory,
   calculateAchievedMaxesFromHistory,
+  getCurrentCycleBestMaxes,
   calculatePrsFromHistory,
   calculateStrengthRatioMaxes,
   mergeHigherPrs,
@@ -4703,45 +4704,11 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
       value: statusText,
     });
 
-    if (
-      !meetReady &&
-      (readiness.primaryBlockerLift || readiness.meetPlanWeakestLift)
-    ) {
-      const primaryLift = readiness.primaryBlockerLift || readiness.meetPlanWeakestLift;
-      rows.push({
-        label: t.smartPrimaryBlocker || 'Primary blocker',
-        value: `${primaryLift} (${oneRMBlockerText})`,
-      });
-    }
-
-    if (
-      readiness.meetPlanOpenerReadyCount !== undefined &&
-      readiness.meetPlanSecondAttemptReadyCount !== undefined &&
-      readiness.meetPlanThirdAttemptPotentialCount !== undefined
-    ) {
-      rows.push(
-        {
-          label: t.smartE1RM90Readiness || 'Opener: 90% of real 1RM',
-          value: `${Number(readiness.meetPlanOpenerReadyCount) || 0}/3`,
-          kind: 'metric',
-        },
-        {
-          label: t.smartE1RM95Readiness || 'Second attempt: 95% of real 1RM',
-          value: `${Number(readiness.meetPlanSecondAttemptReadyCount) || 0}/3`,
-          kind: 'metric',
-        },
-        {
-          label: t.smartOneRMReadiness || 'Meet minimum: 100% of real 1RM',
-          value: `${Number(readiness.meetPlanThirdAttemptPotentialCount) || 0}/3`,
-          kind: 'metric',
-        }
-      );
-    }
-
-    // One row per lift instead of just the single weakest one - the
-    // blockers row above can now name more than one lift (e.g. Squat AND
-    // Deadlift), and showing numbers for only one of them read as a
-    // contradiction. Show Cycle e1RM / target / Gap for all 3 lifts.
+    // One compact row per lift instead of three metric cells each (Cycle
+    // e1RM / target / Gap) - the blockers row above can name more than one
+    // lift (e.g. Squat AND Deadlift), so every named blocker still needs its
+    // own visible numbers, but a lift that has already reached its target
+    // doesn't need three cells to say so.
     ['Squat', 'Bench', 'Deadlift'].forEach(lift => {
       const liftReadiness = meetPlanReadinessByLift[lift];
       if (!liftReadiness) return;
@@ -4752,6 +4719,9 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
       // for days. The modal is presentation UI, so
       // prefer the live dashboard source passed by App; fall back to the
       // snapshot only for isolated helpers/tests that have no app state.
+      // This live source must itself be scoped to the active cycle - an
+      // all-time best from a previous cycle must never make this cycle's
+      // blocker look resolved while the blocker list above still names it.
       const liftCycleEstimate =
         Number(currentE1RMs?.[lift]) ||
         Number(liftReadiness.currentCycleBestE1RM) ||
@@ -4765,34 +4735,24 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
 
       const liftDisplayCycleEstimate = roundDashboardWeightKg(liftCycleEstimate);
       const liftDisplayReadinessTarget = roundDashboardWeightKg(liftReadinessTarget);
-      // Same reasoning as the (now per-lift) blocker text above: the gap
-      // must be simple, visible arithmetic on the two numbers shown right
-      // above it, never a more "precise" number that doesn't add up against
-      // what's on screen.
+      // The gap must be simple, visible arithmetic on the two numbers shown
+      // right above it, never a more "precise" number that doesn't add up
+      // against what's on screen. Whether a lift reads as "ready" here
+      // follows the same displayed numbers, so the row never contradicts
+      // itself (a 0 kg gap must never be paired with a "not ready" badge).
       const liftReadinessGap = Math.max(
         liftDisplayReadinessTarget - liftDisplayCycleEstimate,
         0
       );
-      const liftTargetLabel =
-        t.smartRealOneRMTarget || 'Real 1RM target';
+      const liftIsReady = liftReadinessGap <= 0;
 
-      rows.push(
-        {
-          label: `${lift} (${t.smartCycleEstimateShort || 'Cycle e1RM'})`,
-          value: formatEstimate(liftDisplayCycleEstimate),
-          kind: 'metric',
-        },
-        {
-          label: `${lift} (${liftTargetLabel})`,
-          value: formatEstimate(liftDisplayReadinessTarget),
-          kind: 'metric',
-        },
-        {
-          label: `${lift} (${t.smartOpenerGapShort || 'Gap'})`,
-          value: formatEstimate(liftReadinessGap),
-          kind: 'metric',
-        }
-      );
+      rows.push({
+        label: lift,
+        value: liftIsReady
+          ? `${t.smartLiftReady || 'Ready'} (e1RM ${formatEstimate(liftDisplayCycleEstimate)})`
+          : `e1RM ${formatEstimate(liftDisplayCycleEstimate)} → ${formatEstimate(liftDisplayReadinessTarget)} (${t.smartOpenerGapShort || 'Gap'} ${formatEstimate(liftReadinessGap)})`,
+        kind: 'lift-readiness',
+      });
     });
   }
 
@@ -4814,21 +4774,17 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
   }
 
   if (showMeetReadinessDetail && hasMeetReadinessDetail) {
+    const readinessBasisText = readiness.meetProjection?.available
+      ? (t.smartReadinessBasisTextWithProjection ||
+        'e1RM is an estimate from your best successful set this cycle; the target is your confirmed real 1RM. The projection assumes normal progress and unchanged meet attempts.')
+      : (t.smartReadinessBasisText ||
+        'e1RM is an estimate from your best successful set this cycle; the target is your confirmed real 1RM.');
+
     rows.push({
       label: t.smartReadinessBasis || 'Readiness basis',
-      value: t.smartReadinessBasisText ||
-        'Only successful sets from the active cycle count.',
+      value: readinessBasisText,
       kind: 'note',
     });
-
-    if (readiness.meetProjection?.available) {
-      rows.push({
-        label: t.smartProjectionAssumption || 'Projection assumption',
-        value: t.smartProjectionAssumptionText ||
-          'Assumes normal progress, successful workouts and unchanged meet attempts.',
-        kind: 'note',
-      });
-    }
   }
 
   // A zero fatigue score and zero missed sets add no decision information.
@@ -4941,16 +4897,25 @@ export function SmartDayTypeInline({
     } : null,
   ].filter(Boolean);
   const decisionRow = infoRows.find(row => row.emphasis) || null;
-  const currentBlockerLabel = t.smartCurrentBlocker || 'Current blocker';
+  // The headline blocker/status row can carry one of three labels depending
+  // on how many lifts are blocking (or none at all) - all three must be
+  // recognized here, or the headline silently drops out of the featured
+  // "Meet readiness" section and into the generic "Details" list whenever
+  // there is more than one blocker, or none.
+  const currentBlockerLabels = [
+    t.smartCurrentBlocker || 'Current blocker',
+    t.smartCurrentBlockers || 'Current blockers',
+    t.smartMeetStatus || 'Meet status',
+  ];
   const statusRows = infoRows.filter(
-    row => row.label === currentBlockerLabel
+    row => currentBlockerLabels.includes(row.label)
   );
-  const metricRows = infoRows.filter(row => row.kind === 'metric');
+  const liftReadinessRows = infoRows.filter(row => row.kind === 'lift-readiness');
   const noteRows = infoRows.filter(row => row.kind === 'note');
   const otherRows = infoRows.filter(row =>
     !row.emphasis &&
-    row.label !== currentBlockerLabel &&
-    !['metric', 'note'].includes(row.kind)
+    !currentBlockerLabels.includes(row.label) &&
+    !['metric', 'note', 'lift-readiness'].includes(row.kind)
   );
   const prescriptionRows = otherRows.filter(
     row => row.kind === 'prescription'
@@ -5198,7 +5163,7 @@ export function SmartDayTypeInline({
                     </div>
                   )}
 
-                  {(statusRows.length > 0 || metricRows.length > 0 || projectionRows.length > 0) && (
+                  {(statusRows.length > 0 || liftReadinessRows.length > 0 || projectionRows.length > 0) && (
                     <>
                       {prescriptionRows.length > 0 && <div style={smartModalDividerStyle} />}
                       <div>
@@ -5225,40 +5190,44 @@ export function SmartDayTypeInline({
                             </section>
                           ))}
 
-                          {metricRows.length > 0 && (
+                          {liftReadinessRows.length > 0 && (
                             <div
-                              data-testid="smartMeetMetricGrid"
-                              style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                                minWidth: 0,
-                                rowGap: 12,
-                                columnGap: 8,
-                              }}
+                              data-testid="smartMeetLiftReadinessList"
+                              style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}
                             >
-                              {metricRows.map((row, index) => (
+                              {liftReadinessRows.map(row => (
                                 <div
                                   key={row.label}
                                   style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'clamp(64px, 15vw, 72px) minmax(0, 1fr)',
+                                    gap: 'clamp(10px, 2.5vw, 14px)',
+                                    alignItems: 'baseline',
                                     minWidth: 0,
-                                    textAlign: 'center',
-                                    paddingTop: index >= 3 ? 10 : 0,
-                                    borderTop: index >= 3 && index < 6
-                                      ? '1px solid rgba(255, 244, 230, 0.09)'
-                                      : 'none',
                                   }}
                                 >
                                   <div style={{
-                                    color: index >= 3 ? THEME.primary : THEME.text,
-                                    fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
+                                    color: ({
+                                      Squat: THEME.red,
+                                      Bench: THEME.primary,
+                                      Deadlift: THEME.yellow,
+                                    }[row.label] || THEME.text),
+                                    fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
                                     fontWeight: 900,
-                                    lineHeight: 1.1,
-                                    whiteSpace: 'nowrap',
+                                    lineHeight: 1.3,
+                                    textTransform: 'uppercase',
+                                  }}>
+                                    {liftLabel(row.label, t)}
+                                  </div>
+                                  <div style={{
+                                    minWidth: 0,
+                                    color: THEME.text,
+                                    fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
+                                    fontWeight: 700,
+                                    lineHeight: 1.3,
+                                    overflowWrap: 'anywhere',
                                   }}>
                                     {row.value}
-                                  </div>
-                                  <div style={{ ...smartModalLabelStyle, marginTop: 3 }}>
-                                    {row.label}
                                   </div>
                                 </div>
                               ))}
@@ -12711,6 +12680,18 @@ const dashboardE1RMMetrics = buildDashboardE1RMMetrics(
 );
 const dashboardRecentPrEvents = buildDashboardRecentPrEvents(history);
 
+// Meet-plan readiness (blockers, gap-to-target) is scoped to what has
+// actually been achieved within the active cycle - an all-time best from a
+// previous cycle must not make this cycle's blocker list look resolved.
+// This must stay computed the same way buildSmartMeetPlanReadiness scopes
+// its own currentCycleBestE1RM, or the two disagree.
+const currentCycleBestMaxes = getCurrentCycleBestMaxes(history, currentCycle);
+const currentCycleE1RMs = {
+  Squat: roundDashboardWeightKg(currentCycleBestMaxes.Squat.e1rm),
+  Bench: roundDashboardWeightKg(currentCycleBestMaxes.Bench.e1rm),
+  Deadlift: roundDashboardWeightKg(currentCycleBestMaxes.Deadlift.e1rm),
+};
+
 const latestBodyDataEntry = [...bodyWeights].slice(-1)[0];
 const latestBodyWeightEntry = [...bodyWeights].filter(entry => entry.bodyWeight).slice(-1)[0];
 const latestBodyWeight = latestBodyWeightEntry?.bodyWeight || null;
@@ -13104,12 +13085,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           eStrengthRatio={eStrengthRatio}
           eStrengthMax={eStrengthMax}
           latestBodyWeight={latestBodyWeight}
-          currentE1RMs={Object.fromEntries(
-            LIFT_ORDER.map(lift => [
-              lift,
-              dashboardE1RMMetrics.lifts[lift].e1RM,
-            ])
-          )}
+          currentE1RMs={currentCycleE1RMs}
         />
       )}
 
@@ -13257,7 +13233,6 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       const meetReadiness = workouts[currentIndex].smartDecisionSummary?.readiness;
       const dashboardMeetProjection = meetReadiness?.meetProjection || null;
       const primaryBlockerLift = meetReadiness?.primaryBlockerLift || meetReadiness?.meetPlanWeakestLift;
-      const primaryBlockerPhase = meetReadiness?.primaryBlockerPhase || meetReadiness?.meetPlanWeakestPhase;
       const primaryBlockerReadiness = primaryBlockerLift
         ? meetReadiness?.meetPlanReadiness?.[primaryBlockerLift]
         : null;
@@ -13276,7 +13251,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       );
       const readinessGap = Math.max(readinessTarget - cycleE1RM, 0);
       const blockerRouteText = primaryBlockerLift && cycleE1RM > 0 && readinessTarget > 0
-        ? `${primaryBlockerLift}: ${formatWeightFromKg(cycleE1RM, weightUnit)} → ${formatWeightFromKg(readinessTarget, weightUnit)} (${t.smartOpenerGapShort || 'Gap'} ${formatWeightFromKg(readinessGap, weightUnit)})`
+        ? `${t.smartPrimaryBlocker || 'Primary blocker'}: ${primaryBlockerLift} (${t.smartOpenerGapShort || 'Gap'} ${formatWeightFromKg(readinessGap, weightUnit)})`
         : null;
       const { meetPlan: dashboardMeetPlan, meetTotals: dashboardMeetTotals } = dashboardSuggestedMeetPlan;
 
@@ -13305,11 +13280,6 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                 ? `${t.expectedMeetWindow || 'Expected meet'}: ${dashboardMeetProjection.label}`
                 : (t.smartProjectionUnavailable || 'Not enough active-cycle data for a reliable projection.')}
             </div>
-            {primaryBlockerLift && primaryBlockerPhase && (
-              <div style={{ color: THEME.muted, fontSize: 'clamp(12px, 2.9vw, 14px)', fontWeight: 700, marginBottom: 6 }}>
-                {t.smartPrimaryBlocker || 'Primary blocker'}: {primaryBlockerLift} ({getSmartAttemptPhaseLabel(primaryBlockerPhase, t)})
-              </div>
-            )}
             {blockerRouteText && (
               <div style={{ color: THEME.meet, fontSize: 'clamp(12px, 2.9vw, 14px)', fontWeight: 900, lineHeight: 1.3 }}>
                 {blockerRouteText}
