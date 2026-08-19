@@ -8,7 +8,7 @@ const { execFileSync } = require('child_process');
 const root = process.cwd();
 const pkg = require(path.join(root, 'package.json'));
 const version = pkg.version;
-const expectedPackageName = 'com.kelani.sbdtracker';
+const { packageName: expectedPackageName } = require('./release-common');
 
 function fail(message) {
   console.error(`ERROR: ${message}`);
