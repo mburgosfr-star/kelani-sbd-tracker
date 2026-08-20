@@ -98,3 +98,39 @@ test('multi-lift workout preserves spacing when a rest timer is active', () => {
   const hasNegativeMargin = Array.from(blocks).some(block => block.style && block.style.marginTop === '-40px');
   expect(hasNegativeMargin).toBe(false);
 });
+
+test('an expired inline timer remains visible as ready instead of disappearing', () => {
+  const t = Translations.translations['en'];
+  const workout = {
+    type: 'training',
+    number: 1,
+    lift: 'Squat',
+    sets: [],
+    lifts: [{
+      lift: 'Squat',
+      warmups: [],
+      sets: [{ reps: 5, weight: 100, done: true }],
+    }],
+  };
+  const timer = {
+    id: 'expired-timer',
+    placement: { workoutNumber: 1, type: 'meetSet', liftIndex: 0, index: 0 },
+    seconds: 180,
+    endTime: Date.now() - 1000,
+  };
+
+  const { getByText } = render(
+    <CurrentWorkout
+      workout={workout}
+      timer={timer}
+      t={t}
+      weightUnit="kg"
+      isReadOnly={false}
+      onComplete={() => {}}
+      onToggleSet={() => {}}
+      onToggleMeetSet={() => {}}
+    />
+  );
+
+  expect(getByText(t.readyNextSet)).toBeInTheDocument();
+});

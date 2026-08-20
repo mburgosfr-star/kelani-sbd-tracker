@@ -457,6 +457,54 @@ async function scheduleRestTimerNotification(
   } catch (e) {}
 }
 
+export function shouldPlayRestTimerInAppAlert({
+  isNativePlatform = Capacitor.isNativePlatform(),
+  isDocumentHidden = typeof document !== 'undefined' && document.hidden,
+} = {}) {
+  // Android already owns the reliable exact-alarm notification, including
+  // while the WebView is visible. Playing Web Audio at the same deadline
+  // races that notification and intermittently produces two different
+  // sounds. Keep Web Audio as the browser-only alert source.
+  return !isNativePlatform && !isDocumentHidden;
+}
+
+export function createRestTimerNotificationQueue() {
+  let pending = Promise.resolve();
+
+  return task => {
+    const next = pending
+      .catch(() => undefined)
+      .then(task);
+    pending = next;
+    return next;
+  };
+}
+
+export function hasMoreMeetSets(workout, liftIndex, setIndex) {
+  const liftBlock = workout?.lifts?.[liftIndex];
+  if (!liftBlock) return false;
+
+  const hasMoreSetsInSameLift = (liftBlock.sets || []).some((set, index) =>
+    index > setIndex && !set.done && !set.skipped
+  );
+
+  if (hasMoreSetsInSameLift) return true;
+
+  const hasMoreLiftWork = (workout?.lifts || []).some((laterLift, index) => (
+    index > liftIndex && (
+      (laterLift.prepItems || []).some(item => !item.done) ||
+      (laterLift.warmups || []).some(warmup => !warmup.done) ||
+      (laterLift.sets || []).some(set => !set.done && !set.skipped)
+    )
+  ));
+
+  if (hasMoreLiftWork) return true;
+
+  return (workout?.accessories || []).some(accessory =>
+    (accessory.done || []).some(done => !done)
+  );
+}
+
 export function validateBackupPayload(backup, expectedData) {
   if (!backup || backup.storageKey !== STORAGE_KEY) return false;
   if (!backup.data || typeof backup.data !== 'object') return false;
@@ -1138,7 +1186,7 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
       clearTick();
       setRemaining(0);
 
-      if (document.hidden) {
+      if (!shouldPlayRestTimerInAppAlert()) {
         hasBeepedRef.current = true;
         return;
       }
@@ -1188,7 +1236,10 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
     setRemaining(seconds);
 
     clearFinishTimeout();
-    timeoutRef.current = setTimeout(finishTimer, seconds * 1000);
+    timeoutRef.current = setTimeout(
+      finishTimer,
+      Math.max(Number(endTime) - Date.now(), 0)
+    );
 
 
     startVisibleTick();
@@ -5516,10 +5567,6 @@ export function CurrentWorkout({
   function renderInlineTimer(placement) {
     if (!isTimerFor(placement)) return null;
 
-    if (timer.endTime && Date.now() >= timer.endTime) {
-      return null;
-    }
-
     return (
       <RestTimer
         key={timer.id}
@@ -9315,6 +9362,10 @@ function App() {
   });
 
   const [timer, setTimer] = useState(null);
+  const restTimerNotificationQueueRef = useRef(null);
+  if (!restTimerNotificationQueueRef.current) {
+    restTimerNotificationQueueRef.current = createRestTimerNotificationQueue();
+  }
   const [restTimeSeconds, setRestTimeSeconds] = useState(DEFAULT_REST_TIME_SECONDS);
   const [programProfile, setProgramProfile] = useState(() =>
     normalizeProgramProfile(localStorage.getItem('programProfile'))
@@ -9357,11 +9408,13 @@ function App() {
       placement,
     });
 
-    scheduleRestTimerNotification(endTime, doneTitle, doneMessage);
+    restTimerNotificationQueueRef.current(() =>
+      scheduleRestTimerNotification(endTime, doneTitle, doneMessage)
+    );
   }
 
   function stopTimer() {
-    cancelRestTimerNotification();
+    restTimerNotificationQueueRef.current(cancelRestTimerNotification);
     setTimer(null);
   }
 
@@ -10582,23 +10635,6 @@ function toggleMeetWarmup(liftIndex, warmupIndex) {
       };
     })
   );
-}
-
-function hasMoreMeetSets(workout, liftIndex, setIndex) {
-  const liftBlock = workout?.lifts?.[liftIndex];
-  if (!liftBlock) return false;
-
-  const hasMoreSetsInSameLift = (liftBlock.sets || []).some((s, si) =>
-    si > setIndex && !s.done && !s.skipped
-  );
-
-  if (hasMoreSetsInSameLift) return true;
-
-  const hasMoreAccessories = (workout?.accessories || []).some(accessory =>
-    (accessory.done || []).some(done => !done)
-  );
-
-  return hasMoreAccessories;
 }
 
 function toggleMeetSet(liftIndex, setIndex) {
