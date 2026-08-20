@@ -4,6 +4,7 @@ import {
   SMART_IDEAL_MEET_POLICY,
   SMART_IDEAL_POST_MEET,
   getSmartIdealNormalPhase,
+  getSmartIdealRouteEntryWorkoutNumber,
   getSmartIdealRouteWorkout,
   isSmartIdealRouteEnabled,
   resolveSmartIdealRouteStartCycle,
@@ -55,6 +56,83 @@ const expectedNormalWeek = {
     'Rust',
   ],
 };
+
+test('legacy route entry uses demonstrated readiness instead of restarting the cycle', () => {
+  const anaLikeReadiness = {
+    meetPlanReady: false,
+    meetPlanHasCurrentCycleEvidence: true,
+    meetPlanOpenerReady: true,
+    meetPlanSecondAttemptReady: false,
+    meetPlanReadiness: {
+      Squat: {
+        openerReady: true,
+        secondAttemptReady: true,
+        thirdAttemptPotential: true,
+        projectedMeetReadyExposureCount: 0,
+      },
+      Bench: {
+        openerReady: true,
+        secondAttemptReady: true,
+        thirdAttemptPotential: false,
+        projectedMeetReadyExposureCount: 2,
+      },
+      Deadlift: {
+        openerReady: true,
+        secondAttemptReady: false,
+        thirdAttemptPotential: false,
+        projectedMeetReadyExposureCount: 2,
+      },
+    },
+  };
+
+  expect(getSmartIdealRouteEntryWorkoutNumber({
+    athleteLevel: 'beginner',
+    readiness: anaLikeReadiness,
+  })).toBe(17);
+  expect(getSmartIdealRouteEntryWorkoutNumber({
+    athleteLevel: 'beginner',
+    readiness: {
+      ...anaLikeReadiness,
+      meetPlanHasCurrentCycleEvidence: false,
+    },
+  })).toBe(1);
+  expect(getSmartIdealRouteEntryWorkoutNumber({
+    athleteLevel: 'beginner',
+    readiness: {
+      ...anaLikeReadiness,
+      meetPlanReady: true,
+    },
+  })).toBe(28);
+  expect(getSmartIdealRouteEntryWorkoutNumber({
+    athleteLevel: 'beginner',
+    readiness: {
+      ...anaLikeReadiness,
+      meetPlanReadiness: {
+        ...anaLikeReadiness.meetPlanReadiness,
+        Deadlift: {
+          ...anaLikeReadiness.meetPlanReadiness.Deadlift,
+          projectedMeetReadyExposureCount: 3,
+        },
+      },
+    },
+  })).toBe(10);
+  expect(getSmartIdealRouteEntryWorkoutNumber({
+    athleteLevel: 'beginner',
+    readiness: {
+      ...anaLikeReadiness,
+      meetPlanSecondAttemptReady: true,
+      meetPlanReadiness: {
+        ...anaLikeReadiness.meetPlanReadiness,
+        Deadlift: {
+          ...anaLikeReadiness.meetPlanReadiness.Deadlift,
+          secondAttemptReady: true,
+          thirdAttemptPotential: true,
+          projectedMeetReadyExposureCount: 0,
+        },
+      },
+    },
+  })).toBe(19);
+});
 
 test('existing records enable the ideal-route policy immediately', () => {
   expect(resolveSmartIdealRouteStartCycle({ currentCycle: 3 })).toBe(3);

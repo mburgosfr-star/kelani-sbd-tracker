@@ -1,6 +1,7 @@
 import {
   buildSmartIdealTrainingWorkout,
   generateWorkoutsForTrainingModel,
+  getNextSmartIdealRouteWorkoutNumber,
   isSmartCycleCompleteAfterHistory,
   isSmartIdealRoutePristine,
   shouldFollowSmartIdealRoute,
@@ -27,9 +28,11 @@ function generateCurrent({
   history = [],
   currentIndex = 0,
   athleteLevel = 'intermediate',
+  options = {},
 } = {}) {
   return generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
     ...baseOptions,
+    ...options,
     athleteLevel,
     history,
     currentIndex,
@@ -99,6 +102,54 @@ function legacyEntry({ workoutNumber, type = 'training', effort = 'good' }) {
       }],
     },
   };
+}
+
+function legacyWorkoutEntries({
+  workoutNumber,
+  effort = 'good',
+  lifts = [],
+  rest = false,
+}) {
+  const snapshot = {
+    number: workoutNumber,
+    type: rest ? 'rest' : 'training',
+    workoutEffort: rest ? 'easy' : effort,
+    lifts: lifts.map(({ lift, weight, reps, intensityRole }) => ({
+      lift,
+      intensityRole,
+      sets: [{
+        weight,
+        reps,
+        done: true,
+        failed: false,
+        skipped: false,
+      }],
+    })),
+  };
+
+  if (rest) {
+    return [{
+      cycle: 1,
+      workoutNumber,
+      restDay: true,
+      completionOnly: true,
+      workoutEffort: 'easy',
+      smartDayType: SMART_DAY_TYPES.RECOVERY,
+      workoutSnapshot: snapshot,
+    }];
+  }
+
+  return lifts.map(({ lift, weight, reps, e1rm }) => ({
+    cycle: 1,
+    workoutNumber,
+    lift,
+    topWeight: weight,
+    topReps: reps,
+    e1rm: Number(e1rm) || weight * (1 + reps / 30),
+    workoutEffort: effort,
+    smartDayType: SMART_DAY_TYPES.TRAINING,
+    workoutSnapshot: snapshot,
+  }));
 }
 
 function expectFullLiftGrids(workout) {
@@ -233,18 +284,15 @@ test('a safe successful adaptive workout rejoins the ideal route as soon as poss
 
   const rejoinedW3 = generateCurrent({ history, currentIndex: 2 });
   expect(rejoinedW3.smartIdealRoute).toMatchObject({
-    workoutNumber: 3,
+    workoutNumber: 2,
     stage: 'normal',
   });
-  expect(rejoinedW3.type).toBe('rest');
+  expect(rejoinedW3.type).toBe('training');
 });
 
-test('a legacy unmarked history recovers and rejoins the ideal route after one clean adaptive workout', () => {
-  let history = [legacyEntry({ workoutNumber: 1, effort: 'good' })];
-
-  const adaptiveW2 = generateCurrent({ history, currentIndex: 1 });
-  expect(adaptiveW2.smartIdealRoute).toBeFalsy();
-  history = completeWorkout(history, adaptiveW2, 'good');
+test('a legacy unmarked history starts relative ideal-route W1 immediately', () => {
+  const history = [legacyEntry({ workoutNumber: 1, effort: 'good' })];
+  const routeStartAtActualW2 = generateCurrent({ history, currentIndex: 1 });
 
   expect(shouldFollowSmartIdealRoute({
     history,
@@ -254,17 +302,16 @@ test('a legacy unmarked history recovers and rejoins the ideal route after one c
       recentFailedOrSkippedSetCount: 0,
     },
   })).toBe(true);
-
-  const rejoinedW3 = generateCurrent({ history, currentIndex: 2 });
-  expect(rejoinedW3.smartIdealRoute).toBeTruthy();
+  expect(routeStartAtActualW2.number).toBe(2);
+  expect(routeStartAtActualW2.smartIdealRoute).toMatchObject({
+    workoutNumber: 1,
+    stage: 'normal',
+    phase: 'triple',
+  });
 });
 
-test('a legacy unmarked history never rejoins while fatigue/failure readiness stays active', () => {
-  let history = [legacyEntry({ workoutNumber: 1, effort: 'good' })];
-
-  const adaptiveW2 = generateCurrent({ history, currentIndex: 1 });
-  history = completeWorkout(history, adaptiveW2, 'good');
-
+test('legacy migration activates the route controller even while readiness still reports fatigue', () => {
+  const history = [legacyEntry({ workoutNumber: 1, effort: 'hard' })];
   expect(shouldFollowSmartIdealRoute({
     history,
     currentCycle: 1,
@@ -272,7 +319,7 @@ test('a legacy unmarked history never rejoins while fatigue/failure readiness st
       recentFatigueScore: 1,
       recentFailedOrSkippedSetCount: 0,
     },
-  })).toBe(false);
+  })).toBe(true);
 
   expect(shouldFollowSmartIdealRoute({
     history,
@@ -281,10 +328,10 @@ test('a legacy unmarked history never rejoins while fatigue/failure readiness st
       recentFatigueScore: 0,
       recentFailedOrSkippedSetCount: 1,
     },
-  })).toBe(false);
+  })).toBe(true);
 });
 
-test('a legacy user who keeps performing well is guaranteed a rejoin within one workout, regardless of how much unmarked history exists', () => {
+test('a legacy user starts immediately regardless of how much unmarked history exists', () => {
   const history = [1, 2, 3, 4, 5].map(workoutNumber => (
     legacyEntry({ workoutNumber, effort: 'good' })
   ));
@@ -299,7 +346,170 @@ test('a legacy user who keeps performing well is guaranteed a rejoin within one 
   })).toBe(true);
 
   const rejoinedW6 = generateCurrent({ history, currentIndex: 5 });
-  expect(rejoinedW6.smartIdealRoute).toBeTruthy();
+  expect(rejoinedW6.number).toBe(6);
+  expect(rejoinedW6.smartIdealRoute).toMatchObject({
+    workoutNumber: 1,
+    stage: 'normal',
+  });
+});
+
+test('a beginner beyond the legacy route range with no cross-lift evidence starts at route W1', () => {
+  let history = Array.from({ length: 33 }, (_, index) => (
+    legacyEntry({
+      workoutNumber: index + 1,
+      effort: index === 32 ? 'hard' : 'good',
+    })
+  ));
+  const projectedMeetLabels = [];
+  let meet = null;
+
+  for (let currentIndex = 33; currentIndex < 66; currentIndex += 1) {
+    const workout = generateCurrent({
+      history,
+      currentIndex,
+      athleteLevel: 'beginner',
+    });
+
+    if (currentIndex === 33) {
+      expect(workout.number).toBe(34);
+      expect(workout.smartIdealRoute).toMatchObject({
+        workoutNumber: 1,
+        stage: 'normal',
+        phase: 'triple',
+      });
+      expect(workout.smartTrainingSelectionSummary?.reasonFlags).toContain(
+        'ideal-route'
+      );
+      expect(workout.smartDecisionSummary?.readiness?.meetProjection).toMatchObject({
+        currentWorkoutNumber: 34,
+        minimumWorkoutNumber: 61,
+        maximumWorkoutNumber: 61,
+        minimumWorkoutsBeforeMeet: 27,
+        projectedByIdealRoute: true,
+      });
+    }
+
+    const projection = workout.smartDecisionSummary?.readiness?.meetProjection;
+    if (projection?.projectedByIdealRoute) {
+      projectedMeetLabels.push(projection.label);
+    }
+
+    if (workout.type === 'meet') {
+      meet = workout;
+      break;
+    }
+
+    history = completeWorkout(history, workout, 'good');
+  }
+
+  expect(new Set(projectedMeetLabels)).toEqual(new Set(['C1W61']));
+  expect(meet).toBeTruthy();
+  expect(meet.number).toBe(61);
+  expect(meet.smartIdealRoute).toMatchObject({
+    workoutNumber: 28,
+    stage: 'meet',
+  });
+});
+
+test('an almost meet-ready legacy beginner starts full W17 without pre-route frequency blocking', () => {
+  let history = [
+    ...legacyWorkoutEntries({
+      workoutNumber: 17,
+      effort: 'hard',
+      lifts: [{ lift: 'Deadlift', weight: 42.5, reps: 4, e1rm: 48.1666666667, intensityRole: 'heavy' }],
+    }),
+    ...legacyWorkoutEntries({
+      workoutNumber: 24,
+      lifts: [{ lift: 'Deadlift', weight: 52.5, reps: 2, e1rm: 55, intensityRole: 'heavy' }],
+    }),
+    ...legacyWorkoutEntries({
+      workoutNumber: 28,
+      effort: 'hard',
+      lifts: [{ lift: 'Bench', weight: 30, reps: 1, e1rm: 30, intensityRole: 'heavy' }],
+    }),
+    ...legacyWorkoutEntries({
+      workoutNumber: 29,
+      lifts: [{ lift: 'Squat', weight: 30, reps: 5, intensityRole: 'medium' }],
+    }),
+    ...legacyWorkoutEntries({ workoutNumber: 30, rest: true }),
+    ...legacyWorkoutEntries({
+      workoutNumber: 31,
+      lifts: [{ lift: 'Deadlift', weight: 50, reps: 2, e1rm: 52.5, intensityRole: 'heavy' }],
+    }),
+    ...legacyWorkoutEntries({
+      workoutNumber: 32,
+      lifts: [{ lift: 'Bench', weight: 22.5, reps: 5, e1rm: 27.5, intensityRole: 'medium' }],
+    }),
+    ...legacyWorkoutEntries({
+      workoutNumber: 33,
+      effort: 'hard',
+      lifts: [{ lift: 'Squat', weight: 37.5, reps: 3, e1rm: 42.5, intensityRole: 'heavy' }],
+    }),
+  ];
+  const anaLikeOptions = {
+    squat: 42.5,
+    bench: 32.5,
+    deadlift: 60,
+    oneRMs: { Squat: 42.5, Bench: 32.5, Deadlift: 60 },
+  };
+  const deliveredRouteNumbers = [];
+  const deliveredWorkoutTypes = [];
+  let meet = null;
+
+  for (let currentIndex = 33; currentIndex < 58; currentIndex += 1) {
+    const workout = generateCurrent({
+      history,
+      currentIndex,
+      athleteLevel: 'beginner',
+      options: anaLikeOptions,
+    });
+    deliveredRouteNumbers.push(workout.smartIdealRoute?.workoutNumber);
+    deliveredWorkoutTypes.push(workout.type);
+
+    if (currentIndex === 33) {
+      expect(workout.number).toBe(34);
+      expect(workout.smartIdealRoute).toMatchObject({
+        workoutNumber: 17,
+        stage: 'normal',
+        phase: 'single',
+      });
+      expect(workout.lifts.map(block => [block.lift, block.intensityRole]))
+        .toEqual([
+          ['Deadlift', 'heavy'],
+          ['Bench', 'medium'],
+        ]);
+      expect(workout.smartIdealRoute.transitionPending).toBeUndefined();
+      expect(workout.smartTrainingSelectionSummary?.reasonFlags).not.toContain(
+        'ideal-route-frequency-transition'
+      );
+      expect(workout.smartDecisionSummary?.readiness).toMatchObject({
+        meetPlanWeakestLift: 'Deadlift',
+        meetPlanWeakestPhase: 'second-attempt',
+        meetProjection: { label: 'C1W45' },
+      });
+    }
+
+    if (workout.type === 'meet') {
+      meet = workout;
+      break;
+    }
+
+    history = completeWorkout(history, workout, 'good');
+  }
+
+  expect(deliveredRouteNumbers).toEqual([
+    17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+  ]);
+  expect(deliveredWorkoutTypes).toEqual([
+    'training', 'rest', 'training', 'rest', 'rest', 'training',
+    'rest', 'training', 'training', 'rest', 'rest', 'meet',
+  ]);
+  expect(meet).toBeTruthy();
+  expect(meet.number).toBe(45);
+  expect(meet.smartIdealRoute).toMatchObject({
+    workoutNumber: 28,
+    stage: 'meet',
+  });
 });
 
 test('an unmarked meet-type deviation still blocks the fixed route for the rest of the cycle', () => {
@@ -487,8 +697,8 @@ test('elite ideal route reaches W28 meet and requires one post-meet recovery wor
   }
 });
 
-test('W28 is delayed instead of forcing a meet when readiness was lost to deviations', () => {
-  const history = Array.from({ length: 27 }, (_, index) => ({
+test('W28 stays pending and is eventually delivered when readiness was lost to deviations', () => {
+  let history = Array.from({ length: 27 }, (_, index) => ({
     cycle: 1,
     workoutNumber: index + 1,
     workoutEffort: 'good',
@@ -506,9 +716,41 @@ test('W28 is delayed instead of forcing a meet when readiness was lost to deviat
       sets: [],
     },
   }));
-  const w28 = generateCurrent({ history, currentIndex: 27 });
+  const w28 = generateCurrent({
+    history,
+    currentIndex: 27,
+    options: { skipMeetProjectionSimulation: true },
+  });
 
   expect(w28.smartDecisionSummary?.readiness?.meetPlanReady).toBe(false);
   expect(w28.type).not.toBe('meet');
   expect(w28.smartIdealRoute).toBeFalsy();
+
+  let meet = null;
+  for (let currentIndex = 27; currentIndex < 120; currentIndex += 1) {
+    const workout = generateCurrent({
+      history,
+      currentIndex,
+      options: { skipMeetProjectionSimulation: true },
+    });
+
+    expect(getNextSmartIdealRouteWorkoutNumber({
+      history,
+      currentCycle: 1,
+    })).toBe(28);
+
+    if (workout.type === 'meet') {
+      meet = workout;
+      break;
+    }
+
+    history = completeWorkout(history, workout, 'good');
+  }
+
+  expect(meet).toBeTruthy();
+  expect(meet.number).toBeGreaterThan(28);
+  expect(meet.smartIdealRoute).toMatchObject({
+    workoutNumber: 28,
+    stage: 'meet',
+  });
 });

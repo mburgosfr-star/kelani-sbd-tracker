@@ -172,11 +172,9 @@ export function resolveSmartIdealRouteStartCycle({
   }
 
   // Activate the controller immediately for existing Smart records. A
-  // partially completed legacy cycle keeps its existing workout numbering;
-  // shouldFollowSmartIdealRoute protects those already-created workouts from
-  // retroactive remapping and provides a mid-cycle rejoin path once one
-  // clean workout absorbs the legacy/unmarked history -- the fixed route is
-  // not required to wait for a cycle boundary to resume.
+  // partially completed legacy cycle keeps its existing displayed workout
+  // numbering, while readiness determines the relative ideal-route entry.
+  // The fixed route therefore does not wait for a new cycle boundary.
   return cycle;
 }
 
@@ -378,6 +376,60 @@ export function getSmartIdealRouteWorkout({
     accessoriesAllowed: false,
     lifts: [],
   };
+}
+
+export function getSmartIdealRouteEntryWorkoutNumber({
+  athleteLevel = 'intermediate',
+  readiness = {},
+} = {}) {
+  const level = normalizeLevel(athleteLevel);
+  const byLift = readiness.meetPlanReadiness || readiness.byLift || {};
+  const hasCurrentCycleEvidence = Boolean(
+    readiness.meetPlanHasCurrentCycleEvidence ??
+    readiness.hasCurrentCycleMeetEvidence
+  );
+  const meetPlanReady = Boolean(
+    readiness.meetPlanReady ?? readiness.ready
+  );
+
+  if (meetPlanReady) return 28;
+  if (!hasCurrentCycleEvidence) return 1;
+
+  const openerReady = Boolean(
+    readiness.meetPlanOpenerReady ?? readiness.openerReady
+  );
+  const secondAttemptReady = Boolean(
+    readiness.meetPlanSecondAttemptReady ?? readiness.secondAttemptReady
+  );
+  const maximumProjectedExposures = Math.max(
+    0,
+    ...['Squat', 'Bench', 'Deadlift'].map(liftName => (
+      Number(byLift[liftName]?.projectedMeetReadyExposureCount) || 0
+    ))
+  );
+  const phase = !openerReady
+    ? SMART_IDEAL_NORMAL_PHASES[0]
+    : secondAttemptReady || maximumProjectedExposures <= 2
+      ? SMART_IDEAL_NORMAL_PHASES[2]
+      : SMART_IDEAL_NORMAL_PHASES[1];
+  const readinessProperty = phase.key === 'triple'
+    ? 'openerReady'
+    : phase.key === 'double'
+      ? 'secondAttemptReady'
+      : 'thirdAttemptPotential';
+  const unresolvedLifts = ['Squat', 'Bench', 'Deadlift'].filter(
+    liftName => !byLift[liftName]?.[readinessProperty]
+  );
+  const firstNeededHeavyRow = Object.entries(
+    SMART_IDEAL_NORMAL_ROUTE[level]
+  )
+    .filter(([, lifts]) => lifts.some(item => (
+      item.intensityRole === H && unresolvedLifts.includes(item.lift)
+    )))
+    .map(([rowNumber]) => Number(rowNumber))
+    .sort((a, b) => a - b)[0] || 1;
+
+  return phase.firstWorkout + firstNeededHeavyRow - 1;
 }
 
 export function summarizeSmartIdealFrequency(athleteLevel = 'intermediate') {

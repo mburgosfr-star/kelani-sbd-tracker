@@ -54,6 +54,7 @@ import { generateProgramForProfile } from './classicProgramTemplates';
 import { buildMeetAttemptsFromOneRM } from './meetAttemptPlanning';
 import {
   SMART_IDEAL_ROUTE_VERSION,
+  getSmartIdealRouteEntryWorkoutNumber,
   getSmartIdealRouteWorkout,
 } from './smartIdealRoute';
 
@@ -514,6 +515,31 @@ export function isSmartIdealRoutePristine({
     });
 }
 
+export function getNextSmartIdealRouteWorkoutNumber({
+  history = [],
+  currentCycle = 1,
+  entryWorkoutNumber = 1,
+} = {}) {
+  const completedRouteWorkoutNumbers = getUniqueCompletedSmartWorkoutSnapshots(
+    history,
+    currentCycle
+  )
+    .filter(({ snapshot }) => (
+      !snapshot?.smartIdealRoute?.transitionPending
+    ))
+    .map(({ snapshot }) => Number(snapshot?.smartIdealRoute?.workoutNumber))
+    .filter(number => Number.isInteger(number) && number >= 1);
+
+  if (completedRouteWorkoutNumbers.length === 0) {
+    const entry = Number(entryWorkoutNumber);
+    return Number.isInteger(entry) && entry >= 1 && entry <= 28
+      ? entry
+      : 1;
+  }
+
+  return Math.max(...completedRouteWorkoutNumbers) + 1;
+}
+
 function isSuccessfulSmartIdealRouteSnapshot(snapshot = {}) {
   if (countFailedOrSkippedSetsFromSnapshot(snapshot) > 0) return false;
   if (snapshot.type === 'rest') return true;
@@ -536,6 +562,22 @@ export function shouldFollowSmartIdealRoute({
   );
 
   if (completed.length === 0) return true;
+
+  const hasOnRouteSnapshot = completed.some(({ snapshot }) => (
+    Boolean(snapshot?.smartIdealRoute)
+  ));
+
+  // Existing Smart users can have an arbitrarily long current cycle from
+  // before the ideal route existed. That history is the migration baseline,
+  // not a deviation from a route they never received. Start their relative
+  // route immediately. The readiness analysis chooses the safe route entry;
+  // pre-route frequency labels must not then rewrite that route into extra
+  // recovery days or legacy supplemental work. An already-completed legacy
+  // meet remains a real cycle outcome and must stay with the post-meet
+  // controller instead of being retroactively reinterpreted as route work.
+  if (!hasOnRouteSnapshot) {
+    return !completed.some(({ snapshot }) => snapshot?.type === 'meet');
+  }
 
   // The last point at which the user was demonstrably on the fixed route
   // and succeeding. This is -1 both when the most recent on-route attempt
@@ -4645,6 +4687,15 @@ function generateSmartWorkouts({
   const decisionWorkoutNumber = Number(
     generatedWorkouts[visibleThroughIndex]?.number
   ) || visibleThroughIndex + 1;
+  const idealRouteEntryWorkoutNumber = getSmartIdealRouteEntryWorkoutNumber({
+    athleteLevel,
+    readiness: smartDecision.readiness,
+  });
+  const idealRouteWorkoutNumber = getNextSmartIdealRouteWorkoutNumber({
+    history,
+    currentCycle,
+    entryWorkoutNumber: idealRouteEntryWorkoutNumber,
+  });
   const candidateIdealRouteWorkout = (
     idealRouteEnabled &&
     shouldFollowSmartIdealRoute({
@@ -4654,7 +4705,7 @@ function generateSmartWorkouts({
     })
   )
     ? getSmartIdealRouteWorkout({
-      workoutNumber: decisionWorkoutNumber,
+      workoutNumber: idealRouteWorkoutNumber,
       athleteLevel,
     })
     : null;
@@ -4684,8 +4735,13 @@ function generateSmartWorkouts({
       ? 'rest'
       : null;
 
-    if (decisionWorkoutNumber <= 28) {
-      const workoutsBeforeMeet = Math.max(28 - decisionWorkoutNumber, 0);
+    if (idealRouteWorkout.workoutNumber <= 28) {
+      const workoutsBeforeMeet = Math.max(
+        28 - idealRouteWorkout.workoutNumber,
+        0
+      );
+      const projectedMeetWorkoutNumber =
+        decisionWorkoutNumber + workoutsBeforeMeet;
       const meetPlanReady = Boolean(smartDecision.readiness?.meetPlanReady);
       smartDecision.readiness = {
         ...smartDecision.readiness,
@@ -4704,12 +4760,14 @@ function generateSmartWorkouts({
           available: true,
           cycle: Number(currentCycle) || 1,
           currentWorkoutNumber: decisionWorkoutNumber,
-          minimumWorkoutNumber: 28,
-          maximumWorkoutNumber: 28,
-          label: `C${Number(currentCycle) || 1}W28`,
+          minimumWorkoutNumber: projectedMeetWorkoutNumber,
+          maximumWorkoutNumber: projectedMeetWorkoutNumber,
+          label: `C${Number(currentCycle) || 1}W${projectedMeetWorkoutNumber}`,
           minimumWorkoutsBeforeMeet: workoutsBeforeMeet,
           maximumWorkoutsBeforeMeet: workoutsBeforeMeet,
-          taperWorkouts: decisionWorkoutNumber < 22 ? 6 : Math.max(28 - decisionWorkoutNumber, 0),
+          taperWorkouts: idealRouteWorkout.workoutNumber < 22
+            ? 6
+            : workoutsBeforeMeet,
           projectedByIdealRoute: true,
           assumedSuccessfulFutureWorkouts: true,
         },
@@ -4945,12 +5003,20 @@ function generateSmartWorkouts({
       readiness: smartDecision.readiness,
       usedSmartSourceWorkoutNumbers: smartContext.usedSmartSourceWorkoutNumbers,
     });
+  const idealRouteTrainingRecovery = Boolean(
+    hasActiveIdealRouteWorkout &&
+    idealRouteWorkout?.type === 'training' &&
+    generatedSmartTrainingWorkout?.type === 'rest'
+  );
 
   return generatedWorkouts.map((workout, index) => {
     const isDecisionWorkout = index === visibleThroughIndex;
     const shouldBuildRecoveryDay =
       isDecisionWorkout &&
-      smartDecision.dayType === SMART_DAY_TYPES.RECOVERY;
+      (
+        smartDecision.dayType === SMART_DAY_TYPES.RECOVERY ||
+        idealRouteTrainingRecovery
+      );
     const shouldBuildDeloadDay =
       isDecisionWorkout &&
       smartDecision.dayType === SMART_DAY_TYPES.DELOAD;
@@ -5054,15 +5120,21 @@ function generateSmartWorkouts({
       )
       : adjustedSmartWorkout;
 
-    const effectiveSmartDayType = shouldBuildNoEffectiveTrainingRecovery
+    const effectiveSmartDayType = (
+      shouldBuildNoEffectiveTrainingRecovery || idealRouteTrainingRecovery
+    )
       ? SMART_DAY_TYPES.RECOVERY
       : smartDecision.dayType;
 
     const smartDecisionSummary = isDecisionWorkout
       ? {
         dayType: effectiveSmartDayType,
-        reason: smartDecision.reason,
-        overrideType: smartDecision.overrideType,
+        reason: idealRouteTrainingRecovery
+          ? SMART_DECISION_REASONS.FREQUENCY_RECOVERY
+          : smartDecision.reason,
+        overrideType: idealRouteTrainingRecovery
+          ? 'rest'
+          : smartDecision.overrideType,
         readiness: smartDecision.readiness
           ? {
             completedCount: smartDecision.readiness.completedCount || 0,
@@ -5543,7 +5615,7 @@ function generateWorkoutsForTrainingModelBase(trainingModel, options = {}) {
   return nextWorkouts;
 }
 
-const SMART_MEET_PROJECTION_MAX_FUTURE_WORKOUTS = 24;
+const SMART_MEET_PROJECTION_MAX_FUTURE_WORKOUTS = 48;
 
 function markProjectedSmartWorkoutSuccessful(workout = {}) {
   const lifts = (workout.lifts || []).map(liftBlock => ({
@@ -5637,13 +5709,21 @@ export function projectSmartMeetBySuccessfulSimulation(options = {}) {
 
     if (!workout) return null;
     if (workout.type === 'meet' || workout.smartDayType === SMART_DAY_TYPES.MEET) {
+      const currentWorkoutNumber = startIndex + 1;
+      const meetWorkoutNumber = Number(workout.number) || currentIndex + 1;
+      const workoutsBeforeMeet = Math.max(
+        meetWorkoutNumber - currentWorkoutNumber,
+        0
+      );
       return {
         available: true,
         cycle: currentCycle,
-        currentWorkoutNumber: startIndex + 1,
-        minimumWorkoutNumber: Number(workout.number) || currentIndex + 1,
-        maximumWorkoutNumber: Number(workout.number) || currentIndex + 1,
-        label: `C${currentCycle}W${Number(workout.number) || currentIndex + 1}`,
+        currentWorkoutNumber,
+        minimumWorkoutNumber: meetWorkoutNumber,
+        maximumWorkoutNumber: meetWorkoutNumber,
+        minimumWorkoutsBeforeMeet: workoutsBeforeMeet,
+        maximumWorkoutsBeforeMeet: workoutsBeforeMeet,
+        label: `C${currentCycle}W${meetWorkoutNumber}`,
         projectedBySimulation: true,
         assumedSuccessfulFutureWorkouts: true,
       };

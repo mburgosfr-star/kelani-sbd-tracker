@@ -924,7 +924,14 @@ test('a legacy Smart save freezes the reconstructed cycle-start e1RMs on reload'
       Deadlift: 125,
     });
     expect(saved.smartIdealRouteStartCycle).toBe(1);
-    expect(saved.inProgress.workouts[1]?.smartIdealRoute).toBeFalsy();
+    expect(saved.inProgress.workouts[1]).toMatchObject({
+      number: 2,
+      smartIdealRoute: {
+        workoutNumber: 3,
+        stage: 'normal',
+        phase: 'triple',
+      },
+    });
   });
 });
 
