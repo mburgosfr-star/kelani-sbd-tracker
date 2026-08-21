@@ -12,6 +12,7 @@ import {
   TRAINING_MODELS,
 } from './smartTrainingConstants';
 import { getSmartIdealRouteWorkout } from './smartIdealRoute';
+import { warmupLoadJumpsNeverIncrease } from './warmupAndPrepGeneration';
 
 const baseOptions = {
   programProfile: 'kelaniSbd',
@@ -603,7 +604,12 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
         });
         (liftBlock.warmups || []).forEach(warmup => {
           expect(Number(warmup.weight)).toBeLessThan(highestWorkWeight);
+          expect((Number(warmup.weight) || 0) % 10).toBe(0);
         });
+        expect(warmupLoadJumpsNeverIncrease(
+          (liftBlock.warmups || []).map(warmup => warmup.weight),
+          Number(workSets[0]?.weight) || 0
+        )).toBe(true);
 
         if (
           workout.smartIdealRoute?.stage === 'normal' &&

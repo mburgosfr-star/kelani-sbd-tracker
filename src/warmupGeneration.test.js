@@ -1,4 +1,8 @@
-import { generateWarmups } from './warmupAndPrepGeneration';
+import {
+  generateWarmups,
+  rebalanceWarmupLoadJumps,
+  warmupLoadJumpsNeverIncrease,
+} from './warmupAndPrepGeneration';
 import { completeSmartLiftGrid } from './smartTrainingEngine';
 
 test('reuses the C3W41 70kg bench backoff as the final warm-up', () => {
@@ -32,19 +36,19 @@ test('builds the C3W52 tapered squat bridge without a jump of 60kg or more', () 
   expect(warmups.map(({ reps, weight }) => ({ reps, weight }))).toEqual([
     { reps: 5, weight: 20 },
     { reps: 5, weight: 70 },
-    { reps: 3, weight: 100 },
+    { reps: 3, weight: 110 },
   ]);
   expect(completedSets.filter(set => set.labelKey === 'topTriple')).toHaveLength(1);
   expect(completedSets.filter(set => set.labelKey === 'backoff')).toHaveLength(4);
   expect(warmups.length + completedSets.length).toBe(8);
 
-  const ladder = [...warmups.map(item => item.weight), 135];
-  for (let index = 1; index < ladder.length; index += 1) {
-    expect(ladder[index] - ladder[index - 1]).toBeLessThan(60);
-  }
+  expect(warmupLoadJumpsNeverIncrease(
+    warmups.map(item => item.weight),
+    135
+  )).toBe(true);
 });
 
-test('removes the C3W53 160kg warmup because 120 to 175 is an allowed 55kg jump', () => {
+test('adds a round warmup for C3W53 instead of allowing a larger final jump', () => {
   const sets = [
     { labelKey: 'topDouble', reps: 2, weight: 175 },
     ...Array.from({ length: 3 }, () => ({
@@ -62,11 +66,64 @@ test('removes the C3W53 160kg warmup because 120 to 175 is an allowed 55kg jump'
     { reps: 5, weight: 20 },
     { reps: 5, weight: 70 },
     { reps: 3, weight: 120 },
+    { reps: 3, weight: 150 },
   ]);
   expect(completedSets.filter(set => set.labelKey === 'topDouble')).toHaveLength(1);
-  expect(completedSets.filter(set => set.labelKey === 'backoff')).toHaveLength(4);
+  expect(completedSets.filter(set => set.labelKey === 'backoff')).toHaveLength(3);
   expect(warmups.length + completedSets.length).toBe(8);
-  expect(175 - warmups.at(-1).weight).toBe(55);
+  expect(warmupLoadJumpsNeverIncrease(
+    warmups.map(item => item.weight),
+    175
+  )).toBe(true);
+});
+
+test('prioritizes a smooth C4W6 top-triple ladder over reusing 110kg backoffs', () => {
+  const sets = [
+    { labelKey: 'topTriple', reps: 3, weight: 165 },
+    ...Array.from({ length: 4 }, () => ({
+      labelKey: 'backoff', reps: 6, weight: 110,
+    })),
+  ];
+
+  const warmups = generateWarmups(sets, 'Deadlift');
+
+  expect(warmups.map(({ reps, weight }) => ({ reps, weight }))).toEqual([
+    { reps: 5, weight: 20 },
+    { reps: 5, weight: 70 },
+    { reps: 3, weight: 120 },
+  ]);
+  expect(warmupLoadJumpsNeverIncrease(
+    warmups.map(item => item.weight),
+    165
+  )).toBe(true);
+});
+
+test('adds a warmup only when the existing number of rungs cannot satisfy the jump rule', () => {
+  const warmups = rebalanceWarmupLoadJumps([20, 70], 140, 55);
+
+  expect(warmups).toEqual([20, 70, 110]);
+  expect(warmupLoadJumpsNeverIncrease(warmups, 140)).toBe(true);
+});
+
+test('classic meet warmups prepare the opener instead of a later attempt', () => {
+  const attempts = [
+    { labelKey: 'opener', reps: 1, weight: 135 },
+    { labelKey: 'secondAttempt', reps: 1, weight: 147.5 },
+    { labelKey: 'thirdAttempt', reps: 1, weight: 155 },
+  ];
+
+  const warmups = generateWarmups(attempts, 'Squat');
+
+  expect(warmups.map(({ reps, weight }) => ({ reps, weight }))).toEqual([
+    { reps: 5, weight: 20 },
+    { reps: 5, weight: 70 },
+    { reps: 1, weight: 120 },
+  ]);
+  expect(warmupLoadJumpsNeverIncrease(
+    warmups.map(item => item.weight),
+    attempts[0].weight
+  )).toBe(true);
+  expect(warmups.every(warmup => warmup.weight < attempts[0].weight)).toBe(true);
 });
 
 test('builds the C3W46 deadlift bridge and trades one backoff for the third warmup', () => {
@@ -139,7 +196,7 @@ test('drops the redundant middle bridge warmup on a single-lift day', () => {
   ).toEqual([
     { reps: 5, weight: 20 },
     { reps: 3, weight: 60 },
-    { reps: 3, weight: 70 },
+    { reps: 1, weight: 80 },
   ]);
 
   expect(
@@ -245,6 +302,7 @@ test('does not add a 120kg warm-up immediately before submaximal 125kg work', ()
   ).toEqual([
     { reps: 5, weight: 20 },
     { reps: 5, weight: 70 },
+    { reps: 5, weight: 100 },
   ]);
 });
 

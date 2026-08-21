@@ -43,6 +43,7 @@ import {
   removeDeprecatedPrepItemsFromWorkouts,
   generateWarmups,
   generatePrepItems,
+  rebalanceWarmupLoadJumps,
   roundMeetWeight,
 } from './warmupAndPrepGeneration';
 import {
@@ -2517,15 +2518,17 @@ export function buildSmartMeetWarmups(openerWeight = 0, lift = '') {
     lastWeight = nextWeight;
   }
 
-  return weights.map((weight, index) => {
-    const isFinalWarmup = index === weights.length - 1 && index > 0;
+  const balancedWeights = rebalanceWarmupLoadJumps(weights, opener, 55);
+
+  return balancedWeights.map((weight, index) => {
+    const isFinalWarmup = index === balancedWeights.length - 1 && index > 0;
     const reps = index === 0
       ? 5
       : lift === 'Squat'
         ? (isFinalWarmup ? 1 : 3)
         : lift === 'Bench'
           ? 3
-          : weight <= 70
+          : weight <= 75
             ? 5
             : 3;
 

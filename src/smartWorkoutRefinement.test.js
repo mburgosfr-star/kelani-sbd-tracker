@@ -31,6 +31,12 @@ test('meet warm-ups prepare the opener with the requested SBD ladders', () => {
     { reps: 5, weight: 70, originalWeight: 70, done: false },
     { reps: 3, weight: 120, originalWeight: 120, done: false },
   ]);
+  expect(buildSmartMeetWarmups(175, 'Deadlift')).toEqual([
+    { reps: 5, weight: 20, originalWeight: 20, done: false },
+    { reps: 5, weight: 70, originalWeight: 70, done: false },
+    { reps: 3, weight: 120, originalWeight: 120, done: false },
+    { reps: 3, weight: 150, originalWeight: 150, done: false },
+  ]);
 });
 
 test('meet attempts use readiness rather than the stale template and remain strictly increasing', () => {

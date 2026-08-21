@@ -6,6 +6,160 @@ const DEPRECATED_PREP_LABEL_KEYS = new Set([
   'prepThoracicRotationSideLying',
 ]);
 
+const WARMUP_REBALANCE_STEP_KG = 10;
+const MIN_FINAL_WARMUP_GAP_KG = 7.5;
+
+export function warmupLoadJumpsNeverIncrease(warmupWeights = [], targetWeight = 0) {
+  const weights = (warmupWeights || [])
+    .map(weight => Number(weight) || 0)
+    .filter(weight => weight > 0)
+    // Repeated empty-bar sets added to complete a visual grid are not load
+    // changes and therefore do not start a zero-kilo "jump" sequence.
+    .filter((weight, index, values) => index === 0 || weight !== values[index - 1]);
+  const target = Number(targetWeight) || 0;
+  if (!weights.length || target <= weights.at(-1)) return true;
+
+  const ladder = [...weights, target];
+  for (let index = 2; index < ladder.length; index += 1) {
+    const previousJump = ladder[index - 1] - ladder[index - 2];
+    const nextJump = ladder[index] - ladder[index - 1];
+    if (nextJump > previousJump + 0.0001) return false;
+  }
+
+  return true;
+}
+
+function insertDesiredWarmupBridge(weights = [], targetWeight = 0) {
+  const ladder = [...weights, targetWeight];
+  let largestJumpIndex = 0;
+
+  for (let index = 1; index < ladder.length - 1; index += 1) {
+    if (
+      ladder[index + 1] - ladder[index] >
+      ladder[largestJumpIndex + 1] - ladder[largestJumpIndex]
+    ) {
+      largestJumpIndex = index;
+    }
+  }
+
+  const lower = ladder[largestJumpIndex];
+  const upper = ladder[largestJumpIndex + 1];
+  const midpoint = Math.round(
+    ((lower + upper) / 2) / WARMUP_REBALANCE_STEP_KG
+  ) * WARMUP_REBALANCE_STEP_KG;
+  const bridge = Math.min(
+    upper - MIN_FINAL_WARMUP_GAP_KG,
+    Math.max(lower + WARMUP_REBALANCE_STEP_KG, midpoint)
+  );
+
+  const nextWeights = [...weights];
+  nextWeights.splice(largestJumpIndex + 1, 0, bridge);
+  return nextWeights;
+}
+
+/**
+ * Rebalance an already-selected warm-up ladder without changing its length
+ * when possible. Every warm-up rung remains a strict multiple of 10kg, and
+ * a later jump may never exceed the jump immediately before it.
+ */
+export function rebalanceWarmupLoadJumps(
+  warmupWeights = [],
+  targetWeight = 0,
+  maxFirstJumpKg = 55
+) {
+  const target = Number(targetWeight) || 0;
+  const originalWeights = (warmupWeights || [])
+    .map(weight => Number(weight) || 0)
+    .filter(weight => weight > 0 && weight < target);
+
+  if (
+    originalWeights.length < 2 ||
+    (
+      warmupLoadJumpsNeverIncrease(originalWeights, target) &&
+      originalWeights.every(weight => weight % WARMUP_REBALANCE_STEP_KG === 0)
+    )
+  ) {
+    return originalWeights;
+  }
+
+  const startWeight = originalWeights[0];
+  const firstExistingJump = originalWeights.length > 1
+    ? originalWeights[1] - startWeight
+    : 0;
+  const firstJumpLimit = Math.max(
+    Number(maxFirstJumpKg) || 0,
+    firstExistingJump
+  );
+
+  function findClosestValidLadder(desiredWeights) {
+    const finalIndex = desiredWeights.length;
+    const memo = new Map();
+
+    function search(index, previousWeight, previousJump) {
+      const memoKey = `${index}|${previousWeight}|${previousJump}`;
+      if (memo.has(memoKey)) return memo.get(memoKey);
+
+      if (index === finalIndex) {
+        const finalJump = target - previousWeight;
+        const result =
+          finalJump >= MIN_FINAL_WARMUP_GAP_KG - 0.0001 &&
+          finalJump <= previousJump + 0.0001
+            ? { score: 0, weights: [] }
+            : null;
+        memo.set(memoKey, result);
+        return result;
+      }
+
+      const remainingJumps = finalIndex - index + 1;
+      const maximumCandidate = Math.min(
+        target - MIN_FINAL_WARMUP_GAP_KG,
+        previousWeight + previousJump
+      );
+      let best = null;
+
+      for (
+        let candidate = previousWeight + WARMUP_REBALANCE_STEP_KG;
+        candidate <= maximumCandidate + 0.0001;
+        candidate += WARMUP_REBALANCE_STEP_KG
+      ) {
+        const jump = candidate - previousWeight;
+        const remainingWeight = target - candidate;
+        if (remainingWeight > jump * remainingJumps + 0.0001) continue;
+
+        const tail = search(index + 1, candidate, jump);
+        if (!tail) continue;
+
+        const positionWeight = finalIndex - index + 1;
+        const score =
+          Math.abs(candidate - Number(desiredWeights[index] || candidate)) *
+            positionWeight +
+          tail.score;
+        const option = {
+          score,
+          weights: [candidate, ...tail.weights],
+        };
+
+        if (!best || option.score < best.score - 0.0001) best = option;
+      }
+
+      memo.set(memoKey, best);
+      return best;
+    }
+
+    const result = search(1, startWeight, firstJumpLimit);
+    return result ? [startWeight, ...result.weights] : null;
+  }
+
+  let desiredWeights = [...originalWeights];
+  for (let extraWarmupCount = 0; extraWarmupCount <= 4; extraWarmupCount += 1) {
+    const balanced = findClosestValidLadder(desiredWeights);
+    if (balanced) return balanced;
+    desiredWeights = insertDesiredWarmupBridge(desiredWeights, target);
+  }
+
+  return originalWeights;
+}
+
 export function removeDeprecatedPrepItemsFromWorkout(workout) {
   if (!workout) return workout;
 
@@ -87,7 +241,23 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
 
   if (!workSets.length) return [];
 
-  const targetWeight = Math.max(...workSets.map(set => Number(set.weight) || 0));
+  function isTopWarmupTarget(set = {}) {
+    return (
+      isTopSetLabel(set.labelKey) ||
+      set.labelKey === 'opener' ||
+      set.labelKey === 'secondAttempt' ||
+      set.labelKey === 'thirdAttempt'
+    );
+  }
+
+  const highestWorkWeight = Math.max(...workSets.map(set => Number(set.weight) || 0));
+  const topSet = workSets.find(isTopWarmupTarget);
+  // Attempt plans are ordered opener -> second -> third. Warm-ups prepare
+  // the first actual work set (the opener), not the heaviest later attempt.
+  const targetSet = topSet ||
+    workSets.find(set => Number(set.weight) === highestWorkWeight) ||
+    workSets[0];
+  const targetWeight = Number(targetSet?.weight) || highestWorkWeight;
   const lowestWorkWeight = Math.min(...workSets.map(set => Number(set.weight) || 0));
   const normalizedLift = String(lift || '');
   const isLowerBodyLift = ['Squat', 'Deadlift'].includes(normalizedLift);
@@ -113,17 +283,6 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
     return Math.floor((Number(weight) || 0) / 10) * 10;
   }
 
-  function isTopWarmupTarget(set = {}) {
-    return (
-      isTopSetLabel(set.labelKey) ||
-      set.labelKey === 'opener' ||
-      set.labelKey === 'secondAttempt' ||
-      set.labelKey === 'thirdAttempt'
-    );
-  }
-
-  const topSet = workSets.find(isTopWarmupTarget);
-  const targetSet = topSet || workSets.find(set => Number(set.weight) === targetWeight) || workSets[0];
   const targetReps = Math.max(Number(targetSet?.reps) || 1, 1);
   const hasTopSet = Boolean(topSet);
 
@@ -225,8 +384,16 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
     // sets themselves are 4, 5 or 6 reps.
     if (!hasTopSet) return 5;
 
+    const actuallyReusesBackoffWeight =
+      weight === reusableBackoffWarmupWeight;
     if (
-      (hasCloseBackoff || usesReusableRoundBackoffWarmup || usesReusableTaperBackoffWarmup) &&
+      (
+        hasCloseBackoff ||
+        (
+          (usesReusableRoundBackoffWarmup || usesReusableTaperBackoffWarmup) &&
+          actuallyReusesBackoffWeight
+        )
+      ) &&
       isFinalWarmup
     ) {
       return Math.min(3, Math.max(Number(highestNonTopWorkSet?.reps) || targetReps, 1));
@@ -373,7 +540,13 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
     }
   }
 
-  const computedReps = prunedWarmupWeights.map((weight, index, weights) => {
+  const balancedWarmupWeights = rebalanceWarmupLoadJumps(
+    prunedWarmupWeights,
+    targetWeight,
+    MAX_WARMUP_JUMP_KG
+  );
+
+  const computedReps = balancedWarmupWeights.map((weight, index, weights) => {
     const isFinalWarmup = index === weights.length - 1 && weight !== 20;
     return repsForWarmup(weight, isFinalWarmup);
   });
@@ -394,7 +567,7 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
     return result;
   }, []);
 
-  return prunedWarmupWeights.map((weight, index) => ({
+  return balancedWarmupWeights.map((weight, index) => ({
     reps: normalizedReps[index],
     weight,
     originalWeight: weight,

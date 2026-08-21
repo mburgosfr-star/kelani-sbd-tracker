@@ -745,7 +745,8 @@ const THEME = {
 
 };
 
-const BOTTOM_NAV_SPACE = 52;
+export const BOTTOM_NAV_SPACE = 78;
+export const BOTTOM_NAV_ICON_SIZE = 39;
 
 function balancedVerticalScreenStyle(bottomOffset = BOTTOM_NAV_SPACE) {
   return {
@@ -9224,12 +9225,12 @@ function PlateIcon({ size = 14 }) {
 
 function NavIcon({ type }) {
   const common = {
-    width: 26,
-    height: 26,
+    width: BOTTOM_NAV_ICON_SIZE,
+    height: BOTTOM_NAV_ICON_SIZE,
     viewBox: '0 0 24 24',
     fill: 'none',
     stroke: 'currentColor',
-    strokeWidth: 2.4,
+    strokeWidth: 1.9,
     strokeLinecap: 'round',
     strokeLinejoin: 'round',
     'aria-hidden': true,
@@ -9281,10 +9282,41 @@ function NavIcon({ type }) {
   }
 
   return (
-    <span aria-hidden="true" style={{ fontSize: 25, lineHeight: 1 }}>
-      ⚙
-    </span>
+    <svg {...common}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.86 2.86-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.55v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.86-2.86.06-.06A1.7 1.7 0 0 0 4.1 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H2.3V9.55h.1A1.7 1.7 0 0 0 4.1 8.5a1.7 1.7 0 0 0-.34-1.88l-.06-.06L6.56 3.7l.06.06A1.7 1.7 0 0 0 8.5 4.1a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1v-.1h4.05v.1a1.7 1.7 0 0 0 1.05 1.7 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.86 2.86-.06.06A1.7 1.7 0 0 0 19.4 8.5a1.7 1.7 0 0 0 .6 1 1.7 1.7 0 0 0 1.1.4h.1v4.05h-.1A1.7 1.7 0 0 0 19.4 15Z" />
+    </svg>
   );
+}
+
+export function bottomNavStyle() {
+  return {
+    position: 'fixed',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: BOTTOM_NAV_SPACE,
+    display: 'flex',
+    zIndex: 100,
+    background: THEME.bg,
+    boxSizing: 'border-box',
+  };
+}
+
+export function bottomNavButtonStyle(active = false) {
+  return {
+    flex: 1,
+    height: '100%',
+    minWidth: 0,
+    padding: 0,
+    background: 'none',
+    border: 'none',
+    color: active ? THEME.primary : '#ffffff',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
 }
 
 function BottomNav({ screen, onChange, t }) {
@@ -9297,15 +9329,7 @@ function BottomNav({ screen, onChange, t }) {
   ];
 
   return (
-    <div style={{
-      position: 'fixed',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      display: 'flex',
-      zIndex: 100,
-      background: THEME.bg,
-    }}>
+    <div style={bottomNavStyle()}>
       {items.map(item => (
         <button
           key={item.key}
@@ -9315,17 +9339,7 @@ function BottomNav({ screen, onChange, t }) {
             onChange(item.key);
             window.scrollTo({ top: 0, behavior: 'auto' });
           }}
-          style={{
-            flex: 1,
-            padding: '11px 0',
-            background: 'none',
-            border: 'none',
-            color: screen === item.key ? THEME.primary : '#ffffff',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+          style={bottomNavButtonStyle(screen === item.key)}
         >
           <NavIcon type={item.icon} />
         </button>

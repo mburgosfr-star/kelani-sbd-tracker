@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import App, { DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, SettingsListRow, SmartDayTypeInline, StatsScreen, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, isMeetAttemptPlanLocked, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, settingsModalPanelStyle, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonStyle } from './App';
+import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, SettingsListRow, SmartDayTypeInline, StatsScreen, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, bottomNavButtonStyle, bottomNavStyle, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, isMeetAttemptPlanLocked, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, settingsModalPanelStyle, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
 test('dashboard metrics contain values without treating the e1RM and 1RM difference as a new PR', () => {
@@ -214,7 +214,7 @@ test('completed rest day content is distributed over the available screen height
   // claims more height than its parent has left and forces an unnecessary
   // scroll.
   expect(restDayCompletedScreenStyle()).toMatchObject({
-    minHeight: 'calc(100dvh - 52px - 36px)',
+    minHeight: 'calc(100dvh - 78px - 36px)',
     display: 'grid',
     gridTemplateRows: 'minmax(0, 1fr)',
     boxSizing: 'border-box',
@@ -228,7 +228,7 @@ test('completed rest day content is distributed over the available screen height
 
 test('completed workouts use natural page overflow instead of a permanent scroll container', () => {
   expect(completedWorkoutScreenStyle()).toMatchObject({
-    minHeight: 'calc(100dvh - 52px)',
+    minHeight: 'calc(100dvh - 78px)',
     overflowX: 'hidden',
   });
   expect(completedWorkoutScreenStyle().height).toBeUndefined();
@@ -280,10 +280,29 @@ test.each(['nl', 'en', 'ca'])('meet completion feedback is translated in %s', la
 
 test('stats charts reserve extra clearance above the bottom navigation', () => {
   expect(statsScreenStyle()).toMatchObject({
-    height: 'calc(100dvh - 52px)',
+    height: 'calc(100dvh - 78px)',
     display: 'flex',
     flexDirection: 'column',
     paddingBottom: 32,
+  });
+});
+
+test('bottom navigation uses one-and-a-half times its original height and icon size', () => {
+  expect(BOTTOM_NAV_SPACE).toBe(78);
+  expect(BOTTOM_NAV_ICON_SIZE).toBe(39);
+  expect(bottomNavStyle()).toMatchObject({
+    height: 78,
+    display: 'flex',
+    boxSizing: 'border-box',
+  });
+  expect(bottomNavStyle().borderTop).toBeUndefined();
+  expect(bottomNavButtonStyle(true)).toMatchObject({
+    height: '100%',
+    padding: 0,
+    color: '#ff8a3d',
+    background: 'none',
+    alignItems: 'center',
+    justifyContent: 'center',
   });
 });
 
