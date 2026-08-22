@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, SettingsListRow, SmartDayTypeInline, StatsScreen, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, bottomNavButtonStyle, bottomNavStyle, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, isMeetAttemptPlanLocked, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, settingsModalPanelStyle, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonStyle } from './App';
+import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, SettingsListRow, SmartDayTypeInline, StatsScreen, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, bottomNavButtonStyle, bottomNavStyle, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, isMeetAttemptPlanLocked, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, settingsModalPanelStyle, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
 test('dashboard metrics contain values without treating the e1RM and 1RM difference as a new PR', () => {
@@ -606,6 +606,23 @@ test('post-meet dashboard distributes space between and around its cards', () =>
     alignContent: 'start',
     rowGap: 'clamp(14px, 2.2dvh, 24px)',
   });
+});
+
+test('sparse rest dashboards use the expanded layout while training dashboards stay compact', () => {
+  expect(shouldUseExpandedDashboardLayout({
+    workout: { type: 'rest' },
+    meetState: { isMeetDay: false, hideRouteToMeet: false },
+  })).toBe(true);
+
+  expect(shouldUseExpandedDashboardLayout({
+    workout: { type: 'training' },
+    meetState: { isMeetDay: false, hideRouteToMeet: false },
+  })).toBe(false);
+
+  expect(shouldUseExpandedDashboardLayout({
+    workout: { type: 'rest' },
+    meetState: { isMeetDay: true, hideRouteToMeet: false },
+  })).toBe(false);
 });
 
 test('ideal-route post-meet recovery also keeps route to meet hidden', () => {

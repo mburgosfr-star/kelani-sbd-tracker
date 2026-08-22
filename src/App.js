@@ -844,6 +844,14 @@ export function regularDashboardContentStyle({ spreadContent = false } = {}) {
   };
 }
 
+export function shouldUseExpandedDashboardLayout({ workout, meetState } = {}) {
+  return Boolean(
+    workout &&
+    !meetState?.isMeetDay &&
+    (workout.type === 'rest' || meetState?.hideRouteToMeet)
+  );
+}
+
 export function programScreenStyle() {
   return {
     ...responsiveContentScreenStyle(),
@@ -13146,9 +13154,10 @@ const latestBodyDataRows = [
 
 const dashboardCurrentWorkout = workouts[currentIndex] || null;
 const dashboardMeetState = getDashboardMeetState(dashboardCurrentWorkout);
-const dashboardUsesExpandedPostMeetLayout = Boolean(
-  !dashboardMeetState.isMeetDay && dashboardMeetState.hideRouteToMeet
-);
+const dashboardUsesExpandedLayout = shouldUseExpandedDashboardLayout({
+  workout: dashboardCurrentWorkout,
+  meetState: dashboardMeetState,
+});
 const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
   Squat: { oneRM: best1RMs.Squat },
   Bench: { oneRM: best1RMs.Bench },
@@ -13256,7 +13265,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
 
     {!dashboardMeetState.isMeetDay && (
     <div style={regularDashboardContentStyle({
-      spreadContent: dashboardUsesExpandedPostMeetLayout,
+      spreadContent: dashboardUsesExpandedLayout,
     })}>
 
     {!dashboardMeetState.isMeetDay && workouts[currentIndex] && (() => {
@@ -13282,7 +13291,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         >
           <div style={{
             color: isNextMeetDay ? THEME.meet : THEME.text,
-            fontSize: dashboardUsesExpandedPostMeetLayout
+            fontSize: dashboardUsesExpandedLayout
               ? 'clamp(28px, 7vw, 34px)'
               : 'clamp(24px, 6vw, 30px)',
             fontWeight: 900,
@@ -13319,7 +13328,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           {planLines.length > 0 && (
             <div style={{
               color: THEME.muted,
-              fontSize: dashboardUsesExpandedPostMeetLayout
+              fontSize: dashboardUsesExpandedLayout
                 ? 'clamp(16px, 3.8vw, 19px)'
                 : 'clamp(14px, 3.4vw, 17px)',
               fontWeight: 800,
@@ -13396,17 +13405,17 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
               cursor: 'pointer',
             }}
           >
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: THEME.meet, fontSize: 'clamp(12px, 2.9vw, 14px)', fontWeight: 900, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: THEME.meet, fontSize: dashboardUsesExpandedLayout ? 'clamp(14px, 3.3vw, 16px)' : 'clamp(12px, 2.9vw, 14px)', fontWeight: 900, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4 }}>
               <span>{t.dashboardMeetRouteTitle || 'Route to meet'}</span>
               <TapInfoIcon color={THEME.meet} />
             </div>
-            <div style={{ color: THEME.text, fontSize: 'clamp(14px, 3.3vw, 16px)', fontWeight: 800, marginBottom: dashboardMeetProjection?.available && dashboardMeetProjection.limitingLift ? 2 : 6, lineHeight: 1.35 }}>
+            <div style={{ color: THEME.text, fontSize: dashboardUsesExpandedLayout ? 'clamp(16px, 3.8vw, 19px)' : 'clamp(14px, 3.3vw, 16px)', fontWeight: 800, marginBottom: dashboardMeetProjection?.available && dashboardMeetProjection.limitingLift ? 2 : 6, lineHeight: 1.35 }}>
               {dashboardMeetProjection?.available
                 ? `${t.expectedMeetWindow || 'Expected meet'}: ${dashboardMeetProjection.label}`
                 : (t.smartProjectionUnavailable || 'Not enough active-cycle data for a reliable projection.')}
             </div>
             {blockerRouteText && (
-              <div style={{ color: THEME.meet, fontSize: 'clamp(12px, 2.9vw, 14px)', fontWeight: 900, lineHeight: 1.3 }}>
+              <div style={{ color: THEME.meet, fontSize: dashboardUsesExpandedLayout ? 'clamp(14px, 3.3vw, 16px)' : 'clamp(12px, 2.9vw, 14px)', fontWeight: 900, lineHeight: 1.3 }}>
                 {blockerRouteText}
               </div>
             )}
@@ -13478,7 +13487,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              gap: 'clamp(12px, 3vw, 16px)'
+              gap: dashboardUsesExpandedLayout
+                ? 'clamp(14px, 2.4dvh, 22px) clamp(12px, 3vw, 16px)'
+                : 'clamp(12px, 3vw, 16px)'
             }}>
               {cards.map(card => (
                 <div
@@ -13490,13 +13501,15 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                     if (e.key === 'Enter' || e.key === ' ') openStatsTab(card.statsTab);
                   }}
                   style={{
-                    padding: 'clamp(5px, 0.8dvh, 8px) 2px',
+                    padding: dashboardUsesExpandedLayout
+                      ? 'clamp(6px, 1dvh, 10px) 2px'
+                      : 'clamp(5px, 0.8dvh, 8px) 2px',
                     cursor: 'pointer',
                   }}
                 >
                   <div style={{
                     color: card.color,
-                    fontSize: dashboardUsesExpandedPostMeetLayout
+                    fontSize: dashboardUsesExpandedLayout
                       ? 'clamp(21px, 5vw, 25px)'
                       : 'clamp(19px, 4.6vw, 23px)',
                     fontWeight: 900,
@@ -13514,7 +13527,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   }}>
                     <span style={{
                       color: THEME.muted,
-                      fontSize: dashboardUsesExpandedPostMeetLayout
+                      fontSize: dashboardUsesExpandedLayout
                         ? 'clamp(14px, 3.4vw, 17px)'
                         : 'clamp(13px, 3.2vw, 16px)',
                       fontWeight: 900
@@ -13525,7 +13538,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                       <strong style={{
                         display: 'block',
                         color: card.color,
-                        fontSize: dashboardUsesExpandedPostMeetLayout
+                        fontSize: dashboardUsesExpandedLayout
                           ? 'clamp(19px, 4.6vw, 23px)'
                           : 'clamp(17px, 4.2vw, 21px)',
                         fontWeight: 900,
@@ -13548,7 +13561,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
 
                     <span style={{
                       color: THEME.muted,
-                      fontSize: dashboardUsesExpandedPostMeetLayout
+                      fontSize: dashboardUsesExpandedLayout
                         ? 'clamp(14px, 3.4vw, 17px)'
                         : 'clamp(13px, 3.2vw, 16px)',
                       fontWeight: 900
@@ -13559,7 +13572,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                       <strong style={{
                         display: 'block',
                         color: card.color,
-                        fontSize: dashboardUsesExpandedPostMeetLayout
+                        fontSize: dashboardUsesExpandedLayout
                           ? 'clamp(19px, 4.6vw, 23px)'
                           : 'clamp(17px, 4.2vw, 21px)',
                         fontWeight: 900,
@@ -13626,7 +13639,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                 <span style={{
                   color: THEME.text,
                   fontWeight: 800,
-                  fontSize: dashboardUsesExpandedPostMeetLayout
+                  fontSize: dashboardUsesExpandedLayout
                     ? 'clamp(18px, 4.2vw, 21px)'
                     : 'clamp(16px, 3.8vw, 19px)'
                 }}>
@@ -13637,7 +13650,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   textAlign: 'right',
                   whiteSpace: 'nowrap',
                   minWidth: 70,
-                  fontSize: dashboardUsesExpandedPostMeetLayout
+                  fontSize: dashboardUsesExpandedLayout
                     ? 'clamp(18px, 4.2vw, 21px)'
                     : 'clamp(16px, 3.8vw, 19px)',
                   color: row.status?.color || THEME.primary
