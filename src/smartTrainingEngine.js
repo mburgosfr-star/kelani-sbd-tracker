@@ -556,6 +556,7 @@ export function shouldFollowSmartIdealRoute({
   history = [],
   currentCycle = 1,
   readiness = {},
+  nextRouteWorkout = null,
 } = {}) {
   const completed = getUniqueCompletedSmartWorkoutSnapshots(
     history,
@@ -580,19 +581,39 @@ export function shouldFollowSmartIdealRoute({
     return !completed.some(({ snapshot }) => snapshot?.type === 'meet');
   }
 
-  // The last point at which the user was demonstrably on the fixed route
-  // and succeeding. This is -1 both when the most recent on-route attempt
-  // failed AND when there is no on-route attempt at all yet (a legacy or
-  // freshly-migrated cycle) -- unifying what used to be two separate cases.
-  const lastOnRouteSuccessIndex = completed.findLastIndex(({ snapshot }) => (
+  const firstOnRouteIndex = completed.findIndex(({ snapshot }) => (
+    Boolean(snapshot?.smartIdealRoute)
+  ));
+  const onRouteWorkouts = completed.slice(firstOnRouteIndex);
+  const firstMigratedRouteWorkout = onRouteWorkouts.length === 1
+    ? onRouteWorkouts[0]?.snapshot
+    : null;
+
+  // A legacy user can enter the fixed route immediately before one of its
+  // deliberate rest rows. HARD feedback on that first migrated workout is
+  // not a reason to erase the recovery row that the route already scheduled.
+  // Failed or skipped work still leaves control with autoregulation.
+  if (
+    firstOnRouteIndex > 0 &&
+    firstMigratedRouteWorkout &&
+    nextRouteWorkout?.type === 'rest' &&
+    countFailedOrSkippedSetsFromSnapshot(firstMigratedRouteWorkout) === 0
+  ) {
+    return true;
+  }
+
+  // Only workouts at or after the first marked route workout can absorb a
+  // route deviation. Earlier legacy history is the migration baseline and
+  // must never be mistaken for adaptive recovery performed afterwards.
+  const lastOnRouteSuccessIndex = onRouteWorkouts.findLastIndex(({ snapshot }) => (
     snapshot?.smartIdealRoute && isSuccessfulSmartIdealRouteSnapshot(snapshot)
   ));
 
   // Fully caught up: the most recent completed workout was itself an
   // on-route success, so there is no deviation left to absorb.
-  if (lastOnRouteSuccessIndex === completed.length - 1) return true;
+  if (lastOnRouteSuccessIndex === onRouteWorkouts.length - 1) return true;
 
-  const deviationSnapshot = completed[lastOnRouteSuccessIndex + 1]?.snapshot;
+  const deviationSnapshot = onRouteWorkouts[lastOnRouteSuccessIndex + 1]?.snapshot;
 
   // A failed or non-GOOD meet -- marked or not -- is a different cycle
   // outcome, not a small detour that should be erased by resuming the fixed
@@ -600,7 +621,7 @@ export function shouldFollowSmartIdealRoute({
   // cycle.
   if (deviationSnapshot?.type === 'meet') return false;
 
-  const recoveryZone = completed.slice(lastOnRouteSuccessIndex + 2);
+  const recoveryZone = onRouteWorkouts.slice(lastOnRouteSuccessIndex + 2);
   const adaptiveWorkouts = recoveryZone.filter(({ snapshot }) => (
     !snapshot?.smartIdealRoute
   ));
@@ -4699,18 +4720,22 @@ function generateSmartWorkouts({
     currentCycle,
     entryWorkoutNumber: idealRouteEntryWorkoutNumber,
   });
+  const nextIdealRouteWorkout = idealRouteEnabled
+    ? getSmartIdealRouteWorkout({
+      workoutNumber: idealRouteWorkoutNumber,
+      athleteLevel,
+    })
+    : null;
   const candidateIdealRouteWorkout = (
     idealRouteEnabled &&
     shouldFollowSmartIdealRoute({
       history,
       currentCycle,
       readiness: smartDecision.readiness,
+      nextRouteWorkout: nextIdealRouteWorkout,
     })
   )
-    ? getSmartIdealRouteWorkout({
-      workoutNumber: idealRouteWorkoutNumber,
-      athleteLevel,
-    })
+    ? nextIdealRouteWorkout
     : null;
   const idealRouteWorkout = (
     candidateIdealRouteWorkout?.type === 'meet' &&

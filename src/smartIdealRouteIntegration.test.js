@@ -266,6 +266,48 @@ test('non-GOOD feedback leaves the ideal path and returns control to autoregulat
   );
 });
 
+test('failed work on the first migrated route workout does not force its scheduled rest row', () => {
+  const failedRouteSnapshot = {
+    number: 2,
+    type: 'training',
+    workoutEffort: 'tooMuch',
+    smartIdealRoute: {
+      version: 1,
+      workoutNumber: 1,
+      stage: 'normal',
+      phase: 'triple',
+    },
+    lifts: [{
+      lift: 'Squat',
+      sets: [{ weight: 100, reps: 3, done: true, failed: true, skipped: false }],
+    }],
+  };
+  const history = [
+    legacyEntry({ workoutNumber: 1, effort: 'good' }),
+    {
+      cycle: 1,
+      workoutNumber: 2,
+      lift: 'Squat',
+      workoutEffort: 'tooMuch',
+      smartDayType: SMART_DAY_TYPES.TRAINING,
+      workoutSnapshot: failedRouteSnapshot,
+    },
+  ];
+
+  expect(shouldFollowSmartIdealRoute({
+    history,
+    currentCycle: 1,
+    readiness: {
+      recentFatigueScore: 1,
+      recentFailedOrSkippedSetCount: 1,
+    },
+    nextRouteWorkout: getSmartIdealRouteWorkout({
+      athleteLevel: 'beginner',
+      workoutNumber: 2,
+    }),
+  })).toBe(false);
+});
+
 test('a safe successful adaptive workout rejoins the ideal route as soon as possible', () => {
   const w1 = generateCurrent();
   let history = completeWorkout([], w1, 'easy');
@@ -412,7 +454,7 @@ test('a beginner beyond the legacy route range with no cross-lift evidence start
   });
 });
 
-test('an almost meet-ready legacy beginner starts full W17 without pre-route frequency blocking', () => {
+test('an almost meet-ready legacy beginner keeps the W17-W18-W19 route after HARD entry feedback', () => {
   let history = [
     ...legacyWorkoutEntries({
       workoutNumber: 17,
@@ -446,8 +488,13 @@ test('an almost meet-ready legacy beginner starts full W17 without pre-route fre
       effort: 'hard',
       lifts: [{ lift: 'Squat', weight: 37.5, reps: 3, e1rm: 42.5, intensityRole: 'heavy' }],
     }),
+    ...legacyWorkoutEntries({
+      workoutNumber: 34,
+      effort: 'easy',
+      lifts: [{ lift: 'Bench', weight: 17.5, reps: 5, e1rm: 20.4166666667, intensityRole: 'light' }],
+    }),
   ];
-  const anaLikeOptions = {
+  const legacyBeginnerOptions = {
     squat: 42.5,
     bench: 32.5,
     deadlift: 60,
@@ -457,18 +504,18 @@ test('an almost meet-ready legacy beginner starts full W17 without pre-route fre
   const deliveredWorkoutTypes = [];
   let meet = null;
 
-  for (let currentIndex = 33; currentIndex < 58; currentIndex += 1) {
+  for (let currentIndex = 34; currentIndex < 59; currentIndex += 1) {
     const workout = generateCurrent({
       history,
       currentIndex,
       athleteLevel: 'beginner',
-      options: anaLikeOptions,
+      options: legacyBeginnerOptions,
     });
     deliveredRouteNumbers.push(workout.smartIdealRoute?.workoutNumber);
     deliveredWorkoutTypes.push(workout.type);
 
-    if (currentIndex === 33) {
-      expect(workout.number).toBe(34);
+    if (currentIndex === 34) {
+      expect(workout.number).toBe(35);
       expect(workout.smartIdealRoute).toMatchObject({
         workoutNumber: 17,
         stage: 'normal',
@@ -486,7 +533,7 @@ test('an almost meet-ready legacy beginner starts full W17 without pre-route fre
       expect(workout.smartDecisionSummary?.readiness).toMatchObject({
         meetPlanWeakestLift: 'Deadlift',
         meetPlanWeakestPhase: 'second-attempt',
-        meetProjection: { label: 'C1W45' },
+        meetProjection: { label: 'C1W46' },
       });
     }
 
@@ -495,7 +542,11 @@ test('an almost meet-ready legacy beginner starts full W17 without pre-route fre
       break;
     }
 
-    history = completeWorkout(history, workout, 'good');
+    history = completeWorkout(
+      history,
+      workout,
+      currentIndex === 34 ? 'hard' : 'good'
+    );
   }
 
   expect(deliveredRouteNumbers).toEqual([
@@ -506,7 +557,7 @@ test('an almost meet-ready legacy beginner starts full W17 without pre-route fre
     'rest', 'training', 'training', 'rest', 'rest', 'meet',
   ]);
   expect(meet).toBeTruthy();
-  expect(meet.number).toBe(45);
+  expect(meet.number).toBe(46);
   expect(meet.smartIdealRoute).toMatchObject({
     workoutNumber: 28,
     stage: 'meet',
