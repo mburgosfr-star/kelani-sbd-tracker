@@ -1,11 +1,17 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   AUTO_BACKUP_PATH,
   buildBackupPayload,
+  buildManualBackupFilename,
   formatAutomaticBackupTimestamp,
+  formatLocalIsoTimestamp,
   isVerifiedAutomaticBackupStatus,
+  isVerifiedManualBackupStatus,
   isShareCancellation,
   removeLegacyBrowserAutomaticBackup,
   shouldRetryAutomaticBackup,
+  storeImportedBackup,
   validateBackupPayload,
   validateImportedBackup,
 } from './App';
@@ -16,10 +22,78 @@ test('uses a v2-specific automatic backup filename that cannot collide with the 
   );
 });
 
+test('keeps the Documents backup compatible with Android 10 and older only', () => {
+  const manifest = fs.readFileSync(
+    path.resolve(process.cwd(), 'android/app/src/main/AndroidManifest.xml'),
+    'utf8'
+  );
+
+  expect(manifest).toMatch(
+    /android\.permission\.READ_EXTERNAL_STORAGE"\s+android:maxSdkVersion="29"/
+  );
+  expect(manifest).toMatch(
+    /android\.permission\.WRITE_EXTERNAL_STORAGE"\s+android:maxSdkVersion="29"/
+  );
+});
+
 test('recognizes only the explicit native share cancellation result', () => {
   expect(isShareCancellation(new Error('Share canceled'))).toBe(true);
   expect(isShareCancellation(new Error('Unsupported url'))).toBe(false);
   expect(isShareCancellation(null)).toBe(false);
+});
+
+test('uses the local wall-clock time in manual backup filenames and records the offset', () => {
+  const localDate = new Date(2026, 7, 23, 15, 21, 15, 570);
+  const data = makeStoredData();
+  const backup = buildBackupPayload(data, { now: localDate, appVersion: 'test' });
+
+  expect(buildManualBackupFilename(localDate)).toBe(
+    'kelani-sbd-tracker-backup-2026-08-23-1521.json'
+  );
+  expect(backup.exportedAt).toBe(localDate.toISOString());
+  expect(backup.exportedAtLocal).toBe(formatLocalIsoTimestamp(localDate));
+  expect(backup.exportedAtLocal).toMatch(
+    /^2026-08-23T15:21:15\.570[+-]\d{2}:\d{2}$/
+  );
+});
+
+test('recognizes only a verified manual export status', () => {
+  expect(isVerifiedManualBackupStatus({
+    ok: true,
+    source: 'manual',
+    verified: true,
+    exportedAt: '2026-08-23T13:21:15.570Z',
+  })).toBe(true);
+  expect(isVerifiedManualBackupStatus({
+    ok: true,
+    source: 'automatic',
+    verified: true,
+    exportedAt: '2026-08-23T13:21:15.570Z',
+  })).toBe(false);
+  expect(isVerifiedManualBackupStatus({
+    ok: true,
+    source: 'manual',
+    verified: false,
+    exportedAt: '2026-08-23T13:21:15.570Z',
+  })).toBe(false);
+});
+
+test('an import invalidates the previous automatic backup status', () => {
+  const values = new Map([
+    ['kelani-sbd-tracker-auto-backup-status', '{"ok":true}'],
+    ['kelani-sbd-tracker-manual-backup-status', '{"ok":true}'],
+  ]);
+  const storage = {
+    setItem: (key, value) => values.set(key, value),
+    removeItem: key => values.delete(key),
+  };
+  const importedData = makeStoredData({ currentCycle: 4 });
+
+  storeImportedBackup(storage, importedData);
+
+  expect(JSON.parse(values.get('kel-powerlifting-user-data-v1'))).toEqual(importedData);
+  expect(values.has('kelani-sbd-tracker-auto-backup-status')).toBe(false);
+  expect(values.has('kelani-sbd-tracker-manual-backup-status')).toBe(true);
 });
 
 test('removes the obsolete full browser backup mirror before canonical persistence', () => {

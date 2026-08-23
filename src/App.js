@@ -131,7 +131,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { translations } from './translations';
 import { App as CapacitorApp } from '@capacitor/app';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -142,10 +142,12 @@ const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
 const WORKOUT_EFFORT_OPTIONS = ['easy', 'good', 'hard'];
 export const AUTO_BACKUP_PATH = 'Kelani SBD Tracker/Automatic Backups/kelani-sbd-tracker-v2-autosave.json';
 const AUTO_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-auto-backup-status';
+const MANUAL_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-manual-backup-status';
 const LEGACY_BROWSER_AUTO_BACKUP_KEY = 'kelani-sbd-tracker-autosave';
 const REST_TIMER_NOTIFICATION_ID = 1208;
 const REST_TIMER_NOTIFICATION_CHANNEL_ID = 'kelani_rest_timer_v4';
 const REST_TIMER_NOTIFICATION_SOUND = 'kelani_rest_timer_quiet.wav';
+const DeviceAlertStatus = registerPlugin('DeviceAlertStatus');
 
 export function buildBackupSummary(data) {
   const currentCycle = data?.currentCycle || 1;
@@ -333,14 +335,44 @@ export function removeLegacyBrowserAutomaticBackup(
   return true;
 }
 
-export function buildBackupPayload(data) {
-  const exportedAt = new Date().toISOString();
+export function formatLocalIsoTimestamp(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const pad = (number, length = 2) => String(number).padStart(length, '0');
+  const offsetMinutes = -date.getTimezoneOffset();
+  const offsetSign = offsetMinutes >= 0 ? '+' : '-';
+  const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
+  const offsetRemainder = Math.abs(offsetMinutes) % 60;
+
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
+    `.${pad(date.getMilliseconds(), 3)}${offsetSign}${pad(offsetHours)}:${pad(offsetRemainder)}`
+  );
+}
+
+export function buildManualBackupFilename(value = new Date()) {
+  const localTimestamp = formatLocalIsoTimestamp(value);
+  if (!localTimestamp) return null;
+
+  const timestamp = localTimestamp.slice(0, 16).replace('T', '-').replace(':', '');
+  return `kelani-sbd-tracker-backup-${timestamp}.json`;
+}
+
+export function buildBackupPayload(data, {
+  now = new Date(),
+  appName = 'Kelani SBD Tracker',
+  appVersion = import.meta.env.VITE_APP_VERSION ?? 'dev',
+} = {}) {
+  const exportedAt = now.toISOString();
 
   return {
-    app: 'Kelani SBD Tracker',
+    app: appName,
     backupVersion: 1,
-    appVersion: import.meta.env.VITE_APP_VERSION ?? 'dev',
+    appVersion,
     exportedAt,
+    exportedAtLocal: formatLocalIsoTimestamp(now),
     storageKey: STORAGE_KEY,
     summary: buildBackupSummary(data),
     data,
@@ -371,6 +403,55 @@ async function ensureRestTimerNotificationChannel() {
       vibration: true,
     });
   } catch (e) {}
+}
+
+export function getRestTimerNotificationChannelStatus(channels = []) {
+  const channel = Array.isArray(channels)
+    ? channels.find(item => item?.id === REST_TIMER_NOTIFICATION_CHANNEL_ID)
+    : null;
+
+  if (!channel) {
+    return {
+      found: false,
+      soundEnabled: null,
+      vibrationEnabled: null,
+      importance: null,
+      importanceSufficient: null,
+    };
+  }
+
+  const importance = Number(channel.importance);
+
+  return {
+    found: true,
+    soundEnabled: Boolean(channel.sound),
+    vibrationEnabled: channel.vibration === true,
+    importance: Number.isFinite(importance) ? importance : null,
+    importanceSufficient: Number.isFinite(importance)
+      ? importance >= 3
+      : null,
+  };
+}
+
+export function normalizeRestTimerDoNotDisturbStatus(status) {
+  const filter = ['all', 'priority', 'alarms', 'none', 'unknown'].includes(
+    status?.interruptionFilter
+  )
+    ? status.interruptionFilter
+    : 'unknown';
+  const available = status?.available === true;
+
+  return {
+    available,
+    filter,
+    active: available && filter !== 'unknown'
+      ? filter !== 'all'
+      : null,
+    channelCanBypassDoNotDisturb:
+      typeof status?.channelCanBypassDoNotDisturb === 'boolean'
+        ? status.channelCanBypassDoNotDisturb
+        : null,
+  };
 }
 
 async function checkRestTimerAlertReadiness() {
@@ -406,10 +487,33 @@ async function checkRestTimerAlertReadiness() {
       }
     }
 
+    let channel = null;
+
+    if (typeof LocalNotifications.listChannels === 'function') {
+      try {
+        await ensureRestTimerNotificationChannel();
+        const channelResult = await LocalNotifications.listChannels();
+        channel = getRestTimerNotificationChannelStatus(channelResult?.channels);
+      } catch (e) {
+        channel = null;
+      }
+    }
+
+    let doNotDisturb = null;
+
+    try {
+      const deviceAlertStatus = await DeviceAlertStatus.getStatus();
+      doNotDisturb = normalizeRestTimerDoNotDisturbStatus(deviceAlertStatus);
+    } catch (e) {
+      doNotDisturb = normalizeRestTimerDoNotDisturbStatus(null);
+    }
+
     return {
       native: true,
       display: permissions.display,
       exactAlarm,
+      channel,
+      doNotDisturb,
       message: permissions.display === 'granted'
         ? 'Notification permission is allowed. For screen-off alerts, also allow lock screen notifications and unrestricted battery use in Android settings.'
         : 'Notification permission is not allowed yet. Rest timer alerts may be blocked.',
@@ -591,6 +695,20 @@ export function isVerifiedAutomaticBackupStatus(status) {
     status?.verified === true &&
     status?.exportedAt
   );
+}
+
+export function isVerifiedManualBackupStatus(status) {
+  return Boolean(
+    status?.ok === true &&
+    status?.source === 'manual' &&
+    status?.verified === true &&
+    status?.exportedAt
+  );
+}
+
+export function storeImportedBackup(storage, data) {
+  storage.setItem(STORAGE_KEY, JSON.stringify(data));
+  storage.removeItem(AUTO_BACKUP_STATUS_KEY);
 }
 
 export function shouldRetryAutomaticBackup(status, expectedPath = AUTO_BACKUP_PATH) {
@@ -2451,20 +2569,18 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
         return;
       }
 
-      const exportedAt = new Date().toISOString();
-      const timestamp = exportedAt.slice(0, 16).replace('T', '-').replace(':', '');
-      const filename = `kelani-sbd-tracker-backup-${timestamp}.json`;
+      const exportedAtDate = new Date();
+      const filename = buildManualBackupFilename(exportedAtDate);
       const data = JSON.parse(saved);
-      const backup = {
-        app: t.appName,
-        backupVersion: 1,
-        appVersion: import.meta.env.VITE_APP_VERSION ?? 'dev',
-        exportedAt,
-        storageKey: STORAGE_KEY,
-        summary: buildBackupSummary(data),
-        data,
-      };
+      const backup = buildBackupPayload(data, {
+        now: exportedAtDate,
+        appName: t.appName,
+      });
       const json = JSON.stringify(backup, null, 2);
+
+      if (!filename || !validateBackupPayload(backup, data)) {
+        throw new Error('Manual backup verification failed');
+      }
 
       if (Capacitor.isNativePlatform()) {
         const result = await Filesystem.writeFile({
@@ -2473,6 +2589,20 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
           directory: Directory.Cache,
           encoding: Encoding.UTF8,
         });
+
+        const readResult = await Filesystem.readFile({
+          path: filename,
+          directory: Directory.Cache,
+          encoding: Encoding.UTF8,
+        });
+        const storedJson = typeof readResult?.data === 'string'
+          ? readResult.data
+          : String(readResult?.data || '');
+        const verifiedBackup = JSON.parse(storedJson || 'null');
+
+        if (!validateBackupPayload(verifiedBackup, data)) {
+          throw new Error('Manual backup verification failed');
+        }
 
         await Share.share({
           title: t.exportData,
@@ -2484,6 +2614,15 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
         downloadJson(filename, json);
       }
 
+      localStorage.setItem(MANUAL_BACKUP_STATUS_KEY, JSON.stringify({
+        ok: true,
+        source: 'manual',
+        verified: true,
+        exportedAt: backup.exportedAt,
+        exportedAtLocal: backup.exportedAtLocal,
+        filename,
+        summary: backup.summary,
+      }));
       setNotice(t.exportDataSuccess);
     } catch (e) {
       if (isShareCancellation(e)) return;
@@ -2509,7 +2648,11 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
       setPendingImport({
         data: backup.data,
         appVersion: typeof backup.appVersion === 'string' ? backup.appVersion : '—',
-        exportedAt: typeof backup.exportedAt === 'string' ? backup.exportedAt : '—',
+        exportedAt: typeof backup.exportedAt === 'string'
+          ? backup.exportedAt
+          : typeof backup.exportedAtLocal === 'string'
+            ? backup.exportedAtLocal
+            : '—',
         summary: buildDataSectionBackupSummary(backup.data),
       });
     } catch (e) {
@@ -2520,13 +2663,30 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
   const confirmImport = () => {
     if (!pendingImport) return;
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingImport.data));
+    storeImportedBackup(localStorage, pendingImport.data);
     setNotice(t.importDataSuccess);
     setPendingImport(null);
     window.window.location.reload();
   };
 
   const importSummary = pendingImport?.summary;
+
+  const manualBackupStatus = (() => {
+    try {
+      return JSON.parse(localStorage.getItem(MANUAL_BACKUP_STATUS_KEY) || 'null');
+    } catch {
+      return null;
+    }
+  })();
+
+  const manualBackupVerified = isVerifiedManualBackupStatus(manualBackupStatus);
+  const manualBackupDate = manualBackupVerified
+    ? formatAutomaticBackupTimestamp(manualBackupStatus.exportedAt)
+    : null;
+  const manualBackupDisplayVerified = manualBackupVerified && Boolean(manualBackupDate);
+  const manualBackupValue = manualBackupDisplayVerified
+    ? `✓ ${manualBackupDate}`
+    : t.noManualExportYet;
 
   const autoBackupStatus = (() => {
     try {
@@ -2639,14 +2799,24 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
       )}
 
       {!importOnly && shouldShowAutomaticBackupStatus(Capacitor.isNativePlatform()) && (
-        <SettingsListRow
-          label={t.lastAutomaticBackup}
-          value={autoBackupValue}
-          valueColor={autoBackupDisplayVerified ? THEME.primary : autoBackupFailed ? THEME.red : THEME.muted}
-          compact={true}
-          valueNowrap={true}
-          valueFontSize={RESPONSIVE_SETTINGS_UI.descriptionFontSize}
-        />
+        <>
+          <SettingsListRow
+            label={t.lastManualExport}
+            value={manualBackupValue}
+            valueColor={manualBackupDisplayVerified ? THEME.primary : THEME.muted}
+            compact={true}
+            valueNowrap={true}
+            valueFontSize={RESPONSIVE_SETTINGS_UI.descriptionFontSize}
+          />
+          <SettingsListRow
+            label={t.lastAutomaticBackup}
+            value={autoBackupValue}
+            valueColor={autoBackupDisplayVerified ? THEME.primary : autoBackupFailed ? THEME.red : THEME.muted}
+            compact={true}
+            valueNowrap={true}
+            valueFontSize={RESPONSIVE_SETTINGS_UI.descriptionFontSize}
+          />
+        </>
       )}
 
       <input
@@ -3165,6 +3335,32 @@ function RestTimeSection({ t }) {
     setShowAlertHelp(true);
   }
 
+  async function handleOpenDoNotDisturbSettings() {
+    try {
+      await DeviceAlertStatus.openDoNotDisturbSettings();
+    } catch (e) {}
+  }
+
+  const channelStatus = alertStatus?.channel || null;
+  const doNotDisturbStatus = alertStatus?.doNotDisturb || null;
+  const onOffStatus = value => value === true
+    ? (t.restTimerStatusOn || 'On')
+    : value === false
+      ? (t.restTimerStatusOff || 'Off')
+      : (t.restTimerStatusUnknown || 'Unknown');
+  const diagnosticStatusColor = value => value === true
+    ? THEME.primary
+    : value === false
+      ? THEME.red
+      : THEME.muted;
+  const doNotDisturbLabel = {
+    all: t.restTimerDndOff || 'Off',
+    priority: t.restTimerDndPriority || 'On · Priority only',
+    alarms: t.restTimerDndAlarms || 'On · Alarms only',
+    none: t.restTimerDndNone || 'On · No interruptions',
+    unknown: t.restTimerStatusUnknown || 'Unknown',
+  }[doNotDisturbStatus?.filter || 'unknown'];
+
   return (
     <>
       <SettingsListRow
@@ -3208,14 +3404,53 @@ function RestTimeSection({ t }) {
               fontWeight: 800,
               marginBottom: 12
             }}>
-              <span>Notifications</span>
+              <span>{t.restTimerNotificationsLabel || 'Notifications'}</span>
               <strong style={{ color: alertStatus.display === 'granted' ? THEME.primary : THEME.red }}>
                 {alertStatus.display}
               </strong>
-              <span>Exact alarms</span>
+              <span>{t.restTimerExactAlarmsLabel || 'Exact alarms'}</span>
               <strong style={{ color: alertStatus.exactAlarm === 'granted' ? THEME.primary : THEME.muted }}>
                 {alertStatus.exactAlarm}
               </strong>
+              <span>{t.restTimerChannelLabel || 'Timer channel'}</span>
+              <strong style={{ color: diagnosticStatusColor(channelStatus?.found) }}>
+                {channelStatus?.found === true
+                  ? (t.restTimerStatusOn || 'On')
+                  : channelStatus?.found === false
+                    ? (t.restTimerStatusMissing || 'Missing')
+                    : (t.restTimerStatusUnknown || 'Unknown')}
+              </strong>
+              <span>{t.restTimerSoundLabel || 'Sound'}</span>
+              <strong style={{ color: diagnosticStatusColor(channelStatus?.soundEnabled) }}>
+                {onOffStatus(channelStatus?.soundEnabled)}
+              </strong>
+              <span>{t.restTimerVibrationLabel || 'Vibration'}</span>
+              <strong style={{ color: diagnosticStatusColor(channelStatus?.vibrationEnabled) }}>
+                {onOffStatus(channelStatus?.vibrationEnabled)}
+              </strong>
+              <span>{t.restTimerImportanceLabel || 'Importance'}</span>
+              <strong style={{ color: diagnosticStatusColor(channelStatus?.importanceSufficient) }}>
+                {channelStatus?.importance ?? (t.restTimerStatusUnknown || 'Unknown')}
+              </strong>
+              <span>{t.restTimerDndLabel || 'Do Not Disturb'}</span>
+              <strong style={{ color: doNotDisturbStatus?.active === true ? THEME.red : doNotDisturbStatus?.active === false ? THEME.primary : THEME.muted }}>
+                {doNotDisturbLabel}
+              </strong>
+            </div>
+          )}
+
+          {doNotDisturbStatus?.active === true && (
+            <div style={{
+              padding: 8,
+              borderRadius: 8,
+              border: `1px solid ${THEME.red}`,
+              color: THEME.red,
+              fontSize: 12,
+              fontWeight: 800,
+              lineHeight: 1.3,
+              marginBottom: 12
+            }}>
+              {t.restTimerDndWarning || 'Do Not Disturb is active. Android may suppress the rest timer sound and vibration.'}
             </div>
           )}
 
@@ -3239,6 +3474,25 @@ function RestTimeSection({ t }) {
             gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
             gap: 8
           }}>
+            {alertStatus?.native === true && doNotDisturbStatus?.available === true && (
+              <button
+                onClick={handleOpenDoNotDisturbSettings}
+                style={{
+                  gridColumn: '1 / -1',
+                  width: '100%',
+                  padding: 10,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  border: `1px solid ${THEME.primary}`,
+                  background: THEME.card,
+                  color: THEME.text,
+                  cursor: 'pointer'
+                }}
+              >
+                {t.restTimerOpenDndSettings || 'Open Do Not Disturb settings'}
+              </button>
+            )}
             <button
               onClick={handleCheckAlerts}
               style={{
@@ -8149,6 +8403,18 @@ export function getDashboardMeetState(workout) {
     isMeetDay,
     hideRouteToMeet: isCompletedWorkoutNewCycleBoundary(workout),
   };
+}
+
+export function getDashboardPrimaryBlockerLift(meetReadiness) {
+  if (!meetReadiness || meetReadiness.meetPlanReady === true) {
+    return null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(meetReadiness, 'primaryBlockerLift')) {
+    return meetReadiness.primaryBlockerLift || null;
+  }
+
+  return meetReadiness.meetPlanWeakestLift || null;
 }
 
 function AppTopBar() {
@@ -13395,7 +13661,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       workouts[currentIndex] && (() => {
       const meetReadiness = workouts[currentIndex].smartDecisionSummary?.readiness;
       const dashboardMeetProjection = meetReadiness?.meetProjection || null;
-      const primaryBlockerLift = meetReadiness?.primaryBlockerLift || meetReadiness?.meetPlanWeakestLift;
+      const primaryBlockerLift = getDashboardPrimaryBlockerLift(meetReadiness);
       const primaryBlockerReadiness = primaryBlockerLift
         ? meetReadiness?.meetPlanReadiness?.[primaryBlockerLift]
         : null;
