@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, SettingsListRow, SmartDayTypeInline, StatsScreen, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, bottomNavButtonStyle, bottomNavStyle, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, isMeetAttemptPlanLocked, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, settingsModalPanelStyle, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonStyle } from './App';
+import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, SettingsListRow, SmartDayTypeInline, StatsScreen, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, bottomNavButtonStyle, bottomNavStyle, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, isMeetAttemptPlanLocked, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, settingsModalPanelStyle, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
 test('dashboard metrics contain values without treating the e1RM and 1RM difference as a new PR', () => {
@@ -162,6 +162,28 @@ test('program screen uses the same responsive header alignment as other content 
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
+  });
+});
+
+test('program workout cards tighten only when the compact list toggles are visible', () => {
+  expect(programWorkoutCardSpacingStyle({ compact: true })).toEqual({
+    marginBottom: 'clamp(1px, 0.25dvh, 3px)',
+  });
+  expect(programWorkoutCardSpacingStyle()).toEqual({
+    marginBottom: 'clamp(6px, 0.8dvh, 9px)',
+  });
+});
+
+test('compact program lists pull both toggles closer to the workout cards', () => {
+  expect(programWorkoutListVerticalSpacing({ compact: true })).toEqual({
+    listMarginTop: 'clamp(1px, 0.25dvh, 3px)',
+    topToggleMargin: '14px 0 2px',
+    bottomToggleMargin: '2px 0 0',
+  });
+  expect(programWorkoutListVerticalSpacing()).toEqual({
+    listMarginTop: 'clamp(14px, 2dvh, 22px)',
+    topToggleMargin: '14px 0 10px',
+    bottomToggleMargin: '6px 0 0',
   });
 });
 

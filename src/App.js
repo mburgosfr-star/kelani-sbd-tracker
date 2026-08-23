@@ -860,6 +860,24 @@ export function programScreenStyle() {
   };
 }
 
+export function programWorkoutCardSpacingStyle({ compact = false } = {}) {
+  return {
+    marginBottom: compact
+      ? 'clamp(1px, 0.25dvh, 3px)'
+      : 'clamp(6px, 0.8dvh, 9px)',
+  };
+}
+
+export function programWorkoutListVerticalSpacing({ compact = false } = {}) {
+  return {
+    listMarginTop: compact
+      ? 'clamp(1px, 0.25dvh, 3px)'
+      : 'clamp(14px, 2dvh, 22px)',
+    topToggleMargin: compact ? '14px 0 2px' : '14px 0 10px',
+    bottomToggleMargin: compact ? '2px 0 0' : '6px 0 0',
+  };
+}
+
 export function meetDayDashboardContentStyle() {
   return {
     minHeight: 0,
@@ -8486,6 +8504,10 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
     ? allowedWorkoutEntries
     : allowedWorkoutEntries.slice(visibleStart, visibleEnd);
   const hasHiddenWorkouts = allowedWorkoutEntries.length > (visibleEnd - visibleStart);
+  const useCompactWorkoutCardSpacing = hasHiddenWorkouts && !showAllWorkouts;
+  const workoutListVerticalSpacing = programWorkoutListVerticalSpacing({
+    compact: useCompactWorkoutCardSpacing,
+  });
   const headerWorkoutNumber = Math.max(Number(currentIndex) + 1 || 1, 1);
   const headerSubtitle = formatCycleWorkoutSubtitle({
     t,
@@ -8530,7 +8552,12 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
         type="button"
         onClick={() => setShowAllWorkouts(value => !value)}
         style={{
-          ...programActionButtonStyle(THEME.primary, position === 'top' ? '14px 0 10px' : '6px 0 0'),
+          ...programActionButtonStyle(
+            THEME.primary,
+            position === 'top'
+              ? workoutListVerticalSpacing.topToggleMargin
+              : workoutListVerticalSpacing.bottomToggleMargin
+          ),
           padding: 'clamp(12px, 1.6dvh, 15px)',
           fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
         }}
@@ -8719,7 +8746,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
-        marginTop: 'clamp(14px, 2dvh, 22px)',
+        marginTop: workoutListVerticalSpacing.listMarginTop,
       }}>
 {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
@@ -8749,7 +8776,9 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
               display: 'flex',
               alignItems: 'center',
               padding: 'clamp(9px, 1.2dvh, 12px) clamp(12px, 3vw, 16px)',
-              marginBottom: 'clamp(6px, 0.8dvh, 9px)',
+              ...programWorkoutCardSpacingStyle({
+                compact: useCompactWorkoutCardSpacing,
+              }),
               borderRadius: 8,
               border: isCurrent ? `2px solid ${focusColor}` : 'none',
               background: 'transparent',
