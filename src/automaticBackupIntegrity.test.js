@@ -158,7 +158,7 @@ function makeStoredData(overrides = {}) {
     accessoryPRs: {},
     currentCycle: 3,
     bodyWeights: [],
-    userProfile: {},
+    weightUnit: 'kg',
     meetPlannerAttempts: {},
     meetPrepChecklist: {},
     restTimeSeconds: 300,

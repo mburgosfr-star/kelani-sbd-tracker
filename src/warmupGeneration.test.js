@@ -306,6 +306,63 @@ test('does not add a 120kg warm-up immediately before submaximal 125kg work', ()
   ]);
 });
 
+test('C4W9 balances submaximal warm-ups consistently without changing work volume', () => {
+  const deadliftSets = Array.from({ length: 5 }, () => ({
+    labelKey: 'workSets', reps: 4, weight: 127.5,
+  }));
+  const benchSets = Array.from({ length: 6 }, () => ({
+    labelKey: 'workSets', reps: 4, weight: 72.5,
+  }));
+
+  const deadliftWarmups = generateWarmups(deadliftSets, 'Deadlift');
+  const benchWarmups = generateWarmups(benchSets, 'Bench');
+  const completedDeadliftSets = completeSmartLiftGrid({
+    sets: deadliftSets,
+    warmups: deadliftWarmups,
+    preferMoreVolume: true,
+  });
+
+  expect(deadliftWarmups.map(({ reps, weight }) => ({ reps, weight }))).toEqual([
+    { reps: 5, weight: 20 },
+    { reps: 5, weight: 70 },
+    { reps: 5, weight: 100 },
+  ]);
+  expect(benchWarmups.map(({ reps, weight }) => ({ reps, weight }))).toEqual([
+    { reps: 5, weight: 20 },
+    { reps: 5, weight: 50 },
+  ]);
+  expect(completedDeadliftSets).toHaveLength(5);
+  expect(deadliftWarmups.length + completedDeadliftSets.length).toBe(8);
+  expect(warmupLoadJumpsNeverIncrease(
+    deadliftWarmups.map(item => item.weight),
+    deadliftSets[0].weight
+  )).toBe(true);
+  expect(warmupLoadJumpsNeverIncrease(
+    benchWarmups.map(item => item.weight),
+    benchSets[0].weight
+  )).toBe(true);
+});
+
+test('balances repeated submaximal work ladders across Squat, Bench and Deadlift', () => {
+  const cases = [
+    ['Squat', 100, [20, 60]],
+    ['Bench', 72.5, [20, 50]],
+    ['Deadlift', 127.5, [20, 70, 100]],
+  ];
+
+  cases.forEach(([lift, weight, expectedWeights]) => {
+    const sets = Array.from({ length: 4 }, () => ({
+      labelKey: 'workSets', reps: 4, weight,
+    }));
+    const warmups = generateWarmups(sets, lift);
+
+    expect(warmups.map(warmup => warmup.weight)).toEqual(expectedWeights);
+    expect(warmups.every(warmup => warmup.reps === 5)).toBe(true);
+    expect(warmups.every(warmup => warmup.weight % 10 === 0)).toBe(true);
+    expect(warmupLoadJumpsNeverIncrease(expectedWeights, weight)).toBe(true);
+  });
+});
+
 test('reuses a round squat backoff as the final warmup before a topsingle', () => {
   const sets = [
     { labelKey: 'opener', reps: 1, weight: 130 },

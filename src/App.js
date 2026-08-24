@@ -126,8 +126,9 @@ import {
   normalizeOneRMs,
   ONE_RM_STATE_VERSION,
 } from './oneRMState';
+import { buildMilestoneCelebration } from './milestoneAchievements';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { translations } from './translations';
 import { App as CapacitorApp } from '@capacitor/app';
@@ -200,6 +201,34 @@ export function getDashboardE1RMValue(oneRM, achievedE1RM) {
   return Math.max(Number(oneRM) || 0, Number(achievedE1RM) || 0);
 }
 
+export function resolveStoredWeightUnit(data = {}, fallbackUnit = null) {
+  return normalizeWeightUnit(
+    data?.weightUnit ?? data?.userProfile?.weightUnit ?? fallbackUnit
+  );
+}
+
+const BODY_DATA_VALUE_FIELDS = [
+  'bodyWeight',
+  'bodyFat',
+  'bodyWater',
+  'visceralFat',
+  'leanMass',
+  'physiqueRating',
+];
+
+export function getLatestBodyDataValues(entries = []) {
+  const latest = {};
+
+  (entries || []).forEach(entry => {
+    BODY_DATA_VALUE_FIELDS.forEach(field => {
+      const value = toOptionalNumber(entry?.[field]);
+      if (value !== null) latest[field] = value;
+    });
+  });
+
+  return Object.keys(latest).length ? latest : null;
+}
+
 // A rounded seed/max estimate is not a new training PR. The dashboard may
 // still show the all-time best e1RM, but the PR badge requires an achieved
 // training estimate to exceed the real 1RM basis.
@@ -218,7 +247,11 @@ export function buildDashboardRecentPrEvents(history = []) {
   );
 
   if (!latestStrengthEntry) {
-    return { lifts: emptyLifts, total: { oneRMGain: 0 } };
+    return {
+      lifts: emptyLifts,
+      total: { oneRMGain: 0, e1RMGain: 0 },
+      ratios: { strengthMaxGain: 0, eStrengthMaxGain: 0 },
+    };
   }
 
   const latestCycle = Number(latestStrengthEntry.cycle) || 1;
@@ -232,6 +265,17 @@ export function buildDashboardRecentPrEvents(history = []) {
   const currentOneRMs = calculateActualOneRMsFromHistory(entries);
   const previousAchievedMaxes = calculateAchievedMaxesFromHistory(historyBeforeLatestStrengthWorkout);
   const currentAchievedMaxes = calculateAchievedMaxesFromHistory(entries);
+  const milestoneAchievements = Array.isArray(
+    latestStrengthEntry?.workoutSnapshot?.milestoneCelebration?.achievements
+  )
+    ? latestStrengthEntry.workoutSnapshot.milestoneCelebration.achievements
+    : [];
+  const ratioGain = type => Math.max(
+    0,
+    ...milestoneAchievements
+      .filter(achievement => achievement?.type === type)
+      .map(achievement => Number(achievement.gain) || 0)
+  );
 
   const lifts = Object.fromEntries(LIFT_ORDER.map(lift => {
     const previousOneRM = roundDashboardWeightKg(previousOneRMs[lift]);
@@ -258,6 +302,14 @@ export function buildDashboardRecentPrEvents(history = []) {
         (gain, lift) => gain + lifts[lift].oneRMGain,
         0
       ),
+      e1RMGain: LIFT_ORDER.reduce(
+        (gain, lift) => gain + lifts[lift].e1RMGain,
+        0
+      ),
+    },
+    ratios: {
+      strengthMaxGain: ratioGain('strengthMax'),
+      eStrengthMaxGain: ratioGain('eStrengthMax'),
     },
     cycle: latestCycle,
     workoutNumber: latestWorkoutNumber,
@@ -865,6 +917,102 @@ const THEME = {
 
 export const BOTTOM_NAV_SPACE = 78;
 export const BOTTOM_NAV_ICON_SIZE = 39;
+export const SCREEN_OVERFLOW_TOLERANCE_PX = 2;
+
+export function screenContentNeedsScroll(
+  {
+    contentBottom = 0,
+    viewportHeight = 0,
+    bottomInset = BOTTOM_NAV_SPACE,
+  } = {},
+  tolerance = SCREEN_OVERFLOW_TOLERANCE_PX
+) {
+  const measuredContentBottom = Number(contentBottom);
+  const measuredViewportHeight = Number(viewportHeight);
+  const measuredBottomInset = Math.max(0, Number(bottomInset) || 0);
+  const measuredTolerance = Math.max(0, Number(tolerance) || 0);
+
+  if (!Number.isFinite(measuredContentBottom) || !Number.isFinite(measuredViewportHeight)) {
+    return false;
+  }
+
+  const visibleContentBottom = Math.max(0, measuredViewportHeight - measuredBottomInset);
+  return measuredContentBottom - visibleContentBottom > measuredTolerance;
+}
+
+function getActiveScreenFlowRoot(viewport) {
+  return Array.from(viewport.children).find(child => {
+    const style = window.getComputedStyle(child);
+    const rect = child.getBoundingClientRect();
+    return style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      style.position !== 'fixed' &&
+      rect.width > 0 &&
+      rect.height > 0;
+  }) || null;
+}
+
+const SCREEN_CONTENT_ELEMENT_TAGS = new Set([
+  'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'IMG', 'SVG', 'CANVAS', 'VIDEO', 'AUDIO',
+]);
+
+function measureActualScreenContentBottom(viewport) {
+  const screenRoot = getActiveScreenFlowRoot(viewport);
+  if (!screenRoot) return 0;
+
+  const viewportRect = viewport.getBoundingClientRect();
+  const viewportScrollTop = viewport.scrollTop;
+
+  return Array.from(screenRoot.querySelectorAll('*')).reduce((lowestBottom, element) => {
+    const style = window.getComputedStyle(element);
+    if (
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      style.position === 'fixed'
+    ) {
+      return lowestBottom;
+    }
+
+    const rect = element.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return lowestBottom;
+
+    const hasDirectText = Array.from(element.childNodes).some(node =>
+      node.nodeType === Node.TEXT_NODE && (node.textContent || '').trim()
+    );
+    const isContentElement = hasDirectText ||
+      SCREEN_CONTENT_ELEMENT_TAGS.has(element.tagName) ||
+      element.getAttribute('role') === 'button';
+
+    // Full-height screen and card wrappers create technical overflow even
+    // when their visible content already fits. Only real text, controls and
+    // rendered media determine whether scrolling is useful.
+    if (!isContentElement) return lowestBottom;
+
+    const contentBottom = rect.bottom - viewportRect.top + viewportScrollTop;
+    return Math.max(lowestBottom, contentBottom);
+  }, 0);
+}
+
+export function appViewportStyle({
+  screen,
+  workoutNeedsNavClearance = false,
+  allowVerticalScroll = false,
+} = {}) {
+  return {
+    paddingBottom: screen === 'current' && !workoutNeedsNavClearance
+      ? 0
+      : BOTTOM_NAV_SPACE,
+    boxSizing: 'border-box',
+    background: THEME.bg,
+    width: '100%',
+    minHeight: '100dvh',
+    height: '100dvh',
+    color: THEME.text,
+    overflowX: 'hidden',
+    overflowY: allowVerticalScroll ? 'auto' : 'hidden',
+    overscrollBehaviorY: 'none',
+  };
+}
 
 function balancedVerticalScreenStyle(bottomOffset = BOTTOM_NAV_SPACE) {
   return {
@@ -2422,11 +2570,26 @@ export function settingsModalPanelStyle() {
 export function regularSettingsClusterStyle() {
   return {
     display: 'grid',
-    gap: 'clamp(1px, 0.35dvh, 4px)',
-    // Transform affects only the ordinary settings visually; it deliberately
-    // keeps the cluster's original layout footprint, so the separately
-    // rendered destructive action below does not move at all.
-    transform: 'translateY(-14px)',
+    gap: 'clamp(3px, 0.6dvh, 7px)',
+    alignContent: 'space-evenly',
+    minHeight: 0,
+  };
+}
+
+export function settingsContentLayoutStyle() {
+  return {
+    background: 'transparent',
+    border: 'none',
+    borderRadius: 8,
+    padding: '0 clamp(2px, 1.5vw, 8px)',
+    marginTop: 'clamp(10px, 1.5dvh, 16px)',
+    marginBottom: 0,
+    flex: 1,
+    minHeight: 0,
+    display: 'grid',
+    gridTemplateRows: 'minmax(0, 1fr) auto',
+    rowGap: 'clamp(8px, 1.2dvh, 14px)',
+    alignContent: 'stretch',
   };
 }
 
@@ -2949,7 +3112,11 @@ function SupportActionButton({ children, onClick }) {
         borderRadius: 8,
         cursor: 'pointer',
         minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
+        height: 'clamp(52px, 6.5dvh, 60px)',
         width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         whiteSpace: 'normal',
         overflowWrap: 'anywhere',
         lineHeight: 1.15,
@@ -2960,51 +3127,153 @@ function SupportActionButton({ children, onClick }) {
   );
 }
 
-function SupportSection({ t }) {
-  const links = [
-    {
-      label: t.supportKelani || 'Support Kelani',
-      url: 'https://github.com/sponsors/mburgosfr-star',
-    },
-    {
-      label: t.reportIssueShort || t.reportBug,
-      url: 'https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=bug_report.md',
-    },
-    {
-      label: t.sourceCode || 'Source code',
-      url: 'https://github.com/mburgosfr-star/kelani-sbd-tracker',
-    },
-  ];
+export function MilestoneCelebrationModal({
+  celebration,
+  t,
+  weightUnit = WEIGHT_UNITS.KG,
+  onClose,
+}) {
+  if (!celebration?.achievements?.length) return null;
+
+  const hasLevelMilestone = celebration.achievements.some(item => item.type === 'level');
+  const liftLabels = {
+    Squat: t.squat || 'Squat',
+    Bench: t.bench || 'Bench',
+    Deadlift: t.deadlift || 'Deadlift',
+    Total: t.total || 'Total',
+  };
+  const levelLabels = {
+    beginner: t.athleteLevelBeginner || 'Beginner',
+    intermediate: t.athleteLevelIntermediate || 'Intermediate',
+    advanced: t.athleteLevelAdvanced || 'Advanced',
+    elite: t.athleteLevelElite || 'Elite',
+  };
+
+  function achievementLabel(achievement) {
+    if (achievement.type === 'level') {
+      return t.milestoneNewLevel || 'New level';
+    }
+    if (achievement.type === 'strengthMax') return t.strengthMax || 'Strength Max';
+    if (achievement.type === 'eStrengthMax') return t.eStrengthMax || 'eStrength Max';
+
+    return `${liftLabels[achievement.lift] || achievement.lift} ${achievement.type}`;
+  }
+
+  function achievementValue(achievement) {
+    if (achievement.type === 'level') {
+      return levelLabels[achievement.value] || achievement.value;
+    }
+    if (achievement.type === 'strengthMax' || achievement.type === 'eStrengthMax') {
+      const ratioFormat = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+      return `${formatDecimalDisplay(achievement.value, ratioFormat)}x (+${formatDecimalDisplay(achievement.gain, ratioFormat)})`;
+    }
+
+    return `${formatWeightFromKg(achievement.value, weightUnit)} (+${formatWeightFromKg(achievement.gain, weightUnit)})`;
+  }
 
   function openLink(url) {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
+  const actions = [
+    {
+      label: t.supportKelani || 'Support',
+      onClick: () => openLink('https://github.com/sponsors/mburgosfr-star'),
+    },
+    {
+      label: t.feedbackViaGitHub || 'Feedback',
+      onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=feedback.md'),
+    },
+    {
+      label: t.contactKelani || 'Contact',
+      onClick: () => openLink('mailto:mburgosfr@proton.me?subject=Kelani%20contact'),
+    },
+    {
+      label: t.close || 'Close',
+      onClick: onClose,
+    },
+  ];
+
   return (
-    <SettingsListRow
-      label={t.support}
-      actionContent={(
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr',
-          gap: 8,
-          width: '100%'
-        }}>
-          {links.map(item => (
-            <SupportActionButton
-              key={item.label}
-              onClick={() => openLink(item.url)}
-            >
-              {item.label}
-            </SupportActionButton>
-          ))}
-        </div>
-      )}
-    />
+    <SettingsModal
+      title={hasLevelMilestone
+        ? (t.milestoneLevelTitle || 'New level reached!')
+        : (t.milestoneStrengthTitle || 'New strength milestone!')}
+      onClose={onClose}
+    >
+      <div style={{ fontSize: 38, textAlign: 'center', margin: '-4px 0 8px' }}>🎉</div>
+
+      <p style={{
+        margin: '0 0 14px',
+        color: THEME.text,
+        fontSize: 14,
+        fontWeight: 800,
+        lineHeight: 1.4,
+        textAlign: 'center',
+      }}>
+        {t.milestoneIntro || 'Kelani works. You are demonstrably stronger.'}
+      </p>
+
+      <div style={{
+        display: 'grid',
+        gap: 6,
+        marginBottom: 14,
+      }}>
+        {celebration.achievements.map((achievement, index) => (
+          <div
+            key={`${achievement.type}:${achievement.lift || achievement.value}:${index}`}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) auto',
+              alignItems: 'center',
+              gap: 10,
+              padding: '5px 2px',
+              background: 'transparent',
+              border: 'none',
+            }}
+          >
+            <span style={{ color: THEME.text, fontSize: 13, fontWeight: 800 }}>
+              {achievementLabel(achievement)}
+            </span>
+            <strong style={{
+              color: achievement.type === 'level' ? THEME.yellow : THEME.green,
+              fontSize: 13,
+              textAlign: 'right',
+              whiteSpace: 'nowrap',
+            }}>
+              {achievementValue(achievement)}
+            </strong>
+          </div>
+        ))}
+      </div>
+
+      <p style={{
+        margin: '0 0 14px',
+        color: THEME.text,
+        fontSize: 13,
+        fontWeight: 700,
+        lineHeight: 1.4,
+        textAlign: 'center',
+      }}>
+        {t.milestoneSupportText || 'Kelani is free, offline-first and open source. If it helps you get stronger, support its development or share your experience.'}
+      </p>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+        gap: 8,
+      }}>
+        {actions.map(action => (
+          <SupportActionButton key={action.label} onClick={action.onClick}>
+            {action.label}
+          </SupportActionButton>
+        ))}
+      </div>
+    </SettingsModal>
   );
 }
 
-function AboutSection({ t }) {
+function AboutSupportSection({ t }) {
   const [showAbout, setShowAbout] = useState(false);
 
   function openLink(url) {
@@ -3012,10 +3281,42 @@ function AboutSection({ t }) {
   }
 
   const facts = [
-    [t.aboutRepository || 'Repository', 'mburgosfr-star/kelani-sbd-tracker'],
     [t.aboutPackage || 'Package', 'com.kelani.sbdtracker'],
-    [t.aboutDistribution || 'Distribution', 'GitHub Releases · IzzyOnDroid'],
     [t.aboutSigningSha256 || 'Signing SHA-256', '15d23f2e5ee95ebc2a530b48be6f27dad7a568f722bc819f4571b3470a2ff39d'],
+  ];
+  const actions = [
+    {
+      label: t.supportKelani || 'Support',
+      onClick: () => openLink('https://github.com/sponsors/mburgosfr-star'),
+    },
+    {
+      label: t.feedbackViaGitHub || 'Feedback',
+      onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=feedback.md'),
+    },
+    {
+      label: t.contactKelani || 'Contact',
+      onClick: () => openLink('mailto:mburgosfr@proton.me?subject=Kelani%20contact'),
+    },
+    {
+      label: t.reportIssueShort || t.reportBug,
+      onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=bug_report.md'),
+    },
+    {
+      label: t.githubRepository || 'GitHub repo',
+      onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker'),
+    },
+    {
+      label: t.izzyOnDroid || 'IzzyOnDroid (NeoStore)',
+      onClick: () => openLink('https://apt.izzysoft.de/packages/com.kelani.sbdtracker'),
+    },
+    {
+      label: t.verifyRelease || 'Verify Release',
+      onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/VERIFY.md'),
+    },
+    {
+      label: t.close || 'Close',
+      onClick: () => setShowAbout(false),
+    },
   ];
 
   return (
@@ -3031,9 +3332,25 @@ function AboutSection({ t }) {
           title={t.about || 'About'}
           onClose={() => setShowAbout(false)}
         >
-          <div style={{ display: 'grid', gap: 10, marginBottom: 4 }}>
+          <p style={{
+            margin: '0 0 14px',
+            color: THEME.text,
+            fontSize: 14,
+            fontWeight: 700,
+            lineHeight: 1.4,
+            textAlign: 'center',
+          }}>
+            {t.supportDescription}
+          </p>
+
+          <div style={{
+            display: 'grid',
+            gap: 9,
+            marginBottom: 16,
+            textAlign: 'center',
+          }}>
             {facts.map(([label, value]) => (
-              <div key={label}>
+              <div key={label} style={{ textAlign: 'center' }}>
                 <div style={{
                   color: THEME.muted,
                   fontSize: 11,
@@ -3050,6 +3367,7 @@ function AboutSection({ t }) {
                   lineHeight: 1.35,
                   overflowWrap: 'anywhere',
                   marginTop: 2,
+                  textAlign: 'center',
                 }}>
                   {value}
                 </div>
@@ -3057,21 +3375,18 @@ function AboutSection({ t }) {
             ))}
           </div>
 
-          <div style={modalActionRowStyle()}>
-            <button
-              type="button"
-              onClick={() => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/VERIFY.md')}
-              style={modalActionButtonStyle('primary')}
-            >
-              {t.verifyRelease || 'Verify release'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowAbout(false)}
-              style={modalActionButtonStyle('secondary')}
-            >
-              {t.close || 'Close'}
-            </button>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: 8,
+          }}>
+            {actions.map(item => (
+              <div key={item.label}>
+                <SupportActionButton onClick={item.onClick}>
+                  {item.label}
+                </SupportActionButton>
+              </div>
+            ))}
           </div>
         </SettingsModal>
       )}
@@ -3079,81 +3394,48 @@ function AboutSection({ t }) {
   );
 }
 
-function ProfileSection({ userProfile, onSave, weightUnit, setWeightUnit, t }) {
+export function WeightUnitSection({ weightUnit, setWeightUnit, t }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [birthDate, setBirthDate] = useState(userProfile?.birthDate || '');
-  const [sex, setSex] = useState(userProfile?.sex || '');
-  const [profileWeightUnit, setProfileWeightUnit] = useState(normalizeWeightUnit(weightUnit));
-  const [notice, setNotice] = useState(null);
-
-  useEffect(() => {
-    setBirthDate(userProfile?.birthDate || '');
-    setSex(userProfile?.sex || '');
-    setProfileWeightUnit(normalizeWeightUnit(weightUnit));
-  }, [userProfile?.birthDate, userProfile?.sex, weightUnit]);
-
-  useEffect(() => {
-    if (!notice) return;
-    const id = window.setTimeout(() => setNotice(null), 5000);
-    return () => window.clearTimeout(id);
-  }, [notice]);
-
-  function openEdit() {
-    setBirthDate(userProfile?.birthDate || '');
-    setSex(userProfile?.sex || '');
-    setProfileWeightUnit(normalizeWeightUnit(weightUnit));
-    setIsEditing(true);
-  }
-
-  function handleSave() {
-    onSave({ birthDate, sex });
-    setWeightUnit(normalizeWeightUnit(profileWeightUnit));
-    setIsEditing(false);
-    setNotice(t.profileSaved);
-  }
+  const normalizedWeightUnit = normalizeWeightUnit(weightUnit);
+  const unitLabel = normalizedWeightUnit === WEIGHT_UNITS.LB
+    ? t.weightUnitLb
+    : t.weightUnitKg;
 
   return (
     <>
-      <Toast message={notice} />
-
-      <SettingsListRow label={t.profile} actionLabel={t.editProfile || t.edit} onAction={openEdit} />
+      <SettingsListRow
+        label={t.weightUnit}
+        actionLabel={unitLabel}
+        onAction={() => setIsEditing(true)}
+      />
 
       {isEditing && (
         <SettingsModal
-          title={t.profile}
+          title={t.changeWeightUnit || t.weightUnit}
           onClose={() => setIsEditing(false)}
         >
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', marginBottom: 12, fontWeight: 700, fontSize: 14 }}>{t.birthDate}</label>
-            <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} style={modalInputStyle()} />
-          </div>
-
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.sex}</label>
-            <select value={sex} onChange={e => setSex(e.target.value)} style={modalInputStyle()}>
-              <option value="">{t.selectSex}</option>
-              <option value="male">{t.male}</option>
-              <option value="female">{t.female}</option>
-              <option value="other">{t.other}</option>
-            </select>
-          </div>
-
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, fontSize: 14 }}>{t.weightUnit}</label>
-            <select value={profileWeightUnit} onChange={e => setProfileWeightUnit(normalizeWeightUnit(e.target.value))} style={modalInputStyle()}>
-              <option value={WEIGHT_UNITS.KG}>{t.weightUnitKg}</option>
-              <option value={WEIGHT_UNITS.LB}>{t.weightUnitLb}</option>
-            </select>
-          </div>
-
-          <div style={modalActionRowStyle()}>
-            <button onClick={() => setIsEditing(false)} style={modalActionButtonStyle('secondary')}>
-              {t.cancel}
-            </button>
-
-            <button onClick={handleSave} style={modalActionButtonStyle('primary')}>
-              {t.save}
-            </button>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 140px))',
+            justifyContent: 'center',
+            gap: 10,
+          }}>
+            {[WEIGHT_UNITS.KG, WEIGHT_UNITS.LB].map(unit => (
+              <button
+                type="button"
+                key={unit}
+                onClick={() => {
+                  setWeightUnit(unit);
+                  setIsEditing(false);
+                }}
+                style={{
+                  ...selectionModalButtonStyle(normalizedWeightUnit === unit),
+                  marginBottom: 0,
+                }}
+              >
+                {unit === WEIGHT_UNITS.KG ? t.weightUnitKg : t.weightUnitLb}
+              </button>
+            ))}
           </div>
         </SettingsModal>
       )}
@@ -3165,7 +3447,7 @@ function ProfileSection({ userProfile, onSave, weightUnit, setWeightUnit, t }) {
 
 
 
-function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) {
+export function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS.KG }) {
   const previous = bodyData || {};
   const [isEditing, setIsEditing] = useState(false);
   const [saveNotice, setSaveNotice] = useState(null);
@@ -4806,11 +5088,6 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
       t.smartSafeProgressionReason ||
       'Safe progression from the previous successful top set.'
     );
-  } else if (!['secondary', 'tertiary'].includes(prescription.role || liftBlock.role)) {
-    reasonParts.push(
-      t.smartPrimarySelectionReason ||
-      'Primary work was selected from readiness and recent training.'
-    );
   }
 
   if (reasonParts.length > 0) {
@@ -5097,7 +5374,7 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
         (phaseSeverity[meetPlanReadinessByLift[b]?.readinessPhase] ?? 99)
       );
     const statusText = meetReady
-      ? (t.smartMeetFullyReadyTaper || 'Fully meet-ready: tapering and resting before the meet')
+      ? (t.smartMeetFullyReady || 'Fully meet-ready: all lift goals achieved. Training continues as planned.')
       : blockingLifts.length > 0
         ? `${blockingLifts.join(', ')} (${oneRMBlockerText})`
         : (t.smartMeetPlanNotReady || 'Meet plan not ready');
@@ -5152,12 +5429,13 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
         0
       );
       const liftIsReady = liftReadinessGap <= 0;
+      const cycleEstimateLabel = t.smartCycleEstimateShort || 'Cycle e1RM';
 
       rows.push({
         label: lift,
         value: liftIsReady
-          ? `${t.smartLiftReady || 'Ready'} (e1RM ${formatEstimate(liftDisplayCycleEstimate)})`
-          : `e1RM ${formatEstimate(liftDisplayCycleEstimate)} → ${formatEstimate(liftDisplayReadinessTarget)} (${t.smartOpenerGapShort || 'Gap'} ${formatEstimate(liftReadinessGap)})`,
+          ? `${t.smartLiftReady || 'Ready'} (${cycleEstimateLabel} ${formatEstimate(liftDisplayCycleEstimate)})`
+          : `${cycleEstimateLabel} ${formatEstimate(liftDisplayCycleEstimate)} → ${formatEstimate(liftDisplayReadinessTarget)} (${t.smartOpenerGapShort || 'Gap'} ${formatEstimate(liftReadinessGap)})`,
         kind: 'lift-readiness',
       });
     });
@@ -5183,9 +5461,9 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
   if (showMeetReadinessDetail && hasMeetReadinessDetail) {
     const readinessBasisText = readiness.meetProjection?.available
       ? (t.smartReadinessBasisTextWithProjection ||
-        'e1RM is an estimate from your best successful set this cycle; the target is your confirmed real 1RM. The projection assumes normal progress and unchanged meet attempts.')
+        'Cycle e1RM is an estimate based on your best successful set in this cycle; the target is your confirmed real 1RM. The projection assumes normal progress and unchanged meet attempts.')
       : (t.smartReadinessBasisText ||
-        'e1RM is an estimate from your best successful set this cycle; the target is your confirmed real 1RM.');
+        'Cycle e1RM is an estimate based on your best successful set in this cycle; the target is your confirmed real 1RM.');
 
     rows.push({
       label: t.smartReadinessBasis || 'Readiness basis',
@@ -9251,12 +9529,20 @@ function Onboarding({ onStart, t }) {
   return (
     <div style={{
       minHeight: '100dvh',
+      height: '100dvh',
       background: '#000000',
       color: THEME.text,
-      overflowX: 'hidden'
+      overflowX: 'hidden',
+      overflowY: 'auto',
+      overscrollBehaviorY: 'none',
     }}>
-      <div style={{
-        ...balancedVerticalScreenStyle(0),
+      <div
+        data-testid="onboarding-content"
+        style={{
+        // Reserve the same vertical footprint as the ordinary bottom nav.
+        // Onboarding has no visible navigation, but using its content area
+        // keeps the setup controls from sitting unnaturally low.
+        ...balancedVerticalScreenStyle(BOTTOM_NAV_SPACE),
         maxWidth: 500,
         margin: '0 auto',
         padding: '14px 20px',
@@ -9776,6 +10062,7 @@ function App() {
   const t = translations[language];
   const [screen, setScreen] = useState(null);
   const appViewportRef = useRef(null);
+  const [appAllowsVerticalScroll, setAppAllowsVerticalScroll] = useState(false);
   const [workoutNeedsNavClearance, setWorkoutNeedsNavClearance] = useState(false);
   const [workouts, setWorkouts] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -9792,11 +10079,11 @@ function App() {
   const [completedWorkout, setCompletedWorkout] = useState(null);
   const [completedWorkoutIndex, setCompletedWorkoutIndex] = useState(null);
   const [completedSummary, setCompletedSummary] = useState(null);
+  const [activeMilestoneCelebration, setActiveMilestoneCelebration] = useState(null);
   const [showWorkoutEffortPrompt, setShowWorkoutEffortPrompt] = useState(false);
   const [currentCycle, setCurrentCycle] = useState(1);
   const [bodyWeights, setBodyWeights] = useState([]);
   const athleteLevel = getAthleteLevel({ prs, history, bodyWeights });
-  const [userProfile, setUserProfile] = useState({});
   const [meetPlannerAttempts, setMeetPlannerAttempts] = useState({});
   const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -9833,6 +10120,77 @@ function App() {
     };
   }, [screen, selectedIndex, workouts]);
 
+  useLayoutEffect(() => {
+    const viewport = appViewportRef.current;
+    if (!viewport) return undefined;
+
+    let frameId = null;
+    const observedChildren = new Set();
+
+    const measure = () => {
+      frameId = null;
+      const contentBottom = measureActualScreenContentBottom(viewport);
+      const nextAllowsScroll = screenContentNeedsScroll({
+        contentBottom,
+        viewportHeight: viewport.clientHeight,
+      });
+      setAppAllowsVerticalScroll(previous =>
+        previous === nextAllowsScroll ? previous : nextAllowsScroll
+      );
+    };
+
+    const scheduleMeasure = () => {
+      if (frameId !== null) return;
+      if (typeof window.requestAnimationFrame === 'function') {
+        frameId = window.requestAnimationFrame(measure);
+      } else {
+        measure();
+      }
+    };
+
+    const resizeObserver = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(scheduleMeasure)
+      : null;
+
+    const observeDirectChildren = () => {
+      resizeObserver?.observe(viewport);
+      Array.from(viewport.children).forEach(child => {
+        if (observedChildren.has(child)) return;
+        observedChildren.add(child);
+        resizeObserver?.observe(child);
+      });
+    };
+
+    viewport.scrollTop = 0;
+    observeDirectChildren();
+    measure();
+
+    const mutationObserver = typeof MutationObserver === 'function'
+      ? new MutationObserver(() => {
+          observeDirectChildren();
+          scheduleMeasure();
+        })
+      : null;
+    mutationObserver?.observe(viewport, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    window.addEventListener('resize', scheduleMeasure);
+    window.visualViewport?.addEventListener('resize', scheduleMeasure);
+
+    return () => {
+      if (frameId !== null && typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener('resize', scheduleMeasure);
+      window.visualViewport?.removeEventListener('resize', scheduleMeasure);
+      mutationObserver?.disconnect();
+      resizeObserver?.disconnect();
+    };
+  }, [screen]);
+
   useEffect(() => {
     if (!workouts.length) return;
 
@@ -9853,12 +10211,20 @@ function App() {
   const PROGRAM_VERSION = 'kelani-program-profiles-v5';
 
   useEffect(() => {
+    if (appViewportRef.current) {
+      appViewportRef.current.scrollTop = 0;
+    }
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, [screen, selectedIndex]);
 
   useEffect(() => {
     const setupBackButton = async () => {
       const listener = await CapacitorApp.addListener('backButton', () => {
+        if (activeMilestoneCelebration) {
+          setActiveMilestoneCelebration(null);
+          return;
+        }
+
         if (screen === 'current') {
           setScreen('all');
           return;
@@ -9902,7 +10268,7 @@ function App() {
     return () => {
       if (listener) listener.remove();
     };
-  }, [screen, completedWorkoutIndex]);
+  }, [screen, completedWorkoutIndex, activeMilestoneCelebration]);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -9944,6 +10310,10 @@ function App() {
       });
       const savedTrainingModel = normalizeTrainingModel(
         data.trainingModel || localStorage.getItem('trainingModel')
+      );
+      const savedWeightUnit = resolveStoredWeightUnit(
+        data,
+        localStorage.getItem('weightUnit')
       );
       const savedSmartIdealRouteStartCycle = resolveSmartIdealRouteStartCycle({
         savedStartCycle: data.smartIdealRouteStartCycle,
@@ -10044,7 +10414,7 @@ function App() {
       setAccessoryPRs(data.accessoryPRs || {});
       setCurrentCycle(savedCycle);
       setBodyWeights(normalizeBodyWeights(data));
-      setUserProfile(data.userProfile || {});
+      setWeightUnit(savedWeightUnit);
       setMeetPlannerAttempts(data.meetPlannerAttempts || {});
       setMeetPrepChecklist(savedMeetPrepChecklist);
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
@@ -10110,7 +10480,7 @@ function App() {
       accessoryPRs,
       currentCycle,
       bodyWeights,
-      userProfile,
+      weightUnit: normalizeWeightUnit(weightUnit),
       meetPlannerAttempts,
       meetPrepChecklist,
       restTimeSeconds,
@@ -10173,7 +10543,7 @@ function App() {
         });
       }
     }
-  }, [hasLoadedData, history, prs, oneRMs, cycleE1RMs, smartIdealRouteStartCycle, accessoryPRs, currentCycle, currentIndex, bodyWeights, userProfile, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
+  }, [hasLoadedData, history, prs, oneRMs, cycleE1RMs, smartIdealRouteStartCycle, accessoryPRs, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
 
   useEffect(() => {
     if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
@@ -10336,7 +10706,6 @@ function App() {
     setCycleE1RMs(initialCycleE1RMs);
     setSmartIdealRouteStartCycle(1);
     setAccessoryPRs({});
-    setUserProfile({ ...profile, weightUnit: selectedWeightUnit });
     setMeetPlannerAttempts({});
     setMeetPrepChecklist({});
     setBodyWeights(initialBodyData ? [
@@ -10385,7 +10754,6 @@ function handleResetApp() {
   setCycleE1RMs({});
   setSmartIdealRouteStartCycle(1);
   setAccessoryPRs({});
-  setUserProfile({});
   setMeetPlannerAttempts({});
   setMeetPrepChecklist({});
   setShowNewCycle(false);
@@ -10393,6 +10761,7 @@ function handleResetApp() {
   setCompletedWorkout(null);
   setCompletedWorkoutIndex(null);
   setCompletedSummary(null);
+  setActiveMilestoneCelebration(null);
   setCurrentCycle(1);
   setBodyWeights([]);
   setTrainingModel(TRAINING_MODELS.SMART);
@@ -10450,6 +10819,7 @@ function handleStartNewCycle() {
   setSelectedIndex(0);
   setCompletedWorkout(null);
   setCompletedSummary(null);
+  setActiveMilestoneCelebration(null);
   setShowNewCycle(false);
   setShowWorkoutEffortPrompt(false);
   setScreen('all');
@@ -11352,6 +11722,31 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     });
   }
 
+  function attachMilestoneCelebration({
+    finishedWorkout,
+    nextHistory,
+    nextPrs,
+    nextOneRMs,
+  }) {
+    const celebration = buildMilestoneCelebration({
+      before: { history, prs, oneRMs, bodyWeights },
+      after: {
+        history: nextHistory,
+        prs: nextPrs,
+        oneRMs: nextOneRMs,
+        bodyWeights,
+      },
+      completionId: `${currentCycle}:${finishedWorkout.number}:${finishedWorkout.completedAt}`,
+    });
+
+    if (celebration) {
+      finishedWorkout.milestoneCelebration = celebration;
+      setActiveMilestoneCelebration(celebration);
+    }
+
+    return celebration;
+  }
+
   function completeWorkout(workoutEffortOverride = null) {
     const baseWorkout = workouts[selectedIndex];
     // TOO_MUCH is never a manual choice - a single failed or skipped set
@@ -11371,6 +11766,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     }
 
     setShowWorkoutEffortPrompt(false);
+    setActiveMilestoneCelebration(null);
     stopTimer();
 
     const finishedWorkout = JSON.parse(JSON.stringify(workout));
@@ -11429,6 +11825,13 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
           },
         },
       ];
+
+      attachMilestoneCelebration({
+        finishedWorkout,
+        nextHistory,
+        nextPrs: prs,
+        nextOneRMs: oneRMs,
+      });
 
       setHistory(nextHistory);
       const smartCycleCompleteAfterRest = isSmartTrainingModel(trainingModel)
@@ -11594,6 +11997,12 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     oneRMs,
     calculateActualOneRMsFromHistory(nextHistory)
   );
+  attachMilestoneCelebration({
+    finishedWorkout,
+    nextHistory,
+    nextPrs,
+    nextOneRMs,
+  });
   setHistory(nextHistory);
   setPrs(nextPrs);
   setOneRMs(nextOneRMs);
@@ -11749,6 +12158,13 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         calculateActualOneRMsFromHistory(nextHistory)
       );
 
+      attachMilestoneCelebration({
+        finishedWorkout,
+        nextHistory,
+        nextPrs,
+        nextOneRMs,
+      });
+
       completedTrainingHistory = nextHistory;
       completedTrainingPrs = nextPrs;
       completedTrainingOneRMs = nextOneRMs;
@@ -11850,16 +12266,15 @@ const nextCompletedSummary = {
 finishedWorkout.completedSummary = nextCompletedSummary;
 setCompletedSummary(nextCompletedSummary);
 
-  setPrs(prev => {
-  const current = prev[workout.lift] || 0;
-  return e1RMToday > current ? { ...prev, [workout.lift]: e1RMToday } : prev;
-});
+const nextPrs = e1RMToday > (Number(prs[workout.lift]) || 0)
+  ? { ...prs, [workout.lift]: e1RMToday }
+  : prs;
+setPrs(nextPrs);
   setOneRMs(prev => mergeHigherOneRMs(prev, {
     [workout.lift]: oneRMToday,
   }));
 
-    setHistory(prev => {
-  const existingIndex = prev.findIndex(
+const existingIndex = history.findIndex(
     h => Number(h.cycle) === Number(currentCycle) && Number(h.workoutNumber) === Number(workout.number) && h.lift === workout.lift
   );
 
@@ -11885,14 +12300,26 @@ setCompletedSummary(nextCompletedSummary);
     workoutSnapshot: finishedWorkout,
   };
 
+let nextHistory;
   if (existingIndex !== -1) {
-    const updated = [...prev];
+    const updated = [...history];
     updated[existingIndex] = newEntry;
-    return updated;
+    nextHistory = updated;
+  } else {
+    nextHistory = [...history, newEntry];
   }
 
-  return [...prev, newEntry];
+const milestoneOneRMs = mergeHigherOneRMs(
+  oneRMs,
+  calculateActualOneRMsFromHistory(nextHistory)
+);
+attachMilestoneCelebration({
+  finishedWorkout,
+  nextHistory,
+  nextPrs,
+  nextOneRMs: milestoneOneRMs,
 });
+setHistory(nextHistory);
 }
 }
 
@@ -13120,7 +13547,7 @@ const currentCycleE1RMs = {
   Deadlift: roundDashboardWeightKg(currentCycleBestMaxes.Deadlift.e1rm),
 };
 
-const latestBodyDataEntry = [...bodyWeights].slice(-1)[0];
+const latestBodyDataEntry = getLatestBodyDataValues(bodyWeights);
 const latestBodyWeightEntry = [...bodyWeights].filter(entry => entry.bodyWeight).slice(-1)[0];
 const latestBodyWeight = latestBodyWeightEntry?.bodyWeight || null;
 
@@ -13275,126 +13702,10 @@ const eStrengthRatio = latestBodyWeight
 
 const { strengthMax, eStrengthMax } = calculateStrengthRatioMaxes({
   prs,
+  oneRMs,
   history,
   bodyWeights,
 });
-
-function bodyMetricValue(value, suffix = '') {
-  if (!value) return null;
-
-  const formattedValue = Number.isInteger(Number(value))
-    ? formatDecimalDisplay(value, { maximumFractionDigits: 0 })
-    : formatDecimalDisplay(value, { maximumFractionDigits: 1 });
-
-  return suffix ? `${formattedValue} ${suffix}` : formattedValue;
-}
-
-function calculateAge(birthDate) {
-  if (!birthDate) return null;
-
-  const birth = new Date(birthDate);
-  if (Number.isNaN(birth.getTime())) return null;
-
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const monthDiff = today.getMonth() - birth.getMonth();
-
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-    age -= 1;
-  }
-
-  return age;
-}
-
-function makeStatus(label, color, symbol = '•') {
-  return { label, color, symbol };
-}
-
-function bodyFatStatus(value) {
-  if (!value) return null;
-
-  const age = calculateAge(userProfile?.birthDate);
-  const sex = userProfile?.sex;
-
-  const ranges = {
-    male: [
-      { minAge: 18, maxAge: 39, lowMin: 6, healthyMin: 8, healthyMax: 20, overfatMax: 25 },
-      { minAge: 40, maxAge: 59, lowMin: 8, healthyMin: 11, healthyMax: 22, overfatMax: 28 },
-      { minAge: 60, maxAge: 99, lowMin: 10, healthyMin: 13, healthyMax: 25, overfatMax: 30 },
-    ],
-    female: [
-      { minAge: 18, maxAge: 39, lowMin: 16, healthyMin: 21, healthyMax: 33, overfatMax: 39 },
-      { minAge: 40, maxAge: 59, lowMin: 18, healthyMin: 23, healthyMax: 34, overfatMax: 40 },
-      { minAge: 60, maxAge: 99, lowMin: 20, healthyMin: 24, healthyMax: 36, overfatMax: 41 },
-    ],
-  };
-
-  const range = age && age >= 18 && age <= 99 && ['male', 'female'].includes(sex)
-    ? ranges[sex].find(r => age >= r.minAge && age <= r.maxAge)
-    : null;
-
-  if (range) {
-    if (value < range.lowMin) return makeStatus(t.bodyMetricUnderfat, THEME.red, '');
-    if (value < range.healthyMin) return makeStatus(t.bodyMetricHealthy, THEME.primary, '');
-    if (value <= range.healthyMax) return makeStatus(t.bodyMetricHealthy, THEME.yellow, '');
-    if (value <= range.overfatMax) return makeStatus(t.bodyMetricOverfat, THEME.primary, '');
-    return makeStatus(t.bodyMetricObese, THEME.red, '');
-  }
-
-  if (value >= 8 && value <= 25) return makeStatus(t.bodyMetricHealthy, THEME.yellow, '');
-  if (value > 25 && value <= 35) return makeStatus(t.bodyMetricOverfat, THEME.primary, '');
-  return makeStatus(t.bodyMetricObese, THEME.red, '');
-}
-
-function bodyWaterStatus(value) {
-  if (!value) return null;
-
-  if (userProfile?.sex === 'male') {
-    return value >= 50 && value <= 65
-      ? makeStatus(t.bodyMetricHealthy, THEME.yellow, '')
-      : makeStatus(t.bodyMetricAverage, THEME.primary, '');
-  }
-
-  if (userProfile?.sex === 'female') {
-    return value >= 45 && value <= 60
-      ? makeStatus(t.bodyMetricHealthy, THEME.yellow, '')
-      : makeStatus(t.bodyMetricAverage, THEME.primary, '');
-  }
-
-  return value >= 45 && value <= 65
-    ? makeStatus(t.bodyMetricHealthy, THEME.yellow, '')
-    : makeStatus(t.bodyMetricAverage, THEME.primary, '');
-}
-
-function visceralFatStatus(value) {
-  if (!value) return null;
-
-  if (value >= 1 && value <= 12) {
-    return makeStatus(t.bodyMetricNormal, THEME.yellow, '');
-  }
-
-  if (value >= 13) {
-    return makeStatus(t.bodyMetricExcessive, THEME.red, '');
-  }
-
-  return null;
-}
-
-function physiqueStatus(value) {
-  if (!value) return null;
-
-  const key = `physique${Math.round(value)}`;
-  if (!t[key]) return null;
-
-  const rounded = Math.round(value);
-  const color = rounded >= 9
-    ? THEME.yellow
-    : rounded >= 5
-      ? THEME.primary
-      : THEME.red;
-
-  return makeStatus(t[key], color, '');
-}
 
 const latestBodyDataRows = [
   {
@@ -13405,6 +13716,8 @@ const latestBodyDataRows = [
   {
     key: 'strength',
     label: t.strengthWithMax || 'Strength / Max',
+    recentPrGain: dashboardRecentPrEvents.ratios.strengthMaxGain,
+    recentPrLabel: t.newStrengthMaxPR || 'New Strength Max',
     value: strengthRatio
       ? `${formatDecimalDisplay(strengthRatio, { maximumFractionDigits: 2 })} / ${formatDecimalDisplay(strengthMax || strengthRatio, { maximumFractionDigits: 2 })}`
       : null,
@@ -13412,38 +13725,11 @@ const latestBodyDataRows = [
   {
     key: 'eStrength',
     label: t.eStrengthWithMax || 'eStrength / Max',
+    recentPrGain: dashboardRecentPrEvents.ratios.eStrengthMaxGain,
+    recentPrLabel: t.newEStrengthMaxPR || 'New eStrength Max',
     value: eStrengthRatio
       ? `${formatDecimalDisplay(eStrengthRatio, { maximumFractionDigits: 2 })} / ${formatDecimalDisplay(eStrengthMax || eStrengthRatio, { maximumFractionDigits: 2 })}`
       : null,
-  },
-  {
-    key: 'bodyFat',
-    label: t.bodyFatPercent,
-    value: bodyMetricValue(latestBodyDataEntry?.bodyFat, '%'),
-    status: bodyFatStatus(latestBodyDataEntry?.bodyFat),
-  },
-  {
-    key: 'bodyWater',
-    label: t.bodyWaterPercent,
-    value: bodyMetricValue(latestBodyDataEntry?.bodyWater, '%'),
-    status: bodyWaterStatus(latestBodyDataEntry?.bodyWater),
-  },
-  {
-    key: 'leanMass',
-    label: t.leanMassKg,
-    value: latestBodyDataEntry?.leanMass ? formatWeightFromKg(latestBodyDataEntry.leanMass, weightUnit, { body: true }) : null,
-  },
-  {
-    key: 'visceralFat',
-    label: t.visceralFatRating,
-    value: bodyMetricValue(latestBodyDataEntry?.visceralFat),
-    status: visceralFatStatus(latestBodyDataEntry?.visceralFat),
-  },
-  {
-    key: 'physiqueRating',
-    label: t.physiqueRating,
-    value: bodyMetricValue(latestBodyDataEntry?.physiqueRating),
-    status: physiqueStatus(latestBodyDataEntry?.physiqueRating),
   },
 ].filter(row => row.value);
 
@@ -13460,18 +13746,15 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
 });
 
     return (
-  <div ref={appViewportRef} style={{
-    paddingBottom: screen === 'current' && !workoutNeedsNavClearance
-      ? 0
-      : BOTTOM_NAV_SPACE,
-    boxSizing: 'border-box',
-    background: THEME.bg,
-    minHeight: '100dvh',
-    height: screen === 'current' ? '100dvh' : undefined,
-    color: THEME.text,
-    overflowX: 'hidden',
-    overflowY: screen === 'current' ? 'auto' : undefined,
-  }}>
+  <div
+    ref={appViewportRef}
+    data-testid="app-viewport"
+    style={appViewportStyle({
+      screen,
+      workoutNeedsNavClearance,
+      allowVerticalScroll: appAllowsVerticalScroll,
+    })}
+  >
       {screen === 'current' && (
         <CurrentWorkout
           workout={workouts[selectedIndex]}
@@ -13766,7 +14049,6 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             background: `${THEME.meet}20`,
             ...dashboardE1RMMetrics.total,
             recentPr: dashboardRecentPrEvents.total,
-            isTotal: true,
             statsTab: 'totaal',
           },
         ];
@@ -13875,7 +14157,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                       }}>
                         {value(card.e1RM)}
                       </strong>
-                      {!card.isTotal && card.recentPr?.e1RMGain > 0 && (
+                      {card.recentPr?.e1RMGain > 0 && (
                         <div style={{
                           color: THEME.green,
                           fontSize: 'clamp(11px, 2.7vw, 14px)',
@@ -13941,17 +14223,32 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   {row.label}
                 </span>
 
-                <strong style={{
-                  textAlign: 'right',
-                  whiteSpace: 'nowrap',
-                  minWidth: 70,
-                  fontSize: dashboardUsesExpandedLayout
-                    ? 'clamp(18px, 4.2vw, 21px)'
-                    : 'clamp(16px, 3.8vw, 19px)',
-                  color: row.status?.color || THEME.primary
-                }}>
-                  {row.value}
-                </strong>
+                <div style={{ textAlign: 'right', minWidth: 70 }}>
+                  <strong style={{
+                    display: 'block',
+                    whiteSpace: 'nowrap',
+                    fontSize: dashboardUsesExpandedLayout
+                      ? 'clamp(18px, 4.2vw, 21px)'
+                      : 'clamp(16px, 3.8vw, 19px)',
+                    color: row.status?.color || THEME.primary
+                  }}>
+                    {row.value}
+                  </strong>
+                  {row.recentPrGain > 0 && (
+                    <div style={{
+                      color: THEME.green,
+                      fontSize: 'clamp(11px, 2.7vw, 14px)',
+                      fontWeight: 900,
+                      marginTop: 2,
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {row.recentPrLabel} +{formatDecimalDisplay(row.recentPrGain, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             ))
           ) : (
@@ -14033,25 +14330,12 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
     titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
   />
 
-  <div style={{
-    background: 'transparent',
-    border: 'none',
-    borderRadius: 8,
-    padding: '0 clamp(2px, 1.5vw, 8px)',
-    marginTop: 'clamp(6px, 1dvh, 10px)',
-    marginBottom: 4,
-    flex: 1,
-    display: 'grid',
-    gap: 'clamp(1px, 0.35dvh, 4px)',
-    alignContent: 'safe center',
-  }}>
+  <div style={settingsContentLayoutStyle()}>
     <div
       data-testid="regular-settings-cluster"
       style={regularSettingsClusterStyle()}
     >
-      <ProfileSection
-        userProfile={userProfile}
-        onSave={setUserProfile}
+      <WeightUnitSection
         weightUnit={weightUnit}
         setWeightUnit={setWeightUnit}
         t={t}
@@ -14085,9 +14369,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         t={t}
       />
 
-      <SupportSection t={t} />
-
-      <AboutSection t={t} />
+      <AboutSupportSection t={t} />
     </div>
 
     <div data-testid="start-over-settings-row">
@@ -14460,6 +14742,15 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
 
       </div>
   </div>
+)}
+
+{screen === 'completed' && activeMilestoneCelebration && (
+  <MilestoneCelebrationModal
+    celebration={activeMilestoneCelebration}
+    t={t}
+    weightUnit={weightUnit}
+    onClose={() => setActiveMilestoneCelebration(null)}
+  />
 )}
 
 {false && showNewCycle && screen === 'completed' && (

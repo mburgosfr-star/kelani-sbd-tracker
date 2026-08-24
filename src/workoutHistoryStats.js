@@ -557,7 +557,12 @@ export function calculateEStrengthRatio({ prs = {}, history = [], bodyWeights = 
 // older, lighter weigh-in. This lets Smart Training use a stable experience
 // tier while the ordinary current Strength/eStrength values may still move
 // with today's bodyweight.
-export function calculateStrengthRatioMaxes({ prs = {}, history = [], bodyWeights = [] } = {}) {
+export function calculateStrengthRatioMaxes({
+  prs = {},
+  oneRMs = {},
+  history = [],
+  bodyWeights = [],
+} = {}) {
   const sortedHistory = [...(Array.isArray(history) ? history : [])]
     .filter(entry => entry?.lift && LIFT_ORDER.includes(entry.lift))
     .sort((a, b) => getAbsoluteWorkoutIndex(a) - getAbsoluteWorkoutIndex(b));
@@ -594,20 +599,28 @@ export function calculateStrengthRatioMaxes({ prs = {}, history = [], bodyWeight
           e1rm: Math.max(runningBest[entry.lift].e1rm, candidates.e1rm),
         };
 
-    if (!activeBodyWeight || !LIFT_ORDER.every(lift => runningBest[lift].oneRM > 0)) {
-      return;
+    if (!activeBodyWeight) return;
+
+    const hasCompleteOneRMTotal = LIFT_ORDER.every(lift => runningBest[lift].oneRM > 0);
+    const hasCompleteE1RMTotal = LIFT_ORDER.every(lift => (
+      Math.max(runningBest[lift].oneRM, runningBest[lift].e1rm) > 0
+    ));
+
+    if (hasCompleteOneRMTotal) {
+      const totalOneRM = LIFT_ORDER.reduce(
+        (sum, lift) => sum + runningBest[lift].oneRM,
+        0
+      );
+      strengthMax = Math.max(strengthMax, totalOneRM / activeBodyWeight);
     }
 
-    const totalOneRM = LIFT_ORDER.reduce(
-      (sum, lift) => sum + runningBest[lift].oneRM,
-      0
-    );
-    const totalE1RM = LIFT_ORDER.reduce(
-      (sum, lift) => sum + runningBest[lift].e1rm,
-      0
-    );
-    strengthMax = Math.max(strengthMax, totalOneRM / activeBodyWeight);
-    eStrengthMax = Math.max(eStrengthMax, totalE1RM / activeBodyWeight);
+    if (hasCompleteE1RMTotal) {
+      const totalE1RM = LIFT_ORDER.reduce(
+        (sum, lift) => sum + Math.max(runningBest[lift].oneRM, runningBest[lift].e1rm),
+        0
+      );
+      eStrengthMax = Math.max(eStrengthMax, totalE1RM / activeBodyWeight);
+    }
   });
 
   // A weigh-in can happen between workouts. Record its then-available
@@ -625,28 +638,52 @@ export function calculateStrengthRatioMaxes({ prs = {}, history = [], bodyWeight
     const hasRecordedStrengthAtWeighIn = LIFT_ORDER.every(lift =>
       Number(maxesAtWeighIn?.[lift]?.oneRM) > 0
     );
-    const totalOneRMAtWeighIn = LIFT_ORDER.reduce((sum, lift) => (
-      sum + (hasRecordedStrengthAtWeighIn
-        ? Number(maxesAtWeighIn?.[lift]?.oneRM) || 0
-        : Number(prs?.[lift]) || 0)
-    ), 0);
-    const totalE1RMAtWeighIn = LIFT_ORDER.reduce((sum, lift) => (
-      sum + (hasRecordedStrengthAtWeighIn
-        ? Number(maxesAtWeighIn?.[lift]?.e1rm) || 0
-        : Number(prs?.[lift]) || 0)
-    ), 0);
+    const hasRecordedEStrengthAtWeighIn = LIFT_ORDER.every(lift => (
+      Math.max(
+        Number(maxesAtWeighIn?.[lift]?.oneRM) || 0,
+        Number(maxesAtWeighIn?.[lift]?.e1rm) || 0
+      ) > 0
+    ));
 
-    strengthMax = Math.max(strengthMax, totalOneRMAtWeighIn / bodyWeight);
-    eStrengthMax = Math.max(eStrengthMax, totalE1RMAtWeighIn / bodyWeight);
+    if (hasRecordedStrengthAtWeighIn) {
+      const totalOneRMAtWeighIn = LIFT_ORDER.reduce((sum, lift) => (
+        sum + (Number(maxesAtWeighIn?.[lift]?.oneRM) || 0)
+      ), 0);
+      strengthMax = Math.max(strengthMax, totalOneRMAtWeighIn / bodyWeight);
+    }
+
+    if (hasRecordedEStrengthAtWeighIn) {
+      const totalE1RMAtWeighIn = LIFT_ORDER.reduce((sum, lift) => (
+        sum + Math.max(
+          Number(maxesAtWeighIn?.[lift]?.oneRM) || 0,
+          Number(maxesAtWeighIn?.[lift]?.e1rm) || 0
+        )
+      ), 0);
+      eStrengthMax = Math.max(eStrengthMax, totalE1RMAtWeighIn / bodyWeight);
+    }
   });
 
   const bestMaxes = calculateBestMaxesFromHistory(history);
-  const totalOneRM = LIFT_ORDER.reduce((sum, lift) => (
-    sum + Math.max(Number(prs?.[lift]) || 0, Number(bestMaxes?.[lift]?.oneRM) || 0)
-  ), 0);
-  const totalE1RM = LIFT_ORDER.reduce((sum, lift) => (
-    sum + Math.max(Number(prs?.[lift]) || 0, Number(bestMaxes?.[lift]?.e1rm) || 0)
-  ), 0);
+  const hasExplicitOneRMs = LIFT_ORDER.every(lift => Number(oneRMs?.[lift]) > 0);
+  const hasRecordedOneRMs = LIFT_ORDER.every(lift => Number(bestMaxes?.[lift]?.oneRM) > 0);
+  const currentOneRMs = Object.fromEntries(LIFT_ORDER.map(lift => [
+    lift,
+    hasExplicitOneRMs
+      ? Math.max(Number(oneRMs?.[lift]) || 0, Number(bestMaxes?.[lift]?.oneRM) || 0)
+      : hasRecordedOneRMs
+        ? Number(bestMaxes?.[lift]?.oneRM) || 0
+        : 0,
+  ]));
+  const currentE1RMs = Object.fromEntries(LIFT_ORDER.map(lift => [
+    lift,
+    Math.max(
+      Number(currentOneRMs[lift]) || 0,
+      Number(prs?.[lift]) || 0,
+      Number(bestMaxes?.[lift]?.e1rm) || 0
+    ),
+  ]));
+  const hasCurrentOneRMTotal = LIFT_ORDER.every(lift => currentOneRMs[lift] > 0);
+  const hasCurrentE1RMTotal = LIFT_ORDER.every(lift => currentE1RMs[lift] > 0);
   const latestBodyWeight = Number(
     [...(Array.isArray(bodyWeights) ? bodyWeights : [])]
       .filter(entry => Number(entry?.bodyWeight) > 0)
@@ -654,8 +691,21 @@ export function calculateStrengthRatioMaxes({ prs = {}, history = [], bodyWeight
   ) || 0;
 
   if (latestBodyWeight > 0) {
-    strengthMax = Math.max(strengthMax, totalOneRM / latestBodyWeight);
-    eStrengthMax = Math.max(eStrengthMax, totalE1RM / latestBodyWeight);
+    if (hasCurrentOneRMTotal) {
+      const totalOneRM = LIFT_ORDER.reduce(
+        (sum, lift) => sum + currentOneRMs[lift],
+        0
+      );
+      strengthMax = Math.max(strengthMax, totalOneRM / latestBodyWeight);
+    }
+
+    if (hasCurrentE1RMTotal) {
+      const totalE1RM = LIFT_ORDER.reduce(
+        (sum, lift) => sum + currentE1RMs[lift],
+        0
+      );
+      eStrengthMax = Math.max(eStrengthMax, totalE1RM / latestBodyWeight);
+    }
   }
 
   return {

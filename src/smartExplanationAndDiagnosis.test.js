@@ -162,7 +162,7 @@ function workoutWith(lifts) {
   };
 }
 
-test('fully demonstrated meet readiness remains visible during taper', () => {
+test('fully demonstrated meet readiness does not claim taper before taper starts', () => {
   const workout = workoutWith([smartLift({ lift: 'Squat', role: 'secondary' })]);
   workout.smartDecisionSummary.readiness.meetPlanFullyDemonstrated = true;
   workout.smartDecisionSummary.readiness.meetPlanOpenerReadyCount = 3;
@@ -171,12 +171,12 @@ test('fully demonstrated meet readiness remains visible during taper', () => {
 
   const rows = getSmartModalDetailRows(workout, {
     smartMeetStatus: 'Meetstatus',
-    smartMeetFullyReadyTaper: 'Volledig wedstrijdklaar: taperen en rusten voor de meet',
+    smartMeetFullyReady: 'Volledig wedstrijdklaar: alle liftdoelen bereikt. De training gaat verder volgens plan.',
   });
 
   expect(rows).toContainEqual({
     label: 'Meetstatus',
-    value: 'Volledig wedstrijdklaar: taperen en rusten voor de meet',
+    value: 'Volledig wedstrijdklaar: alle liftdoelen bereikt. De training gaat verder volgens plan.',
   });
 });
 
@@ -232,7 +232,7 @@ test('shows the full readiness/blocker/fatigue detail on a deload or rest day to
     },
     {
       label: 'Deadlift',
-      value: 'e1RM 157.5 kg → 180 kg (Gap 22.5 kg)',
+      value: 'Cycle e1RM 157.5 kg → 180 kg (Gap 22.5 kg)',
       kind: 'lift-readiness',
     },
     {
@@ -269,7 +269,7 @@ test('the Gap is always exactly (displayed target) - (displayed current) - simpl
   const rows = getSmartModalDetailRows(workout);
   const liftRow = rows.find(row => row.label === 'Deadlift');
 
-  expect(liftRow.value).toBe('e1RM 170 kg → 185 kg (Gap 15 kg)');
+  expect(liftRow.value).toBe('Cycle e1RM 170 kg → 185 kg (Gap 15 kg)');
 });
 
 function secondaryLiftBlock(lift, { volumePct = 0.75, volumeReps = 6, volumeCount = 6 } = {}) {
@@ -330,6 +330,38 @@ test('C3W43 secondary roles are both explained as medium from their prescribed d
   });
 });
 
+test('C4W9 primary and secondary medium lifts use the same intensity explanation', () => {
+  const deadlift = secondaryLiftBlock('Deadlift', {
+    volumePct: 0.70,
+    volumeReps: 4,
+    volumeCount: 5,
+  });
+  const bench = secondaryLiftBlock('Bench', {
+    volumePct: 0.70,
+    volumeReps: 4,
+    volumeCount: 6,
+  });
+  deadlift.role = 'primary';
+  deadlift.intensityRole = 'medium';
+  deadlift.smartPrescription.role = 'primary';
+  deadlift.smartPrescription.intensityRole = 'medium';
+  bench.intensityRole = 'medium';
+  bench.smartPrescription.intensityRole = 'medium';
+
+  expect(getSmartPrescriptionDetailRows(workoutWith([deadlift, bench]))).toEqual([
+    {
+      label: 'Deadlift (Plan)',
+      value: '5×4×70% · Medium intensity.',
+      kind: 'prescription',
+    },
+    {
+      label: 'Bench (Plan)',
+      value: '6×4×70% · Medium intensity.',
+      kind: 'prescription',
+    },
+  ]);
+});
+
 test('lists every lift still short of its real 1RM as a blocker, not just the single weakest one', () => {
   const workout = workoutWith([smartLift({ lift: 'Deadlift' })]);
   workout.smartDecisionSummary.readiness.meetPlanReadiness = {
@@ -375,9 +407,9 @@ test('lists every lift still short of its real 1RM as a blocker, not just the si
   // own row, including Bench even though it's already fully ready (not
   // omitted), just compacted to one line each instead of three cells.
   expect(rows).toEqual(expect.arrayContaining([
-    { label: 'Deadlift', value: 'e1RM 170 kg → 185 kg (Gap 15 kg)', kind: 'lift-readiness' },
-    { label: 'Squat', value: 'e1RM 137.5 kg → 147.5 kg (Gap 10 kg)', kind: 'lift-readiness' },
-    { label: 'Bench', value: 'Ready (e1RM 102.5 kg)', kind: 'lift-readiness' },
+    { label: 'Deadlift', value: 'Cycle e1RM 170 kg → 185 kg (Gap 15 kg)', kind: 'lift-readiness' },
+    { label: 'Squat', value: 'Cycle e1RM 137.5 kg → 147.5 kg (Gap 10 kg)', kind: 'lift-readiness' },
+    { label: 'Bench', value: 'Ready (Cycle e1RM 102.5 kg)', kind: 'lift-readiness' },
   ]));
 });
 
@@ -404,8 +436,8 @@ test('live dashboard e1RMs override stale 5kg workout snapshots in the Smart mod
   });
 
   expect(rows).toEqual(expect.arrayContaining([
-    { label: 'Bench', value: 'e1RM 102.5 kg → 105 kg (Gap 2.5 kg)', kind: 'lift-readiness' },
-    { label: 'Deadlift', value: 'e1RM 182.5 kg → 185 kg (Gap 2.5 kg)', kind: 'lift-readiness' },
+    { label: 'Bench', value: 'Cycle e1RM 102.5 kg → 105 kg (Gap 2.5 kg)', kind: 'lift-readiness' },
+    { label: 'Deadlift', value: 'Cycle e1RM 182.5 kg → 185 kg (Gap 2.5 kg)', kind: 'lift-readiness' },
   ]));
 });
 

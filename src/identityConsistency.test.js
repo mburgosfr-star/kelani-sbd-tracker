@@ -138,14 +138,14 @@ test('the distribution-integrity check script targets the official repository', 
   );
 });
 
-test('the in-app Support and About sections only ever link to the official repository', () => {
+test('the combined in-app About and Support section only links to the official repository', () => {
   expectOnlyOfficialRepoLinks('src/App.js');
 });
 
 test('the in-app About screen shows the exact package ID and certificate fingerprint', () => {
   const source = read('src/App.js');
   const aboutSectionMatch = source.match(
-    /function AboutSection[\s\S]*?\n}\n/
+    /function AboutSupportSection[\s\S]*?\n}\n/
   );
   expect(aboutSectionMatch).toBeTruthy();
   const aboutSectionSource = aboutSectionMatch[0];

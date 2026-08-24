@@ -216,11 +216,11 @@ test('names the cycle estimate and real 1RM target separately in the Smart modal
       label: 'Current blocker',
       value: 'Squat (100% of the real 1RM not yet reached)',
     },
-    { label: 'Squat', value: 'e1RM 115 kg → 145 kg (Gap 30 kg)', kind: 'lift-readiness' },
+    { label: 'Squat', value: 'Cycle e1RM 115 kg → 145 kg (Gap 30 kg)', kind: 'lift-readiness' },
     { label: 'Projected meet', value: 'C3W27–C3W29' },
     {
       label: 'Readiness basis',
-      value: 'e1RM is an estimate from your best successful set this cycle; the target is your confirmed real 1RM. The projection assumes normal progress and unchanged meet attempts.',
+      value: 'Cycle e1RM is an estimate based on your best successful set in this cycle; the target is your confirmed real 1RM. The projection assumes normal progress and unchanged meet attempts.',
       kind: 'note',
     },
   ]);
@@ -267,7 +267,7 @@ test('shows the real 1RM readiness target in the Smart modal', () => {
   });
   expect(rows).toContainEqual({
     label: 'Deadlift',
-    value: 'e1RM 167.5 kg → 180 kg (Gap 12.5 kg)',
+    value: 'Cycle e1RM 167.5 kg → 180 kg (Gap 12.5 kg)',
     kind: 'lift-readiness',
   });
   expect(rows).toContainEqual({

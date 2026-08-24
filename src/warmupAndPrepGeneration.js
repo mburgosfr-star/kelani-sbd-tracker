@@ -460,6 +460,26 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
       warmupWeights.push(bridge);
       last = bridge;
     }
+
+    // A repeated submaximal work block does not benefit from loading its
+    // final 5-rep warm-up as close to the work weight as possible. Balance
+    // that last transition around the midpoint instead, for every lift,
+    // while the later rebalance still enforces non-increasing load jumps.
+    // C4W9: Deadlift 20 -> 70 -> 100 -> 127.5; Bench 20 -> 50 -> 72.5.
+    if (warmupWeights.length >= 2) {
+      const finalIndex = warmupWeights.length - 1;
+      const previousWarmupWeight = warmupWeights[finalIndex - 1];
+      const redistributedFinalWarmup = cleanWarmupWeight(
+        (previousWarmupWeight + targetWeight) / 2
+      );
+
+      if (
+        redistributedFinalWarmup > previousWarmupWeight &&
+        redistributedFinalWarmup < targetWeight
+      ) {
+        warmupWeights[finalIndex] = redistributedFinalWarmup;
+      }
+    }
   }
 
   const sortedWarmupWeights = warmupWeights

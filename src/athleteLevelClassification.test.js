@@ -84,7 +84,11 @@ describe('calculateEStrengthRatio / getAthleteLevel', () => {
   test('uses eStrength Max for a stable level when a later weigh-in is heavier', () => {
     const input = {
       prs: { Squat: 150, Bench: 100, Deadlift: 180 },
-      history: [],
+      history: [
+        { cycle: 1, workoutNumber: 0, seedMax: true, lift: 'Squat', topWeight: 150, e1rm: 150 },
+        { cycle: 1, workoutNumber: 0, seedMax: true, lift: 'Bench', topWeight: 100, e1rm: 100 },
+        { cycle: 1, workoutNumber: 0, seedMax: true, lift: 'Deadlift', topWeight: 180, e1rm: 180 },
+      ],
       bodyWeights: [
         { cycle: 1, workoutNumber: 0, bodyWeight: 70 },
         { cycle: 1, workoutNumber: 1, bodyWeight: 80 },
@@ -97,5 +101,63 @@ describe('calculateEStrengthRatio / getAthleteLevel', () => {
       eStrengthMax: 6.14,
     });
     expect(getAthleteLevel(input)).toBe('advanced');
+  });
+
+  test('an e1RM-only PR raises eStrength Max without inventing a Strength Max record', () => {
+    const history = [
+      { cycle: 0, workoutNumber: 0, seedMax: true, lift: 'Squat', topWeight: 100, e1rm: 100 },
+      { cycle: 0, workoutNumber: 0, seedMax: true, lift: 'Bench', topWeight: 75, e1rm: 75 },
+      { cycle: 0, workoutNumber: 0, seedMax: true, lift: 'Deadlift', topWeight: 125, e1rm: 125 },
+      { cycle: 1, workoutNumber: 1, lift: 'Squat', topWeight: 100, topReps: 2, e1rm: 107.5 },
+    ];
+    const result = calculateStrengthRatioMaxes({
+      prs: { Squat: 107.5, Bench: 75, Deadlift: 125 },
+      oneRMs: { Squat: 100, Bench: 75, Deadlift: 125 },
+      history,
+      bodyWeights: [{ cycle: 1, workoutNumber: 0, bodyWeight: 80 }],
+    });
+
+    expect(result).toEqual({
+      strengthMax: 3.75,
+      eStrengthMax: 3.84,
+    });
+  });
+
+  test('never substitutes e1RMs for missing real 1RMs at a historical weigh-in', () => {
+    const before = calculateStrengthRatioMaxes({
+      prs: { Squat: 100, Bench: 75, Deadlift: 125 },
+      oneRMs: { Squat: 95, Bench: 70, Deadlift: 120 },
+      history: [],
+      bodyWeights: [{ cycle: 1, workoutNumber: 0, bodyWeight: 80 }],
+    });
+    const after = calculateStrengthRatioMaxes({
+      prs: { Squat: 107.5, Bench: 75, Deadlift: 125 },
+      oneRMs: { Squat: 95, Bench: 70, Deadlift: 120 },
+      history: [{
+        cycle: 1,
+        workoutNumber: 1,
+        lift: 'Squat',
+        topWeight: 100,
+        topReps: 2,
+        e1rm: 107.5,
+      }],
+      bodyWeights: [{ cycle: 1, workoutNumber: 0, bodyWeight: 80 }],
+    });
+
+    expect(before).toEqual({ strengthMax: 3.56, eStrengthMax: 3.75 });
+    expect(after).toEqual({ strengthMax: 3.56, eStrengthMax: 3.84 });
+  });
+
+  test('can record historical eStrength when complete e1RMs exist without complete real 1RMs', () => {
+    const result = calculateStrengthRatioMaxes({
+      history: [
+        { cycle: 1, workoutNumber: 1, lift: 'Squat', topWeight: 90, topReps: 3, e1rm: 100 },
+        { cycle: 1, workoutNumber: 2, lift: 'Bench', topWeight: 65, topReps: 3, e1rm: 75 },
+        { cycle: 1, workoutNumber: 3, lift: 'Deadlift', topWeight: 112.5, topReps: 3, e1rm: 125 },
+      ],
+      bodyWeights: [{ cycle: 1, workoutNumber: 0, bodyWeight: 80 }],
+    });
+
+    expect(result).toEqual({ strengthMax: null, eStrengthMax: 3.75 });
   });
 });

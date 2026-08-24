@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, SettingsListRow, SmartDayTypeInline, StatsScreen, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, bottomNavButtonStyle, bottomNavStyle, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, isMeetAttemptPlanLocked, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, settingsModalPanelStyle, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonStyle } from './App';
+import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SettingsListRow, SmartDayTypeInline, StatsScreen, WeightUnitSection, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, isMeetAttemptPlanLocked, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, resolveStoredWeightUnit, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
 test('dashboard metrics contain values without treating the e1RM and 1RM difference as a new PR', () => {
@@ -89,7 +89,80 @@ test('dashboard shows only PRs created by the latest strength workout', () => {
     Bench: { oneRMGain: 2.5, e1RMGain: 0 },
     Deadlift: { oneRMGain: 0, e1RMGain: 0 },
   });
-  expect(events.total).toEqual({ oneRMGain: 5 });
+  expect(events.total).toEqual({ oneRMGain: 5, e1RMGain: 2.5 });
+});
+
+test('dashboard reports a total e1RM PR when one lift raises the e1RM total', () => {
+  const historyBeforeMeet = dashboardPrHistory().filter(entry => entry.workoutNumber !== 45);
+  const history = [
+    ...historyBeforeMeet,
+    {
+      cycle: 3,
+      workoutNumber: 42,
+      lift: 'Squat',
+      topWeight: 137.5,
+      topReps: 2,
+      e1rm: 147.5,
+      workoutSnapshot: {
+        type: 'training',
+        completed: true,
+        lift: 'Squat',
+        sets: [{ weight: 137.5, reps: 2, done: true, failed: false, skipped: false }],
+      },
+    },
+  ];
+
+  expect(buildDashboardRecentPrEvents(history)).toMatchObject({
+    lifts: {
+      Squat: { oneRMGain: 0, e1RMGain: 2.5 },
+      Bench: { oneRMGain: 0, e1RMGain: 0 },
+      Deadlift: { oneRMGain: 0, e1RMGain: 0 },
+    },
+    total: { oneRMGain: 0, e1RMGain: 2.5 },
+  });
+});
+
+test('dashboard reads recent Strength Max records from the latest milestone celebration', () => {
+  const history = dashboardPrHistory();
+  history.at(-1).workoutSnapshot.milestoneCelebration = {
+    achievements: [
+      { type: 'e1RM', lift: 'Squat', gain: 2.5 },
+      { type: 'eStrengthMax', previous: 5.3, value: 5.33, gain: 0.03 },
+    ],
+  };
+
+  expect(buildDashboardRecentPrEvents(history).ratios).toEqual({
+    strengthMaxGain: 0,
+    eStrengthMaxGain: 0.03,
+  });
+
+  const afterRecovery = [
+    ...history,
+    { cycle: 3, workoutNumber: 46, restDay: true, completionOnly: true },
+  ];
+  expect(buildDashboardRecentPrEvents(afterRecovery).ratios.eStrengthMaxGain).toBe(0.03);
+
+  const afterNextStrengthWorkout = [
+    ...afterRecovery,
+    {
+      cycle: 4,
+      workoutNumber: 1,
+      lift: 'Squat',
+      topWeight: 100,
+      topReps: 3,
+      e1rm: 110,
+      workoutSnapshot: {
+        type: 'training',
+        completed: true,
+        lift: 'Squat',
+        sets: [{ weight: 100, reps: 3, done: true, failed: false, skipped: false }],
+      },
+    },
+  ];
+  expect(buildDashboardRecentPrEvents(afterNextStrengthWorkout).ratios).toEqual({
+    strengthMaxGain: 0,
+    eStrengthMaxGain: 0,
+  });
 });
 
 test('recent dashboard PRs survive recovery days and expire after the next strength workout', () => {
@@ -122,7 +195,7 @@ test('recent dashboard PRs survive recovery days and expire after the next stren
       Bench: { oneRMGain: 0, e1RMGain: 0 },
       Deadlift: { oneRMGain: 0, e1RMGain: 0 },
     },
-    total: { oneRMGain: 0 },
+    total: { oneRMGain: 0, e1RMGain: 0 },
   });
 });
 
@@ -156,6 +229,8 @@ test.each(['nl', 'en', 'ca'])('dashboard PR labels are translated in %s', langua
   expect(translations[language]).toMatchObject({
     new1RMPR: expect.any(String),
     newE1RMPR: expect.any(String),
+    newStrengthMaxPR: expect.any(String),
+    newEStrengthMaxPR: expect.any(String),
   });
 });
 
@@ -274,13 +349,46 @@ test('completed rest day content is distributed over the available screen height
   });
 });
 
-test('completed workouts use natural page overflow instead of a permanent scroll container', () => {
+test('completed workout content leaves vertical overflow control to the shared viewport', () => {
   expect(completedWorkoutScreenStyle()).toMatchObject({
     minHeight: 'calc(100dvh - 78px)',
     overflowX: 'hidden',
   });
   expect(completedWorkoutScreenStyle().height).toBeUndefined();
   expect(completedWorkoutScreenStyle().overflowY).toBeUndefined();
+});
+
+test('all main screens suppress tiny pseudo-overflow and scroll only for hidden content', () => {
+  expect(screenContentNeedsScroll({
+    contentBottom: 795,
+    viewportHeight: 873,
+  })).toBe(false);
+  expect(screenContentNeedsScroll({
+    contentBottom: 797,
+    viewportHeight: 873,
+  })).toBe(false);
+  expect(screenContentNeedsScroll({
+    contentBottom: 798,
+    viewportHeight: 873,
+  })).toBe(true);
+
+  expect(appViewportStyle({ screen: 'completed', allowVerticalScroll: false })).toMatchObject({
+    height: '100dvh',
+    minHeight: '100dvh',
+    paddingBottom: 78,
+    overflowY: 'hidden',
+    overscrollBehaviorY: 'none',
+  });
+  expect(appViewportStyle({ screen: 'settings', allowVerticalScroll: true })).toMatchObject({
+    height: '100dvh',
+    paddingBottom: 78,
+    overflowY: 'auto',
+  });
+  expect(appViewportStyle({
+    screen: 'current',
+    workoutNeedsNavClearance: false,
+    allowVerticalScroll: false,
+  }).paddingBottom).toBe(0);
 });
 
 test('meet completion keeps achieved lift weights prominent', () => {
@@ -354,11 +462,19 @@ test('bottom navigation uses one-and-a-half times its original height and icon s
   });
 });
 
-test('ordinary settings move up without changing the Start over layout slot', () => {
+test('settings distribute regular actions and keep Start over at the bottom', () => {
   expect(regularSettingsClusterStyle()).toMatchObject({
     display: 'grid',
-    gap: 'clamp(1px, 0.35dvh, 4px)',
-    transform: 'translateY(-14px)',
+    gap: 'clamp(3px, 0.6dvh, 7px)',
+    alignContent: 'space-evenly',
+    minHeight: 0,
+  });
+  expect(regularSettingsClusterStyle().transform).toBeUndefined();
+  expect(settingsContentLayoutStyle()).toMatchObject({
+    gridTemplateRows: 'minmax(0, 1fr) auto',
+    marginTop: 'clamp(10px, 1.5dvh, 16px)',
+    rowGap: 'clamp(8px, 1.2dvh, 14px)',
+    alignContent: 'stretch',
   });
 });
 
@@ -526,6 +642,119 @@ test('settings rows use responsive text and phone-sized action targets', () => {
   expect(action.style.minHeight).toBe('clamp(44px, 5.5dvh, 52px)');
   expect(action.style.fontSize).toBe('clamp(15px, 3.7vw, 18px)');
   expect(action.style.whiteSpace).toBe('normal');
+});
+
+test('weight unit is a direct Settings choice without a demographic profile', () => {
+  const setWeightUnit = jest.fn();
+  render(
+    <WeightUnitSection
+      weightUnit="kg"
+      setWeightUnit={setWeightUnit}
+      t={translations.en}
+    />
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: 'kg' }));
+  expect(screen.getByRole('heading', { name: 'Change weight unit' })).toBeInTheDocument();
+  expect(screen.queryByText(/date of birth/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/^sex/i)).not.toBeInTheDocument();
+
+  const unitButtons = [
+    screen.getAllByRole('button', { name: 'kg' }).at(-1),
+    screen.getByRole('button', { name: 'lb' }),
+  ];
+  expect(unitButtons[0].parentElement.style.gridTemplateColumns)
+    .toBe('repeat(2, minmax(0, 140px))');
+
+  fireEvent.click(screen.getByRole('button', { name: 'lb' }));
+  expect(setWeightUnit).toHaveBeenCalledWith('lb');
+});
+
+test('body data keeps the most recent valid value for every individual field', () => {
+  const latestBodyData = getLatestBodyDataValues([
+    { bodyWeight: 80, bodyFat: 20, bodyWater: 51, visceralFat: 8, physiqueRating: 4 },
+    { bodyWeight: 81 },
+    { bodyFat: 19, bodyWater: 53, visceralFat: 7 },
+  ]);
+
+  expect(latestBodyData).toEqual({
+    bodyWeight: 81,
+    bodyFat: 19,
+    bodyWater: 53,
+    visceralFat: 7,
+    physiqueRating: 4,
+  });
+
+  render(
+    <BodyDataSection
+      bodyData={latestBodyData}
+      onSave={() => {}}
+      t={translations.en}
+      weightUnit="kg"
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Update' }));
+
+  const inputs = screen.getAllByRole('spinbutton');
+  expect(inputs.map(input => Number(input.placeholder))).toEqual([81, 19, 53, 7, 4]);
+});
+
+test('stored weight unit prefers canonical data and still reads legacy backups', () => {
+  expect(resolveStoredWeightUnit({
+    weightUnit: 'lb',
+    userProfile: { weightUnit: 'kg' },
+  }, 'kg')).toBe('lb');
+  expect(resolveStoredWeightUnit({
+    userProfile: { weightUnit: 'lb' },
+  }, 'kg')).toBe('lb');
+  expect(resolveStoredWeightUnit({}, 'lb')).toBe('lb');
+});
+
+test('milestone celebration overlays the already-rendered completed screen and combines achievements', () => {
+  const onClose = jest.fn();
+  render(
+    <>
+      <div data-testid="underlying-completed-screen">Workout completed</div>
+      <MilestoneCelebrationModal
+        celebration={{
+          primaryType: 'level',
+          achievements: [
+            { type: 'level', previous: 'beginner', value: 'intermediate' },
+            { type: 'e1RM', lift: 'Squat', previous: 100, value: 105, gain: 5 },
+            { type: 'e1RM', lift: 'Total', previous: 300, value: 305, gain: 5 },
+            { type: 'eStrengthMax', previous: 3.75, value: 3.81, gain: 0.06 },
+          ],
+        }}
+        t={translations.en}
+        weightUnit="kg"
+        onClose={onClose}
+      />
+    </>
+  );
+
+  expect(screen.getByTestId('underlying-completed-screen')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'New level reached!' })).toBeInTheDocument();
+  expect(screen.getByText('Intermediate')).toBeInTheDocument();
+  expect(screen.getByText('Squat e1RM')).toBeInTheDocument();
+  expect(screen.getByText('Total e1RM')).toBeInTheDocument();
+  expect(screen.getByText('eStrength Max')).toBeInTheDocument();
+  expect(screen.getByText('105 kg (+5 kg)')).toBeInTheDocument();
+  expect(screen.getByText('3.81x (+0.06)')).toBeInTheDocument();
+
+  const eStrengthRow = screen.getByText('eStrength Max').parentElement;
+  expect(eStrengthRow.style.background).toBe('transparent');
+  expect(eStrengthRow.style.borderStyle).toBe('none');
+
+  const modalOverlay = screen.getByRole('heading', { name: 'New level reached!' })
+    .parentElement.parentElement;
+  expect(modalOverlay.style.position).toBe('fixed');
+  expect(modalOverlay.style.zIndex).toBe('650');
+
+  expect(screen.getByRole('button', { name: 'Support' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Feedback' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Contact' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  expect(onClose).toHaveBeenCalledTimes(1);
 });
 
 test('the destructive settings action stays concise in every language', () => {
@@ -766,6 +995,7 @@ test.each(['nl', 'en', 'ca'])('meet-readiness labels explain the 90, 95 and 100 
   expect(t.smartE1RM95Readiness).not.toBe('95% e1RM');
   expect(t.smartOneRMReadiness).toMatch(/100%/);
   expect(t.smartReadinessBasisText).toMatch(/e1RM/i);
+  expect(t.smartReadinessBasisText).toContain(t.smartCycleEstimateShort);
 });
 
 test('recovery and deload reasons stay visible beside structured Smart details', () => {
@@ -890,6 +1120,15 @@ test('offers backup import directly from the compact setup actions', async () =>
   )).toBeInTheDocument();
 });
 
+test('onboarding reserves the ordinary navigation footprint without showing navigation', async () => {
+  localStorage.clear();
+  render(<App />);
+
+  const content = await screen.findByTestId('onboarding-content', {}, { timeout: 3000 });
+  expect(content.style.minHeight).toBe(`calc(100dvh - ${BOTTOM_NAV_SPACE}px)`);
+  expect(screen.queryByRole('button', { name: 'Dashboard' })).not.toBeInTheDocument();
+});
+
 test('new setup offers Smart directly without a Classic model choice', async () => {
   localStorage.clear();
   render(<App />);
@@ -949,7 +1188,8 @@ test('finishing the compact setup creates a Smart user with body weight and star
   await waitFor(() => {
     const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
     expect(saved.trainingModel).toBe('smart');
-    expect(saved.userProfile).toEqual({ weightUnit: 'kg', trainingModel: 'smart' });
+    expect(saved.weightUnit).toBe('kg');
+    expect(saved.userProfile).toBeUndefined();
     expect(saved.prs.Squat).toBe(117.5);
     expect(saved.cycleE1RMs).toEqual({
       Squat: 117.5,
@@ -1051,7 +1291,7 @@ test('an existing Classic user keeps Classic and can make the one-way switch to 
   });
 });
 
-test('settings shows the official app identity and links to VERIFY.md', async () => {
+test('settings combines support, feedback, source, identity and release verification in About', async () => {
   localStorage.clear();
   localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
     version: 1,
@@ -1074,20 +1314,59 @@ test('settings shows the official app identity and links to VERIFY.md', async ()
 
   // The identity facts must not sit directly on the settings screen -
   // only a compact row with a button that opens them in a modal.
-  expect(screen.queryByText(/mburgosfr-star\/kelani-sbd-tracker/)).not.toBeInTheDocument();
   expect(screen.queryByText(/com\.kelani\.sbdtracker/)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Support' })).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: 'View' }));
 
-  expect(screen.getByText(/mburgosfr-star\/kelani-sbd-tracker/)).toBeInTheDocument();
-  expect(screen.getByText(/com\.kelani\.sbdtracker/)).toBeInTheDocument();
-  expect(screen.getByText(/GitHub Releases.*IzzyOnDroid/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Support' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Feedback' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Contact' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Report issue' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'GitHub repo' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'IzzyOnDroid (NeoStore)' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Verify Release' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  const packageValue = screen.getByText(/com\.kelani\.sbdtracker/);
+  expect(packageValue).toBeInTheDocument();
+  expect(packageValue.style.textAlign).toBe('center');
   expect(screen.getByText(
     /15d23f2e5ee95ebc2a530b48be6f27dad7a568f722bc819f4571b3470a2ff39d/
-  )).toBeInTheDocument();
+  ).style.textAlign).toBe('center');
+
+  const supportActionButtons = [
+    'Support',
+    'Feedback',
+    'Contact',
+    'Report issue',
+    'GitHub repo',
+    'IzzyOnDroid (NeoStore)',
+    'Verify Release',
+    'Close',
+  ].map(name => screen.getByRole('button', { name }));
+  expect(new Set(supportActionButtons.map(button => button.style.height)))
+    .toEqual(new Set(['clamp(52px, 6.5dvh, 60px)']));
 
   const openSpy = jest.spyOn(window, 'open').mockImplementation(() => {});
-  fireEvent.click(screen.getByRole('button', { name: 'Verify release' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Feedback' }));
+  expect(openSpy).toHaveBeenCalledWith(
+    'https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=feedback.md',
+    '_blank',
+    'noopener,noreferrer'
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Contact' }));
+  expect(openSpy).toHaveBeenCalledWith(
+    'mailto:mburgosfr@proton.me?subject=Kelani%20contact',
+    '_blank',
+    'noopener,noreferrer'
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'IzzyOnDroid (NeoStore)' }));
+  expect(openSpy).toHaveBeenCalledWith(
+    'https://apt.izzysoft.de/packages/com.kelani.sbdtracker',
+    '_blank',
+    'noopener,noreferrer'
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Verify Release' }));
   expect(openSpy).toHaveBeenCalledWith(
     'https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/VERIFY.md',
     '_blank',
@@ -1096,5 +1375,5 @@ test('settings shows the official app identity and links to VERIFY.md', async ()
   openSpy.mockRestore();
 
   fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-  expect(screen.queryByText(/mburgosfr-star\/kelani-sbd-tracker/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/com\.kelani\.sbdtracker/)).not.toBeInTheDocument();
 });
