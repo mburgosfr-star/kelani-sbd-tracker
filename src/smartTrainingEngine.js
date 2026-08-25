@@ -520,25 +520,73 @@ export function getNextSmartIdealRouteWorkoutNumber({
   history = [],
   currentCycle = 1,
   entryWorkoutNumber = 1,
+  athleteLevel = 'intermediate',
 } = {}) {
-  const completedRouteWorkoutNumbers = getUniqueCompletedSmartWorkoutSnapshots(
+  const completed = getUniqueCompletedSmartWorkoutSnapshots(
     history,
     currentCycle
-  )
-    .filter(({ snapshot }) => (
-      !snapshot?.smartIdealRoute?.transitionPending
-    ))
-    .map(({ snapshot }) => Number(snapshot?.smartIdealRoute?.workoutNumber))
-    .filter(number => Number.isInteger(number) && number >= 1);
+  );
+  const hasCompletedRouteWorkout = completed.some(({ snapshot }) => {
+    const routeNumber = Number(snapshot?.smartIdealRoute?.workoutNumber);
+    return (
+      !snapshot?.smartIdealRoute?.transitionPending &&
+      Number.isInteger(routeNumber) &&
+      routeNumber >= 1
+    );
+  });
 
-  if (completedRouteWorkoutNumbers.length === 0) {
+  if (!hasCompletedRouteWorkout) {
     const entry = Number(entryWorkoutNumber);
     return Number.isInteger(entry) && entry >= 1 && entry <= 28
       ? entry
       : 1;
   }
 
-  return Math.max(...completedRouteWorkoutNumbers) + 1;
+  let nextRouteWorkoutNumber = null;
+
+  completed.forEach(({ snapshot }) => {
+    const markedRouteNumber = Number(
+      snapshot?.smartIdealRoute?.workoutNumber
+    );
+    const hasUsableRouteMarker = Boolean(
+      !snapshot?.smartIdealRoute?.transitionPending &&
+      Number.isInteger(markedRouteNumber) &&
+      markedRouteNumber >= 1
+    );
+
+    if (hasUsableRouteMarker && nextRouteWorkoutNumber === null) {
+      nextRouteWorkoutNumber = markedRouteNumber + 1;
+      return;
+    }
+
+    if (nextRouteWorkoutNumber === null) return;
+
+    if (
+      hasUsableRouteMarker &&
+      markedRouteNumber >= nextRouteWorkoutNumber
+    ) {
+      nextRouteWorkoutNumber = markedRouteNumber + 1;
+      return;
+    }
+
+    const pendingRouteWorkout = getSmartIdealRouteWorkout({
+      workoutNumber: nextRouteWorkoutNumber,
+      athleteLevel,
+    });
+
+    // An adaptive recovery day delivers the same recovery as a planned
+    // route rest day. Let every completed rest day satisfy one pending rest
+    // row, including records whose route marker already lags behind after a
+    // mid-cycle migration. This prevents duplicate or triple recovery days.
+    if (
+      snapshot?.type === 'rest' &&
+      pendingRouteWorkout?.type === 'rest'
+    ) {
+      nextRouteWorkoutNumber += 1;
+    }
+  });
+
+  return nextRouteWorkoutNumber;
 }
 
 function isSuccessfulSmartIdealRouteSnapshot(snapshot = {}) {
@@ -688,10 +736,23 @@ function hasCompletedSuccessfulSmartIdealMeet(
     ));
 }
 
+function hasCompletedSmartMeetInCycle(history = [], currentCycle = 1) {
+  return getUniqueCompletedSmartWorkoutSnapshots(history, currentCycle)
+    .some(({ snapshot }) => (
+      snapshot?.type === 'meet' ||
+      snapshot?.smartDayType === SMART_DAY_TYPES.MEET
+    ));
+}
+
 
 export function isSmartCycleCompleteAfterHistory(history = [], currentCycle = 1) {
   const idealPostMeet = getSmartIdealPostMeetCompletion(history, currentCycle);
   if (idealPostMeet) return idealPostMeet.complete;
+
+  // Readiness intentionally sees the previous cycle's meet so post-meet
+  // recovery can be interpreted correctly. Cycle completion must be stricter:
+  // an older meet can never close a newer, still-active cycle after import.
+  if (!hasCompletedSmartMeetInCycle(history, currentCycle)) return false;
 
   const readiness = buildSmartReadinessSignals({
     history,
@@ -2539,12 +2600,40 @@ export function buildSmartMeetWarmups(openerWeight = 0, lift = '') {
     lastWeight = nextWeight;
   }
 
+  // A light Squat or Deadlift opener still needs one useful movement-
+  // specific step after the empty bar. Choose the round 10kg rung nearest
+  // the midpoint that keeps the final jump no larger than the first. This
+  // gives beginner meet ladders such as 20 -> 30 -> 37.5 for Squat and
+  // 20 -> 40 -> 55 for Deadlift. Bench 20 -> 30 is already sufficiently
+  // close and deliberately stays unchanged.
+  if (
+    weights.length === 1 &&
+    ['Squat', 'Deadlift'].includes(lift)
+  ) {
+    const midpoint = (20 + opener) / 2;
+    const candidates = [];
+
+    for (let weight = 30; weight <= opener - 5; weight += 10) {
+      const firstJump = weight - 20;
+      const finalJump = opener - weight;
+      if (finalJump <= firstJump) candidates.push(weight);
+    }
+
+    const balancedBridge = candidates.sort((a, b) => (
+      Math.abs(a - midpoint) - Math.abs(b - midpoint) || a - b
+    ))[0];
+
+    if (balancedBridge) weights.push(balancedBridge);
+  }
+
   const balancedWeights = rebalanceWarmupLoadJumps(weights, opener, 55);
 
   return balancedWeights.map((weight, index) => {
     const isFinalWarmup = index === balancedWeights.length - 1 && index > 0;
     const reps = index === 0
       ? 5
+      : opener <= 75 && ['Squat', 'Deadlift'].includes(lift)
+        ? 3
       : lift === 'Squat'
         ? (isFinalWarmup ? 1 : 3)
         : lift === 'Bench'
@@ -3594,6 +3683,7 @@ function buildSmartIdealSet({
   trainingMax,
   groupKey,
   weightOverride = null,
+  prescribedPct = null,
 } = {}) {
   const precisePct = Number(pct) || 0;
   const numericTrainingMax = Number(trainingMax) || 0;
@@ -3613,6 +3703,7 @@ function buildSmartIdealSet({
     reps,
     pct: displayPct,
     precisePct,
+    prescribedPct: Number(prescribedPct) || null,
     weight,
     originalPct: displayPct,
     originalWeight: weight,
@@ -3662,6 +3753,49 @@ function padSmartIdealWarmupsToGrid(warmups = [], sets = []) {
   const addCount = (SMART_LIFT_GRID_COLUMNS - remainder) % SMART_LIFT_GRID_COLUMNS;
 
   if (addCount === 0) return nextWarmups;
+
+  const onlySet = (sets || []).length === 1 ? sets[0] : null;
+  const targetWeight = Number(onlySet?.weight) || 0;
+  const isLowLoadTopSingle = Boolean(
+    onlySet?.labelKey === 'topSingle' &&
+    Number(onlySet?.reps) === 1 &&
+    targetWeight >= 45 &&
+    targetWeight <= 60 &&
+    nextWarmups.length < 3
+  );
+
+  if (isLowLoadTopSingle) {
+    const finalWarmupWeight = Math.floor(
+      (targetWeight - 0.001) / 10
+    ) * 10;
+    const middleWarmupWeight = finalWarmupWeight - 10;
+    const candidateWeights = [20, middleWarmupWeight, finalWarmupWeight];
+    const candidateJumps = [
+      candidateWeights[1] - candidateWeights[0],
+      candidateWeights[2] - candidateWeights[1],
+      targetWeight - candidateWeights[2],
+    ];
+    const hasValidLowLoadLadder = Boolean(
+      candidateWeights.every((weight, index) => (
+        weight >= 20 &&
+        weight % 10 === 0 &&
+        (index === 0 || weight > candidateWeights[index - 1]) &&
+        weight < targetWeight
+      )) &&
+      candidateJumps[0] >= candidateJumps[1] &&
+      candidateJumps[1] >= candidateJumps[2] &&
+      candidateJumps[2] >= 5
+    );
+
+    if (hasValidLowLoadLadder) {
+      return candidateWeights.map((weight, index) => ({
+        reps: [5, 3, 1][index],
+        weight,
+        originalWeight: weight,
+        done: false,
+      }));
+    }
+  }
 
   const lightestWorkWeight = Math.min(
     ...(sets || [])
@@ -3733,19 +3867,28 @@ function applySmartIdealRouteMetadata(
 ) {
   if (!workout || !routeWorkout) return workout;
 
+  const usesCombinedFourColumnGrid = Boolean(
+    workout.type === 'training' &&
+    routeWorkout.type === 'training'
+  );
+
   const lifts = (workout.lifts || []).map(liftBlock => {
-    const warmups = padSmartIdealWarmupsToGrid(
-      liftBlock.warmups || [],
-      liftBlock.sets || []
-    );
+    const warmups = usesCombinedFourColumnGrid
+      ? padSmartIdealWarmupsToGrid(
+        liftBlock.warmups || [],
+        liftBlock.sets || []
+      )
+      : (liftBlock.warmups || []).map(item => ({ ...item }));
 
     return {
       ...liftBlock,
       warmups,
       smartPrescription: {
         ...(liftBlock.smartPrescription || {}),
-        completeGrid: true,
-        gridItemCount: warmups.length + (liftBlock.sets || []).length,
+        ...(usesCombinedFourColumnGrid ? {
+          completeGrid: true,
+          gridItemCount: warmups.length + (liftBlock.sets || []).length,
+        } : {}),
       },
     };
   });
@@ -3809,6 +3952,7 @@ export function buildSmartIdealTrainingWorkout({
           routeWorkout,
           pct: topSet.pct,
         }),
+        prescribedPct: isTaper ? topSet.pct : null,
       })];
 
       if (prescription.backoff) {
@@ -4719,6 +4863,7 @@ function generateSmartWorkouts({
     history,
     currentCycle,
     entryWorkoutNumber: idealRouteEntryWorkoutNumber,
+    athleteLevel,
   });
   const nextIdealRouteWorkout = idealRouteEnabled
     ? getSmartIdealRouteWorkout({

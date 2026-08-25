@@ -1,4 +1,5 @@
 import { buildMilestoneCelebration } from './milestoneAchievements';
+import { calculateStrengthRatioMaxes } from './workoutHistoryStats';
 
 const bodyWeights = [{ cycle: 1, workoutNumber: 0, bodyWeight: 80 }];
 const baselineHistory = [
@@ -107,6 +108,88 @@ test('an e1RM-only PR never creates Strength Max when real 1RMs come from saved 
     expect.objectContaining({ type: 'eStrengthMax' }),
   ]));
   expect(celebration.achievements.some(item => item.type === 'strengthMax')).toBe(false);
+});
+
+test('an e1RM PR is not an eStrength Max PR while a lighter historical ratio remains higher', () => {
+  const seedHistory = [
+    { cycle: 1, workoutNumber: 0, seedMax: true, lift: 'Squat', topWeight: 150, e1rm: 150 },
+    { cycle: 1, workoutNumber: 0, seedMax: true, lift: 'Bench', topWeight: 100, e1rm: 100 },
+    { cycle: 1, workoutNumber: 0, seedMax: true, lift: 'Deadlift', topWeight: 180, e1rm: 180 },
+  ];
+  const priorEstimatedRecords = [
+    {
+      cycle: 2,
+      workoutNumber: 1,
+      lift: 'Bench',
+      topWeight: 92.5,
+      topReps: 3,
+      e1rm: 102.5,
+      workoutSnapshot: {
+        type: 'training',
+        completed: true,
+        lifts: [{ lift: 'Bench', sets: [{ weight: 92.5, reps: 3, done: true }] }],
+      },
+    },
+    {
+      cycle: 2,
+      workoutNumber: 1,
+      lift: 'Deadlift',
+      topWeight: 170,
+      topReps: 2,
+      e1rm: 182.5,
+      workoutSnapshot: {
+        type: 'training',
+        completed: true,
+        lifts: [{ lift: 'Deadlift', sets: [{ weight: 170, reps: 2, done: true }] }],
+      },
+    },
+  ];
+  const beforeHistory = [...seedHistory, ...priorEstimatedRecords];
+  const newSquatRecord = {
+    cycle: 2,
+    workoutNumber: 2,
+    lift: 'Squat',
+    topWeight: 142.5,
+    topReps: 2,
+    e1rm: 152.5,
+    workoutSnapshot: {
+      type: 'training',
+      completed: true,
+      lifts: [{ lift: 'Squat', sets: [{ weight: 142.5, reps: 2, done: true }] }],
+    },
+  };
+  const ratioBodyWeights = [
+    { cycle: 1, workoutNumber: 0, bodyWeight: 80 },
+    { cycle: 2, workoutNumber: 0, bodyWeight: 82.1 },
+  ];
+  const before = {
+    history: beforeHistory,
+    prs: { Squat: 150, Bench: 102.5, Deadlift: 182.5 },
+    oneRMs: { Squat: 150, Bench: 100, Deadlift: 180 },
+    bodyWeights: ratioBodyWeights,
+  };
+  const after = {
+    ...before,
+    history: [...beforeHistory, newSquatRecord],
+    prs: { ...before.prs, Squat: 152.5 },
+  };
+
+  expect(calculateStrengthRatioMaxes(before)).toEqual({
+    strengthMax: 5.38,
+    eStrengthMax: 5.38,
+  });
+  expect(calculateStrengthRatioMaxes(after)).toEqual({
+    strengthMax: 5.38,
+    eStrengthMax: 5.38,
+  });
+
+  const celebration = buildMilestoneCelebration({ before, after });
+  expect(celebration.achievements).toEqual(expect.arrayContaining([
+    expect.objectContaining({ type: 'e1RM', lift: 'Squat', gain: 2.5 }),
+    expect.objectContaining({ type: 'e1RM', lift: 'Total', gain: 2.5 }),
+  ]));
+  expect(celebration.achievements.some(item => item.type === 'strengthMax')).toBe(false);
+  expect(celebration.achievements.some(item => item.type === 'eStrengthMax')).toBe(false);
 });
 
 test('a level increase is the primary milestone', () => {

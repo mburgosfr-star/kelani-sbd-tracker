@@ -6,9 +6,17 @@
 
 > **Official Kelani project:** this repository, `mburgosfr-star/kelani-sbd-tracker`, is the official Kelani SBD Tracker source and GitHub release location. The current Android package is `com.kelani.sbdtracker`. Official Android distribution is through this repository's GitHub Releases and IzzyOnDroid. See [VERIFY.md](VERIFY.md) to verify an APK and [BRANDING.md](BRANDING.md) for project-identity guidance.
 
+Kelani is built for lifters who prefer to train independently but do not want to train blindly. It gives you adaptive SBD programming without requiring a personal trainer, an account, a subscription, or handing your training data to a cloud service.
+
 Kelani is an offline-first Android app for Squat, Bench and Deadlift. Its main training model, Smart Training, does not give you a long static calendar. It plans one next workout at a time from the training you actually completed and how that work affected your readiness.
 
 After every completed workout, Kelani interprets your recent training load, lift frequency, successful and failed work, skipped sets, workout difficulty, current strength and progress toward your planned meet attempts. It uses those signals to choose what to train next and to prescribe the sets, reps and barbell-loadable weights.
+
+## Philosophy
+
+Kelani can be used by anyone, but it is designed first for independent, natural, raw powerlifters of every age, sex and experience level. Its programming responds to demonstrated strength, completed training, readiness and feedback. It does not classify lifters by age or sex, and it does not need those details to help someone become stronger.
+
+Training independently should not mean guessing. Kelani aims to provide structure, adaptation and clear reasoning while leaving the lifter in control. It keeps the app free, open source, offline-first and private by default so useful programming does not depend on an account, recurring payment or remote ownership of training data.
 
 ## Smart Training
 

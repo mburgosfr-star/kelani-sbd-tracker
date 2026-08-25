@@ -68,7 +68,7 @@ test('aligns weight labels above rep circles in the shared grid', () => {
 
 test('meet grid keeps warmups on one row and attempts on the next row', () => {
   const view = render(
-    <WorkoutLiftGrid columnCount={12} testId="meet-lift-grid">
+    <WorkoutLiftGrid columnCount={12} testId="meet-lift-grid" compactVertical>
       <WarmupGrid
         compactGrid
         gridSpan={meetWorkoutGridSpan(2)}
@@ -98,6 +98,12 @@ test('meet grid keeps warmups on one row and attempts on the next row', () => {
 
   expect(view.getByTestId('meet-lift-grid').style.gridTemplateColumns)
     .toBe('repeat(12, minmax(0, 1fr))');
+  expect(view.getByTestId('meet-lift-grid').style.rowGap)
+    .toBe('clamp(3px, 0.4dvh, 4px)');
+  expect(view.getByTestId('meet-lift-grid').style.marginBottom)
+    .toBe('2px');
+  expect(view.getByTestId('meet-lift-grid').style.getPropertyValue('--workout-circle-item-row-gap'))
+    .toBe('4px');
   view.getAllByTestId(/warmup-row-/).forEach(item => {
     expect(item.style.gridColumn).toBe('span 6');
   });

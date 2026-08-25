@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SettingsListRow, SmartDayTypeInline, StatsScreen, WeightUnitSection, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, isMeetAttemptPlanLocked, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, resolveStoredWeightUnit, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonStyle } from './App';
+import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SettingsListRow, SmartDayTypeInline, StatsScreen, WeightUnitSection, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, isMeetAttemptPlanLocked, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, resolveStoredWeightUnit, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
 test('dashboard metrics contain values without treating the e1RM and 1RM difference as a new PR', () => {
@@ -21,6 +21,12 @@ test('dashboard metrics contain values without treating the e1RM and 1RM differe
     oneRM: 422.5,
     e1RM: 430,
   });
+});
+
+test('dashboard Strength ratios always show two decimal places', () => {
+  expect(formatStrengthRatioWithMax(5.3, 5.36)).toBe('5.30 / 5.36');
+  expect(formatStrengthRatioWithMax(5.3, null)).toBe('5.30 / 5.30');
+  expect(formatStrengthRatioWithMax(null, 5.36)).toBeNull();
 });
 
 function dashboardPrHistory() {
@@ -295,22 +301,57 @@ test('activeWorkoutLiftBlockStyle uses normal margins', () => {
   });
 });
 
-test('meet workout scrolls naturally with equal compact lift spacing', () => {
+test('meet workout keeps the standard top spacing and balanced compact lift spacing', () => {
   expect(meetWorkoutScreenStyle()).toMatchObject({
     display: 'block',
-    paddingBottom: 24,
+    paddingBottom: 4,
   });
+  expect(meetWorkoutScreenStyle().paddingTop).toBeUndefined();
   expect(meetWorkoutLiftBlockStyle()).toMatchObject({
     overflow: 'visible',
-    margin: '0 0 clamp(16px, 2.2dvh, 22px)',
+    margin: '0 0 3px',
   });
   expect(meetWorkoutLiftBlockStyle().marginTop).toBeUndefined();
+  expect(workoutCompletionButtonMargin({ isMeetDay: true })).toBe('8px auto 0');
+  expect(workoutCompletionButtonMargin({ isMeetDay: false })).toBe('2px auto 18px');
 });
 
 test('meet warmups and attempts each consume one complete 12-column row', () => {
   expect(meetWorkoutGridSpan(2) * 2).toBe(12);
   expect(meetWorkoutGridSpan(3) * 3).toBe(12);
   expect(meetWorkoutGridSpan(4) * 4).toBe(12);
+});
+
+test('the current meet screen always permits natural overflow scrolling', () => {
+  expect(shouldAllowAppVerticalScroll({
+    screen: 'current',
+    workout: { type: 'meet' },
+    measuredOverflow: false,
+  })).toBe(true);
+  expect(shouldAllowAppVerticalScroll({
+    screen: 'current',
+    workout: { type: 'training' },
+    measuredOverflow: false,
+  })).toBe(false);
+  expect(shouldAllowAppVerticalScroll({
+    screen: 'settings',
+    measuredOverflow: true,
+  })).toBe(true);
+  expect(shouldReserveWorkoutBottomNavSpace({
+    screen: 'current',
+    workout: { type: 'meet' },
+    measuredNeedsClearance: false,
+  })).toBe(true);
+  expect(shouldReserveWorkoutBottomNavSpace({
+    screen: 'current',
+    workout: { type: 'training' },
+    measuredNeedsClearance: false,
+  })).toBe(false);
+  expect(shouldReserveWorkoutBottomNavSpace({
+    screen: 'current',
+    workout: { type: 'training' },
+    measuredNeedsClearance: true,
+  })).toBe(true);
 });
 
 test('rest information sits optically above centre with its completion action below', () => {
@@ -885,6 +926,39 @@ test('post-meet dashboard distributes space between and around its cards', () =>
   });
 });
 
+test('PR-rich training dashboards use tighter spacing without changing sparse dashboards', () => {
+  const recentPrEvents = {
+    lifts: {
+      Squat: { oneRMGain: 2.5, e1RMGain: 0 },
+      Bench: { oneRMGain: 2.5, e1RMGain: 2.5 },
+      Deadlift: { oneRMGain: 2.5, e1RMGain: 2.5 },
+    },
+    total: { oneRMGain: 7.5, e1RMGain: 5 },
+    ratios: { strengthMaxGain: 0.1, eStrengthMaxGain: 0.01 },
+  };
+
+  expect(countDashboardRecentPrLines(recentPrEvents)).toBe(9);
+  expect(shouldUseCompactDashboardLayout({
+    workout: { type: 'training' },
+    meetState: { isMeetDay: false },
+    recentPrEvents,
+  })).toBe(true);
+  expect(regularDashboardScreenStyle({ compact: true }).rowGap)
+    .toBe('clamp(9px, 1.3dvh, 13px)');
+  expect(regularDashboardContentStyle({ compact: true }).rowGap)
+    .toBe('clamp(8px, 1.1dvh, 12px)');
+
+  expect(shouldUseCompactDashboardLayout({
+    workout: { type: 'training' },
+    meetState: { isMeetDay: false },
+    recentPrEvents: {
+      lifts: { Squat: { oneRMGain: 0, e1RMGain: 2.5 } },
+      total: { oneRMGain: 0, e1RMGain: 2.5 },
+      ratios: { strengthMaxGain: 0, eStrengthMaxGain: 0 },
+    },
+  })).toBe(false);
+});
+
 test('sparse rest dashboards use the expanded layout while training dashboards stay compact', () => {
   expect(shouldUseExpandedDashboardLayout({
     workout: { type: 'rest' },
@@ -1057,6 +1131,20 @@ test('meet attempts show their exact percentages instead of rounded duplicate 10
   expect(formatWorkoutSetPercentDisplay({ labelKey: 'opener', pct: 0.9 })).toBe('90');
   expect(formatWorkoutSetPercentDisplay({ labelKey: 'secondAttempt', pct: 0.975 })).toBe('97.5');
   expect(formatWorkoutSetPercentDisplay({ labelKey: 'thirdAttempt', pct: 1.025 })).toBe('102.5');
+});
+
+test('ideal-route taper singles show their prescribed 90 percent until the weight is adjusted', () => {
+  expect(formatWorkoutSetPercentDisplay({
+    labelKey: 'topSingle',
+    pct: 0.925,
+    prescribedPct: 0.9,
+  })).toBe('90');
+  expect(formatWorkoutSetPercentDisplay({
+    labelKey: 'topSingle',
+    pct: 0.925,
+    prescribedPct: 0.9,
+    adjustedFromOriginal: true,
+  })).toBe('92.5');
 });
 
 test('meet attempt weights lock as soon as meet execution has started', () => {
@@ -1325,7 +1413,7 @@ test('settings combines support, feedback, source, identity and release verifica
   expect(screen.getByRole('button', { name: 'Report issue' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'GitHub repo' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'IzzyOnDroid (NeoStore)' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Verify Release' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Verify release' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
   const packageValue = screen.getByText(/com\.kelani\.sbdtracker/);
   expect(packageValue).toBeInTheDocument();
@@ -1341,7 +1429,7 @@ test('settings combines support, feedback, source, identity and release verifica
     'Report issue',
     'GitHub repo',
     'IzzyOnDroid (NeoStore)',
-    'Verify Release',
+    'Verify release',
     'Close',
   ].map(name => screen.getByRole('button', { name }));
   expect(new Set(supportActionButtons.map(button => button.style.height)))
@@ -1366,7 +1454,7 @@ test('settings combines support, feedback, source, identity and release verifica
     '_blank',
     'noopener,noreferrer'
   );
-  fireEvent.click(screen.getByRole('button', { name: 'Verify Release' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Verify release' }));
   expect(openSpy).toHaveBeenCalledWith(
     'https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/VERIFY.md',
     '_blank',

@@ -156,6 +156,17 @@ function legacyWorkoutEntries({
 function expectFullLiftGrids(workout) {
   (workout.lifts || []).forEach(liftBlock => {
     expect(liftBlock.warmups.length + liftBlock.sets.length).toBeGreaterThan(0);
+
+    if (workout.type === 'meet') {
+      // Meet warm-ups and the three attempts are two separate complete
+      // rows. Their combined item count is deliberately not padded to a
+      // multiple of four.
+      expect(liftBlock.warmups.length).toBeGreaterThan(0);
+      expect(liftBlock.warmups.length).toBeLessThanOrEqual(4);
+      expect(liftBlock.sets).toHaveLength(3);
+      return;
+    }
+
     expect((liftBlock.warmups.length + liftBlock.sets.length) % 4).toBe(0);
     expect(liftBlock.smartPrescription?.completeGrid).toBe(true);
   });
@@ -562,6 +573,103 @@ test('an almost meet-ready legacy beginner keeps the W17-W18-W19 route after HAR
     workoutNumber: 28,
     stage: 'meet',
   });
+  expect(meet.lifts.find(block => block.lift === 'Squat').warmups)
+    .toEqual([
+      { reps: 5, weight: 20, originalWeight: 20, done: false },
+      { reps: 3, weight: 30, originalWeight: 30, done: false },
+    ]);
+  expect(meet.lifts.find(block => block.lift === 'Bench').warmups)
+    .toEqual([
+      { reps: 5, weight: 20, originalWeight: 20, done: false },
+    ]);
+  expect(meet.lifts.find(block => block.lift === 'Deadlift').warmups)
+    .toEqual([
+      { reps: 5, weight: 20, originalWeight: 20, done: false },
+      { reps: 3, weight: 40, originalWeight: 40, done: false },
+    ]);
+});
+
+test('adaptive recovery satisfies pending beginner route rests after a mid-cycle migration', () => {
+  const routeSnapshot = ({
+    number,
+    routeNumber,
+    type = 'training',
+    effort = 'good',
+    marked = true,
+  }) => ({
+    number,
+    type,
+    workoutEffort: type === 'rest' ? 'easy' : effort,
+    smartIdealRoute: marked ? {
+      version: 1,
+      workoutNumber: routeNumber,
+      athleteLevel: 'beginner',
+      stage: 'normal',
+      phase: routeNumber >= 15 ? 'single' : null,
+    } : undefined,
+    lifts: type === 'rest' ? [] : [{
+      lift: 'Squat',
+      sets: [{
+        weight: 40,
+        reps: 1,
+        done: true,
+        failed: false,
+        skipped: false,
+      }],
+    }],
+  });
+  const entryFor = snapshot => ({
+    cycle: 1,
+    workoutNumber: snapshot.number,
+    restDay: snapshot.type === 'rest',
+    completionOnly: snapshot.type === 'rest',
+    lift: snapshot.type === 'rest' ? undefined : 'Squat',
+    workoutEffort: snapshot.workoutEffort,
+    smartDayType: snapshot.type === 'rest'
+      ? SMART_DAY_TYPES.RECOVERY
+      : SMART_DAY_TYPES.TRAINING,
+    workoutSnapshot: snapshot,
+  });
+  const history = [
+    routeSnapshot({ number: 35, routeNumber: 17, effort: 'hard' }),
+    routeSnapshot({ number: 36, routeNumber: 18, type: 'rest' }),
+    routeSnapshot({ number: 37, routeNumber: 19, effort: 'hard' }),
+    routeSnapshot({ number: 38, type: 'rest', marked: false }),
+    routeSnapshot({ number: 39, routeNumber: 20, type: 'rest' }),
+  ].map(entryFor);
+
+  expect(getNextSmartIdealRouteWorkoutNumber({
+    history,
+    currentCycle: 1,
+    athleteLevel: 'beginner',
+  })).toBe(22);
+
+  const w40 = generateCurrent({
+    history,
+    currentIndex: 39,
+    athleteLevel: 'beginner',
+    options: {
+      squat: 42.5,
+      bench: 32.5,
+      deadlift: 60,
+      oneRMs: { Squat: 42.5, Bench: 32.5, Deadlift: 60 },
+    },
+  });
+
+  expect(w40).toMatchObject({
+    number: 40,
+    type: 'training',
+    smartIdealRoute: {
+      workoutNumber: 22,
+      athleteLevel: 'beginner',
+      stage: 'taper',
+    },
+  });
+  expect(w40.lifts.map(({ lift, intensityRole }) => [lift, intensityRole]))
+    .toEqual([
+      ['Squat', 'heavy'],
+      ['Bench', 'light'],
+    ]);
 });
 
 test('an unmarked meet-type deviation still blocks the fixed route for the rest of the cycle', () => {
@@ -624,6 +732,84 @@ test('normal heavy phase changes guarantee a 2.5 kg rise when the cycle cap allo
   });
 
   expect(topWeights).toEqual([35, 37.5, 40]);
+});
+
+test('beginner W22 keeps four-column grids and rehearses the final squat warmup for three reps', () => {
+  const routeWorkout = getSmartIdealRouteWorkout({
+    workoutNumber: 22,
+    athleteLevel: 'beginner',
+  });
+  const workout = buildSmartIdealTrainingWorkout({
+    sourceWorkout: { number: 40 },
+    routeWorkout,
+    athleteLevel: 'beginner',
+    squat: 42.5,
+    bench: 32.5,
+    deadlift: 60,
+    preparationMode: 'basicFirst',
+  });
+  const squat = workout.lifts.find(block => block.lift === 'Squat');
+  const bench = workout.lifts.find(block => block.lift === 'Bench');
+
+  expect(squat.warmups.map(({ weight, reps }) => ({ weight, reps })))
+    .toEqual([
+      { weight: 20, reps: 5 },
+      { weight: 20, reps: 5 },
+      { weight: 30, reps: 3 },
+    ]);
+  expect(squat.sets).toHaveLength(1);
+  expect(squat.sets[0]).toMatchObject({
+    weight: 37.5,
+    reps: 1,
+    pct: 0.875,
+    precisePct: 0.9,
+    prescribedPct: 0.9,
+  });
+  expect(squat.warmups.length + squat.sets.length).toBe(4);
+
+  expect(bench.warmups).toHaveLength(0);
+  expect(bench.sets.map(({ weight, reps }) => ({ weight, reps })))
+    .toEqual(Array.from({ length: 4 }, () => ({ weight: 20, reps: 3 })));
+  expect(bench.warmups.length + bench.sets.length).toBe(4);
+});
+
+test('beginner W24 uses a useful four-column deadlift ladder and preserves the prescribed taper percentage', () => {
+  const routeWorkout = getSmartIdealRouteWorkout({
+    workoutNumber: 24,
+    athleteLevel: 'beginner',
+  });
+  const workout = buildSmartIdealTrainingWorkout({
+    sourceWorkout: { number: 42 },
+    routeWorkout,
+    athleteLevel: 'beginner',
+    squat: 42.5,
+    bench: 32.5,
+    deadlift: 60,
+    preparationMode: 'basicFirst',
+  });
+  const deadlift = workout.lifts.find(block => block.lift === 'Deadlift');
+  const bench = workout.lifts.find(block => block.lift === 'Bench');
+
+  expect(deadlift.warmups.map(({ weight, reps }) => ({ weight, reps })))
+    .toEqual([
+      { weight: 20, reps: 5 },
+      { weight: 40, reps: 3 },
+      { weight: 50, reps: 1 },
+    ]);
+  expect(deadlift.sets).toHaveLength(1);
+  expect(deadlift.sets[0]).toMatchObject({
+    weight: 55,
+    reps: 1,
+    pct: 0.925,
+    precisePct: 0.9,
+    prescribedPct: 0.9,
+  });
+  expect(deadlift.warmups.length + deadlift.sets.length).toBe(4);
+
+  expect(bench.warmups).toHaveLength(0);
+  expect(bench.sets.map(({ weight, reps }) => ({ weight, reps })))
+    .toEqual(Array.from({ length: 4 }, () => ({ weight: 22.5, reps: 3 })));
+  expect(bench.warmups.length + bench.sets.length).toBe(4);
 });
 
 test.each(['beginner', 'intermediate', 'advanced', 'elite'])(

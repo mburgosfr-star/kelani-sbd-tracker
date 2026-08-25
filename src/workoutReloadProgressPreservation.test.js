@@ -108,3 +108,53 @@ test('does not touch an already-completed workout, regardless of user progress',
   expect(result[0].label).not.toBe('Freshly Regenerated');
   expect(result[0].lifts[0].sets[0].done).toBe(true);
 });
+
+test('repairs duplicated meet warmup padding while preserving checked progress', () => {
+  const attempt = weight => ({
+    reps: 1,
+    weight,
+    originalWeight: weight,
+    done: false,
+    failed: false,
+    skipped: false,
+  });
+  const restoredWorkout = {
+    number: 46,
+    type: 'meet',
+    lifts: [{
+      lift: 'Squat',
+      warmups: [20, 20, 20, 20, 30].map((weight, index) => ({
+        reps: weight === 30 ? 3 : 5,
+        weight,
+        originalWeight: weight,
+        done: index === 0,
+      })),
+      sets: [37.5, 42.5, 45].map(attempt),
+    }],
+    warmups: [],
+    sets: [37.5, 42.5, 45].map(attempt),
+  };
+  const generatedWorkout = {
+    ...restoredWorkout,
+    lifts: [{
+      ...restoredWorkout.lifts[0],
+      warmups: [
+        { reps: 5, weight: 20, originalWeight: 20, done: false },
+        { reps: 3, weight: 30, originalWeight: 30, done: false },
+      ],
+    }],
+  };
+
+  const [result] = mergeGeneratedWorkoutStructure(
+    [restoredWorkout],
+    [generatedWorkout],
+    [],
+    1
+  );
+
+  expect(result.lifts[0].warmups).toEqual([
+    { reps: 5, weight: 20, originalWeight: 20, done: true },
+    { reps: 3, weight: 30, originalWeight: 30, done: false },
+  ]);
+  expect(result.lifts[0].sets).toEqual(restoredWorkout.lifts[0].sets);
+});

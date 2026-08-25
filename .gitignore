@@ -35,3 +35,10 @@ yarn-error.log*
 *.keystore
 *.p12
 *.pfx
+
+# local collaboration, planning, and editor state
+/AGENTS.md
+/docs/archive/planning/
+/marketing/video-youtube-structure.md
+/.vscode/
+/android/.idea/

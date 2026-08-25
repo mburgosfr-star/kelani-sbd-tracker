@@ -5,6 +5,7 @@ import {
   getSmartAttemptPhaseLabel,
   getHistoricalSmartIntensityRole,
 } from './App';
+import { translations } from './translations';
 
 test('completed workout labels keep their stored historical meaning', () => {
   expect(getHistoricalSmartIntensityRole({
@@ -179,6 +180,28 @@ test('fully demonstrated meet readiness does not claim taper before taper starts
     value: 'Volledig wedstrijdklaar: alle liftdoelen bereikt. De training gaat verder volgens plan.',
   });
 });
+
+test.each(['nl', 'en', 'ca'])(
+  'a fully meet-ready ideal-route taper explicitly explains tapering in %s',
+  language => {
+    const t = translations[language];
+    const workout = workoutWith([
+      smartLift({ lift: 'Squat' }),
+      smartLift({ lift: 'Bench', role: 'secondary' }),
+    ]);
+    workout.smartIdealRoute = { stage: 'taper', workoutNumber: 22 };
+    workout.smartDecisionSummary.readiness.meetPlanReady = true;
+    workout.smartDecisionSummary.readiness.meetPlanFullyDemonstrated = true;
+
+    const rows = getSmartModalDetailRows(workout, t);
+
+    expect(rows).toContainEqual({
+      label: t.smartMeetStatus,
+      value: t.smartMeetFullyReadyTaper,
+    });
+    expect(t.smartMeetFullyReadyTaper).not.toBe(t.smartMeetFullyReady);
+  }
+);
 
 test('a ready-phase Bench prescription explains taper instead of recovery or blocked progression', () => {
   const bench = smartLift({ lift: 'Bench', labelKey: 'topTriple', reps: 3 });

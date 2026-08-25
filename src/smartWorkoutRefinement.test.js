@@ -17,6 +17,17 @@ import { applyAccessoryPlanToWorkouts } from './accessoryGeneration';
 import { generateUltraProgram } from './classicProgramTemplates';
 
 test('meet warm-ups prepare the opener with the requested SBD ladders', () => {
+  expect(buildSmartMeetWarmups(37.5, 'Squat')).toEqual([
+    { reps: 5, weight: 20, originalWeight: 20, done: false },
+    { reps: 3, weight: 30, originalWeight: 30, done: false },
+  ]);
+  expect(buildSmartMeetWarmups(30, 'Bench')).toEqual([
+    { reps: 5, weight: 20, originalWeight: 20, done: false },
+  ]);
+  expect(buildSmartMeetWarmups(55, 'Deadlift')).toEqual([
+    { reps: 5, weight: 20, originalWeight: 20, done: false },
+    { reps: 3, weight: 40, originalWeight: 40, done: false },
+  ]);
   expect(buildSmartMeetWarmups(135, 'Squat')).toEqual([
     { reps: 5, weight: 20, originalWeight: 20, done: false },
     { reps: 3, weight: 70, originalWeight: 70, done: false },

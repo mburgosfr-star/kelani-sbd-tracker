@@ -35,6 +35,55 @@ export function workoutHasUserProgress(workout) {
   );
 }
 
+function repairPaddedMeetWarmups(workout, generated) {
+  if (workout?.type !== 'meet' || generated?.type !== 'meet') return workout;
+
+  const savedLifts = workout.lifts || [];
+  const generatedLifts = generated.lifts || [];
+  let changed = false;
+
+  const lifts = savedLifts.map((savedLift, liftIndex) => {
+    const generatedLift = generatedLifts.find(
+      liftBlock => liftBlock?.lift === savedLift?.lift
+    ) || generatedLifts[liftIndex];
+    const savedWarmups = savedLift?.warmups || [];
+    const generatedWarmups = generatedLift?.warmups || [];
+    const generatedWeights = new Set(
+      generatedWarmups.map(warmup => Number(warmup?.weight) || 0)
+    );
+    const hasOnlyGeneratedWeights = savedWarmups.every(warmup => (
+      generatedWeights.has(Number(warmup?.weight) || 0)
+    ));
+    const hasDuplicatePadding = Boolean(
+      savedWarmups.length > generatedWarmups.length &&
+      hasOnlyGeneratedWeights
+    );
+
+    if (!hasDuplicatePadding) return savedLift;
+
+    changed = true;
+    return {
+      ...savedLift,
+      warmups: generatedWarmups.map(generatedWarmup => ({
+        ...generatedWarmup,
+        done: savedWarmups.some(savedWarmup => (
+          Number(savedWarmup?.weight) === Number(generatedWarmup?.weight) &&
+          savedWarmup?.done
+        )),
+      })),
+    };
+  });
+
+  if (!changed) return workout;
+
+  const primaryLift = lifts[0] || {};
+  return {
+    ...workout,
+    lifts,
+    warmups: primaryLift.warmups || workout.warmups || [],
+  };
+}
+
 export function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, history, cycle) {
   const completedWorkoutNumbers = getCompletedWorkoutNumbers(history, cycle);
 
@@ -53,7 +102,7 @@ export function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, hist
         // generated workout would silently wipe that progress on the next
         // app load. Keep their in-progress data instead.
         if (workoutHasUserProgress(workout)) {
-          return workout;
+          return repairPaddedMeetWarmups(workout, generated);
         }
 
         return generated;

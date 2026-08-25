@@ -402,6 +402,17 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
     const distanceToTarget = targetWeight - weight;
 
     if (targetReps <= 1) {
+      // At beginner lower-body loads, the final warm-up is still important
+      // technique practice. A single at 30kg before a 37.5kg top single is
+      // needlessly sparse; three reps rehearse the movement without adding
+      // meaningful taper fatigue. Keep heavier top-single ladders unchanged.
+      if (
+        isLowerBodyLift &&
+        targetWeight <= 50 &&
+        isFinalWarmup
+      ) {
+        return 3;
+      }
       if (isFinalWarmup || distanceToTarget <= 20) return 1;
       if (distanceToTarget <= 50) return 3;
       return 5;

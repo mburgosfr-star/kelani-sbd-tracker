@@ -61,7 +61,7 @@ export function decimalLocale() {
 
 export function formatWeightValue(value, unit = WEIGHT_UNITS.KG, { body = false } = {}) {
   const numericValue = Number(value);
-  if (!Number.isFinite(numericValue)) return '—';
+  if (!Number.isFinite(numericValue)) return '-';
 
   const normalizedUnit = normalizeWeightUnit(unit);
 
@@ -77,7 +77,7 @@ export function formatWeightValue(value, unit = WEIGHT_UNITS.KG, { body = false 
 
 export function formatDecimalDisplay(value, { minimumFractionDigits, maximumFractionDigits = 1 } = {}) {
   const numericValue = Number(value);
-  if (!Number.isFinite(numericValue)) return '—';
+  if (!Number.isFinite(numericValue)) return '-';
 
   const hasDecimal = !Number.isInteger(numericValue);
   const minDigits = minimumFractionDigits ?? (hasDecimal ? 1 : 0);
@@ -95,7 +95,7 @@ export function formatWeightDisplayValue(value, unit = WEIGHT_UNITS.KG, options 
 
 export function formatWeightFromKg(weightKg, unit = WEIGHT_UNITS.KG, options = {}) {
   const displayWeight = kgToDisplayWeight(weightKg, unit);
-  if (displayWeight === '') return '—';
+  if (displayWeight === '') return '-';
 
   return `${formatWeightDisplayValue(displayWeight, unit, options)} ${normalizeWeightUnit(unit)}`;
 }

@@ -115,6 +115,7 @@ import {
   deriveCycleE1RMs,
   normalizeCycleE1RMs,
 } from './smartCycleBasis';
+import { buildAutomaticNextSmartCycle } from './smartCycleTransition';
 import {
   isSmartIdealRouteEnabled,
   resolveSmartIdealRouteStartCycle,
@@ -148,7 +149,158 @@ const LEGACY_BROWSER_AUTO_BACKUP_KEY = 'kelani-sbd-tracker-autosave';
 const REST_TIMER_NOTIFICATION_ID = 1208;
 const REST_TIMER_NOTIFICATION_CHANNEL_ID = 'kelani_rest_timer_v4';
 const REST_TIMER_NOTIFICATION_SOUND = 'kelani_rest_timer_quiet.wav';
+const REST_TIMER_STATE_KEY = 'kelani-sbd-tracker-active-rest-timer';
+const REST_TIMER_NOTIFICATION_STATUS_KEY = 'kelani-sbd-tracker-rest-timer-notification-status';
+const APP_NAVIGATION_STATE_KEY = 'kelani-sbd-tracker-navigation-state';
+const RESTORABLE_APP_SCREENS = new Set(['dashboard', 'all', 'current', 'stats', 'settings']);
 const DeviceAlertStatus = registerPlugin('DeviceAlertStatus');
+
+export function normalizePersistedRestTimerState(value, now = Date.now()) {
+  let parsed = value;
+
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  const seconds = Number(parsed?.seconds);
+  const endTime = Number(parsed?.endTime);
+  const id = Number(parsed?.id);
+
+  if (
+    !Number.isFinite(seconds) || seconds <= 0 ||
+    !Number.isFinite(endTime) || endTime <= Number(now) ||
+    !Number.isFinite(id)
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    seconds,
+    endTime,
+    placement: parsed?.placement && typeof parsed.placement === 'object'
+      ? parsed.placement
+      : null,
+  };
+}
+
+function readPersistedRestTimerState(now = Date.now()) {
+  if (typeof localStorage === 'undefined') return null;
+
+  const restored = normalizePersistedRestTimerState(
+    localStorage.getItem(REST_TIMER_STATE_KEY),
+    now
+  );
+
+  if (!restored) {
+    localStorage.removeItem(REST_TIMER_STATE_KEY);
+  }
+
+  return restored;
+}
+
+function persistRestTimerState(timer) {
+  if (typeof localStorage === 'undefined') return;
+
+  const normalized = normalizePersistedRestTimerState(timer);
+  if (!normalized) {
+    localStorage.removeItem(REST_TIMER_STATE_KEY);
+    return;
+  }
+
+  localStorage.setItem(REST_TIMER_STATE_KEY, JSON.stringify(normalized));
+}
+
+function clearPersistedRestTimerState() {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.removeItem(REST_TIMER_STATE_KEY);
+}
+
+export function normalizePersistedNavigationState(value, workoutCount = 0) {
+  let parsed = value;
+
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch (error) {
+      parsed = null;
+    }
+  }
+
+  const screen = RESTORABLE_APP_SCREENS.has(parsed?.screen)
+    ? parsed.screen
+    : 'dashboard';
+  const maxIndex = Math.max(0, Number(workoutCount) - 1);
+  const requestedIndex = Number(parsed?.selectedIndex);
+  const selectedIndex = Number.isInteger(requestedIndex)
+    ? Math.min(Math.max(0, requestedIndex), maxIndex)
+    : 0;
+
+  return { screen, selectedIndex };
+}
+
+export function resolveRestoredNavigationState({
+  navigation,
+  activeTimer,
+  workouts = [],
+  fallbackSelectedIndex = 0,
+} = {}) {
+  const workoutCount = workouts.length;
+  const fallback = normalizePersistedNavigationState({
+    screen: navigation?.screen,
+    selectedIndex: Number.isInteger(Number(navigation?.selectedIndex))
+      ? Number(navigation.selectedIndex)
+      : fallbackSelectedIndex,
+  }, workoutCount);
+  const timerWorkoutNumber = Number(activeTimer?.placement?.workoutNumber);
+  const timerWorkoutIndex = Number.isFinite(timerWorkoutNumber)
+    ? workouts.findIndex(workout => Number(workout?.number) === timerWorkoutNumber)
+    : -1;
+
+  if (activeTimer && timerWorkoutIndex >= 0) {
+    return {
+      screen: 'current',
+      selectedIndex: timerWorkoutIndex,
+    };
+  }
+
+  return fallback;
+}
+
+function readPersistedNavigationState(workoutCount) {
+  if (typeof localStorage === 'undefined') return null;
+
+  const stored = localStorage.getItem(APP_NAVIGATION_STATE_KEY);
+  if (!stored) return null;
+
+  return normalizePersistedNavigationState(
+    stored,
+    workoutCount
+  );
+}
+
+function persistNavigationState(screen, selectedIndex) {
+  if (typeof localStorage === 'undefined' || !RESTORABLE_APP_SCREENS.has(screen)) return;
+
+  localStorage.setItem(APP_NAVIGATION_STATE_KEY, JSON.stringify({
+    screen,
+    selectedIndex,
+  }));
+}
+
+function recordRestTimerNotificationStatus(status, details = {}) {
+  if (typeof localStorage === 'undefined') return;
+
+  localStorage.setItem(REST_TIMER_NOTIFICATION_STATUS_KEY, JSON.stringify({
+    status,
+    checkedAt: new Date().toISOString(),
+    ...details,
+  }));
+}
 
 export function buildBackupSummary(data) {
   const currentCycle = data?.currentCycle || 1;
@@ -199,6 +351,16 @@ export function buildDashboardE1RMMetrics(oneRMs = {}, e1RMs = {}) {
 // when no set ever achieved it.
 export function getDashboardE1RMValue(oneRM, achievedE1RM) {
   return Math.max(Number(oneRM) || 0, Number(achievedE1RM) || 0);
+}
+
+export function formatStrengthRatioWithMax(currentRatio, maximumRatio) {
+  const current = Number(currentRatio);
+  if (!Number.isFinite(current) || current <= 0) return null;
+
+  const maximum = Number(maximumRatio) > 0 ? Number(maximumRatio) : current;
+  const format = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+
+  return `${formatDecimalDisplay(current, format)} / ${formatDecimalDisplay(maximum, format)}`;
 }
 
 export function resolveStoredWeightUnit(data = {}, fallbackUnit = null) {
@@ -438,11 +600,13 @@ async function cancelRestTimerNotification() {
     await LocalNotifications.cancel({
       notifications: [{ id: REST_TIMER_NOTIFICATION_ID }],
     });
-  } catch (e) {}
+  } catch (error) {
+    console.error('Could not cancel rest timer notification', error);
+  }
 }
 
 async function ensureRestTimerNotificationChannel() {
-  if (!Capacitor.isNativePlatform()) return;
+  if (!Capacitor.isNativePlatform()) return false;
 
   try {
     await LocalNotifications.createChannel({
@@ -454,7 +618,11 @@ async function ensureRestTimerNotificationChannel() {
       sound: REST_TIMER_NOTIFICATION_SOUND,
       vibration: true,
     });
-  } catch (e) {}
+    return true;
+  } catch (error) {
+    console.error('Could not create rest timer notification channel', error);
+    return false;
+  }
 }
 
 export function getRestTimerNotificationChannelStatus(channels = []) {
@@ -585,32 +753,124 @@ async function scheduleRestTimerNotification(
   doneTitle = 'Rest finished',
   doneText = 'Your next set is ready.'
 ) {
-  if (!Capacitor.isNativePlatform() || !endTime) return;
+  if (!Capacitor.isNativePlatform() || !endTime || Number(endTime) <= Date.now()) {
+    return false;
+  }
 
   try {
     const permissions = await LocalNotifications.checkPermissions();
     if (permissions.display !== 'granted') {
       const requested = await LocalNotifications.requestPermissions();
-      if (requested.display !== 'granted') return;
+      if (requested.display !== 'granted') {
+        recordRestTimerNotificationStatus('failed', {
+          reason: 'notification-permission-denied',
+          endTime,
+        });
+        return false;
+      }
     }
 
     await cancelRestTimerNotification();
-    await ensureRestTimerNotificationChannel();
+    const channelReady = await ensureRestTimerNotificationChannel();
+    if (!channelReady) {
+      recordRestTimerNotificationStatus('failed', {
+        reason: 'notification-channel-unavailable',
+        endTime,
+      });
+      return false;
+    }
 
-    await LocalNotifications.schedule({
+    const result = await LocalNotifications.schedule({
       notifications: [{
         id: REST_TIMER_NOTIFICATION_ID,
         title: doneTitle,
         body: doneText,
         channelId: REST_TIMER_NOTIFICATION_CHANNEL_ID,
         sound: REST_TIMER_NOTIFICATION_SOUND,
+        foreground: true,
+        autoCancel: true,
+        isExactNotification: true,
+        isExactMandatory: true,
         schedule: {
           at: new Date(endTime),
           allowWhileIdle: true,
         },
       }],
     });
-  } catch (e) {}
+
+    const scheduledIds = Array.isArray(result?.notifications)
+      ? result.notifications.map(notification => Number(notification?.id))
+      : [];
+    const scheduled = scheduledIds.includes(REST_TIMER_NOTIFICATION_ID);
+
+    recordRestTimerNotificationStatus(scheduled ? 'scheduled' : 'failed', {
+      reason: scheduled ? null : 'schedule-result-missing-id',
+      endTime,
+    });
+
+    return scheduled;
+  } catch (error) {
+    console.error('Could not schedule rest timer notification', error);
+    recordRestTimerNotificationStatus('failed', {
+      reason: error?.code || error?.message || 'schedule-error',
+      endTime,
+    });
+    return false;
+  }
+}
+
+export function hasPendingRestTimerNotification(result) {
+  return Array.isArray(result?.notifications) && result.notifications.some(
+    notification => Number(notification?.id) === REST_TIMER_NOTIFICATION_ID
+  );
+}
+
+async function ensurePendingRestTimerNotification(
+  timer,
+  doneTitle = 'Rest finished',
+  doneText = 'Your next set is ready.'
+) {
+  if (!Capacitor.isNativePlatform()) return false;
+
+  const activeTimer = normalizePersistedRestTimerState(timer);
+  if (!activeTimer) return false;
+
+  try {
+    const pending = await LocalNotifications.getPending();
+    if (hasPendingRestTimerNotification(pending)) {
+      recordRestTimerNotificationStatus('verified', {
+        endTime: activeTimer.endTime,
+      });
+      return true;
+    }
+  } catch (error) {
+    console.error('Could not verify pending rest timer notification', error);
+  }
+
+  const scheduled = await scheduleRestTimerNotification(
+    activeTimer.endTime,
+    doneTitle,
+    doneText
+  );
+
+  if (!scheduled) return false;
+
+  try {
+    const pending = await LocalNotifications.getPending();
+    const verified = hasPendingRestTimerNotification(pending);
+    recordRestTimerNotificationStatus(verified ? 'verified' : 'failed', {
+      reason: verified ? null : 'notification-not-pending-after-schedule',
+      endTime: activeTimer.endTime,
+    });
+    return verified;
+  } catch (error) {
+    console.error('Could not confirm scheduled rest timer notification', error);
+    recordRestTimerNotificationStatus('scheduled-unverified', {
+      reason: error?.code || error?.message || 'pending-check-error',
+      endTime: activeTimer.endTime,
+    });
+    return true;
+  }
 }
 
 export function shouldPlayRestTimerInAppAlert({
@@ -622,6 +882,78 @@ export function shouldPlayRestTimerInAppAlert({
   // races that notification and intermittently produces two different
   // sounds. Keep Web Audio as the browser-only alert source.
   return !isNativePlatform && !isDocumentHidden;
+}
+
+export function shouldTriggerRestTimerWebAlert({
+  timer,
+  alertedTimerId = null,
+  now = Date.now(),
+  isNativePlatform = Capacitor.isNativePlatform(),
+  isDocumentHidden = typeof document !== 'undefined' && document.hidden,
+} = {}) {
+  const timerId = Number(timer?.id);
+  const endTime = Number(timer?.endTime);
+
+  return (
+    Number.isFinite(timerId) &&
+    Number.isFinite(endTime) &&
+    endTime <= Number(now) &&
+    timerId !== Number(alertedTimerId) &&
+    shouldPlayRestTimerInAppAlert({ isNativePlatform, isDocumentHidden })
+  );
+}
+
+function playRestTimerWebAlert() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return false;
+
+    const ctx = new AudioCtx();
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.9, ctx.currentTime);
+    master.connect(ctx.destination);
+
+    const beep = (delay, frequency, duration = 0.22) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(frequency, ctx.currentTime + delay);
+
+      gain.gain.setValueAtTime(0.001, ctx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.85, ctx.currentTime + delay + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration);
+
+      osc.connect(gain);
+      gain.connect(master);
+
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + duration);
+    };
+
+    [
+      [0, 1200],
+      [0.22, 1600],
+      [0.55, 1200],
+      [0.77, 1600],
+      [1.1, 1800],
+    ].forEach(([delay, frequency]) => beep(delay, frequency));
+
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(error => {
+        console.error('Could not resume rest timer web audio', error);
+      });
+    }
+
+    setTimeout(() => {
+      ctx.close().catch(() => {});
+    }, 1800);
+
+    return true;
+  } catch (error) {
+    console.error('Could not play rest timer web audio', error);
+    return false;
+  }
 }
 
 export function createRestTimerNotificationQueue() {
@@ -1014,6 +1346,28 @@ export function appViewportStyle({
   };
 }
 
+export function shouldAllowAppVerticalScroll({
+  screen,
+  workout,
+  measuredOverflow = false,
+} = {}) {
+  return Boolean(
+    measuredOverflow ||
+    (screen === 'current' && workout?.type === 'meet')
+  );
+}
+
+export function shouldReserveWorkoutBottomNavSpace({
+  screen,
+  workout,
+  measuredNeedsClearance = false,
+} = {}) {
+  return Boolean(
+    measuredNeedsClearance ||
+    (screen === 'current' && workout?.type === 'meet')
+  );
+}
+
 function balancedVerticalScreenStyle(bottomOffset = BOTTOM_NAV_SPACE) {
   return {
     minHeight: bottomOffset
@@ -1087,23 +1441,27 @@ export function meetDayDashboardScreenStyle() {
   };
 }
 
-export function regularDashboardScreenStyle() {
+export function regularDashboardScreenStyle({ compact = false } = {}) {
   return {
     ...responsiveContentScreenStyle(),
     gridTemplateRows: 'auto minmax(0, 1fr)',
     alignContent: 'stretch',
-    rowGap: 'clamp(14px, 2.2dvh, 24px)',
+    rowGap: compact
+      ? 'clamp(9px, 1.3dvh, 13px)'
+      : 'clamp(14px, 2.2dvh, 24px)',
   };
 }
 
-export function regularDashboardContentStyle({ spreadContent = false } = {}) {
+export function regularDashboardContentStyle({ spreadContent = false, compact = false } = {}) {
   return {
     minHeight: 0,
     display: 'grid',
     alignContent: spreadContent ? 'space-evenly' : 'start',
     rowGap: spreadContent
       ? 'clamp(10px, 1.4dvh, 16px)'
-      : 'clamp(14px, 2.2dvh, 24px)',
+      : compact
+        ? 'clamp(8px, 1.1dvh, 12px)'
+        : 'clamp(14px, 2.2dvh, 24px)',
     ...(spreadContent ? {
       paddingBottom: 'clamp(24px, 3.5dvh, 36px)',
     } : {}),
@@ -1115,6 +1473,30 @@ export function shouldUseExpandedDashboardLayout({ workout, meetState } = {}) {
     workout &&
     !meetState?.isMeetDay &&
     (workout.type === 'rest' || meetState?.hideRouteToMeet)
+  );
+}
+
+export function countDashboardRecentPrLines(recentPrEvents = {}) {
+  const liftEvents = Object.values(recentPrEvents?.lifts || {});
+  const metricEvents = [...liftEvents, recentPrEvents?.total || {}];
+  const liftAndTotalLines = metricEvents.reduce((count, event) => (
+    count +
+    (Number(event?.oneRMGain) > 0 ? 1 : 0) +
+    (Number(event?.e1RMGain) > 0 ? 1 : 0)
+  ), 0);
+  const ratioLines =
+    (Number(recentPrEvents?.ratios?.strengthMaxGain) > 0 ? 1 : 0) +
+    (Number(recentPrEvents?.ratios?.eStrengthMaxGain) > 0 ? 1 : 0);
+
+  return liftAndTotalLines + ratioLines;
+}
+
+export function shouldUseCompactDashboardLayout({ workout, meetState, recentPrEvents } = {}) {
+  return Boolean(
+    workout &&
+    workout.type !== 'rest' &&
+    !meetState?.isMeetDay &&
+    countDashboardRecentPrLines(recentPrEvents) >= 6
   );
 }
 
@@ -1200,7 +1582,7 @@ export function meetWorkoutScreenStyle() {
     // Let the document scroll naturally instead of stretching the blocks
     // over one viewport with space-between.
     display: 'block',
-    paddingBottom: 24,
+    paddingBottom: 4,
   };
 }
 
@@ -1210,7 +1592,7 @@ export function meetWorkoutLiftBlockStyle() {
     border: 'none',
     borderRadius: 8,
     overflow: 'visible',
-    margin: '0 0 clamp(16px, 2.2dvh, 22px)',
+    margin: '0 0 3px',
   };
 }
 
@@ -1352,6 +1734,10 @@ export function workoutCompletionButtonStyle({ enabled = true } = {}) {
   };
 }
 
+export function workoutCompletionButtonMargin({ isMeetDay = false } = {}) {
+  return isMeetDay ? '8px auto 0' : '2px auto 18px';
+}
+
 // // const APP_TOP_BAR_HEIGHT = 50; // unused // unused after local black statusbar patch
 
 
@@ -1458,8 +1844,6 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
   const [remaining, setRemaining] = useState(() => Math.max(0, Math.ceil(((endTime || Date.now() + seconds * 1000) - Date.now()) / 1000)));
   const intervalRef = useRef(null);
   const timeoutRef = useRef(null);
-  const hasBeepedRef = useRef(false);
-  const wasHiddenRef = useRef(false);
   useEffect(() => {
     const clearTick = () => {
       if (intervalRef.current) {
@@ -1478,18 +1862,6 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
     const finishTimer = () => {
       clearTick();
       setRemaining(0);
-
-      if (!shouldPlayRestTimerInAppAlert()) {
-        hasBeepedRef.current = true;
-        return;
-      }
-
-      cancelRestTimerNotification();
-
-      if (!hasBeepedRef.current) {
-        hasBeepedRef.current = true;
-        playBeep();
-      }
     };
 
     const updateRemaining = () => {
@@ -1504,28 +1876,13 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
     const startVisibleTick = () => {
       clearTick();
 
-      if (document.hidden) {
-        wasHiddenRef.current = true;
-        updateRemaining();
-        return;
-      }
-
-      if (wasHiddenRef.current && Date.now() >= endTime) {
-        hasBeepedRef.current = true;
-        setRemaining(0);
-        cancelRestTimerNotification();
-        return;
-      }
-
       updateRemaining();
 
-      if (Date.now() < endTime) {
+      if (!document.hidden && Date.now() < endTime) {
         intervalRef.current = setInterval(updateRemaining, 1000);
       }
     };
 
-    hasBeepedRef.current = false;
-    wasHiddenRef.current = document.hidden;
     setRemaining(seconds);
 
     clearFinishTimeout();
@@ -1547,52 +1904,6 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
     seconds,
     endTime,
   ]);
-
-  function playBeep() {
-    try {
-
-
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AudioCtx();
-      const master = ctx.createGain();
-      master.gain.setValueAtTime(0.9, ctx.currentTime);
-      master.connect(ctx.destination);
-
-      const beep = (delay, frequency, duration = 0.22) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(frequency, ctx.currentTime + delay);
-
-        gain.gain.setValueAtTime(0.001, ctx.currentTime + delay);
-        gain.gain.exponentialRampToValueAtTime(0.85, ctx.currentTime + delay + 0.015);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration);
-
-        osc.connect(gain);
-        gain.connect(master);
-
-        osc.start(ctx.currentTime + delay);
-        osc.stop(ctx.currentTime + delay + duration);
-      };
-
-      [
-        [0, 1200],
-        [0.22, 1600],
-        [0.55, 1200],
-        [0.77, 1600],
-        [1.1, 1800],
-      ].forEach(([delay, frequency]) => beep(delay, frequency));
-
-      if (ctx.state === 'suspended') {
-        ctx.resume().catch(() => {});
-      }
-
-      setTimeout(() => {
-        ctx.close().catch(() => {});
-      }, 1800);
-    } catch (e) {}
-  }
 
   const mins = Math.floor(remaining / 60);
   const secs = remaining % 60;
@@ -1802,7 +2113,7 @@ function WorkoutWeightPercentLabel({
         alignItems: 'center',
         justifyContent: 'center',
         color,
-        lineHeight: 1.08,
+        lineHeight: 'var(--workout-weight-label-line-height, 1.08)',
         whiteSpace: 'nowrap',
       }}
     >
@@ -1810,7 +2121,7 @@ function WorkoutWeightPercentLabel({
       {percentText ? (
         <span
           style={{
-            marginTop: 2,
+            marginTop: 'var(--workout-weight-percent-margin-top, 2px)',
             fontSize: '0.82em',
             fontWeight: 700,
             opacity: 0.9,
@@ -1867,7 +2178,7 @@ function WorkoutCircleItem({
         gridTemplateRows: 'auto auto auto',
         justifyItems: 'center',
         alignContent: 'start',
-        rowGap: RESPONSIVE_WORKOUT_UI.labelCircleGap,
+        rowGap: 'var(--workout-circle-item-row-gap, clamp(6px, 0.8dvh, 9px))',
         minWidth: 0,
         gridColumn: fullWidth
           ? '1 / -1'
@@ -1958,7 +2269,12 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t, compact = false }) {
 }
 
 
-export function WorkoutLiftGrid({ children, testId = 'workout-lift-grid', columnCount = 4 }) {
+export function WorkoutLiftGrid({
+  children,
+  testId = 'workout-lift-grid',
+  columnCount = 4,
+  compactVertical = false,
+}) {
   return (
     <div
       data-testid={testId}
@@ -1966,9 +2282,19 @@ export function WorkoutLiftGrid({ children, testId = 'workout-lift-grid', column
         display: 'grid',
         gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
         justifyContent: 'start',
-        gap: RESPONSIVE_WORKOUT_UI.circleGap,
+        columnGap: RESPONSIVE_WORKOUT_UI.circleGap,
+        rowGap: compactVertical
+          ? 'clamp(3px, 0.4dvh, 4px)'
+          : RESPONSIVE_WORKOUT_UI.circleGap,
         padding: `0 ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
-        marginBottom: RESPONSIVE_WORKOUT_UI.sectionGap,
+        marginBottom: compactVertical
+          ? 2
+          : RESPONSIVE_WORKOUT_UI.sectionGap,
+        '--workout-circle-item-row-gap': compactVertical
+          ? '4px'
+          : RESPONSIVE_WORKOUT_UI.labelCircleGap,
+        '--workout-weight-label-line-height': compactVertical ? 1.05 : 1.08,
+        '--workout-weight-percent-margin-top': compactVertical ? '1px' : '2px',
       }}
     >
       {children}
@@ -2221,12 +2547,21 @@ function SetActionButton({ title, onClick, borderColor, disabled = false, childr
 }
 
 export function formatWorkoutSetPercentDisplay(set = {}) {
+  const isAdjusted = Boolean(
+    set.adjustedFromFailedSet ||
+    set.adjustedFromOriginal ||
+    set.failed
+  );
+  const displayPct = !isAdjusted && Number(set.prescribedPct) > 0
+    ? Number(set.prescribedPct)
+    : Number(set.pct) || 0;
+
   return isAttemptSetLabel(set.labelKey)
-    ? formatDecimalDisplay((Number(set.pct) || 0) * 100, {
+    ? formatDecimalDisplay(displayPct * 100, {
       minimumFractionDigits: 0,
       maximumFractionDigits: 1,
     })
-    : formatSetPercentDisplay(set.pct);
+    : formatSetPercentDisplay(displayPct);
 }
 
 export function SetRow({ set, index, label, isWarmup = false, compactGrid = false, gridSpan = null, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator }) {
@@ -2539,7 +2874,7 @@ export function SettingsListRow({ label, description, value, valueColor = THEME.
             </button>
           ) : (
             <span style={{ whiteSpace: valueNowrap ? 'nowrap' : 'normal' }}>
-              {value || '—'}
+              {value || '-'}
             </span>
           )
         )}
@@ -2810,12 +3145,12 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
 
       setPendingImport({
         data: backup.data,
-        appVersion: typeof backup.appVersion === 'string' ? backup.appVersion : '—',
+        appVersion: typeof backup.appVersion === 'string' ? backup.appVersion : '-',
         exportedAt: typeof backup.exportedAt === 'string'
           ? backup.exportedAt
           : typeof backup.exportedAtLocal === 'string'
             ? backup.exportedAtLocal
-            : '—',
+            : '-',
         summary: buildDataSectionBackupSummary(backup.data),
       });
     } catch (e) {
@@ -3039,9 +3374,9 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
               [t.importPreviewVersion, pendingImport.appVersion],
               [
                 t.importPreviewExportedAt,
-                pendingImport.exportedAt && pendingImport.exportedAt !== '—'
+                pendingImport.exportedAt && pendingImport.exportedAt !== '-'
                   ? new Date(pendingImport.exportedAt).toLocaleString()
-                  : '—'
+                  : '-'
               ],
               [
                 t.importPreviewProgress,
@@ -3310,7 +3645,7 @@ function AboutSupportSection({ t }) {
       onClick: () => openLink('https://apt.izzysoft.de/packages/com.kelani.sbdtracker'),
     },
     {
-      label: t.verifyRelease || 'Verify Release',
+      label: t.verifyRelease || 'Verify release',
       onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/VERIFY.md'),
     },
     {
@@ -3978,7 +4313,7 @@ function NewCycleModal({ prs, onStart, t, weightUnit = WEIGHT_UNITS.KG }) {
               <span style={{ color: THEME.text, fontWeight: 700 }}>
                 {liftLabel(lift, t)} {t.e1RM}
               </span>
-              <span style={{ fontWeight: 700 }}>{prs[lift] ? formatWeightFromKg(prs[lift], weightUnit) : '—'}</span>
+              <span style={{ fontWeight: 700 }}>{prs[lift] ? formatWeightFromKg(prs[lift], weightUnit) : '-'}</span>
             </div>
           ))}
         </div>
@@ -5001,8 +5336,15 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
   const parts = [];
 
   if (topSet) {
+    const isAdjusted = Boolean(
+      topSet.adjustedFromFailedSet ||
+      topSet.adjustedFromOriginal ||
+      topSet.failed
+    );
     const currentPct = Number(
-      topSet.pct ?? topSet.originalPct ?? topSet.precisePct
+      !isAdjusted && Number(topSet.prescribedPct) > 0
+        ? topSet.prescribedPct
+        : topSet.pct ?? topSet.originalPct ?? topSet.precisePct
     ) || 0;
     const previousPct = roundPercent(
       Number(
@@ -5042,7 +5384,7 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
     });
 
     parts.push(grouped.map(group => {
-      const pctText = formatSmartPrescriptionPercent(group.pct) || '—';
+      const pctText = formatSmartPrescriptionPercent(group.pct) || '-';
       return `${group.count}×${group.reps}×${pctText}`;
     }).join(' + '));
   }
@@ -5362,6 +5704,7 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
     const meetReady = Boolean(
       readiness.meetPlanReady || readiness.meetPlanFullyDemonstrated
     );
+    const isIdealRouteTaper = workout?.smartIdealRoute?.stage === 'taper';
     const phaseSeverity = { opener: 0, 'second-attempt': 1, 'third-attempt': 2 };
     const meetPlanReadinessByLift = readiness.meetPlanReadiness || {};
     const blockingLifts = Object.keys(meetPlanReadinessByLift)
@@ -5374,7 +5717,9 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
         (phaseSeverity[meetPlanReadinessByLift[b]?.readinessPhase] ?? 99)
       );
     const statusText = meetReady
-      ? (t.smartMeetFullyReady || 'Fully meet-ready: all lift goals achieved. Training continues as planned.')
+      ? isIdealRouteTaper
+        ? (t.smartMeetFullyReadyTaper || 'Fully meet-ready: all lift goals achieved. Tapering toward the meet is now underway.')
+        : (t.smartMeetFullyReady || 'Fully meet-ready: all lift goals achieved. Training continues as planned.')
       : blockingLifts.length > 0
         ? `${blockingLifts.join(', ')} (${oneRMBlockerText})`
         : (t.smartMeetPlanNotReady || 'Meet plan not ready');
@@ -6144,7 +6489,7 @@ export function CurrentWorkout({
   function renderActivateWorkoutCard() {
     if (!isReadOnly) return null;
 
-    const workoutNumber = workout?.number || '—';
+    const workoutNumber = workout?.number || '-';
     const confirmText = t.activateWorkoutConfirmText
       .replaceAll('{workout}', workoutNumber);
 
@@ -6461,7 +6806,7 @@ export function CurrentWorkout({
                 : activeWorkoutLiftBlockStyle()}
             >
               <div style={{
-                padding: '2px 10px 4px',
+                padding: isMeetDay ? '0 10px' : '2px 10px 4px',
                 textAlign: 'center',
               }}>
                 {(() => {
@@ -6479,15 +6824,15 @@ export function CurrentWorkout({
                       onClick={() => guideAvailable && setSelectedExerciseGuideLift(liftBlock.lift)}
                       title={guideAvailable ? (t.exerciseGuide || 'Guide') : undefined}
                       aria-label={guideAvailable
-                        ? `${workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)} — ${t.exerciseGuide || 'Guide'}`
+                        ? `${workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}: ${t.exerciseGuide || 'Guide'}`
                         : workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 7,
-                        minHeight: 'clamp(32px, 7vw, 38px)',
-                        padding: '4px 12px',
+                        minHeight: isMeetDay ? 30 : 'clamp(32px, 7vw, 38px)',
+                        padding: isMeetDay ? '2px 10px' : '4px 12px',
                         border: 'none',
                         borderRadius: 8,
                         background: 'transparent',
@@ -6549,6 +6894,7 @@ export function CurrentWorkout({
               <WorkoutLiftGrid
                 testId={`workout-lift-grid-${li}`}
                 columnCount={isMeetDay ? 12 : 4}
+                compactVertical={isMeetDay}
               >
                 <WarmupGrid
                   compactGrid
@@ -6840,7 +7186,7 @@ export function CurrentWorkout({
             ...workoutCompletionButtonStyle({
               enabled: allMeetDone && !isReadOnly,
             }),
-            margin: '2px auto 18px',
+            margin: workoutCompletionButtonMargin({ isMeetDay }),
           }}
         >
           {isReadOnly
@@ -6878,7 +7224,7 @@ export function CurrentWorkout({
           Deadlift: THEME.yellow,
         }[workout.lift] || THEME.meet)
       }}>
-        {t.workout} {workout.number} — {workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant)}
+        {t.workout} {workout.number}: {workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant)}
       </h2>
 
       <div style={{ textAlign: 'center', color: THEME.muted, fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize, marginBottom: smartModel ? 0 : 12 }}>
@@ -7242,7 +7588,7 @@ export function MeetPlanContent({
           fontWeight: 900,
           lineHeight: 1,
         }}>
-          {meetTotals.third ? formatWeightFromKg(meetTotals.third, statsWeightUnit) : '—'}
+          {meetTotals.third ? formatWeightFromKg(meetTotals.third, statsWeightUnit) : '-'}
         </div>
       </div>
 
@@ -7283,7 +7629,7 @@ export function MeetPlanContent({
                   fontWeight: 700,
                   whiteSpace: 'nowrap',
                 }}>
-                  {t.oneRM} {row.oneRM ? formatWeightFromKg(row.oneRM, statsWeightUnit) : '—'}
+                  {t.oneRM} {row.oneRM ? formatWeightFromKg(row.oneRM, statsWeightUnit) : '-'}
                 </span>
               </div>
 
@@ -7326,7 +7672,7 @@ export function MeetPlanContent({
                       fontSize: dashboardLayout ? 'clamp(17px, 4.2vw, 20px)' : 15,
                       fontWeight: 800,
                     }}>
-                      {value ? formatWeightFromKg(value, statsWeightUnit) : '—'}
+                      {value ? formatWeightFromKg(value, statsWeightUnit) : '-'}
                     </div>
                   </div>
                 ))}
@@ -7351,7 +7697,7 @@ export function MeetPlanContent({
         ].map(([label, value]) => (
           <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
             <span style={{ color: THEME.meet, fontWeight: 800 }}>{label}</span>
-            <strong style={{ color: THEME.text }}>{value ? formatWeightFromKg(value, statsWeightUnit) : '—'}</strong>
+            <strong style={{ color: THEME.text }}>{value ? formatWeightFromKg(value, statsWeightUnit) : '-'}</strong>
           </div>
         ))}
       </div>
@@ -9964,11 +10310,62 @@ function App() {
     return 'en';
   });
 
-  const [timer, setTimer] = useState(null);
+  const [timer, setTimer] = useState(() => readPersistedRestTimerState());
   const restTimerNotificationQueueRef = useRef(null);
   if (!restTimerNotificationQueueRef.current) {
     restTimerNotificationQueueRef.current = createRestTimerNotificationQueue();
   }
+  const restTimerAlertedIdRef = useRef(null);
+
+  useEffect(() => {
+    if (!timer) return undefined;
+
+    let deadlineTimeout = null;
+
+    const clearDeadlineTimeout = () => {
+      if (deadlineTimeout !== null) {
+        clearTimeout(deadlineTimeout);
+        deadlineTimeout = null;
+      }
+    };
+
+    const checkDeadline = () => {
+      clearDeadlineTimeout();
+
+      const remainingMs = Number(timer.endTime) - Date.now();
+      if (remainingMs > 0) {
+        deadlineTimeout = setTimeout(checkDeadline, remainingMs);
+        return;
+      }
+
+      if (Capacitor.isNativePlatform()) {
+        restTimerAlertedIdRef.current = timer.id;
+        clearPersistedRestTimerState();
+        return;
+      }
+
+      if (!shouldTriggerRestTimerWebAlert({
+        timer,
+        alertedTimerId: restTimerAlertedIdRef.current,
+      })) {
+        return;
+      }
+
+      if (playRestTimerWebAlert()) {
+        restTimerAlertedIdRef.current = timer.id;
+        clearPersistedRestTimerState();
+      }
+    };
+
+    checkDeadline();
+    document.addEventListener('visibilitychange', checkDeadline);
+
+    return () => {
+      clearDeadlineTimeout();
+      document.removeEventListener('visibilitychange', checkDeadline);
+    };
+  }, [timer]);
+
   const [restTimeSeconds, setRestTimeSeconds] = useState(DEFAULT_REST_TIME_SECONDS);
   const [programProfile, setProgramProfile] = useState(() =>
     normalizeProgramProfile(localStorage.getItem('programProfile'))
@@ -10004,19 +10401,30 @@ function App() {
     const doneTitle = currentTranslations.restTimerDone || 'Rest finished';
     const doneMessage = currentTranslations.restTimerDoneMessage || 'Your next set is ready.';
 
-    setTimer({
+    const nextTimer = {
       id: Date.now(),
       seconds: effectiveSeconds,
       endTime,
       placement,
-    });
+    };
 
-    restTimerNotificationQueueRef.current(() =>
-      scheduleRestTimerNotification(endTime, doneTitle, doneMessage)
-    );
+    persistRestTimerState(nextTimer);
+    setTimer(nextTimer);
+
+    restTimerNotificationQueueRef.current(async () => {
+      const scheduled = await scheduleRestTimerNotification(
+        nextTimer.endTime,
+        doneTitle,
+        doneMessage
+      );
+
+      if (!scheduled) return false;
+      return ensurePendingRestTimerNotification(nextTimer, doneTitle, doneMessage);
+    });
   }
 
   function stopTimer() {
+    clearPersistedRestTimerState();
     restTimerNotificationQueueRef.current(cancelRestTimerNotification);
     setTimer(null);
   }
@@ -10090,6 +10498,59 @@ function App() {
   const [plateCalcWeightKg, setPlateCalcWeightKg] = useState(null);
   const automaticBackupKeyRef = useRef(null);
   const automaticBackupStartupAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    if (!hasLoadedData) return;
+    persistNavigationState(screen, selectedIndex);
+  }, [hasLoadedData, screen, selectedIndex]);
+
+  useEffect(() => {
+    if (!hasLoadedData || !Capacitor.isNativePlatform()) return undefined;
+
+    const currentTranslations = translations[language] || translations.en || {};
+    const doneTitle = currentTranslations.restTimerDone || 'Rest finished';
+    const doneMessage = currentTranslations.restTimerDoneMessage || 'Your next set is ready.';
+
+    const reconcileNativeTimer = () => {
+      const restoredTimer = readPersistedRestTimerState();
+
+      if (!restoredTimer) {
+        if (timer && Number(timer.endTime) <= Date.now()) {
+          setTimer(null);
+        }
+        return;
+      }
+
+      persistRestTimerState(restoredTimer);
+      setTimer(previous => previous || restoredTimer);
+      restTimerNotificationQueueRef.current(() =>
+        ensurePendingRestTimerNotification(restoredTimer, doneTitle, doneMessage)
+      );
+    };
+
+    reconcileNativeTimer();
+
+    let listener;
+    let disposed = false;
+    CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      if (!isActive) {
+        if (timer) persistRestTimerState(timer);
+      }
+
+      reconcileNativeTimer();
+    }).then(nextListener => {
+      if (disposed) {
+        nextListener.remove();
+      } else {
+        listener = nextListener;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      listener?.remove();
+    };
+  }, [hasLoadedData, language, timer]);
 
   useEffect(() => {
     if (screen !== 'current') {
@@ -10444,20 +10905,35 @@ function App() {
         completedWorkoutCount,
         restorableCurrentIndex ?? completedWorkoutCount
       );
+      const fallbackSelectedIndex = isSmartTrainingModel(savedTrainingModel)
+        ? restoredCurrentIndex
+        : Math.max(restoredCurrentIndex, restorableSelectedIndex ?? restoredCurrentIndex);
+      const storedTimer = readPersistedRestTimerState();
+      const restoredTimer = storedTimer && cleanedWorkouts.some(
+        workout => Number(workout?.number) === Number(storedTimer?.placement?.workoutNumber)
+      )
+        ? storedTimer
+        : null;
+      if (storedTimer && !restoredTimer) {
+        clearPersistedRestTimerState();
+      }
+      const restoredNavigation = resolveRestoredNavigationState({
+        navigation: readPersistedNavigationState(cleanedWorkouts.length),
+        activeTimer: restoredTimer,
+        workouts: cleanedWorkouts,
+        fallbackSelectedIndex,
+      });
 
       setCurrentWorkoutIndex(restoredCurrentIndex);
-      setSelectedIndex(
-        isSmartTrainingModel(savedTrainingModel)
-          ? restoredCurrentIndex
-          : Math.max(restoredCurrentIndex, restorableSelectedIndex ?? restoredCurrentIndex)
-      );
+      setSelectedIndex(restoredNavigation.selectedIndex);
+      setTimer(restoredTimer);
 
       setShowNewCycle(
         isSmartTrainingModel(savedTrainingModel)
           ? isSmartCycleCompleteAfterHistory(savedHistory, savedCycle)
           : false
       );
-      setScreen('dashboard');
+      setScreen(restoredNavigation.screen);
       setHasLoadedData(true);
     } catch (e) {
       console.error('Kon opgeslagen user data niet laden', e);
@@ -10595,6 +11071,74 @@ function App() {
 
     setSelectedIndex(currentIndex);
   }, [hasLoadedData, trainingModel, selectedIndex, currentIndex]);
+
+  useEffect(() => {
+    if (!hasLoadedData) return;
+
+    const transition = buildAutomaticNextSmartCycle({
+      trainingModel,
+      currentCycle,
+      history,
+      prs,
+      oneRMs,
+      bodyWeights,
+      programProfile,
+      accessoryMode,
+      accessoryPRs,
+      preparationMode,
+      deadliftVariant,
+      benchPressVariant,
+      squatVariant,
+      cooldownMode,
+      smartIdealRouteStartCycle,
+    });
+
+    if (!transition) return;
+
+    setCurrentCycle(transition.currentCycle);
+    setCycleE1RMs(transition.cycleE1RMs);
+    setWorkouts(transition.workouts);
+    setCurrentWorkoutIndex(transition.currentIndex);
+    setSelectedIndex(transition.selectedIndex);
+    setMeetPlannerAttempts({});
+    setShowNewCycle(screen === 'completed');
+    setShowWorkoutEffortPrompt(false);
+
+    if (screen !== 'completed') {
+      setCompletedWorkout(null);
+      setCompletedWorkoutIndex(null);
+      setCompletedSummary(null);
+      setActiveMilestoneCelebration(null);
+    }
+  }, [
+    hasLoadedData,
+    trainingModel,
+    currentCycle,
+    history,
+    prs,
+    oneRMs,
+    bodyWeights,
+    programProfile,
+    accessoryMode,
+    accessoryPRs,
+    preparationMode,
+    deadliftVariant,
+    benchPressVariant,
+    squatVariant,
+    cooldownMode,
+    smartIdealRouteStartCycle,
+    screen,
+  ]);
+
+  useEffect(() => {
+    if (
+      screen !== 'completed' &&
+      showNewCycle &&
+      isSmartTrainingModel(trainingModel)
+    ) {
+      setShowNewCycle(false);
+    }
+  }, [screen, showNewCycle, trainingModel]);
 
   function handleStart(s, b, d, profile = {}, initialBodyData = null) {
     const today = new Date().toLocaleDateString('nl-NL');
@@ -10735,7 +11279,10 @@ function switchClassicToSmart() {
 
 function handleResetApp() {
   setShowResetConfirm(false);
+  stopTimer();
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(APP_NAVIGATION_STATE_KEY);
+  localStorage.removeItem(REST_TIMER_NOTIFICATION_STATUS_KEY);
   localStorage.removeItem('kel-powerlifting');
   localStorage.removeItem('app_version');
   localStorage.removeItem('bodyweight_prompt_date');
@@ -13718,18 +14265,14 @@ const latestBodyDataRows = [
     label: t.strengthWithMax || 'Strength / Max',
     recentPrGain: dashboardRecentPrEvents.ratios.strengthMaxGain,
     recentPrLabel: t.newStrengthMaxPR || 'New Strength Max',
-    value: strengthRatio
-      ? `${formatDecimalDisplay(strengthRatio, { maximumFractionDigits: 2 })} / ${formatDecimalDisplay(strengthMax || strengthRatio, { maximumFractionDigits: 2 })}`
-      : null,
+    value: formatStrengthRatioWithMax(strengthRatio, strengthMax),
   },
   {
     key: 'eStrength',
     label: t.eStrengthWithMax || 'eStrength / Max',
     recentPrGain: dashboardRecentPrEvents.ratios.eStrengthMaxGain,
     recentPrLabel: t.newEStrengthMaxPR || 'New eStrength Max',
-    value: eStrengthRatio
-      ? `${formatDecimalDisplay(eStrengthRatio, { maximumFractionDigits: 2 })} / ${formatDecimalDisplay(eStrengthMax || eStrengthRatio, { maximumFractionDigits: 2 })}`
-      : null,
+    value: formatStrengthRatioWithMax(eStrengthRatio, eStrengthMax),
   },
 ].filter(row => row.value);
 
@@ -13738,6 +14281,11 @@ const dashboardMeetState = getDashboardMeetState(dashboardCurrentWorkout);
 const dashboardUsesExpandedLayout = shouldUseExpandedDashboardLayout({
   workout: dashboardCurrentWorkout,
   meetState: dashboardMeetState,
+});
+const dashboardUsesCompactLayout = shouldUseCompactDashboardLayout({
+  workout: dashboardCurrentWorkout,
+  meetState: dashboardMeetState,
+  recentPrEvents: dashboardRecentPrEvents,
 });
 const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
   Squat: { oneRM: best1RMs.Squat },
@@ -13751,8 +14299,16 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
     data-testid="app-viewport"
     style={appViewportStyle({
       screen,
-      workoutNeedsNavClearance,
-      allowVerticalScroll: appAllowsVerticalScroll,
+      workoutNeedsNavClearance: shouldReserveWorkoutBottomNavSpace({
+        screen,
+        workout: workouts[selectedIndex],
+        measuredNeedsClearance: workoutNeedsNavClearance,
+      }),
+      allowVerticalScroll: shouldAllowAppVerticalScroll({
+        screen,
+        workout: workouts[selectedIndex],
+        measuredOverflow: appAllowsVerticalScroll,
+      }),
     })}
   >
       {screen === 'current' && (
@@ -13806,7 +14362,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
     style={{
       ...(dashboardMeetState.isMeetDay
         ? meetDayDashboardScreenStyle()
-        : regularDashboardScreenStyle()),
+        : regularDashboardScreenStyle({ compact: dashboardUsesCompactLayout })),
     }}
   >
     <AppHeader
@@ -13844,6 +14400,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
     {!dashboardMeetState.isMeetDay && (
     <div style={regularDashboardContentStyle({
       spreadContent: dashboardUsesExpandedLayout,
+      compact: dashboardUsesCompactLayout,
     })}>
 
     {!dashboardMeetState.isMeetDay && workouts[currentIndex] && (() => {
@@ -14053,7 +14610,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           },
         ];
 
-        const value = weight => weight ? formatWeightFromKg(weight, weightUnit) : '—';
+        const value = weight => weight ? formatWeightFromKg(weight, weightUnit) : '-';
         const openStatsTab = tab => {
           setStatsTab(tab);
           changeScreen('stats');
@@ -14066,7 +14623,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
               gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
               gap: dashboardUsesExpandedLayout
                 ? 'clamp(14px, 2.4dvh, 22px) clamp(12px, 3vw, 16px)'
-                : 'clamp(12px, 3vw, 16px)'
+                : dashboardUsesCompactLayout
+                  ? 'clamp(6px, 0.8dvh, 9px) clamp(12px, 3vw, 16px)'
+                  : 'clamp(12px, 3vw, 16px)'
             }}>
               {cards.map(card => (
                 <div
@@ -14080,7 +14639,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   style={{
                     padding: dashboardUsesExpandedLayout
                       ? 'clamp(6px, 1dvh, 10px) 2px'
-                      : 'clamp(5px, 0.8dvh, 8px) 2px',
+                      : dashboardUsesCompactLayout
+                        ? 'clamp(3px, 0.45dvh, 5px) 2px'
+                        : 'clamp(5px, 0.8dvh, 8px) 2px',
                     cursor: 'pointer',
                   }}
                 >
@@ -14090,7 +14651,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                       ? 'clamp(21px, 5vw, 25px)'
                       : 'clamp(19px, 4.6vw, 23px)',
                     fontWeight: 900,
-                    marginBottom: 'clamp(7px, 1dvh, 10px)',
+                    marginBottom: dashboardUsesCompactLayout
+                      ? 'clamp(5px, 0.7dvh, 7px)'
+                      : 'clamp(7px, 1dvh, 10px)',
                     lineHeight: 1.1
                   }}>
                     {card.label}
@@ -14099,7 +14662,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'auto 1fr',
-                    gap: 'clamp(7px, 0.9dvh, 10px) 10px',
+                    gap: dashboardUsesCompactLayout
+                      ? 'clamp(5px, 0.65dvh, 7px) 10px'
+                      : 'clamp(7px, 0.9dvh, 10px) 10px',
                     alignItems: 'baseline'
                   }}>
                     <span style={{
@@ -14185,7 +14750,12 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       const dashboardBodyRows = latestBodyDataRows.filter(row => dashboardBodyRowTabs[row.key]);
 
       return (
-        <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: '2px 8px 4px' }}>
+        <div style={{
+          background: 'transparent',
+          border: 'none',
+          borderRadius: 8,
+          padding: dashboardUsesCompactLayout ? '0 8px 2px' : '2px 8px 4px',
+        }}>
           {dashboardBodyRows.length > 0 ? (
             dashboardBodyRows.map((row, index) => (
               <div
@@ -14207,8 +14777,14 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   gridTemplateColumns: '1fr auto',
                   alignItems: 'center',
                   columnGap: 14,
-                  padding: 'clamp(6px, 0.9dvh, 10px) 8px',
-                  marginBottom: index === dashboardBodyRows.length - 1 ? 0 : 'clamp(3px, 0.5dvh, 6px)',
+                  padding: dashboardUsesCompactLayout
+                    ? 'clamp(4px, 0.55dvh, 6px) 8px'
+                    : 'clamp(6px, 0.9dvh, 10px) 8px',
+                  marginBottom: index === dashboardBodyRows.length - 1
+                    ? 0
+                    : dashboardUsesCompactLayout
+                      ? 'clamp(2px, 0.3dvh, 3px)'
+                      : 'clamp(3px, 0.5dvh, 6px)',
                   borderRadius: 8,
                   cursor: 'pointer',
                 }}
@@ -14443,7 +15019,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             }}>
               {completedMeetAchievedTotal
                 ? formatWeightFromKg(completedMeetAchievedTotal, weightUnit)
-                : '—'}
+                : '-'}
             </div>
             <div style={{
               display: 'grid',
@@ -14461,7 +15037,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                     {liftLabel(result.lift, t)}
                   </div>
                   <div style={meetCompletedAchievedWeightStyle()}>
-                    {result.weight ? formatWeightFromKg(result.weight, weightUnit) : '—'}
+                    {result.weight ? formatWeightFromKg(result.weight, weightUnit) : '-'}
                   </div>
                 </div>
               ))}
@@ -14502,10 +15078,10 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
               marginBottom: 4,
               textAlign: 'left'
             }}>
-              {summaryRow(t.lifts || t.lift, liftNames || '—')}
-              {summaryRow(t.workout, completedWorkout?.number || '—')}
+              {summaryRow(t.lifts || t.lift, liftNames || '-')}
+              {summaryRow(t.workout, completedWorkout?.number || '-')}
               {summaryRow(t.cycle, currentCycle)}
-              {summaryRow(t.workoutEffortWas, effortLabel || '—')}
+              {summaryRow(t.workoutEffortWas, effortLabel || '-')}
               {autoTooMuchSetCount > 0 && (
                 <p style={{
                   color: THEME.muted,
@@ -14513,7 +15089,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   margin: '2px 0 0',
                   textAlign: 'left'
                 }}>
-                  {(t.workoutEffortAutoTooMuch || 'Automatically marked as TOO MUCH — {count} set(s) failed or skipped.')
+                  {(t.workoutEffortAutoTooMuch || 'Automatically marked as TOO MUCH: {count} set(s) failed or skipped.')
                     .replace('{count}', autoTooMuchSetCount)}
                 </p>
               )}

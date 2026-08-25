@@ -374,7 +374,7 @@ export function shouldTrackLiftBlockStrength(liftBlock = {}, benchPressVariant =
 
 export function getWorkoutTypeLabel(workout, t) {
   const key = getWorkoutTypeKey(workout);
-  return key ? t[key] : '—';
+  return key ? t[key] : '-';
 }
 
 export function normalizePreparationMode(mode) {

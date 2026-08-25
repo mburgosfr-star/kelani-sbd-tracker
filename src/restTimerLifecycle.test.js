@@ -1,11 +1,117 @@
 import {
   createRestTimerNotificationQueue,
   getRestTimerNotificationChannelStatus,
+  hasPendingRestTimerNotification,
   hasMoreMeetSets,
+  normalizePersistedNavigationState,
+  normalizePersistedRestTimerState,
   normalizeRestTimerDoNotDisturbStatus,
+  resolveRestoredNavigationState,
   shouldPlayRestTimerInAppAlert,
+  shouldTriggerRestTimerWebAlert,
 } from './App';
 import { translations } from './translations';
+
+test('active rest timers survive reloads but expired or malformed timers do not', () => {
+  expect(normalizePersistedRestTimerState({
+    id: 10,
+    seconds: 180,
+    endTime: 20_000,
+    placement: { workoutNumber: 8, liftIndex: 0, setIndex: 1 },
+  }, 10_000)).toEqual({
+    id: 10,
+    seconds: 180,
+    endTime: 20_000,
+    placement: { workoutNumber: 8, liftIndex: 0, setIndex: 1 },
+  });
+
+  expect(normalizePersistedRestTimerState({
+    id: 10,
+    seconds: 180,
+    endTime: 10_000,
+  }, 10_000)).toBeNull();
+  expect(normalizePersistedRestTimerState('{broken json', 10_000)).toBeNull();
+});
+
+test('only stable main screens are restored and workout indexes stay in range', () => {
+  expect(normalizePersistedNavigationState({
+    screen: 'stats',
+    selectedIndex: 7,
+  }, 10)).toEqual({
+    screen: 'stats',
+    selectedIndex: 7,
+  });
+
+  expect(normalizePersistedNavigationState({
+    screen: 'completed',
+    selectedIndex: 99,
+  }, 10)).toEqual({
+    screen: 'dashboard',
+    selectedIndex: 9,
+  });
+});
+
+test('an active timer restores its workout instead of the dashboard', () => {
+  expect(resolveRestoredNavigationState({
+    navigation: { screen: 'dashboard', selectedIndex: 0 },
+    activeTimer: {
+      id: 10,
+      seconds: 180,
+      endTime: 20_000,
+      placement: { workoutNumber: 8 },
+    },
+    workouts: [{ number: 7 }, { number: 8 }, { number: 9 }],
+    fallbackSelectedIndex: 0,
+  })).toEqual({
+    screen: 'current',
+    selectedIndex: 1,
+  });
+});
+
+test('pending notification verification recognizes only the Kelani timer alarm', () => {
+  expect(hasPendingRestTimerNotification({
+    notifications: [{ id: 1208 }],
+  })).toBe(true);
+  expect(hasPendingRestTimerNotification({
+    notifications: [{ id: 99 }],
+  })).toBe(false);
+});
+
+test('web rest timer alerts depend on the deadline and visibility, not the active screen', () => {
+  const timer = { id: 44, endTime: 10_000 };
+
+  expect(shouldTriggerRestTimerWebAlert({
+    timer,
+    now: 10_000,
+    isNativePlatform: false,
+    isDocumentHidden: false,
+  })).toBe(true);
+  expect(shouldTriggerRestTimerWebAlert({
+    timer,
+    now: 10_000,
+    isNativePlatform: false,
+    isDocumentHidden: true,
+  })).toBe(false);
+  expect(shouldTriggerRestTimerWebAlert({
+    timer,
+    now: 10_000,
+    isNativePlatform: true,
+    isDocumentHidden: false,
+  })).toBe(false);
+  expect(shouldTriggerRestTimerWebAlert({
+    timer,
+    alertedTimerId: 44,
+    now: 10_000,
+    isNativePlatform: false,
+    isDocumentHidden: false,
+  })).toBe(false);
+  expect(shouldTriggerRestTimerWebAlert({
+    timer,
+    now: 9_999,
+    isNativePlatform: false,
+    isDocumentHidden: false,
+  })).toBe(false);
+});
 
 test('rest timer diagnostics report the actual Android channel settings', () => {
   expect(getRestTimerNotificationChannelStatus([
