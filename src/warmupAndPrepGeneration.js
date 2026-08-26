@@ -65,7 +65,8 @@ function insertDesiredWarmupBridge(weights = [], targetWeight = 0) {
 export function rebalanceWarmupLoadJumps(
   warmupWeights = [],
   targetWeight = 0,
-  maxFirstJumpKg = 55
+  maxFirstJumpKg = 55,
+  doNotExceedDesiredWeights = false
 ) {
   const target = Number(targetWeight) || 0;
   const originalWeights = (warmupWeights || [])
@@ -113,7 +114,10 @@ export function rebalanceWarmupLoadJumps(
       const remainingJumps = finalIndex - index + 1;
       const maximumCandidate = Math.min(
         target - MIN_FINAL_WARMUP_GAP_KG,
-        previousWeight + previousJump
+        previousWeight + previousJump,
+        doNotExceedDesiredWeights
+          ? Number(desiredWeights[index]) || Number.POSITIVE_INFINITY
+          : Number.POSITIVE_INFINITY
       );
       let best = null;
 
@@ -234,6 +238,95 @@ export function generatePrepItems(lift, preparationMode = 'basicFirst') {
   }));
 }
 
+const UNIVERSAL_WARMUP_START_KG = 20;
+const UNIVERSAL_WARMUP_ANCHOR_STEP_KG = 50;
+const UNIVERSAL_WARMUP_MAX_JUMP_KG = 50;
+
+function buildDesiredUniversalWarmupWeights(targetWeight = 0) {
+  const target = Number(targetWeight) || 0;
+  if (target < 30) return [];
+
+  const finalWarmup = Math.floor(target / 10) * 10 - 10;
+  const weights = [UNIVERSAL_WARMUP_START_KG];
+
+  for (
+    let anchor = UNIVERSAL_WARMUP_START_KG + UNIVERSAL_WARMUP_ANCHOR_STEP_KG;
+    anchor < finalWarmup;
+    anchor += UNIVERSAL_WARMUP_ANCHOR_STEP_KG
+  ) {
+    weights.push(anchor);
+  }
+
+  if (
+    finalWarmup > UNIVERSAL_WARMUP_START_KG &&
+    finalWarmup < target &&
+    !weights.includes(finalWarmup)
+  ) {
+    weights.push(finalWarmup);
+  }
+
+  return weights;
+}
+
+function universalWarmupLadderIsValid(weights = [], targetWeight = 0) {
+  const target = Number(targetWeight) || 0;
+  if (target < 30) return weights.length === 0;
+  if (!weights.length || weights[0] !== UNIVERSAL_WARMUP_START_KG) return false;
+  if (weights.some(weight => weight % 10 !== 0 || weight >= target)) return false;
+
+  const ladder = [...weights, target];
+  let previousJump = UNIVERSAL_WARMUP_MAX_JUMP_KG;
+
+  for (let index = 1; index < ladder.length; index += 1) {
+    const jump = ladder[index] - ladder[index - 1];
+    if (jump <= 0 || jump > previousJump + 0.0001) return false;
+    previousJump = jump;
+  }
+
+  return true;
+}
+
+export function generateUniversalWarmupWeights(targetWeight = 0) {
+  const target = Number(targetWeight) || 0;
+  let desiredWeights = buildDesiredUniversalWarmupWeights(target);
+
+  while (desiredWeights.length) {
+    const balancedWeights = rebalanceWarmupLoadJumps(
+      desiredWeights,
+      target,
+      UNIVERSAL_WARMUP_MAX_JUMP_KG,
+      true
+    );
+
+    if (universalWarmupLadderIsValid(balancedWeights, target)) {
+      return balancedWeights;
+    }
+
+    desiredWeights = desiredWeights.slice(0, -1);
+  }
+
+  return [];
+}
+
+export function distributeUniversalWarmupReps(warmupCount = 0, targetReps = 1) {
+  const count = Math.max(Math.floor(Number(warmupCount) || 0), 0);
+  if (count === 0) return [];
+
+  const repetitionFloor = Math.min(
+    Math.max(Math.floor(Number(targetReps) || 1), 1),
+    5
+  );
+  const allowedReps = [5, 3, 1].filter(reps => reps >= repetitionFloor);
+  const baseCount = Math.floor(count / allowedReps.length);
+  const remainder = count % allowedReps.length;
+
+  return allowedReps.flatMap((reps, index) =>
+    Array.from({
+      length: baseCount + (index < remainder ? 1 : 0),
+    }, () => reps)
+  );
+}
+
 export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false) {
   const workSets = Array.isArray(workPlan)
     ? workPlan.filter(set => Number(set?.weight) > 0)
@@ -241,7 +334,7 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
 
   if (!workSets.length) return [];
 
-  function isTopWarmupTarget(set = {}) {
+  function isFirstMainSet(set = {}) {
     return (
       isTopSetLabel(set.labelKey) ||
       set.labelKey === 'opener' ||
@@ -250,356 +343,16 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
     );
   }
 
-  const highestWorkWeight = Math.max(...workSets.map(set => Number(set.weight) || 0));
-  const topSet = workSets.find(isTopWarmupTarget);
-  // Attempt plans are ordered opener -> second -> third. Warm-ups prepare
-  // the first actual work set (the opener), not the heaviest later attempt.
-  const targetSet = topSet ||
-    workSets.find(set => Number(set.weight) === highestWorkWeight) ||
-    workSets[0];
-  const targetWeight = Number(targetSet?.weight) || highestWorkWeight;
-  const lowestWorkWeight = Math.min(...workSets.map(set => Number(set.weight) || 0));
-  const normalizedLift = String(lift || '');
-  const isLowerBodyLift = ['Squat', 'Deadlift'].includes(normalizedLift);
-  // Squat/Deadlift may add at most 55kg (one 25kg + one 2.5kg plate per
-  // side): a jump of 60kg or more is forbidden. The single-lift-day
-  // widening was calibrated for Bench/OHP's narrower 40kg base and, applied
-  // to Squat/Deadlift too, skips a genuinely necessary bridge step (see the
-  // C3W30 Squat report: missing 70kg bridge between 20kg and a 125kg top).
-  const MAX_WARMUP_JUMP_KG = isLowerBodyLift
-    ? 55
-    : 40 + (isSingleLiftWorkout ? 20 : 0);
-  const WARMUP_BRIDGE_STEP_KG = isLowerBodyLift
-    ? 50
-    : MAX_WARMUP_JUMP_KG;
-
-  if (targetWeight < 30) return [];
-
-  function roundTo10(weight) {
-    return Math.round((Number(weight) || 0) / 10) * 10;
-  }
-
-  function roundDown10(weight) {
-    return Math.floor((Number(weight) || 0) / 10) * 10;
-  }
-
+  // Top-set and attempt plans identify their first main set explicitly.
+  // Every other prescription warms up for its first displayed work set.
+  const targetSet = workSets.find(isFirstMainSet) || workSets[0];
+  const targetWeight = Number(targetSet?.weight) || 0;
   const targetReps = Math.max(Number(targetSet?.reps) || 1, 1);
-  const hasTopSet = Boolean(topSet);
+  const weights = generateUniversalWarmupWeights(targetWeight);
+  const reps = distributeUniversalWarmupReps(weights.length, targetReps);
 
-  const highestNonTopWorkSet = workSets
-    .filter(set => !isTopWarmupTarget(set))
-    .filter(set => Number(set.weight) >= 40 && Number(set.weight) < targetWeight)
-    .sort((a, b) => Number(b.weight) - Number(a.weight))[0] || null;
-  const highestNonTopWorkWeight = Number(highestNonTopWorkSet?.weight) || null;
-
-  const hasCloseBackoff =
-    hasTopSet &&
-    highestNonTopWorkWeight &&
-    targetWeight - highestNonTopWorkWeight <= 25 &&
-    targetReps > 1;
-
-  const reusableBackoffWarmupWeight =
-    highestNonTopWorkWeight > 20
-      ? roundDown10(highestNonTopWorkWeight)
-      : 0;
-  const usesReusableRoundBackoffWarmup =
-    hasTopSet &&
-    targetReps <= 1 &&
-    reusableBackoffWarmupWeight > 20 &&
-    reusableBackoffWarmupWeight < targetWeight &&
-    reusableBackoffWarmupWeight <= highestNonTopWorkWeight &&
-    targetWeight - reusableBackoffWarmupWeight <= MAX_WARMUP_JUMP_KG;
-  const usesReusableTaperBackoffWarmup =
-    hasTopSet &&
-    targetReps >= 3 &&
-    reusableBackoffWarmupWeight > 20 &&
-    reusableBackoffWarmupWeight < targetWeight &&
-    targetWeight - reusableBackoffWarmupWeight <= MAX_WARMUP_JUMP_KG;
-
-  function finalWarmupWeight() {
-    if (hasTopSet) {
-      if (
-        normalizedLift === 'Bench' &&
-        targetReps >= 3 &&
-        highestNonTopWorkWeight > 20 &&
-        targetWeight - highestNonTopWorkWeight <= MAX_WARMUP_JUMP_KG
-      ) {
-        return highestNonTopWorkWeight;
-      }
-
-      if (usesReusableRoundBackoffWarmup || usesReusableTaperBackoffWarmup) {
-        return reusableBackoffWarmupWeight;
-      }
-
-      if (hasCloseBackoff) {
-        return roundDown10(highestNonTopWorkWeight);
-      }
-
-      if (targetReps <= 1) return roundTo10(targetWeight * 0.92);
-      if (targetReps === 2) return roundTo10(targetWeight * 0.88);
-      return roundTo10(targetWeight * 0.82);
-    }
-
-    return roundDown10(targetWeight - 10);
-  }
-
-  function cleanWarmupWeight(weight) {
-    const rounded = roundTo10(weight);
-    const reusesBenchBackoff =
-      normalizedLift === 'Bench' &&
-      hasTopSet &&
-      targetReps >= 3 &&
-      rounded === roundTo10(highestNonTopWorkWeight);
-
-    if (rounded <= 20) return null;
-
-    if (
-      !hasCloseBackoff &&
-      !usesReusableRoundBackoffWarmup &&
-      !usesReusableTaperBackoffWarmup &&
-      !reusesBenchBackoff &&
-      normalizedLift !== 'Bench' &&
-      rounded >= lowestWorkWeight
-    ) {
-      const belowLowestWorkWeight = roundDown10(lowestWorkWeight - 0.001);
-      return belowLowestWorkWeight > 20 ? belowLowestWorkWeight : null;
-    }
-
-    if (rounded >= targetWeight) return null;
-    if (targetWeight - rounded < 7.5) return null;
-
-    // On top set + close backoff days, do not insert a warm-up above the later backoff.
-    // Example: Bench top 77.5, backoff 67.5 must not create 70.
-    if (hasCloseBackoff && rounded > highestNonTopWorkWeight) return null;
-
-    return rounded;
-  }
-
-  function repsForWarmup(weight, isFinalWarmup) {
-    if (weight === 20) return 5;
-    if (isLowerBodyLift && weight <= 70 && !isFinalWarmup) return 5;
-    // A secondary/tertiary (no top set) block's own work-set reps don't
-    // belong on its warm-ups - a warm-up is never the actual working
-    // stimulus, so it stays at a full 5 reps regardless of whether the work
-    // sets themselves are 4, 5 or 6 reps.
-    if (!hasTopSet) return 5;
-
-    const actuallyReusesBackoffWeight =
-      weight === reusableBackoffWarmupWeight;
-    if (
-      (
-        hasCloseBackoff ||
-        (
-          (usesReusableRoundBackoffWarmup || usesReusableTaperBackoffWarmup) &&
-          actuallyReusesBackoffWeight
-        )
-      ) &&
-      isFinalWarmup
-    ) {
-      return Math.min(3, Math.max(Number(highestNonTopWorkSet?.reps) || targetReps, 1));
-    }
-
-    const distanceToTarget = targetWeight - weight;
-
-    if (targetReps <= 1) {
-      // At beginner lower-body loads, the final warm-up is still important
-      // technique practice. A single at 30kg before a 37.5kg top single is
-      // needlessly sparse; three reps rehearse the movement without adding
-      // meaningful taper fatigue. Keep heavier top-single ladders unchanged.
-      if (
-        isLowerBodyLift &&
-        targetWeight <= 50 &&
-        isFinalWarmup
-      ) {
-        return 3;
-      }
-      if (isFinalWarmup || distanceToTarget <= 20) return 1;
-      if (distanceToTarget <= 50) return 3;
-      return 5;
-    }
-
-    if (targetReps === 2) {
-      // A top double needs enough rehearsal to establish the movement and
-      // brace without turning its final warm-up into a competing single.
-      // Keep the whole ladder at 5/3 reps; never prescribe 1 or 2 reps.
-      if (distanceToTarget <= 60) return 3;
-      return 5;
-    }
-
-    if (isFinalWarmup) return Math.min(3, targetReps);
-    if (distanceToTarget <= 60) return 3;
-    return 5;
-  }
-
-  const warmupWeights = [20];
-
-  if (hasTopSet) {
-    const finalWeight = cleanWarmupWeight(finalWarmupWeight());
-
-    if (finalWeight) {
-      let last = 20;
-      const bridgeJumpLimit =
-        normalizedLift === 'Bench' &&
-        (usesReusableTaperBackoffWarmup || targetReps >= 3)
-          ? 50
-          : MAX_WARMUP_JUMP_KG;
-
-      while (finalWeight - last > bridgeJumpLimit) {
-        const bridge = cleanWarmupWeight(last + WARMUP_BRIDGE_STEP_KG);
-        if (!bridge || bridge <= last || bridge >= finalWeight) break;
-
-        warmupWeights.push(bridge);
-        last = bridge;
-      }
-
-      if (!warmupWeights.includes(finalWeight)) {
-        warmupWeights.push(finalWeight);
-      }
-    }
-  } else {
-    // No top/attempt set to bridge into - just close the gap to the actual
-    // work weight in <= MAX_WARMUP_JUMP_KG steps, without an extra rung
-    // padded in right next to the target. Regression boundary: a 100kg
-    // warm-up 10kg under a 110kg *light* work set added nothing - "5x20,
-    // 5x70" straight into the work sets was what he actually wanted.
-    let last = 20;
-
-    while (targetWeight - last > MAX_WARMUP_JUMP_KG) {
-      const bridge = cleanWarmupWeight(last + WARMUP_BRIDGE_STEP_KG);
-      if (!bridge || bridge <= last || bridge >= targetWeight) break;
-
-      warmupWeights.push(bridge);
-      last = bridge;
-    }
-
-    // A repeated submaximal work block does not benefit from loading its
-    // final 5-rep warm-up as close to the work weight as possible. Balance
-    // that last transition around the midpoint instead, for every lift,
-    // while the later rebalance still enforces non-increasing load jumps.
-    // C4W9: Deadlift 20 -> 70 -> 100 -> 127.5; Bench 20 -> 50 -> 72.5.
-    if (warmupWeights.length >= 2) {
-      const finalIndex = warmupWeights.length - 1;
-      const previousWarmupWeight = warmupWeights[finalIndex - 1];
-      const redistributedFinalWarmup = cleanWarmupWeight(
-        (previousWarmupWeight + targetWeight) / 2
-      );
-
-      if (
-        redistributedFinalWarmup > previousWarmupWeight &&
-        redistributedFinalWarmup < targetWeight
-      ) {
-        warmupWeights[finalIndex] = redistributedFinalWarmup;
-      }
-    }
-  }
-
-  const sortedWarmupWeights = warmupWeights
-    .filter((weight, index, weights) => weight > 0 && weights.indexOf(weight) === index)
-    .sort((a, b) => a - b);
-
-  // A close backoff can nominate a final warm-up only 5kg below the later
-  // volume work. Prefer the preceding bridge when that bridge already sits
-  // within the lower-body max jump of the top set. C3W46 Deadlift: the
-  // useful ladder into 170 is 20 -> 70 -> 120; 140 adds fatigue immediately
-  // before both the top double and 145kg backoffs.
-  if (hasCloseBackoff && sortedWarmupWeights.length >= 3) {
-    const finalIndex = sortedWarmupWeights.length - 1;
-    const finalWeight = sortedWarmupWeights[finalIndex];
-    const previousWeight = sortedWarmupWeights[finalIndex - 1];
-    const sitsRightBelowBackoff =
-      highestNonTopWorkWeight - finalWeight < 7.5;
-    const previousAlreadyBridgesTop =
-      targetWeight - previousWeight <= MAX_WARMUP_JUMP_KG;
-
-    if (
-      sitsRightBelowBackoff &&
-      previousAlreadyBridgesTop &&
-      !usesReusableTaperBackoffWarmup
-    ) {
-      sortedWarmupWeights.pop();
-    }
-  }
-
-  const prunedWarmupWeights = sortedWarmupWeights
-    .filter((weight, index, weights) => {
-      if (index <= 1) return true;
-
-      const previousWeight = Number(weights[index - 1]) || 0;
-      const currentWeight = Number(weight) || 0;
-      const target = Number(targetWeight) || 0;
-
-      if (!previousWeight || !currentWeight || !target) return true;
-
-      const distanceFromPrevious = currentWeight - previousWeight;
-      const distanceToWork = target - currentWeight;
-
-      if (
-        (usesReusableRoundBackoffWarmup || usesReusableTaperBackoffWarmup) &&
-        currentWeight === reusableBackoffWarmupWeight
-      ) {
-        return true;
-      }
-
-      if (
-        normalizedLift === 'Bench' &&
-        hasTopSet &&
-        targetReps >= 3 &&
-        currentWeight === roundTo10(targetWeight * 0.82)
-      ) {
-        return true;
-      }
-
-      return distanceToWork <= distanceFromPrevious;
-    });
-
-  // Pruning against lighter backoffs must never reopen an unsafe jump into
-  // a heavier top set. A warm-up above the later backoff is valid because
-  // the top set happens first. Enforce the lower-body <60kg ceiling after
-  // every pruning decision (C3W52 Squat: 20 -> 70 -> 120 -> 135).
-  if (hasTopSet && isLowerBodyLift) {
-    let lastWarmupWeight = prunedWarmupWeights.at(-1) || 20;
-
-    while (targetWeight - lastWarmupWeight > MAX_WARMUP_JUMP_KG) {
-      const bridge = roundDown10(Math.min(
-        lastWarmupWeight + WARMUP_BRIDGE_STEP_KG,
-        targetWeight - 7.5
-      ));
-      if (bridge <= lastWarmupWeight || bridge >= targetWeight) break;
-
-      prunedWarmupWeights.push(bridge);
-      lastWarmupWeight = bridge;
-    }
-  }
-
-  const balancedWarmupWeights = rebalanceWarmupLoadJumps(
-    prunedWarmupWeights,
-    targetWeight,
-    MAX_WARMUP_JUMP_KG
-  );
-
-  const computedReps = balancedWarmupWeights.map((weight, index, weights) => {
-    const isFinalWarmup = index === weights.length - 1 && weight !== 20;
-    return repsForWarmup(weight, isFinalWarmup);
-  });
-
-  // Invariants enforced here regardless of which branch above computed each
-  // step: a warm-up is never exactly 2 reps, every warm-up before a top
-  // double is at least 3 reps, and reps never increase as weight climbs.
-  const normalizedReps = computedReps.reduce((result, rawReps, index) => {
-    const withoutTwo = rawReps === 2 ? 3 : rawReps;
-    const withTopDoubleMinimum = targetReps === 2
-      ? Math.max(withoutTwo, 3)
-      : withoutTwo;
-    const capped = index > 0
-      ? Math.min(withTopDoubleMinimum, result[index - 1])
-      : withTopDoubleMinimum;
-
-    result.push(capped);
-    return result;
-  }, []);
-
-  return balancedWarmupWeights.map((weight, index) => ({
-    reps: normalizedReps[index],
+  return weights.map((weight, index) => ({
+    reps: reps[index],
     weight,
     originalWeight: weight,
     done: false,

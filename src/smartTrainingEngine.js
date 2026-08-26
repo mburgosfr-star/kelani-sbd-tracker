@@ -43,7 +43,6 @@ import {
   removeDeprecatedPrepItemsFromWorkouts,
   generateWarmups,
   generatePrepItems,
-  rebalanceWarmupLoadJumps,
   roundMeetWeight,
 } from './warmupAndPrepGeneration';
 import {
@@ -2586,69 +2585,11 @@ function buildSmartDeloadWorkout(sourceWorkout = {}, trainingCandidate = null, r
 
 export function buildSmartMeetWarmups(openerWeight = 0, lift = '') {
   const opener = Number(openerWeight) || 0;
-  if (opener < 30) return [];
-
-  const weights = [20];
-  let lastWeight = 20;
-
-  // Meet warm-ups prepare the opener, not the heaviest planned attempt.
-  // Add clean 50kg plate jumps until the remaining jump is at most 55kg.
-  while (opener - lastWeight > 55) {
-    const nextWeight = lastWeight + 50;
-    if (nextWeight >= opener) break;
-    weights.push(nextWeight);
-    lastWeight = nextWeight;
-  }
-
-  // A light Squat or Deadlift opener still needs one useful movement-
-  // specific step after the empty bar. Choose the round 10kg rung nearest
-  // the midpoint that keeps the final jump no larger than the first. This
-  // gives beginner meet ladders such as 20 -> 30 -> 37.5 for Squat and
-  // 20 -> 40 -> 55 for Deadlift. Bench 20 -> 30 is already sufficiently
-  // close and deliberately stays unchanged.
-  if (
-    weights.length === 1 &&
-    ['Squat', 'Deadlift'].includes(lift)
-  ) {
-    const midpoint = (20 + opener) / 2;
-    const candidates = [];
-
-    for (let weight = 30; weight <= opener - 5; weight += 10) {
-      const firstJump = weight - 20;
-      const finalJump = opener - weight;
-      if (finalJump <= firstJump) candidates.push(weight);
-    }
-
-    const balancedBridge = candidates.sort((a, b) => (
-      Math.abs(a - midpoint) - Math.abs(b - midpoint) || a - b
-    ))[0];
-
-    if (balancedBridge) weights.push(balancedBridge);
-  }
-
-  const balancedWeights = rebalanceWarmupLoadJumps(weights, opener, 55);
-
-  return balancedWeights.map((weight, index) => {
-    const isFinalWarmup = index === balancedWeights.length - 1 && index > 0;
-    const reps = index === 0
-      ? 5
-      : opener <= 75 && ['Squat', 'Deadlift'].includes(lift)
-        ? 3
-      : lift === 'Squat'
-        ? (isFinalWarmup ? 1 : 3)
-        : lift === 'Bench'
-          ? 3
-          : weight <= 75
-            ? 5
-            : 3;
-
-    return {
-      reps,
-      weight,
-      originalWeight: weight,
-      done: false,
-    };
-  });
+  return generateWarmups([{
+    labelKey: 'opener',
+    reps: 1,
+    weight: opener,
+  }], lift);
 }
 
 export function buildSmartMeetAttemptSets(lift = '', readiness = {}, fallbackSets = []) {
@@ -3747,84 +3688,6 @@ function getSmartIdealHeavyTopWeight({
   return Math.min(Math.max(target, minimum), cycleCap);
 }
 
-function padSmartIdealWarmupsToGrid(warmups = [], sets = []) {
-  const nextWarmups = (warmups || []).map(item => ({ ...item }));
-  const remainder = (nextWarmups.length + (sets || []).length) % SMART_LIFT_GRID_COLUMNS;
-  const addCount = (SMART_LIFT_GRID_COLUMNS - remainder) % SMART_LIFT_GRID_COLUMNS;
-
-  if (addCount === 0) return nextWarmups;
-
-  const onlySet = (sets || []).length === 1 ? sets[0] : null;
-  const targetWeight = Number(onlySet?.weight) || 0;
-  const isLowLoadTopSingle = Boolean(
-    onlySet?.labelKey === 'topSingle' &&
-    Number(onlySet?.reps) === 1 &&
-    targetWeight >= 45 &&
-    targetWeight <= 60 &&
-    nextWarmups.length < 3
-  );
-
-  if (isLowLoadTopSingle) {
-    const finalWarmupWeight = Math.floor(
-      (targetWeight - 0.001) / 10
-    ) * 10;
-    const middleWarmupWeight = finalWarmupWeight - 10;
-    const candidateWeights = [20, middleWarmupWeight, finalWarmupWeight];
-    const candidateJumps = [
-      candidateWeights[1] - candidateWeights[0],
-      candidateWeights[2] - candidateWeights[1],
-      targetWeight - candidateWeights[2],
-    ];
-    const hasValidLowLoadLadder = Boolean(
-      candidateWeights.every((weight, index) => (
-        weight >= 20 &&
-        weight % 10 === 0 &&
-        (index === 0 || weight > candidateWeights[index - 1]) &&
-        weight < targetWeight
-      )) &&
-      candidateJumps[0] >= candidateJumps[1] &&
-      candidateJumps[1] >= candidateJumps[2] &&
-      candidateJumps[2] >= 5
-    );
-
-    if (hasValidLowLoadLadder) {
-      return candidateWeights.map((weight, index) => ({
-        reps: [5, 3, 1][index],
-        weight,
-        originalWeight: weight,
-        done: false,
-      }));
-    }
-  }
-
-  const lightestWorkWeight = Math.min(
-    ...(sets || [])
-      .map(set => Number(set?.weight) || 0)
-      .filter(weight => weight > 0)
-  );
-  const safeFallbackWeight = Number.isFinite(lightestWorkWeight)
-    ? Math.max(
-      2.5,
-      Math.floor((lightestWorkWeight * 0.5) / 2.5) * 2.5
-    )
-    : 20;
-  const template = nextWarmups[0] || {
-    reps: 5,
-    weight: safeFallbackWeight,
-    originalWeight: safeFallbackWeight,
-    done: false,
-  };
-
-  for (let index = 0; index < addCount; index += 1) {
-    nextWarmups.unshift({
-      ...template,
-      done: false,
-    });
-  }
-
-  return nextWarmups;
-}
-
 function distributeSmartIdealTaperReps(sets = [], targetTotalReps = 12) {
   const count = sets.length;
   if (count === 0) return sets;
@@ -3873,12 +3736,7 @@ function applySmartIdealRouteMetadata(
   );
 
   const lifts = (workout.lifts || []).map(liftBlock => {
-    const warmups = usesCombinedFourColumnGrid
-      ? padSmartIdealWarmupsToGrid(
-        liftBlock.warmups || [],
-        liftBlock.sets || []
-      )
-      : (liftBlock.warmups || []).map(item => ({ ...item }));
+    const warmups = (liftBlock.warmups || []).map(item => ({ ...item }));
 
     return {
       ...liftBlock,
@@ -3982,6 +3840,26 @@ export function buildSmartIdealTrainingWorkout({
       routeWorkout.lifts.length === 1
     );
 
+    // A taper opener remains the only fixed main set, but its universal
+    // warm-up count determines how many light back-offs fit in the remaining
+    // four-column cells. Do not manufacture duplicate warm-ups for layout.
+    if (isTaper && isHeavy && !sets.some(set => set.labelKey === 'backoff')) {
+      const addCount = (
+        SMART_LIFT_GRID_COLUMNS -
+        ((warmups.length + sets.length) % SMART_LIFT_GRID_COLUMNS)
+      ) % SMART_LIFT_GRID_COLUMNS;
+
+      sets.push(...Array.from({ length: addCount }, () => buildSmartIdealSet({
+        lift: routeLift.lift,
+        labelKey: 'backoff',
+        reps: 3,
+        pct: 0.60,
+        trainingMax,
+        groupKey: `${routeLift.lift}-taper-backoff`,
+        prescribedPct: 0.60,
+      })));
+    }
+
     if (sets.some(set => ['backoff', 'workSets'].includes(set.labelKey))) {
       sets = completeSmartLiftGrid({
         sets,
@@ -4002,8 +3880,6 @@ export function buildSmartIdealTrainingWorkout({
         routeWorkout.lifts.length === 1
       );
     }
-
-    warmups = padSmartIdealWarmupsToGrid(warmups, sets);
 
     const role = liftIndex === 0
       ? 'primary'

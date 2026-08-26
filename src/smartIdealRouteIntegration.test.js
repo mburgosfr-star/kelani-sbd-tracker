@@ -576,7 +576,6 @@ test('an almost meet-ready legacy beginner keeps the W17-W18-W19 route after HAR
   expect(meet.lifts.find(block => block.lift === 'Squat').warmups)
     .toEqual([
       { reps: 5, weight: 20, originalWeight: 20, done: false },
-      { reps: 3, weight: 30, originalWeight: 30, done: false },
     ]);
   expect(meet.lifts.find(block => block.lift === 'Bench').warmups)
     .toEqual([
@@ -734,7 +733,7 @@ test('normal heavy phase changes guarantee a 2.5 kg rise when the cycle cap allo
   expect(topWeights).toEqual([35, 37.5, 40]);
 });
 
-test('beginner W22 keeps four-column grids and rehearses the final squat warmup for three reps', () => {
+test('beginner W22 lets universal warmups determine the remaining taper backoffs', () => {
   const routeWorkout = getSmartIdealRouteWorkout({
     workoutNumber: 22,
     athleteLevel: 'beginner',
@@ -754,10 +753,8 @@ test('beginner W22 keeps four-column grids and rehearses the final squat warmup 
   expect(squat.warmups.map(({ weight, reps }) => ({ weight, reps })))
     .toEqual([
       { weight: 20, reps: 5 },
-      { weight: 20, reps: 5 },
-      { weight: 30, reps: 3 },
     ]);
-  expect(squat.sets).toHaveLength(1);
+  expect(squat.sets).toHaveLength(3);
   expect(squat.sets[0]).toMatchObject({
     weight: 37.5,
     reps: 1,
@@ -765,6 +762,15 @@ test('beginner W22 keeps four-column grids and rehearses the final squat warmup 
     precisePct: 0.9,
     prescribedPct: 0.9,
   });
+  expect(squat.sets.slice(1)).toEqual(
+    expect.arrayContaining(Array.from({ length: 2 }, () => expect.objectContaining({
+      labelKey: 'backoff',
+      weight: 25,
+      reps: 3,
+      precisePct: 0.6,
+      prescribedPct: 0.6,
+    })))
+  );
   expect(squat.warmups.length + squat.sets.length).toBe(4);
 
   expect(bench.warmups).toHaveLength(0);
@@ -794,15 +800,21 @@ test('beginner W24 uses a useful four-column deadlift ladder and preserves the p
     .toEqual([
       { weight: 20, reps: 5 },
       { weight: 40, reps: 3 },
-      { weight: 50, reps: 1 },
     ]);
-  expect(deadlift.sets).toHaveLength(1);
+  expect(deadlift.sets).toHaveLength(2);
   expect(deadlift.sets[0]).toMatchObject({
     weight: 55,
     reps: 1,
     pct: 0.925,
     precisePct: 0.9,
     prescribedPct: 0.9,
+  });
+  expect(deadlift.sets[1]).toMatchObject({
+    labelKey: 'backoff',
+    weight: 35,
+    reps: 3,
+    precisePct: 0.6,
+    prescribedPct: 0.6,
   });
   expect(deadlift.warmups.length + deadlift.sets.length).toBe(4);
 
@@ -876,11 +888,17 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
           workout.smartIdealRoute?.stage === 'taper' &&
           liftBlock.intensityRole === 'heavy'
         ) {
-          expect(workSets).toHaveLength(1);
           expect(workSets[0]).toMatchObject({
             labelKey: 'topSingle',
             reps: 1,
             precisePct: 0.9,
+          });
+          workSets.slice(1).forEach(set => {
+            expect(set).toMatchObject({
+              labelKey: 'backoff',
+              reps: 3,
+              precisePct: 0.6,
+            });
           });
         }
       });

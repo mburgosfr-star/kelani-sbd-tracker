@@ -783,11 +783,28 @@ export function getRestorableSelectedIndex(inProgress, currentCycle, totalWorkou
 }
 
 export function normalizeBodyWeights(data) {
-  const entries = [];
+  const entriesByIdentity = new Map();
+  let sourceOrder = 0;
+  const bodyDataFields = [
+    'bodyWeight',
+    'bodyFat',
+    'bodyWater',
+    'visceralFat',
+    'leanMass',
+    'physiqueRating',
+  ];
 
-  function normalizedBodyEntry(entry, fallbackWorkoutNumber = 0) {
+  function normalizedBodyEntry(
+    entry,
+    fallbackWorkoutNumber = 0,
+    { allowWeightAlias = false } = {}
+  ) {
     const bodyData = {
-      bodyWeight: toOptionalNumber(entry.bodyWeight || entry.weight || entry.bodyWeightToday),
+      bodyWeight: toOptionalNumber(
+        entry.bodyWeight ||
+        entry.bodyWeightToday ||
+        (allowWeightAlias ? entry.weight : null)
+      ),
       bodyFat: toOptionalNumber(entry.bodyFat),
       bodyWater: toOptionalNumber(entry.bodyWater),
       visceralFat: toOptionalNumber(entry.visceralFat),
@@ -803,42 +820,64 @@ export function normalizeBodyWeights(data) {
         ? Number(entry.workoutNumber)
         : fallbackWorkoutNumber,
       cycle: getEntryCycle(entry),
-      date: entry.date || new Date().toLocaleDateString('nl-NL'),
-      timestamp: entry.timestamp || new Date().toISOString(),
+      date: entry.date || null,
+      timestamp: entry.timestamp || null,
       ...bodyData,
     };
   }
 
-  (data.bodyWeights || []).forEach((entry, index) => {
-    const normalized = normalizedBodyEntry(entry, index);
-    if (normalized) entries.push(normalized);
-  });
+  function addBodyEntry(entry, fallbackWorkoutNumber = 0, options = {}) {
+    const normalized = normalizedBodyEntry(entry, fallbackWorkoutNumber, options);
+    if (!normalized) return;
 
-  (data.history || []).forEach(entry => {
-    const normalized = normalizedBodyEntry(entry, 0);
-    if (normalized) entries.push(normalized);
-  });
+    // Body data is entered once per calendar day. The workout position is a
+    // chart anchor, not its identity: several daily updates can legitimately
+    // happen while the user remains on the same workout.
+    const identity = normalized.date
+      ? `date:${normalized.date}`
+      : `workout:${normalized.cycle}-${normalized.workoutNumber}`;
+    const existing = entriesByIdentity.get(identity);
+    const merged = existing ? { ...existing.entry } : { ...normalized };
 
+    bodyDataFields.forEach(field => {
+      if (normalized[field] !== null) merged[field] = normalized[field];
+    });
+    ['workoutNumber', 'cycle', 'date', 'timestamp'].forEach(field => {
+      if (normalized[field] !== null && normalized[field] !== undefined) {
+        merged[field] = normalized[field];
+      }
+    });
+
+    entriesByIdentity.set(identity, {
+      entry: merged,
+      order: sourceOrder,
+    });
+    sourceOrder += 1;
+  }
+
+  // Process compatibility sources first. The dedicated bodyWeights array is
+  // the canonical store and must always win when an older history field or
+  // bodyWeightToday value describes the same day/workout.
   if (data.bodyWeightToday) {
     const completedWorkouts = (data.history || []).filter(
       h => h.lift && h.workoutNumber > 0
     ).length;
 
-    const normalized = normalizedBodyEntry({
+    addBodyEntry({
       workoutNumber: completedWorkouts,
       bodyWeight: data.bodyWeightToday,
     }, completedWorkouts);
-
-    if (normalized) entries.push(normalized);
   }
 
-  const byWorkout = {};
-
-  entries.forEach(entry => {
-    byWorkout[`${getEntryCycle(entry)}-${entry.workoutNumber}`] = entry;
+  (data.history || []).forEach(entry => {
+    addBodyEntry(entry, 0);
   });
 
-  return Object.values(byWorkout).sort(
-    (a, b) => getAbsoluteWorkoutIndex(a) - getAbsoluteWorkoutIndex(b)
-  );
+  (data.bodyWeights || []).forEach((entry, index) => {
+    addBodyEntry(entry, index, { allowWeightAlias: true });
+  });
+
+  return [...entriesByIdentity.values()]
+    .sort((a, b) => a.order - b.order)
+    .map(record => record.entry);
 }

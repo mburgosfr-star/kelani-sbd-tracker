@@ -254,7 +254,7 @@ test('progresses the repeated C3W24 Deadlift double to 85% and completes both gr
   const deadliftWarmups = generateWarmups(deadliftSets, 'Deadlift');
 
   expect(deadliftSets.filter(set => set.labelKey === 'backoff'))
-    .toHaveLength(4);
+    .toHaveLength(3);
   expect(deadliftWarmups.length + deadliftSets.length).toBe(8);
   expect((deadliftWarmups.length + deadliftSets.length) % 4).toBe(0);
 
