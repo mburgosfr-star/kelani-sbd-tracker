@@ -4,4 +4,8 @@
     <string name="title_activity_main">Kelani SBD Tracker</string>
     <string name="package_name">com.kelani.sbdtracker</string>
     <string name="custom_url_scheme">com.kelani.sbdtracker</string>
+    <string name="rest_timer_channel_name">Kelani rest timer</string>
+    <string name="rest_timer_channel_description">Rest timer alerts</string>
+    <string name="rest_timer_notification_title">Rest finished</string>
+    <string name="rest_timer_notification_body">Your next set is ready.</string>
 </resources>

@@ -26,6 +26,7 @@
     "start": "vite",
     "build": "VITE_APP_VERSION=$npm_package_version vite build",
     "test": "node scripts/run-tests.js",
+    "privacy:check": "node scripts/check-public-repository-boundary.js",
     "android:release-apk": "node scripts/build-release-apk.js",
     "github:release": "npm run release:publish",
     "android:izzy-test": "node scripts/test-izzy-build.js",

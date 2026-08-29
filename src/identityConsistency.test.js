@@ -94,7 +94,6 @@ test('README, VERIFY and BRANDING only ever mention the canonical package ID', (
   expectOnlyPackageId('README.md');
   expectOnlyPackageId('VERIFY.md');
   expectOnlyPackageId('BRANDING.md');
-  expectOnlyPackageId('docs/google-play-data-safety.md');
 });
 
 test('VERIFY.md documents the exact certificate fingerprint release-common.js enforces', () => {
@@ -102,11 +101,10 @@ test('VERIFY.md documents the exact certificate fingerprint release-common.js en
   expect(shaMatches).toEqual([releaseCertificateSha256]);
 });
 
-test('README, VERIFY, BRANDING and the safety doc only ever link to the official repository', () => {
+test('README, VERIFY and BRANDING only ever link to the official repository', () => {
   expectOnlyOfficialRepoLinks('README.md');
   expectOnlyOfficialRepoLinks('VERIFY.md');
   expectOnlyOfficialRepoLinks('BRANDING.md');
-  expectOnlyOfficialRepoLinks('docs/google-play-data-safety.md');
 });
 
 test('VERIFY.md and README point at the real official download locations', () => {

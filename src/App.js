@@ -128,8 +128,12 @@ import {
   ONE_RM_STATE_VERSION,
 } from './oneRMState';
 import { buildMilestoneCelebration } from './milestoneAchievements';
+import {
+  buildAnonymousUsageMetrics,
+  buildAnonymousUsageReport,
+} from './anonymousUsageSummary';
 
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { translations } from './translations';
 import { App as CapacitorApp } from '@capacitor/app';
@@ -147,13 +151,16 @@ const AUTO_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-auto-backup-status';
 const MANUAL_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-manual-backup-status';
 const LEGACY_BROWSER_AUTO_BACKUP_KEY = 'kelani-sbd-tracker-autosave';
 const REST_TIMER_NOTIFICATION_ID = 1208;
-const REST_TIMER_NOTIFICATION_CHANNEL_ID = 'kelani_rest_timer_v4';
-const REST_TIMER_NOTIFICATION_SOUND = 'kelani_rest_timer_quiet.wav';
+const REST_TIMER_TEST_NOTIFICATION_ID = 1209;
+const REST_TIMER_NOTIFICATION_CHANNEL_ID = 'kelani_rest_timer_v5';
+const REST_TIMER_TEST_DELAY_MS = 15_000;
+const REST_TIMER_TEST_GRACE_MS = 5_000;
 const REST_TIMER_STATE_KEY = 'kelani-sbd-tracker-active-rest-timer';
 const REST_TIMER_NOTIFICATION_STATUS_KEY = 'kelani-sbd-tracker-rest-timer-notification-status';
 const APP_NAVIGATION_STATE_KEY = 'kelani-sbd-tracker-navigation-state';
 const RESTORABLE_APP_SCREENS = new Set(['dashboard', 'all', 'current', 'stats', 'settings']);
 const DeviceAlertStatus = registerPlugin('DeviceAlertStatus');
+const RestTimerAlarm = registerPlugin('RestTimerAlarm');
 
 export function normalizePersistedRestTimerState(value, now = Date.now()) {
   let parsed = value;
@@ -597,11 +604,9 @@ async function cancelRestTimerNotification() {
   if (!Capacitor.isNativePlatform()) return;
 
   try {
-    await LocalNotifications.cancel({
-      notifications: [{ id: REST_TIMER_NOTIFICATION_ID }],
-    });
+    await RestTimerAlarm.cancel({ id: REST_TIMER_NOTIFICATION_ID });
   } catch (error) {
-    console.error('Could not cancel rest timer notification', error);
+    console.error('Could not cancel native rest timer alarm', error);
   }
 }
 
@@ -609,20 +614,92 @@ async function ensureRestTimerNotificationChannel() {
   if (!Capacitor.isNativePlatform()) return false;
 
   try {
-    await LocalNotifications.createChannel({
-      id: REST_TIMER_NOTIFICATION_CHANNEL_ID,
-      name: 'Kelani rest timer',
-      description: 'Rest timer alerts',
-      importance: 5,
-      visibility: 1,
-      sound: REST_TIMER_NOTIFICATION_SOUND,
-      vibration: true,
-    });
+    // The native plugin creates this channel with USAGE_ALARM. Android channel
+    // audio attributes are immutable, so this must happen before any generic
+    // notification-channel creation for the same id.
+    await RestTimerAlarm.ensureChannel();
     return true;
   } catch (error) {
     console.error('Could not create rest timer notification channel', error);
     return false;
   }
+}
+
+export async function scheduleNativeRestTimerAlarmWithPermissions({
+  nativeRequest,
+  scheduleAlarm = request => RestTimerAlarm.schedule(request),
+  requestNotificationPermission = () => LocalNotifications.requestPermissions(),
+  requestExactAlarmPermission = () =>
+    LocalNotifications.changeExactNotificationSetting(),
+} = {}) {
+  let notificationPermissionRequested = false;
+  let exactAlarmPermissionRequested = false;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      // This is intentionally the first operation. The native method checks,
+      // replaces and schedules the alarm atomically, so backgrounding the
+      // WebView cannot pause the operation halfway through.
+      return await scheduleAlarm(nativeRequest);
+    } catch (nativeError) {
+      if (
+        nativeError?.code === 'NOTIFICATION_PERMISSION_REQUIRED' &&
+        !notificationPermissionRequested
+      ) {
+        notificationPermissionRequested = true;
+        const requested = await requestNotificationPermission();
+        if (requested?.display !== 'granted') throw nativeError;
+        continue;
+      }
+
+      if (
+        nativeError?.code === 'EXACT_ALARM_PERMISSION_REQUIRED' &&
+        !exactAlarmPermissionRequested &&
+        typeof requestExactAlarmPermission === 'function'
+      ) {
+        exactAlarmPermissionRequested = true;
+        await requestExactAlarmPermission();
+        continue;
+      }
+
+      throw nativeError;
+    }
+  }
+
+  throw new Error('Native rest timer alarm could not be scheduled after permission checks');
+}
+
+export function classifyRestTimerTestStatus(
+  status,
+  now = Date.now(),
+  graceMs = REST_TIMER_TEST_GRACE_MS
+) {
+  const id = Number(status?.id);
+  const targetAt = Number(status?.targetAt || status?.at);
+  const scheduledAt = Number(status?.scheduledAt);
+  const deliveredAt = Number(status?.deliveredAt);
+
+  if (id !== REST_TIMER_TEST_NOTIFICATION_ID || !Number.isFinite(scheduledAt) || scheduledAt <= 0) {
+    return 'idle';
+  }
+
+  if (
+    status?.delivered === true &&
+    Number.isFinite(deliveredAt) &&
+    deliveredAt >= scheduledAt
+  ) {
+    return 'delivered';
+  }
+
+  if (status?.pending === true) {
+    return 'scheduled';
+  }
+
+  if (Number.isFinite(targetAt) && targetAt > 0 && Number(now) <= targetAt + Number(graceMs)) {
+    return 'scheduled';
+  }
+
+  return 'not-delivered';
 }
 
 export function getRestTimerNotificationChannelStatus(channels = []) {
@@ -674,13 +751,13 @@ export function normalizeRestTimerDoNotDisturbStatus(status) {
   };
 }
 
-async function checkRestTimerAlertReadiness() {
+async function checkRestTimerAlertReadiness(t = translations.en) {
   if (!Capacitor.isNativePlatform()) {
     return {
       native: false,
       display: 'web',
       exactAlarm: 'web',
-      message: 'Rest timer alerts are only needed on the installed Android app.',
+      message: t.restTimerWebOnly,
     };
   }
 
@@ -735,77 +812,51 @@ async function checkRestTimerAlertReadiness() {
       channel,
       doNotDisturb,
       message: permissions.display === 'granted'
-        ? 'Notification permission is allowed. For screen-off alerts, also allow lock screen notifications and unrestricted battery use in Android settings.'
-        : 'Notification permission is not allowed yet. Rest timer alerts may be blocked.',
+        ? (t.restTimerPermissionAllowed)
+        : (t.restTimerPermissionBlocked),
     };
   } catch (e) {
     return {
       native: true,
       display: 'unknown',
       exactAlarm: 'unknown',
-      message: 'Could not check notification settings. Please allow notifications, lock screen notifications and unrestricted battery use in Android settings.',
+      message: t.restTimerCheckFailed,
     };
   }
 }
 
 async function scheduleRestTimerNotification(
   endTime,
-  doneTitle = 'Rest finished',
-  doneText = 'Your next set is ready.'
+  doneTitle,
+  doneText
 ) {
   if (!Capacitor.isNativePlatform() || !endTime || Number(endTime) <= Date.now()) {
     return false;
   }
 
   try {
-    const permissions = await LocalNotifications.checkPermissions();
-    if (permissions.display !== 'granted') {
-      const requested = await LocalNotifications.requestPermissions();
-      if (requested.display !== 'granted') {
-        recordRestTimerNotificationStatus('failed', {
-          reason: 'notification-permission-denied',
-          endTime,
-        });
-        return false;
-      }
-    }
-
-    await cancelRestTimerNotification();
-    const channelReady = await ensureRestTimerNotificationChannel();
-    if (!channelReady) {
-      recordRestTimerNotificationStatus('failed', {
-        reason: 'notification-channel-unavailable',
-        endTime,
-      });
-      return false;
-    }
-
-    const result = await LocalNotifications.schedule({
-      notifications: [{
-        id: REST_TIMER_NOTIFICATION_ID,
-        title: doneTitle,
-        body: doneText,
-        channelId: REST_TIMER_NOTIFICATION_CHANNEL_ID,
-        sound: REST_TIMER_NOTIFICATION_SOUND,
-        foreground: true,
-        autoCancel: true,
-        isExactNotification: true,
-        isExactMandatory: true,
-        schedule: {
-          at: new Date(endTime),
-          allowWhileIdle: true,
-        },
-      }],
+    const nativeRequest = {
+      id: REST_TIMER_NOTIFICATION_ID,
+      at: Number(endTime),
+      title: doneTitle,
+      body: doneText,
+    };
+    const result = await scheduleNativeRestTimerAlarmWithPermissions({
+      nativeRequest,
+      requestExactAlarmPermission:
+        typeof LocalNotifications.changeExactNotificationSetting === 'function'
+          ? () => LocalNotifications.changeExactNotificationSetting()
+          : null,
     });
 
-    const scheduledIds = Array.isArray(result?.notifications)
-      ? result.notifications.map(notification => Number(notification?.id))
-      : [];
-    const scheduled = scheduledIds.includes(REST_TIMER_NOTIFICATION_ID);
+    const scheduled = result?.scheduled === true &&
+      Number(result?.id) === REST_TIMER_NOTIFICATION_ID &&
+      Number(result?.at) === Number(endTime);
 
     recordRestTimerNotificationStatus(scheduled ? 'scheduled' : 'failed', {
-      reason: scheduled ? null : 'schedule-result-missing-id',
+      reason: scheduled ? null : 'native-alarm-result-mismatch',
       endTime,
+      method: result?.method || null,
     });
 
     return scheduled;
@@ -819,16 +870,18 @@ async function scheduleRestTimerNotification(
   }
 }
 
-export function hasPendingRestTimerNotification(result) {
-  return Array.isArray(result?.notifications) && result.notifications.some(
-    notification => Number(notification?.id) === REST_TIMER_NOTIFICATION_ID
-  );
+export function hasPendingNativeRestTimerAlarm(result, endTime = null) {
+  if (result?.pending !== true || Number(result?.id) !== REST_TIMER_NOTIFICATION_ID) {
+    return false;
+  }
+
+  return endTime === null || Number(result?.at) === Number(endTime);
 }
 
 async function ensurePendingRestTimerNotification(
   timer,
-  doneTitle = 'Rest finished',
-  doneText = 'Your next set is ready.'
+  doneTitle,
+  doneText
 ) {
   if (!Capacitor.isNativePlatform()) return false;
 
@@ -836,10 +889,11 @@ async function ensurePendingRestTimerNotification(
   if (!activeTimer) return false;
 
   try {
-    const pending = await LocalNotifications.getPending();
-    if (hasPendingRestTimerNotification(pending)) {
+    const pending = await RestTimerAlarm.getPending();
+    if (hasPendingNativeRestTimerAlarm(pending, activeTimer.endTime)) {
       recordRestTimerNotificationStatus('verified', {
         endTime: activeTimer.endTime,
+        method: 'alarmClock',
       });
       return true;
     }
@@ -856,8 +910,8 @@ async function ensurePendingRestTimerNotification(
   if (!scheduled) return false;
 
   try {
-    const pending = await LocalNotifications.getPending();
-    const verified = hasPendingRestTimerNotification(pending);
+    const pending = await RestTimerAlarm.getPending();
+    const verified = hasPendingNativeRestTimerAlarm(pending, activeTimer.endTime);
     recordRestTimerNotificationStatus(verified ? 'verified' : 'failed', {
       reason: verified ? null : 'notification-not-pending-after-schedule',
       endTime: activeTimer.endTime,
@@ -2343,8 +2397,8 @@ export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activ
             {onShowPlateCalculator && (
               <button
                 type="button"
-                title={t.plateCalculatorTitle || 'Plate calculator'}
-                aria-label={t.plateCalculatorTitle || 'Plate calculator'}
+                title={t.plateCalculatorTitle}
+                aria-label={t.plateCalculatorTitle}
                 onClick={(event) => {
                   event.stopPropagation();
                   onShowPlateCalculator(warmup.weight);
@@ -2462,23 +2516,23 @@ function getFailedSetFeedbackMessage(set, t) {
 
   if (isAttemptSetLabel(set?.labelKey)) {
     if (set.labelKey === 'opener') {
-      return t.failedOpenerFeedback || 'Opener was missed. The attempt is skipped; use this as feedback for attempt selection.';
+      return t.failedOpenerFeedback;
     }
 
     if (set.labelKey === 'secondAttempt') {
-      return t.failedSecondAttemptFeedback || 'Second attempt was missed. The attempt is skipped; use this as feedback for the next attempt.';
+      return t.failedSecondAttemptFeedback;
     }
 
     if (set.labelKey === 'thirdAttempt') {
-      return t.failedThirdAttemptFeedback || 'Third attempt was missed. Use this as useful attempt-planning data for next time.';
+      return t.failedThirdAttemptFeedback;
     }
   }
 
   if (set.skipped) {
-    return t.failedSetSkippedFeedback || 'Set missed and skipped. Continue with the next appropriate work.';
+    return t.failedSetSkippedFeedback;
   }
 
-  return t.failedSetFeedback || 'Set missed. Use the adjusted weight as feedback and continue with controlled technique.';
+  return t.failedSetFeedback;
 }
 
 function getSetEffortLabel(effort, t) {
@@ -2618,15 +2672,15 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
           t,
           lift,
           benchPressVariant
-        )}${set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}`}
+        )}${set.perSide ? ` ${t.perSideSuffix}` : ''}`}
         percentText={displayPct}
         color={isAdjusted ? '#f39c12' : THEME.muted}
       />
       {onShowPlateCalculator && !set.perSide && (
         <button
           type="button"
-          title={t.plateCalculatorTitle || 'Plate calculator'}
-          aria-label={t.plateCalculatorTitle || 'Plate calculator'}
+          title={t.plateCalculatorTitle}
+          aria-label={t.plateCalculatorTitle}
           onClick={(e) => {
             e.stopPropagation();
             onShowPlateCalculator(set.weight);
@@ -3219,9 +3273,9 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
           type="button"
           onClick={() => importInputRef.current?.click()}
           style={{
-            width: 'min(150px, calc(50vw - 28px))',
-            padding: '11px 14px',
-            fontSize: 15,
+            width: 'min(170px, calc(50vw - 24px))',
+            padding: '11px 8px',
+            fontSize: 14,
             fontWeight: 800,
             background: THEME.card,
             color: THEME.text,
@@ -3229,9 +3283,10 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
             borderRadius: 6,
             cursor: 'pointer',
             whiteSpace: 'nowrap',
+            boxSizing: 'border-box',
           }}
         >
-          {t.importBackupAction || 'Import backup'}
+          {t.importBackupAction}
         </button>
       ) : (
         <SettingsListRow
@@ -3462,34 +3517,193 @@ function SupportActionButton({ children, onClick }) {
   );
 }
 
+function usageModeLabel(mode, kind, t) {
+  if (!mode || mode === 'off') return t.programOptionOff;
+  if (kind === 'preparation') {
+    return mode === 'shoulderThoracic'
+      ? t.programPreparationUpperBackFriendly
+      : t.programPreparationGeneral;
+  }
+  if (kind === 'accessories') {
+    return mode === 'standard'
+      ? t.programAccessoriesGeneral
+      : t.programAccessoriesUpperBackFriendly;
+  }
+  return t.programCooldownUpperBackFriendly;
+}
+
+export function getAnonymousUsagePreviewRows(metrics = {}, t = translations.en) {
+  const efforts = metrics.efforts || {};
+  const languageLabels = {
+    nl: t.languageDutch,
+    en: t.languageEnglish,
+    ca: t.languageCatalan,
+  };
+  const modelLabels = {
+    smart: t.trainingModelSmart,
+    classic: t.trainingModelClassic,
+  };
+  const levelLabels = {
+    beginner: t.athleteLevelBeginner,
+    intermediate: t.athleteLevelIntermediate,
+    advanced: t.athleteLevelAdvanced,
+    elite: t.athleteLevelElite,
+  };
+
+  return [
+    [t.usageAppVersion, metrics.appVersion || 'dev'],
+    [t.usageLanguage, languageLabels[metrics.language] || metrics.language || '-'],
+    [t.usageWeightUnit, metrics.weightUnit || '-'],
+    [t.usageTrainingModel, modelLabels[metrics.trainingModel] || metrics.trainingModel || '-'],
+    [t.usageAthleteLevel, levelLabels[metrics.athleteLevel] || metrics.athleteLevel || '-'],
+    [t.usageCompletedSessions, Number(metrics.completedSessions) || 0],
+    [
+      t.usageSessionBreakdown,
+      `${t.usageTrainingShort} ${Number(metrics.trainingSessions) || 0}, ` +
+      `${t.usageRecoveryShort} ${Number(metrics.recoverySessions) || 0}, ` +
+      `${t.usageMeetShort} ${Number(metrics.meetSessions) || 0}`,
+    ],
+    [
+      t.usageWorkoutFeedback,
+      `${t.workoutEffortEasy} ${Number(efforts.easy) || 0}, ` +
+      `${t.workoutEffortGood} ${Number(efforts.good) || 0}, ` +
+      `${t.workoutEffortHard} ${Number(efforts.hard) || 0}, ` +
+      `${t.workoutEffortTooMuch} ${Number(efforts.tooMuch) || 0}, ` +
+      `${t.usageNotRecorded} ${Number(efforts.unrecorded) || 0}`,
+    ],
+    [t.usageFailedSkippedSets, Number(metrics.failedOrSkippedSets) || 0],
+    [t.usageMilestoneCelebrations, Number(metrics.milestoneCelebrations) || 0],
+    [t.usagePreparation, usageModeLabel(metrics.preparationMode, 'preparation', t)],
+    [t.usageAccessories, usageModeLabel(metrics.accessoryMode, 'accessories', t)],
+    [t.usageCooldown, usageModeLabel(metrics.cooldownMode, 'cooldown', t)],
+  ];
+}
+
+export function AnonymousUsageShareModal({ metrics, t, onClose }) {
+  const [copyState, setCopyState] = useState('idle');
+  const report = buildAnonymousUsageReport(metrics);
+  const rows = getAnonymousUsagePreviewRows(metrics, t);
+
+  async function copyReport() {
+    try {
+      await copySmartDiagnosticText(report);
+      setCopyState('copied');
+    } catch (error) {
+      console.error('Could not copy anonymous usage summary', error);
+      setCopyState('error');
+    }
+  }
+
+  function emailReport() {
+    const subject = encodeURIComponent(t.usageEmailSubject);
+    const body = encodeURIComponent(report);
+    window.open(
+      `mailto:mburgosfr@gmail.com?subject=${subject}&body=${body}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
+  }
+
+  return (
+    <SettingsModal title={t.usageShareTitle} onClose={onClose}>
+      <p style={{
+        margin: '0 0 8px',
+        color: THEME.text,
+        fontSize: 13,
+        fontWeight: 700,
+        lineHeight: 1.4,
+        textAlign: 'center',
+      }}>
+        {t.usageShareIntro}
+      </p>
+
+      <p style={{
+        margin: '0 0 12px',
+        color: THEME.green,
+        fontSize: 12,
+        fontWeight: 800,
+        lineHeight: 1.35,
+        textAlign: 'center',
+      }}>
+        {t.usageSharePrivacy}
+      </p>
+
+      <div style={{
+        display: 'grid',
+        gap: 5,
+        marginBottom: 12,
+        fontSize: 12,
+      }}>
+        {rows.map(([label, value]) => (
+          <div
+            key={label}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.1fr)',
+              gap: 10,
+              alignItems: 'start',
+            }}
+          >
+            <span style={{ color: THEME.muted, fontWeight: 700 }}>{label}</span>
+            <strong style={{ color: THEME.text, textAlign: 'right', overflowWrap: 'anywhere' }}>
+              {value}
+            </strong>
+          </div>
+        ))}
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+        gap: 8,
+      }}>
+        <SupportActionButton onClick={copyReport}>
+          {copyState === 'copied'
+            ? t.usageCopied
+            : copyState === 'error'
+              ? t.usageCopyError
+              : t.usageCopy}
+        </SupportActionButton>
+        <SupportActionButton onClick={emailReport}>{t.usageEmail}</SupportActionButton>
+      </div>
+
+      <div style={{ width: 'calc(50% - 4px)', margin: '8px auto 0' }}>
+        <SupportActionButton onClick={onClose}>{t.close}</SupportActionButton>
+      </div>
+    </SettingsModal>
+  );
+}
+
 export function MilestoneCelebrationModal({
   celebration,
   t,
   weightUnit = WEIGHT_UNITS.KG,
+  usageMetrics,
   onClose,
 }) {
+  const [showUsageSummary, setShowUsageSummary] = useState(false);
   if (!celebration?.achievements?.length) return null;
 
   const hasLevelMilestone = celebration.achievements.some(item => item.type === 'level');
   const liftLabels = {
-    Squat: t.squat || 'Squat',
-    Bench: t.bench || 'Bench',
-    Deadlift: t.deadlift || 'Deadlift',
-    Total: t.total || 'Total',
+    Squat: t.squat,
+    Bench: t.bench,
+    Deadlift: t.deadlift,
+    Total: t.total,
   };
   const levelLabels = {
-    beginner: t.athleteLevelBeginner || 'Beginner',
-    intermediate: t.athleteLevelIntermediate || 'Intermediate',
-    advanced: t.athleteLevelAdvanced || 'Advanced',
-    elite: t.athleteLevelElite || 'Elite',
+    beginner: t.athleteLevelBeginner,
+    intermediate: t.athleteLevelIntermediate,
+    advanced: t.athleteLevelAdvanced,
+    elite: t.athleteLevelElite,
   };
 
   function achievementLabel(achievement) {
     if (achievement.type === 'level') {
-      return t.milestoneNewLevel || 'New level';
+      return t.milestoneNewLevel;
     }
-    if (achievement.type === 'strengthMax') return t.strengthMax || 'Strength Max';
-    if (achievement.type === 'eStrengthMax') return t.eStrengthMax || 'eStrength Max';
+    if (achievement.type === 'strengthMax') return t.strengthMax;
+    if (achievement.type === 'eStrengthMax') return t.eStrengthMax;
 
     return `${liftLabels[achievement.lift] || achievement.lift} ${achievement.type}`;
   }
@@ -3512,28 +3726,29 @@ export function MilestoneCelebrationModal({
 
   const actions = [
     {
-      label: t.supportKelani || 'Support',
+      label: t.supportKelani,
       onClick: () => openLink('https://github.com/sponsors/mburgosfr-star'),
     },
     {
-      label: t.feedbackViaGitHub || 'Feedback',
-      onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=feedback.md'),
+      label: t.usageShareAction,
+      onClick: () => setShowUsageSummary(true),
     },
     {
-      label: t.contactKelani || 'Contact',
-      onClick: () => openLink('mailto:mburgosfr@proton.me?subject=Kelani%20contact'),
+      label: t.contactKelani,
+      onClick: () => openLink('mailto:mburgosfr@gmail.com?subject=Kelani%20contact'),
     },
     {
-      label: t.close || 'Close',
+      label: t.close,
       onClick: onClose,
     },
   ];
 
   return (
+    <>
     <SettingsModal
       title={hasLevelMilestone
-        ? (t.milestoneLevelTitle || 'New level reached!')
-        : (t.milestoneStrengthTitle || 'New strength milestone!')}
+        ? (t.milestoneLevelTitle)
+        : (t.milestoneStrengthTitle)}
       onClose={onClose}
     >
       <div style={{ fontSize: 38, textAlign: 'center', margin: '-4px 0 8px' }}>🎉</div>
@@ -3546,7 +3761,7 @@ export function MilestoneCelebrationModal({
         lineHeight: 1.4,
         textAlign: 'center',
       }}>
-        {t.milestoneIntro || 'Kelani works. You are demonstrably stronger.'}
+        {t.milestoneIntro}
       </p>
 
       <div style={{
@@ -3590,7 +3805,7 @@ export function MilestoneCelebrationModal({
         lineHeight: 1.4,
         textAlign: 'center',
       }}>
-        {t.milestoneSupportText || 'Kelani is free, offline-first and open source. If it helps you get stronger, support its development or share your experience.'}
+        {t.milestoneSupportText}
       </p>
 
       <div style={{
@@ -3605,66 +3820,75 @@ export function MilestoneCelebrationModal({
         ))}
       </div>
     </SettingsModal>
+    {showUsageSummary && (
+      <AnonymousUsageShareModal
+        metrics={usageMetrics}
+        t={t}
+        onClose={() => setShowUsageSummary(false)}
+      />
+    )}
+    </>
   );
 }
 
-function AboutSupportSection({ t }) {
+function AboutSupportSection({ t, usageMetrics }) {
   const [showAbout, setShowAbout] = useState(false);
+  const [showUsageSummary, setShowUsageSummary] = useState(false);
 
   function openLink(url) {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
   const facts = [
-    [t.aboutPackage || 'Package', 'com.kelani.sbdtracker'],
-    [t.aboutSigningSha256 || 'Signing SHA-256', '15d23f2e5ee95ebc2a530b48be6f27dad7a568f722bc819f4571b3470a2ff39d'],
+    [t.aboutPackage, 'com.kelani.sbdtracker'],
+    [t.aboutSigningSha256, '15d23f2e5ee95ebc2a530b48be6f27dad7a568f722bc819f4571b3470a2ff39d'],
   ];
   const actions = [
     {
-      label: t.supportKelani || 'Support',
+      label: t.supportKelani,
       onClick: () => openLink('https://github.com/sponsors/mburgosfr-star'),
     },
     {
-      label: t.feedbackViaGitHub || 'Feedback',
+      label: t.usageShareAction,
+      onClick: () => setShowUsageSummary(true),
+    },
+    {
+      label: t.feedbackViaGitHub,
       onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=feedback.md'),
     },
     {
-      label: t.contactKelani || 'Contact',
-      onClick: () => openLink('mailto:mburgosfr@proton.me?subject=Kelani%20contact'),
+      label: t.contactKelani,
+      onClick: () => openLink('mailto:mburgosfr@gmail.com?subject=Kelani%20contact'),
     },
     {
       label: t.reportIssueShort || t.reportBug,
       onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=bug_report.md'),
     },
     {
-      label: t.githubRepository || 'GitHub repo',
+      label: t.githubRepository,
       onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker'),
     },
     {
-      label: t.izzyOnDroid || 'IzzyOnDroid (NeoStore)',
+      label: t.izzyOnDroid,
       onClick: () => openLink('https://apt.izzysoft.de/packages/com.kelani.sbdtracker'),
     },
     {
-      label: t.verifyRelease || 'Verify release',
+      label: t.verifyRelease,
       onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/VERIFY.md'),
-    },
-    {
-      label: t.close || 'Close',
-      onClick: () => setShowAbout(false),
     },
   ];
 
   return (
     <>
       <SettingsListRow
-        label={t.about || 'About'}
-        actionLabel={t.view || 'View'}
+        label={t.about}
+        actionLabel={t.view}
         onAction={() => setShowAbout(true)}
       />
 
       {showAbout && (
         <SettingsModal
-          title={t.about || 'About'}
+          title={t.about}
           onClose={() => setShowAbout(false)}
         >
           <p style={{
@@ -3723,7 +3947,21 @@ function AboutSupportSection({ t }) {
               </div>
             ))}
           </div>
+
+          <div style={{ width: 'calc(50% - 4px)', margin: '8px auto 0' }}>
+            <SupportActionButton onClick={() => setShowAbout(false)}>
+              {t.close}
+            </SupportActionButton>
+          </div>
         </SettingsModal>
+      )}
+
+      {showUsageSummary && (
+        <AnonymousUsageShareModal
+          metrics={usageMetrics}
+          t={t}
+          onClose={() => setShowUsageSummary(false)}
+        />
       )}
     </>
   );
@@ -3945,9 +4183,11 @@ export function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS
 function RestTimeSection({ t }) {
   const [showAlertHelp, setShowAlertHelp] = useState(false);
   const [alertStatus, setAlertStatus] = useState(null);
+  const [alertTestStatus, setAlertTestStatus] = useState(null);
+  const [alertTestNow, setAlertTestNow] = useState(Date.now());
 
   async function handleCheckAlerts() {
-    const status = await checkRestTimerAlertReadiness();
+    const status = await checkRestTimerAlertReadiness(t);
     setAlertStatus(status);
     setShowAlertHelp(true);
   }
@@ -3958,37 +4198,109 @@ function RestTimeSection({ t }) {
     } catch (e) {}
   }
 
+  const refreshAlertTestStatus = useCallback(async () => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    try {
+      setAlertTestStatus(await RestTimerAlarm.getTestStatus());
+      setAlertTestNow(Date.now());
+    } catch (error) {
+      console.error('Could not read rest timer test status', error);
+    }
+  }, []);
+
+  async function handleTestAlert() {
+    const targetAt = Date.now() + REST_TIMER_TEST_DELAY_MS;
+
+    try {
+      await scheduleNativeRestTimerAlarmWithPermissions({
+        nativeRequest: {
+          id: REST_TIMER_TEST_NOTIFICATION_ID,
+          at: targetAt,
+          title: t.restTimerTestNotificationTitle,
+          body: t.restTimerTestNotificationBody,
+        },
+        scheduleAlarm: request => RestTimerAlarm.scheduleTest(request),
+      });
+      await refreshAlertTestStatus();
+    } catch (error) {
+      console.error('Could not schedule rest timer test', error);
+      setAlertTestStatus({ error: true });
+    }
+  }
+
+  useEffect(() => {
+    if (!showAlertHelp || !Capacitor.isNativePlatform()) return undefined;
+
+    const refresh = () => {
+      refreshAlertTestStatus();
+    };
+    const refreshWhenVisible = () => {
+      if (!document.hidden) refresh();
+    };
+
+    refresh();
+    const intervalId = window.setInterval(refresh, 1000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [showAlertHelp, refreshAlertTestStatus]);
+
   const channelStatus = alertStatus?.channel || null;
   const doNotDisturbStatus = alertStatus?.doNotDisturb || null;
   const onOffStatus = value => value === true
-    ? (t.restTimerStatusOn || 'On')
+    ? (t.restTimerStatusOn)
     : value === false
-      ? (t.restTimerStatusOff || 'Off')
-      : (t.restTimerStatusUnknown || 'Unknown');
+      ? (t.restTimerStatusOff)
+      : (t.restTimerStatusUnknown);
+  const permissionStatusLabel = value => value === 'granted'
+    ? (t.restTimerStatusAllowed)
+    : ['denied', 'prompt', 'prompt-with-rationale'].includes(value)
+      ? (t.restTimerStatusBlocked)
+      : (t.restTimerStatusUnknown);
   const diagnosticStatusColor = value => value === true
     ? THEME.primary
     : value === false
       ? THEME.red
       : THEME.muted;
   const doNotDisturbLabel = {
-    all: t.restTimerDndOff || 'Off',
-    priority: t.restTimerDndPriority || 'On · Priority only',
-    alarms: t.restTimerDndAlarms || 'On · Alarms only',
-    none: t.restTimerDndNone || 'On · No interruptions',
-    unknown: t.restTimerStatusUnknown || 'Unknown',
+    all: t.restTimerDndOff,
+    priority: t.restTimerDndPriority,
+    alarms: t.restTimerDndAlarms,
+    none: t.restTimerDndNone,
+    unknown: t.restTimerStatusUnknown,
   }[doNotDisturbStatus?.filter || 'unknown'];
+  const alertTestKind = alertTestStatus?.error === true
+    ? 'error'
+    : classifyRestTimerTestStatus(alertTestStatus);
+  const alertTestSecondsRemaining = Math.max(
+    0,
+    Math.ceil((Number(alertTestStatus?.targetAt || alertTestStatus?.at) - alertTestNow) / 1000)
+  );
+  const alertTestMessage = {
+    scheduled: t.restTimerTestScheduled
+      .replace('{seconds}', alertTestSecondsRemaining),
+    delivered: t.restTimerTestDelivered,
+    'not-delivered': t.restTimerTestNotDelivered,
+    error: t.restTimerTestFailedToSchedule,
+  }[alertTestKind];
 
   return (
     <>
       <SettingsListRow
-        label={t.restTimerAlerts || 'Rest timer alerts'}
-        actionLabel={t.check || 'Check'}
+        label={t.restTimerAlerts}
+        actionLabel={t.check}
         onAction={handleCheckAlerts}
       />
 
       {showAlertHelp && (
         <SettingsModal
-          title={t.restTimerAlerts || 'Rest timer alerts'}
+          title={t.restTimerAlerts}
           onClose={() => setShowAlertHelp(false)}
         >
           <div style={{
@@ -3998,7 +4310,7 @@ function RestTimeSection({ t }) {
             lineHeight: 1.35,
             marginBottom: 4
           }}>
-            Rest times are chosen automatically by set type. For reliable screen-off alerts, allow notifications, lock screen notifications, unrestricted battery use, and exact alarms if Android asks.
+            {t.restTimerHelp}
           </div>
 
           <div style={{
@@ -4008,7 +4320,7 @@ function RestTimeSection({ t }) {
             lineHeight: 1.3,
             marginBottom: alertStatus ? 10 : 12
           }}>
-            Xiaomi/HyperOS may also require lock screen notifications and no battery restrictions.
+            {t.restTimerXiaomiHelp}
           </div>
 
           {alertStatus?.native === true && (
@@ -4021,35 +4333,35 @@ function RestTimeSection({ t }) {
               fontWeight: 800,
               marginBottom: 12
             }}>
-              <span>{t.restTimerNotificationsLabel || 'Notifications'}</span>
+              <span>{t.restTimerNotificationsLabel}</span>
               <strong style={{ color: alertStatus.display === 'granted' ? THEME.primary : THEME.red }}>
-                {alertStatus.display}
+                {permissionStatusLabel(alertStatus.display)}
               </strong>
-              <span>{t.restTimerExactAlarmsLabel || 'Exact alarms'}</span>
+              <span>{t.restTimerExactAlarmsLabel}</span>
               <strong style={{ color: alertStatus.exactAlarm === 'granted' ? THEME.primary : THEME.muted }}>
-                {alertStatus.exactAlarm}
+                {permissionStatusLabel(alertStatus.exactAlarm)}
               </strong>
-              <span>{t.restTimerChannelLabel || 'Timer channel'}</span>
+              <span>{t.restTimerChannelLabel}</span>
               <strong style={{ color: diagnosticStatusColor(channelStatus?.found) }}>
                 {channelStatus?.found === true
-                  ? (t.restTimerStatusOn || 'On')
+                  ? (t.restTimerStatusOn)
                   : channelStatus?.found === false
-                    ? (t.restTimerStatusMissing || 'Missing')
-                    : (t.restTimerStatusUnknown || 'Unknown')}
+                    ? (t.restTimerStatusMissing)
+                    : (t.restTimerStatusUnknown)}
               </strong>
-              <span>{t.restTimerSoundLabel || 'Sound'}</span>
+              <span>{t.restTimerSoundLabel}</span>
               <strong style={{ color: diagnosticStatusColor(channelStatus?.soundEnabled) }}>
                 {onOffStatus(channelStatus?.soundEnabled)}
               </strong>
-              <span>{t.restTimerVibrationLabel || 'Vibration'}</span>
+              <span>{t.restTimerVibrationLabel}</span>
               <strong style={{ color: diagnosticStatusColor(channelStatus?.vibrationEnabled) }}>
                 {onOffStatus(channelStatus?.vibrationEnabled)}
               </strong>
-              <span>{t.restTimerImportanceLabel || 'Importance'}</span>
+              <span>{t.restTimerImportanceLabel}</span>
               <strong style={{ color: diagnosticStatusColor(channelStatus?.importanceSufficient) }}>
-                {channelStatus?.importance ?? (t.restTimerStatusUnknown || 'Unknown')}
+                {channelStatus?.importance ?? (t.restTimerStatusUnknown)}
               </strong>
-              <span>{t.restTimerDndLabel || 'Do Not Disturb'}</span>
+              <span>{t.restTimerDndLabel}</span>
               <strong style={{ color: doNotDisturbStatus?.active === true ? THEME.red : doNotDisturbStatus?.active === false ? THEME.primary : THEME.muted }}>
                 {doNotDisturbLabel}
               </strong>
@@ -4067,7 +4379,7 @@ function RestTimeSection({ t }) {
               lineHeight: 1.3,
               marginBottom: 12
             }}>
-              {t.restTimerDndWarning || 'Do Not Disturb is active. Android may suppress the rest timer sound and vibration.'}
+              {t.restTimerDndWarning}
             </div>
           )}
 
@@ -4082,7 +4394,24 @@ function RestTimeSection({ t }) {
               lineHeight: 1.3,
               marginBottom: 12
             }}>
-              Open the installed Android app to check device alert settings.
+              {t.restTimerOpenAndroidApp}
+            </div>
+          )}
+
+          {alertTestMessage && (
+            <div style={{
+              color: alertTestKind === 'delivered'
+                ? THEME.primary
+                : alertTestKind === 'scheduled'
+                  ? THEME.text
+                  : THEME.red,
+              fontSize: 12,
+              fontWeight: 800,
+              lineHeight: 1.3,
+              textAlign: 'center',
+              marginBottom: 12
+            }}>
+              {alertTestMessage}
             </div>
           )}
 
@@ -4107,7 +4436,27 @@ function RestTimeSection({ t }) {
                   cursor: 'pointer'
                 }}
               >
-                {t.restTimerOpenDndSettings || 'Open Do Not Disturb settings'}
+                {t.restTimerOpenDndSettings}
+              </button>
+            )}
+            {alertStatus?.native === true && (
+              <button
+                onClick={handleTestAlert}
+                disabled={alertTestKind === 'scheduled'}
+                style={{
+                  gridColumn: '1 / -1',
+                  width: '100%',
+                  padding: 10,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  borderRadius: 8,
+                  border: `1px solid ${THEME.primary}`,
+                  background: THEME.card,
+                  color: alertTestKind === 'scheduled' ? THEME.muted : THEME.text,
+                  cursor: alertTestKind === 'scheduled' ? 'default' : 'pointer'
+                }}
+              >
+                {t.restTimerTestAlert}
               </button>
             )}
             <button
@@ -4124,7 +4473,7 @@ function RestTimeSection({ t }) {
                 cursor: 'pointer'
               }}
             >
-              {t.check || 'Check'}
+              {t.check}
             </button>
 
             <button
@@ -4141,7 +4490,7 @@ function RestTimeSection({ t }) {
                 cursor: 'pointer'
               }}
             >
-              {t.close || 'Close'}
+              {t.close}
             </button>
           </div>
         </SettingsModal>
@@ -4222,22 +4571,22 @@ function ModelSection({ trainingModel, switchToSmart, switchBlocked, t }) {
   return (
     <>
       <SettingsListRow
-        label={t.trainingModelLabel || 'Model'}
+        label={t.trainingModelLabel}
         actionLabel={getTrainingModelShortLabel(currentModel)}
         onAction={() => setIsEditing(true)}
       />
 
       {isEditing && (
         <SettingsModal
-          title={t.switchToSmartTitle || 'Switch to Smart Training'}
+          title={t.switchToSmartTitle}
           onClose={() => setIsEditing(false)}
         >
           <p style={{ margin: '0 0 14px', color: THEME.text, lineHeight: 1.45, textAlign: 'center' }}>
-            {t.switchToSmartText || 'Smart Training uses your existing history to choose each next workout. This switch is permanent; Classic remains available only until you switch.'}
+            {t.switchToSmartText}
           </p>
           {switchBlocked && (
             <p style={{ margin: '0 0 14px', color: THEME.red, fontWeight: 800, lineHeight: 1.4, textAlign: 'center' }}>
-              {t.switchToSmartBlocked || 'Finish or clear your current Classic workout before switching so no set progress is lost.'}
+              {t.switchToSmartBlocked}
             </p>
           )}
           <button
@@ -4254,7 +4603,7 @@ function ModelSection({ trainingModel, switchToSmart, switchBlocked, t }) {
               cursor: switchBlocked ? 'not-allowed' : 'pointer',
             }}
           >
-            {t.switchToSmartAction || 'Switch permanently to Smart'}
+            {t.switchToSmartAction}
           </button>
         </SettingsModal>
       )}
@@ -4341,29 +4690,29 @@ function NewCycleModal({ prs, onStart, t, weightUnit = WEIGHT_UNITS.KG }) {
 
 function getSkippedSetMessage(set, t, isLastSet = false) {
   if (set?.labelKey === 'opener') {
-    return t.openerSkippedWithLoweredPlan || 'Opener missed. This attempt is skipped; the next attempts are lowered.';
+    return t.openerSkippedWithLoweredPlan;
   }
 
   if (set?.labelKey === 'secondAttempt') {
-    return t.secondAttemptSkippedWithLoweredPlan || 'Second attempt missed. This attempt is skipped; the third attempt is lowered.';
+    return t.secondAttemptSkippedWithLoweredPlan;
   }
 
   if (set?.labelKey === 'thirdAttempt') {
-    return t.thirdAttemptSkipped || 'Third attempt missed. This attempt is skipped. Continue with the back-off sets.';
+    return t.thirdAttemptSkipped;
   }
 
   // There is no "next set" to continue with when this is the very last set
   // of the whole workout - saying so anyway read as a contradiction right
   // before the athlete taps "Complete workout".
   if (isLastSet) {
-    return t.lastSetSkipped || 'Set skipped.';
+    return t.lastSetSkipped;
   }
 
   if (isTopSetLabel(set?.labelKey)) {
-    return t.topSetSkipped || 'Top set missed and skipped. Continue with the backoff work.';
+    return t.topSetSkipped;
   }
 
-  return t.topSetSkipped || 'Set skipped. Continue with the next set.';
+  return t.topSetSkipped;
 }
 
 export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = false, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator, isLastGroupOfWorkout = false, workoutCompleted = false }) {
@@ -4514,7 +4863,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
     }}>
       {failedEntry.set.skipped
         ? getSkippedSetMessage(failedEntry.set, t, isFeedbackOnLastSetOfWorkout)
-        : getFailedSetFeedbackMessage(failedEntry.set, t) || 'Set missed and skipped. Continue with the next set.'}
+        : getFailedSetFeedbackMessage(failedEntry.set, t) || t.failedSetSkippedFeedback}
     </div>
   ) : null;
 
@@ -4553,15 +4902,15 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
                   t,
                   lift,
                   benchPressVariant
-                )}${set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}`}
+                )}${set.perSide ? ` ${t.perSideSuffix}` : ''}`}
                 percentText={setDisplayPct}
                 color={setIsAdjusted ? '#f39c12' : THEME.muted}
               />
               {onShowPlateCalculator && !set.perSide && (
                 <button
                   type="button"
-                  title={t.plateCalculatorTitle || 'Plate calculator'}
-                  aria-label={t.plateCalculatorTitle || 'Plate calculator'}
+                  title={t.plateCalculatorTitle}
+                  aria-label={t.plateCalculatorTitle}
                   onClick={(e) => {
                     e.stopPropagation();
                     onShowPlateCalculator(set.weight);
@@ -4750,9 +5099,9 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
             ) ||
             setWeight !== originalWeight;
           const weightText = isBodyweight
-            ? (t.bodyweight || 'Body weight')
+            ? (t.bodyweight)
             : `${formatWeightFromKg(setWeight, weightUnit)}` +
-              `${acc.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}`;
+              `${acc.perSide ? ` ${t.perSideSuffix}` : ''}`;
           const setTargetText = durationSeconds > 0
             ? `${durationSeconds} s`
             : `${acc.reps} reps`;
@@ -4782,8 +5131,8 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
                   {onShowPlateCalculator && !isBodyweight && !acc.perSide && (
                     <button
                       type="button"
-                      title={t.plateCalculatorTitle || 'Plate calculator'}
-                      aria-label={t.plateCalculatorTitle || 'Plate calculator'}
+                      title={t.plateCalculatorTitle}
+                      aria-label={t.plateCalculatorTitle}
                       onClick={(event) => {
                         event.stopPropagation();
                         onShowPlateCalculator(setWeight);
@@ -4835,42 +5184,42 @@ function getExerciseGuide(lift, t) {
       title: t.squat,
       videoSrc: `${import.meta.env.BASE_URL}videos/squat.mp4`,
       steps: [
-        t.squatGuideStep1 || 'Set the bar on your upper back and grip it firmly.',
-        t.squatGuideStep2 || 'Step out, set your feet, breathe in and brace.',
-        t.squatGuideStep3 || 'Squat down with knees and hips moving together.',
-        t.squatGuideStep4 || 'Reach consistent depth, then drive back up with control.',
+        t.squatGuideStep1,
+        t.squatGuideStep2,
+        t.squatGuideStep3,
+        t.squatGuideStep4,
       ],
       safety: [
-        t.squatGuideSafety1 || 'Use safety arms or spotters when training heavy.',
-        t.squatGuideSafety2 || 'Do not cut depth by using more weight than you can control.',
+        t.squatGuideSafety1,
+        t.squatGuideSafety2,
       ],
     },
     Bench: {
       title: t.bench,
       videoSrc: `${import.meta.env.BASE_URL}videos/bench.mp4`,
       steps: [
-        t.benchGuideStep1 || 'Set your feet and pull your shoulder blades back and down.',
-        t.benchGuideStep2 || 'Grip the bar evenly and unrack with control.',
-        t.benchGuideStep3 || 'Lower the bar to your chest with a stable upper back.',
-        t.benchGuideStep4 || 'Press up to lockout without losing position.',
+        t.benchGuideStep1,
+        t.benchGuideStep2,
+        t.benchGuideStep3,
+        t.benchGuideStep4,
       ],
       safety: [
-        t.benchGuideSafety1 || 'Use safeties or a spotter when benching heavy.',
-        t.benchGuideSafety2 || 'Do not bounce the bar off your chest.',
+        t.benchGuideSafety1,
+        t.benchGuideSafety2,
       ],
     },
     Deadlift: {
       title: t.deadlift,
       videoSrc: `${import.meta.env.BASE_URL}videos/deadlift.mp4`,
       steps: [
-        t.deadliftGuideStep1 || 'Stand with the bar over the middle of your foot.',
-        t.deadliftGuideStep2 || 'Grip the bar, brace, and build tension before pulling.',
-        t.deadliftGuideStep3 || 'Push the floor away and keep the bar close.',
-        t.deadliftGuideStep4 || 'Stand tall at lockout, then lower the bar with control.',
+        t.deadliftGuideStep1,
+        t.deadliftGuideStep2,
+        t.deadliftGuideStep3,
+        t.deadliftGuideStep4,
       ],
       safety: [
-        t.deadliftGuideSafety1 || 'Do not jerk the bar from a loose position.',
-        t.deadliftGuideSafety2 || 'Stop the set if your position breaks down.',
+        t.deadliftGuideSafety1,
+        t.deadliftGuideSafety2,
       ],
     },
   };
@@ -4964,13 +5313,13 @@ function ExerciseGuideModal({ lift, t, onClose }) {
             fontSize: 13,
             fontWeight: 800
           }}>
-            {t.videoComingSoon || 'Video coming soon'}
+            {t.videoComingSoon}
           </div>
         )}
 
         <div style={{ marginBottom: 14 }}>
           <div style={{ color: THEME.primary, fontWeight: 900, marginBottom: 8 }}>
-            {t.howToPerform || 'How to perform'}
+            {t.howToPerform}
           </div>
           <ol style={{ margin: 0, paddingLeft: 20, color: THEME.text, lineHeight: 1.45, fontSize: 14 }}>
             {guide.steps.map((step, index) => (
@@ -4981,7 +5330,7 @@ function ExerciseGuideModal({ lift, t, onClose }) {
 
         <div style={{ marginBottom: 16 }}>
           <div style={{ color: THEME.primary, fontWeight: 900, marginBottom: 8 }}>
-            {t.safetyNotes || 'Safety notes'}
+            {t.safetyNotes}
           </div>
           <ul style={{ margin: 0, paddingLeft: 20, color: THEME.muted, lineHeight: 1.45, fontSize: 14 }}>
             {guide.safety.map((note, index) => (
@@ -5004,22 +5353,24 @@ function ExerciseGuideModal({ lift, t, onClose }) {
             cursor: 'pointer'
           }}
         >
-          {t.close || 'Close'}
+          {t.close}
         </button>
       </div>
     </div>
   );
 }
 
-function getSmartDayTypeDisplayLabel(dayType, t = {}) {
-  if (dayType === SMART_DAY_TYPES.DELOAD) return t.deload || 'Deload';
-  if (dayType === SMART_DAY_TYPES.RECOVERY) return t.restAndRecovery || 'Recovery';
-  if (dayType === SMART_DAY_TYPES.MEET) return t.sbdMeetDay || t.meetDay || 'Meet day';
-  if (dayType === SMART_DAY_TYPES.TRAINING) return t.training || 'Training';
+function getSmartDayTypeDisplayLabel(dayType, t = translations.en) {
+  t = completeUiTranslations(t);
+  if (dayType === SMART_DAY_TYPES.DELOAD) return t.deload;
+  if (dayType === SMART_DAY_TYPES.RECOVERY) return t.restAndRecovery;
+  if (dayType === SMART_DAY_TYPES.MEET) return t.sbdMeetDay || t.meetDay;
+  if (dayType === SMART_DAY_TYPES.TRAINING) return t.training;
   return null;
 }
 
-export function getSmartMeetdayBlockerDisplayLabels(blockers = [], t = {}, readiness = {}) {
+export function getSmartMeetdayBlockerDisplayLabels(blockers = [], t = translations.en, readiness = {}) {
+  t = completeUiTranslations(t);
   const fatigueScore = Number(readiness.recentFatigueScore) || 0;
   const lastEffort = String(readiness.lastWorkoutEffort || '').trim().toUpperCase();
   const fatigueCause = lastEffort
@@ -5027,25 +5378,25 @@ export function getSmartMeetdayBlockerDisplayLabels(blockers = [], t = {}, readi
     : null;
   const fatigueLabel = fatigueScore > 0
     ? `fatigue ${fatigueScore}/${SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE}${fatigueCause ? ` (${fatigueCause})` : ''}`
-    : (t.smartBlockerFatigue || 'fatigue');
+    : (t.smartBlockerFatigue);
 
   const labels = {
-    'active-block-too-short': t.smartBlockerActiveBlock || 'block too short',
+    'active-block-too-short': t.smartBlockerActiveBlock,
     fatigue: fatigueLabel,
-    'failed-skipped': t.smartBlockerFailedSkipped || 'failed/skipped',
-    'missing-lift-exposure': t.smartBlockerMissingLiftExposure || 'lift exposure',
-    'opener-readiness': t.smartBlockerOpenerReadiness || 'opener readiness',
+    'failed-skipped': t.smartBlockerFailedSkipped,
+    'missing-lift-exposure': t.smartBlockerMissingLiftExposure,
+    'opener-readiness': t.smartBlockerOpenerReadiness,
     'second-attempt-readiness':
-      t.smartBlockerSecondAttemptReadiness || 'second-attempt readiness',
+      t.smartBlockerSecondAttemptReadiness,
     'one-rm-readiness':
-      t.smartBlockerOneRMReadiness || '100% real 1RM not reached',
+      t.smartBlockerOneRMReadiness,
     'deadlift-taper-recovery':
-      t.smartBlockerDeadliftTaperRecovery || 'Deadlift taper recovery',
-    'meet-plan-not-ready': t.smartBlockerMeetPlanNotReady || 'meet plan',
-    'last-workout-hard': t.smartBlockerLastWorkoutHard || 'last workout hard',
-    'after-recovery-intervention': t.smartBlockerAfterRecovery || 'after recovery',
-    'post-meet-training-cooldown': t.smartBlockerPostMeetCooldown || 'post-meet rebuild',
-    'post-failed-meet-training-cooldown': t.smartBlockerPostFailedMeetCooldown || 'post-failed meet rebuild',
+      t.smartBlockerDeadliftTaperRecovery,
+    'meet-plan-not-ready': t.smartBlockerMeetPlanNotReady,
+    'last-workout-hard': t.smartBlockerLastWorkoutHard,
+    'after-recovery-intervention': t.smartBlockerAfterRecovery,
+    'post-meet-training-cooldown': t.smartBlockerPostMeetCooldown,
+    'post-failed-meet-training-cooldown': t.smartBlockerPostFailedMeetCooldown,
   };
 
   return (blockers || [])
@@ -5053,14 +5404,15 @@ export function getSmartMeetdayBlockerDisplayLabels(blockers = [], t = {}, readi
     .filter(Boolean);
 }
 
-export function getSmartAttemptPhaseLabel(phase, t = {}) {
+export function getSmartAttemptPhaseLabel(phase, t = translations.en) {
+  t = completeUiTranslations(t);
   if (phase === 'third-attempt') {
-    return t.smartAttemptPhaseThird || '3rd attempt';
+    return t.smartAttemptPhaseThird;
   }
   if (phase === 'second-attempt') {
-    return t.smartAttemptPhaseSecond || '2nd attempt';
+    return t.smartAttemptPhaseSecond;
   }
-  return t.smartAttemptPhaseOpener || 'opener';
+  return t.smartAttemptPhaseOpener;
 }
 
 function canMentionSmartMeetPlanReady(readiness = {}) {
@@ -5089,12 +5441,37 @@ function hasSmartFatigueEvidence(readiness = {}) {
   return Number(readiness.recentFailedOrSkippedSetCount) > 0 || Number(readiness.recentFatigueScore) > 0;
 }
 
-function getSmartFatigueFailedDisplayText(readiness = {}) {
+function formatTranslatedText(template, values = {}) {
+  return Object.entries(values).reduce(
+    (text, [key, value]) => text.split(`{${key}}`).join(String(value)),
+    String(template || '')
+  );
+}
+
+function completeUiTranslations(t) {
+  if (!t || t === translations.en) return translations.en;
+  return { ...translations.en, ...t };
+}
+
+function getSmartFatigueFailedDisplayText(readiness = {}, t = translations.en) {
   const failedCount = Number(readiness.recentFailedOrSkippedSetCount) || 0;
-  const failedText = `failed/skipped ${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT}`;
+  const failedText = formatTranslatedText(
+    t.smartFailedSkippedCount,
+    {
+      current: failedCount,
+      target: SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT,
+    }
+  );
   if (!hasSmartFatigueEvidence(readiness)) return failedText;
   const fatigueScore = Number(readiness.recentFatigueScore) || 0;
-  return `fatigue ${fatigueScore}/${SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE}, ${failedText}`;
+  return formatTranslatedText(
+    t.smartFatigueAndFailedCount,
+    {
+      fatigue: fatigueScore,
+      fatigueTarget: SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE,
+      failed: failedText,
+    }
+  );
 }
 
 function getKelaniTrainingStructureIssues(workout = {}) {
@@ -5139,7 +5516,8 @@ function getKelaniWarmupJumpIssues(workout = {}) {
   });
 }
 
-export function getSmartDecisionReasonDisplayText(summary, t = {}, workout = {}) {
+export function getSmartDecisionReasonDisplayText(summary, t = translations.en, workout = {}) {
+  t = completeUiTranslations(t);
   if (!summary?.reason) return null;
 
   const readiness = summary.readiness || {};
@@ -5153,48 +5531,61 @@ export function getSmartDecisionReasonDisplayText(summary, t = {}, workout = {})
     const failedByLift = readiness.recentFailedOrSkippedSetCountsByLift || {};
     const failedLiftText = LIFT_ORDER
       .filter(lift => Number(failedByLift[lift]) > 0)
-      .map(lift => `${lift} ${Number(failedByLift[lift])}`)
+      .map(lift => `${liftLabel(lift, t)} ${Number(failedByLift[lift])}`)
       .join(', ');
 
     if (failedLiftText) {
-      return t.smartReasonFailedSetDeload || `${failedLiftText} failed/skipped → lighter deload day.`;
+      return formatTranslatedText(
+        t.smartReasonFailedSetDeload,
+        {
+          details: formatTranslatedText(
+            t.smartFailedLiftCounts,
+            { lifts: failedLiftText }
+          ),
+        }
+      );
     }
 
-    return t.smartReasonFailedSetDeload || `${getSmartFatigueFailedDisplayText(readiness)} → lighter deload day.`;
+    return formatTranslatedText(
+      t.smartReasonFailedSetDeload,
+      { details: getSmartFatigueFailedDisplayText(readiness, t) }
+    );
   }
 
   if (summary.reason === SMART_DECISION_REASONS.IDEAL_ROUTE) {
     if (summary.dayType === SMART_DAY_TYPES.MEET) {
-      return t.smartReasonIdealRouteMeet || 'The optimal route is ready for the Kelani meet.';
+      return t.smartReasonIdealRouteMeet;
     }
 
     if (summary.dayType === SMART_DAY_TYPES.RECOVERY) {
       if (workout?.smartIdealRoute?.stage === 'post-meet') {
-        return t.smartReasonIdealRoutePostMeetRecovery ||
-          'The meet is complete. This recovery day lets fatigue settle before you start the next cycle.';
+        return t.smartReasonIdealRoutePostMeetRecovery;
       }
 
-      return t.smartReasonIdealRouteRecovery || 'The optimal route schedules recovery here.';
+      return t.smartReasonIdealRouteRecovery;
     }
 
-    return t.smartReasonIdealRouteTraining || 'The optimal route continues with this training workout.';
+    return t.smartReasonIdealRouteTraining;
   }
 
   if (summary.reason === SMART_DECISION_REASONS.DEADLIFT_TAPER_RECOVERY) {
-    return t.smartReasonDeadliftTaperRecovery ||
-      'A failed heavy Deadlift requires two final recovery days before the meet.';
+    return t.smartReasonDeadliftTaperRecovery;
   }
 
   if (summary.reason === SMART_DECISION_REASONS.FATIGUE_RECOVERY) {
-    const meetPlanText = canMentionSmartMeetPlanReady(readiness)
-      ? 'Meet plan ready, but '
-      : '';
-
-    return t.smartReasonFatigueRecovery || `${meetPlanText}${getSmartFatigueFailedDisplayText(readiness)} → recovery day.`;
+    const key = canMentionSmartMeetPlanReady(readiness)
+      ? 'smartReasonFatigueRecoveryMeetReady'
+      : 'smartReasonFatigueRecovery';
+    return formatTranslatedText(
+      t[key] || (key === 'smartReasonFatigueRecoveryMeetReady'
+        ? 'Meet plan ready, but {details}. Recovery day.'
+        : '{details}. Recovery day.'),
+      { details: getSmartFatigueFailedDisplayText(readiness, t) }
+    );
   }
 
   if (summary.reason === SMART_DECISION_REASONS.FREQUENCY_RECOVERY) {
-    return 'Rolling 7-workout frequency leaves no safe lift combination, so recovery was selected.';
+    return t.smartReasonFrequencyRecovery;
   }
 
   if (summary.reason === SMART_DECISION_REASONS.TRAINING_STREAK_RECOVERY) {
@@ -5203,20 +5594,29 @@ export function getSmartDecisionReasonDisplayText(summary, t = {}, workout = {})
       SMART_THRESHOLDS.TRAINING_STREAK_RECOVERY_DAYS
     );
 
-    return `Planned recovery after ${completedTrainingWorkouts}/${SMART_THRESHOLDS.TRAINING_STREAK_RECOVERY_DAYS} training workouts.`;
+    return formatTranslatedText(
+      t.smartReasonTrainingStreakRecovery,
+      {
+        current: completedTrainingWorkouts,
+        target: SMART_THRESHOLDS.TRAINING_STREAK_RECOVERY_DAYS,
+      }
+    );
   }
 
   if (summary.reason === SMART_DECISION_REASONS.TRAINING_FALLBACK) {
     if (activeBlockCount === 0 && Number(readiness.completedCount) === 0) {
-      return t.smartReasonTrainingFallback || `New cycle. Build readiness toward meet plan → training day.`;
+      return t.smartReasonTrainingFallbackNewCycle;
     }
 
     if (readiness.lastWasRecoveryIntervention) {
       if (canMentionSmartMeetPlanReady(readiness)) {
-        return t.smartReasonTrainingFallback || `Meet plan ready, but fresh after recovery → training day.`;
+        return t.smartReasonTrainingFallbackMeetReadyAfterRecovery;
       }
 
-      return t.smartReasonTrainingFallback || `Fresh after recovery. ${getSmartFatigueFailedDisplayText(readiness)} → training day.`;
+      return formatTranslatedText(
+        t.smartReasonTrainingFallbackAfterRecovery,
+        { details: getSmartFatigueFailedDisplayText(readiness, t) }
+      );
     }
 
     const blockers = getSmartMeetdayBlockerDisplayLabels(
@@ -5227,49 +5627,79 @@ export function getSmartDecisionReasonDisplayText(summary, t = {}, workout = {})
 
     if (blockers.length > 0) {
       if (canMentionSmartMeetPlanReady(readiness)) {
-        return t.smartReasonTrainingFallback || `Meet plan ready, but ${blockers.slice(0, 3).join(', ')} → training day.`;
+        return formatTranslatedText(
+          t.smartReasonTrainingFallbackMeetReadyBlocked,
+          { blockers: blockers.slice(0, 3).join(', ') }
+        );
       }
 
       const weakestLift = readiness.meetPlanWeakestLift;
       const weakestBest = Number(readiness.meetPlanWeakestBestE1RM) || 0;
       const weakestTarget = Number(readiness.meetPlanWeakestTarget) || 0;
       const weakestText = weakestLift && weakestBest > 0 && weakestTarget > 0
-        ? `${weakestLift} e1RM ${formatWeightValue(weakestBest, WEIGHT_UNITS.KG)} / target ${formatWeightValue(weakestTarget, WEIGHT_UNITS.KG)}`
+        ? formatTranslatedText(
+          t.smartWeakestE1RMTarget,
+          {
+            lift: liftLabel(weakestLift, t),
+            current: formatWeightValue(weakestBest, WEIGHT_UNITS.KG),
+            target: formatWeightValue(weakestTarget, WEIGHT_UNITS.KG),
+          }
+        )
         : null;
 
-      return t.smartReasonTrainingFallback || `Meet not ready: ${[
-        weakestText,
-        ...blockers,
-      ].filter(Boolean).slice(0, 3).join(', ')} → training day.`;
+      return formatTranslatedText(
+        t.smartReasonTrainingFallbackBlocked,
+        {
+          details: [weakestText, ...blockers]
+            .filter(Boolean)
+            .slice(0, 3)
+            .join(', '),
+        }
+      );
     }
 
-    return t.smartReasonTrainingFallback || `Meet readiness ${meetReadyDays}/${SMART_THRESHOLDS.MEETDAY_MIN_ACTIVE_BLOCK_DAYS}; ${getSmartFatigueFailedDisplayText(readiness)} → training day.`;
+    return formatTranslatedText(
+      t.smartReasonTrainingFallbackReadiness,
+      {
+        current: meetReadyDays,
+        target: SMART_THRESHOLDS.MEETDAY_MIN_ACTIVE_BLOCK_DAYS,
+        details: getSmartFatigueFailedDisplayText(readiness, t),
+      }
+    );
   }
 
   if (summary.reason === SMART_DECISION_REASONS.MEETDAY_READY) {
     if (canMentionSmartMeetPlanReady(readiness) && readiness.lastWasRecoveryIntervention) {
-      return t.smartReasonMeetdayReady || `Meet plan ready, fresh after recovery → meet day.`;
+      return t.smartReasonMeetdayReadyAfterRecovery;
     }
 
     if (canMentionSmartMeetPlanReady(readiness)) {
-      return t.smartReasonMeetdayReady || `Meet plan ready, ${getSmartFatigueFailedDisplayText(readiness)} → meet day.`;
+      return formatTranslatedText(
+        t.smartReasonMeetdayReady,
+        { details: getSmartFatigueFailedDisplayText(readiness, t) }
+      );
     }
 
-    return t.smartReasonMeetdayReady || `Meet readiness ${SMART_THRESHOLDS.MEETDAY_MIN_ACTIVE_BLOCK_DAYS}/${SMART_THRESHOLDS.MEETDAY_MIN_ACTIVE_BLOCK_DAYS}, ${getSmartFatigueFailedDisplayText(readiness)} → meet day.`;
+    return formatTranslatedText(
+      t.smartReasonMeetdayReadyByReadiness,
+      {
+        current: SMART_THRESHOLDS.MEETDAY_MIN_ACTIVE_BLOCK_DAYS,
+        target: SMART_THRESHOLDS.MEETDAY_MIN_ACTIVE_BLOCK_DAYS,
+        details: getSmartFatigueFailedDisplayText(readiness, t),
+      }
+    );
   }
 
   if (summary.reason === SMART_DECISION_REASONS.POST_MEET_RECOVERY) {
     const target = Number(readiness.postMeetRecoveryTarget) || 0;
     const completed = Number(readiness.postMeetRecoveryDaysCompleted) || 0;
     if (target > 0) {
-      return (t.smartReasonPostMeetRecovery ||
-        'Recovery after the meet {current}/{target}. Rest lets fatigue settle before the next cycle begins.')
+      return (t.smartReasonPostMeetRecovery)
         .replace('{current}', Math.min(completed + 1, target))
         .replace('{target}', target);
     }
 
-    return t.smartReasonIdealRoutePostMeetRecovery ||
-      'The meet is complete. This recovery day lets fatigue settle before you start the next cycle.';
+    return t.smartReasonIdealRoutePostMeetRecovery;
   }
 
   return null;
@@ -5279,13 +5709,13 @@ export function shouldShowSmartReasonWithStructuredDetails(dayType) {
   return [SMART_DAY_TYPES.RECOVERY, SMART_DAY_TYPES.DELOAD].includes(dayType);
 }
 
-function getSmartTrainingSelectionDisplayText(workout, t = {}) {
+function getSmartTrainingSelectionDisplayText(workout, t = translations.en) {
   // Meet-readiness numbers are presented as explicitly named detail rows.
   // The old combined “e1RM limiter / target” sentence was ambiguous.
   return null;
 }
 
-function getSmartSetDisplayLabel(set = {}, t = {}) {
+function getSmartSetDisplayLabel(set = {}, t = translations.en) {
   const labelKey = String(set?.labelKey || '').trim();
   const fallbackLabels = {
     topTriple: 'Top triple',
@@ -5305,18 +5735,18 @@ function formatSmartPrescriptionPercent(pct) {
   return formatted ? `${formatted}%` : null;
 }
 
-function getSmartIntensityReasonDisplayText(liftBlock = {}, t = {}) {
+function getSmartIntensityReasonDisplayText(liftBlock = {}, t = translations.en) {
   const intensity = getSmartIntensityRole(liftBlock);
   const reasonByIntensity = {
-    heavy: t.smartHeavyTotalIntensityReason || 'Heavy intensity.',
-    medium: t.smartMediumTotalIntensityReason || 'Medium intensity.',
-    light: t.smartLightTotalIntensityReason || 'Light work.',
+    heavy: t.smartHeavyTotalIntensityReason,
+    medium: t.smartMediumTotalIntensityReason,
+    light: t.smartLightTotalIntensityReason,
   };
 
   return reasonByIntensity[intensity] || reasonByIntensity.light;
 }
 
-function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkout = false) {
+function getSmartLiftPrescriptionPlan(liftBlock = {}, t = translations.en, isSingleLiftWorkout = false) {
   const prescription = liftBlock?.smartPrescription || null;
   if (!prescription) return null;
 
@@ -5393,14 +5823,12 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
   if (prescription.regressionReason) {
     reasonParts.push(
       prescription.regressionReason === 'ready-taper'
-        ? (t.smartTaperReason || 'Meet-ready taper: reducing fatigue while preserving competition readiness.')
-        : (t.smartRegressionReason ||
-          'Recovery or missed work blocked normal progression.')
+        ? (t.smartTaperReason)
+        : (t.smartRegressionReason)
     );
   } else if (prescription.repeatVariationApplied) {
     reasonParts.push(
-      t.smartEquivalentStimulusProgressed ||
-      'Progressed to avoid repeating the same stimulus.'
+      t.smartEquivalentStimulusProgressed
     );
   } else if (
     ['secondary', 'tertiary'].includes(prescription.role || liftBlock.role) &&
@@ -5413,8 +5841,7 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
     // two-lift-day copy below would be misleading here.
     if (getSmartIntensityRole(liftBlock) === 'medium') {
       reasonParts.push(
-        t.smartFrequencyMediumSoloReason ||
-        "This lift's heavy slot is already used this week. Today's medium session fills its remaining weekly target."
+        t.smartFrequencyMediumSoloReason
       );
     }
   } else if (
@@ -5427,8 +5854,7 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
       )
   ) {
     reasonParts.push(
-      t.smartSafeProgressionReason ||
-      'Safe progression from the previous successful top set.'
+      t.smartSafeProgressionReason
     );
   }
 
@@ -5437,7 +5863,7 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
   }
 
   return {
-    label: `${liftBlock.lift} (${t.smartPrescriptionPlan || 'Plan'})`,
+    label: `${liftBlock.lift} (${t.smartPrescriptionPlan})`,
     value: parts.join(' · '),
     kind: 'prescription',
   };
@@ -5445,7 +5871,7 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = {}, isSingleLiftWorkou
 
 function getFrequencySupplementedLiftPrescriptionPlan(
   liftBlock = {},
-  t = {},
+  t = translations.en,
 ) {
   const prescription = liftBlock?.smartPrescription || {};
 
@@ -5472,24 +5898,24 @@ function getFrequencySupplementedLiftPrescriptionPlan(
     || prescription.volumeAnchorPct
   ) || 0;
   const planParts = [
-    `${t.smartTopSingle || 'Top single'}: ${formatPct(topSingle.pct)}`,
+    `${t.smartTopSingle}: ${formatPct(topSingle.pct)}`,
     `${volumeSets.length}×${volumeReps}×${formatPct(volumePct)}`,
     getSmartIntensityReasonDisplayText(liftBlock, t),
   ];
 
   planParts.push(
-    t.smartPrimarySelectionReason
-    || 'Primary work was selected from readiness and recent training.',
+    t.smartPrimarySelectionReason,
   );
 
   return {
-    label: `${liftBlock.lift} (${t.smartPrescriptionPlan || 'Plan'})`,
+    label: `${liftBlock.lift} (${t.smartPrescriptionPlan})`,
     value: planParts.join(' · '),
     kind: 'prescription',
   };
 }
 
-export function getSmartPrescriptionDetailRows(workout = {}, t = {}) {
+export function getSmartPrescriptionDetailRows(workout = {}, t = translations.en) {
+  t = completeUiTranslations(t);
   if (
     workout?.smartDayType !== SMART_DAY_TYPES.TRAINING &&
     workout?.smartDecisionSummary?.dayType !== SMART_DAY_TYPES.TRAINING
@@ -5507,7 +5933,8 @@ export function getSmartPrescriptionDetailRows(workout = {}, t = {}) {
     .filter(row => row?.value);
 }
 
-export function buildSmartDiagnosticText(workout = {}, t = {}, currentE1RMs = {}) {
+export function buildSmartDiagnosticText(workout = {}, t = translations.en, currentE1RMs = {}) {
+  t = completeUiTranslations(t);
   const summary = workout?.smartDecisionSummary || {};
   const readiness = summary.readiness || {};
   const selection = workout?.smartTrainingSelectionSummary || {};
@@ -5606,7 +6033,8 @@ async function copySmartDiagnosticText(text = '') {
   if (!copied) throw new Error('Clipboard copy failed.');
 }
 
-export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {}) {
+export function getSmartModalDetailRows(workout = {}, t = translations.en, currentE1RMs = {}) {
+  t = completeUiTranslations(t);
   const summary = workout?.smartDecisionSummary || {};
   const readiness = summary.readiness || {};
   const rows = [];
@@ -5623,13 +6051,13 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
   if (isMeetDay) {
     return [
       {
-        label: t.smartMeetDayReadyLabel || 'You are ready',
-        value: t.smartMeetDayReadyText || 'Trust your preparation. Stay calm and execute one attempt at a time.',
+        label: t.smartMeetDayReadyLabel,
+        value: t.smartMeetDayReadyText,
         kind: 'meet-day',
       },
       {
-        label: t.smartMeetDayStrategyLabel || 'Attempt strategy',
-        value: t.smartMeetDayStrategyText || 'Secure the opener, build the total with the second, then commit to the third.',
+        label: t.smartMeetDayStrategyLabel,
+        value: t.smartMeetDayStrategyText,
         kind: 'meet-day',
       },
     ];
@@ -5643,30 +6071,27 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
       ? Math.min(completedRecoveryDays + 1, recoveryTarget)
       : 0;
     const recoveryPlanText = recoveryTarget > 0
-      ? (t.smartPostMeetRecoveryPlanText || 'Recovery day {current} of {target}.')
+      ? (t.smartPostMeetRecoveryPlanText)
         .replace('{current}', recoveryDay)
         .replace('{target}', recoveryTarget)
-      : (t.smartPostMeetRecoveryPlanFallback || 'Take the recovery you need after the meet.');
+      : (t.smartPostMeetRecoveryPlanFallback);
 
     return [
       {
-        label: t.smartPostMeetStatus || 'Meet complete',
-        value: t.smartPostMeetStatusText ||
-          'The meet is done. Kelani is scheduling recovery.',
+        label: t.smartPostMeetStatus,
+        value: t.smartPostMeetStatusText,
       },
       {
-        label: t.smartPostMeetRecoveryPlan || 'Recovery plan',
+        label: t.smartPostMeetRecoveryPlan,
         value: recoveryPlanText,
       },
       {
-        label: t.smartPostMeetRecoveryReason || 'Why this recovery',
-        value: t.smartPostMeetRecoveryAfterMeet ||
-          'Recover from the meet before starting the next cycle.',
+        label: t.smartPostMeetRecoveryReason,
+        value: t.smartPostMeetRecoveryAfterMeet,
       },
       {
-        label: t.smartPostMeetNextStep || 'Next step',
-        value: t.smartPostMeetNextStepText ||
-          'After these recovery days, this cycle ends and you start a new one.',
+        label: t.smartPostMeetNextStep,
+        value: t.smartPostMeetNextStepText,
       },
     ];
   }
@@ -5700,7 +6125,7 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
         maximumFractionDigits: 1,
       })} kg`;
     const oneRMBlockerText =
-      t.smartOneRMNotReached || '100% of the real 1RM not yet reached';
+      t.smartOneRMNotReached;
     const meetReady = Boolean(
       readiness.meetPlanReady || readiness.meetPlanFullyDemonstrated
     );
@@ -5718,18 +6143,18 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
       );
     const statusText = meetReady
       ? isIdealRouteTaper
-        ? (t.smartMeetFullyReadyTaper || 'Fully meet-ready: all lift goals achieved. Tapering toward the meet is now underway.')
-        : (t.smartMeetFullyReady || 'Fully meet-ready: all lift goals achieved. Training continues as planned.')
+        ? (t.smartMeetFullyReadyTaper)
+        : (t.smartMeetFullyReady)
       : blockingLifts.length > 0
         ? `${blockingLifts.join(', ')} (${oneRMBlockerText})`
-        : (t.smartMeetPlanNotReady || 'Meet plan not ready');
+        : (t.smartMeetPlanNotReady);
 
     rows.push({
       label: meetReady
-        ? (t.smartMeetStatus || 'Meet status')
+        ? (t.smartMeetStatus)
         : blockingLifts.length > 1
-          ? (t.smartCurrentBlockers || 'Current blockers')
-          : (t.smartCurrentBlocker || 'Current blocker'),
+          ? (t.smartCurrentBlockers)
+          : (t.smartCurrentBlocker),
       value: statusText,
     });
 
@@ -5774,13 +6199,13 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
         0
       );
       const liftIsReady = liftReadinessGap <= 0;
-      const cycleEstimateLabel = t.smartCycleEstimateShort || 'Cycle e1RM';
+      const cycleEstimateLabel = t.smartCycleEstimateShort;
 
       rows.push({
         label: lift,
         value: liftIsReady
-          ? `${t.smartLiftReady || 'Ready'} (${cycleEstimateLabel} ${formatEstimate(liftDisplayCycleEstimate)})`
-          : `${cycleEstimateLabel} ${formatEstimate(liftDisplayCycleEstimate)} → ${formatEstimate(liftDisplayReadinessTarget)} (${t.smartOpenerGapShort || 'Gap'} ${formatEstimate(liftReadinessGap)})`,
+          ? `${t.smartLiftReady} (${cycleEstimateLabel} ${formatEstimate(liftDisplayCycleEstimate)})`
+          : `${cycleEstimateLabel} ${formatEstimate(liftDisplayCycleEstimate)} → ${formatEstimate(liftDisplayReadinessTarget)} (${t.smartOpenerGapShort} ${formatEstimate(liftReadinessGap)})`,
         kind: 'lift-readiness',
       });
     });
@@ -5794,24 +6219,21 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
     summary.dayType !== SMART_DAY_TYPES.MEET
   ) {
     rows.push({
-      label: t.smartProjectedMeet || 'Projected meet',
+      label: t.smartProjectedMeet,
       value: meetProjection.available
         ? meetProjection.label
-        : (t.smartProjectionUnavailable ||
-          'Not enough active-cycle data for a reliable projection.'),
+        : (t.smartProjectionUnavailable),
     });
 
   }
 
   if (showMeetReadinessDetail && hasMeetReadinessDetail) {
     const readinessBasisText = readiness.meetProjection?.available
-      ? (t.smartReadinessBasisTextWithProjection ||
-        'Cycle e1RM is an estimate based on your best successful set in this cycle; the target is your confirmed real 1RM. The projection assumes normal progress and unchanged meet attempts.')
-      : (t.smartReadinessBasisText ||
-        'Cycle e1RM is an estimate based on your best successful set in this cycle; the target is your confirmed real 1RM.');
+      ? (t.smartReadinessBasisTextWithProjection)
+      : (t.smartReadinessBasisText);
 
     rows.push({
-      label: t.smartReadinessBasis || 'Readiness basis',
+      label: t.smartReadinessBasis,
       value: readinessBasisText,
       kind: 'note',
     });
@@ -5834,7 +6256,7 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
 
   if (showFatigueDetail) {
     rows.push({
-      label: t.smartBlockerFatigue || 'Fatigue',
+      label: t.smartBlockerFatigue,
       value: fatigueScore >= fatigueThreshold
         ? `${fatigueScore} (recovery required)`
         : `${fatigueScore} (below recovery threshold)`,
@@ -5845,14 +6267,14 @@ export function getSmartModalDetailRows(workout = {}, t = {}, currentE1RMs = {})
   if (showFailureDetail) {
     const failedThresholdStatus = failedCount >= SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT
       ? summary.dayType === SMART_DAY_TYPES.RECOVERY
-        ? (t.smartRecoverySelected || 'recovery selected')
+        ? (t.smartRecoverySelected)
         : summary.dayType === SMART_DAY_TYPES.DELOAD
-          ? (t.smartDeloadSelected || 'deload selected')
-          : (t.smartDeloadRequired || 'deload required')
-      : (t.smartBelowDeloadThreshold || 'below deload threshold');
+          ? (t.smartDeloadSelected)
+          : (t.smartDeloadRequired)
+      : (t.smartBelowDeloadThreshold);
 
     rows.push({
-      label: t.smartBlockerFailed || 'Failed',
+      label: t.smartBlockerFailed,
       value: `${failedCount}/${SMART_THRESHOLDS.FAILED_SET_DELOAD_COUNT} (${failedThresholdStatus})`,
     });
   }
@@ -5910,7 +6332,7 @@ export function SmartDayTypeInline({
   const limiterMatch = selectionText?.match(/^e1RM limiter:\s*(.+)$/i);
   const infoRows = [
     {
-      label: t.smartDecision || 'Decision',
+      label: t.smartDecision,
       value: label,
       emphasis: true,
     },
@@ -5918,11 +6340,11 @@ export function SmartDayTypeInline({
     reasonText &&
     !hasDedicatedPostMeetRecoveryExplanation &&
     (!usesStructuredSmartDetails || showReasonWithStructuredDetails) ? {
-      label: t.smartReason || 'Reason',
+      label: t.smartReason,
       value: reasonText,
     } : null,
     !usesStructuredSmartDetails && selectionText ? {
-      label: limiterMatch ? 'e1RM limit' : (t.smartSelection || 'Selection'),
+      label: limiterMatch ? 'e1RM limit' : (t.smartSelection),
       value: limiterMatch ? limiterMatch[1] : selectionText,
     } : null,
   ].filter(Boolean);
@@ -5933,9 +6355,9 @@ export function SmartDayTypeInline({
   // "Meet readiness" section and into the generic "Details" list whenever
   // there is more than one blocker, or none.
   const currentBlockerLabels = [
-    t.smartCurrentBlocker || 'Current blocker',
-    t.smartCurrentBlockers || 'Current blockers',
-    t.smartMeetStatus || 'Meet status',
+    t.smartCurrentBlocker,
+    t.smartCurrentBlockers,
+    t.smartMeetStatus,
   ];
   const statusRows = infoRows.filter(
     row => currentBlockerLabels.includes(row.label)
@@ -5951,7 +6373,7 @@ export function SmartDayTypeInline({
     row => row.kind === 'prescription'
   );
   const projectedMeetLabel =
-    t.smartProjectedMeet || 'Projected meet';
+    t.smartProjectedMeet;
   const projectionRows = otherRows.filter(row =>
     row.label === projectedMeetLabel
   );
@@ -6018,7 +6440,7 @@ export function SmartDayTypeInline({
       }}>
         <button
           type="button"
-          aria-label={`Smart: ${label}. ${t.smartWorkoutInfo || 'Open workout information'}`}
+          aria-label={`Smart: ${label}. ${t.smartWorkoutInfo}`}
           aria-expanded={showSmartInfo}
           onClick={() => {
             setSmartCopyStatus(null);
@@ -6047,7 +6469,7 @@ export function SmartDayTypeInline({
             textDecoration: 'none',
           }}
         >
-          <span>Smart: {label}</span>
+          <span>{t.smartLabel}: {label}</span>
           <span
             aria-hidden="true"
             style={{
@@ -6075,7 +6497,7 @@ export function SmartDayTypeInline({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Smart workout info"
+          aria-label={t.smartWorkoutDialogLabel}
           onClick={() => setShowSmartInfo(false)}
           style={{
             position: 'fixed',
@@ -6124,7 +6546,7 @@ export function SmartDayTypeInline({
                   lineHeight: 1.15,
                   letterSpacing: -0.25,
                 }}>
-                  {t.smartWorkoutTitle || 'Smart workout'}
+                  {t.smartWorkoutTitle}
                 </h2>
                 {decisionRow ? (
                   <div style={{
@@ -6198,7 +6620,7 @@ export function SmartDayTypeInline({
                       {prescriptionRows.length > 0 && <div style={smartModalDividerStyle} />}
                       <div>
                         <div style={smartModalSectionTitleStyle}>
-                          {t.smartMeetReadinessTitle || 'Meet readiness'}
+                          {t.smartMeetReadinessTitle}
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -6301,7 +6723,7 @@ export function SmartDayTypeInline({
                   {meetDayRows.length > 0 && (
                     <div>
                       <div style={smartModalSectionTitleStyle}>
-                        {t.smartMeetDayFocusTitle || 'Meet day focus'}
+                        {t.smartMeetDayFocusTitle}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {meetDayRows.map(row => (
@@ -6321,7 +6743,7 @@ export function SmartDayTypeInline({
                       <div style={smartModalDividerStyle} />
                       <div>
                         <div style={smartModalSectionTitleStyle}>
-                          {t.smartDetailsTitle || 'Details'}
+                          {t.smartDetailsTitle}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                           {ordinaryGeneralRows.map(row => (
@@ -6384,7 +6806,7 @@ export function SmartDayTypeInline({
                   lineHeight: 1.35,
                   textAlign: 'center',
                 }}>
-                  {t.smartInfoUnavailable || 'No extra Smart details for this workout.'}
+                  {t.smartInfoUnavailable}
                 </p>
               )}
 
@@ -6419,10 +6841,10 @@ export function SmartDayTypeInline({
                   }}
                 >
                   {smartCopyStatus === 'copied'
-                    ? (t.smartDiagnosisCopied || 'Copied')
+                    ? (t.smartDiagnosisCopied)
                     : smartCopyStatus === 'failed'
-                      ? (t.smartCopyFailed || 'Copy failed')
-                      : (t.smartCopyDiagnosis || 'Copy diagnosis')}
+                      ? (t.smartCopyFailed)
+                      : (t.smartCopyDiagnosis)}
                 </button>
 
                 <button
@@ -6443,7 +6865,7 @@ export function SmartDayTypeInline({
                     cursor: 'pointer',
                   }}
                 >
-                  {t.close || 'Close'}
+                  {t.close}
                 </button>
               </div>
             </div>
@@ -6694,7 +7116,7 @@ export function CurrentWorkout({
               fontWeight: 700,
               lineHeight: 1.4
             }}>
-              {t.restReadyNextWorkout || 'Rest and recover. No lifting today; complete this rest day when you are ready to continue.'}
+              {t.restReadyNextWorkout}
             </p>
           </div>
         </div>
@@ -6706,7 +7128,7 @@ export function CurrentWorkout({
             data-testid="complete-rest-day-button"
             style={workoutCompletionButtonStyle()}
           >
-            {t.completeRestDay || 'Complete rest day'}
+            {t.completeRestDay}
           </button>
         )}
       </div>
@@ -6822,9 +7244,9 @@ export function CurrentWorkout({
                       type="button"
                       disabled={!guideAvailable}
                       onClick={() => guideAvailable && setSelectedExerciseGuideLift(liftBlock.lift)}
-                      title={guideAvailable ? (t.exerciseGuide || 'Guide') : undefined}
+                      title={guideAvailable ? (t.exerciseGuide) : undefined}
                       aria-label={guideAvailable
-                        ? `${workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}: ${t.exerciseGuide || 'Guide'}`
+                        ? `${workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}: ${t.exerciseGuide}`
                         : workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}
                       style={{
                         display: 'inline-flex',
@@ -7065,7 +7487,7 @@ export function CurrentWorkout({
                       <span>
                         {set.skipped
                           ? getSkippedSetMessage(set, t)
-                          : getFailedSetFeedbackMessage(set, t) || 'Set missed and skipped. Continue with the next set.'}
+                          : getFailedSetFeedbackMessage(set, t) || t.failedSetSkippedFeedback}
                       </span>
                     </div>
                   )}
@@ -7387,7 +7809,7 @@ export function CurrentWorkout({
                   <span>
                     {set.skipped
                       ? getSkippedSetMessage(set, t)
-                      : getFailedSetFeedbackMessage(set, t) || 'Set missed and skipped. Continue with the next set.'}
+                      : getFailedSetFeedbackMessage(set, t) || t.failedSetSkippedFeedback}
                   </span>
                 </div>
               )}
@@ -7721,7 +8143,7 @@ function MeetPlanModal({ meetPlan, meetTotals, t, weightUnit = WEIGHT_UNITS.KG, 
         onClick={onClose}
         style={modalActionButtonStyle('primary')}
       >
-        {t.back || 'Back'}
+        {t.back}
       </button>
     </SettingsModal>
   );
@@ -7968,8 +8390,8 @@ function chartMetricLabel(key) {
   if (key === 'gewicht') return weightMetricTitle(t.bodyweight);
   if (key === 'strength') return t.strength;
   if (key === 'eStrength') return t.eStrength;
-  if (key === 'strengthMax') return t.strengthMax || 'Strength Max';
-  if (key === 'eStrengthMax') return t.eStrengthMax || 'eStrength Max';
+  if (key === 'strengthMax') return t.strengthMax;
+  if (key === 'eStrengthMax') return t.eStrengthMax;
   if (key === 'bodyFat') return `${t.bodyFatPercent} (%)`;
   if (key === 'bodyWater') return `${t.bodyWaterPercent} (%)`;
   if (key === 'leanMass') return weightMetricTitle(t.leanMassKg);
@@ -8151,10 +8573,10 @@ function chartMetricLabel(key) {
   }
 
   const statsTabs = [
-    { key: 'lifts', label: t.statsTabLifts || 'Lifts' },
-    { key: 'totaal', label: t.statsTabTotal || 'Total' },
-    { key: 'lichaam', label: t.statsTabBody || 'Body' },
-    { key: 'scores', label: t.statsTabHealth || 'Health' },
+    { key: 'lifts', label: t.statsTabLifts },
+    { key: 'totaal', label: t.statsTabTotal },
+    { key: 'lichaam', label: t.statsTabBody },
+    { key: 'scores', label: t.statsTabHealth },
   ];
 
   function renderChartCard(chart) {
@@ -8310,7 +8732,7 @@ function chartMetricLabel(key) {
           })}
           {renderChartCard({
             key: 'strengthMax',
-            title: t.strengthMax || 'Strength Max',
+            title: t.strengthMax,
             color: THEME.meet,
             data: strengthData,
             dataKeys: ['strengthMax', 'eStrengthMax'],
@@ -8502,85 +8924,85 @@ function ProgramProfileSection({
 
   const steps = [
     {
-      title: t.programStepFocusTitle || 'Choose program',
+      title: t.programStepFocusTitle,
       key: 'focus',
       selected: draft?.focus,
       options: [
         {
           value: 'sbd',
-          title: t.programFocusSbd || 'Kelani SBD',
-          text: t.programFocusSbdText || 'Squat, Bench and Deadlift.',
+          title: t.programFocusSbd,
+          text: t.programFocusSbdText,
         },
         {
           value: 'lower',
-          title: t.programFocusLower || 'Kelani Adapt',
-          text: t.programFocusLowerText || 'Squat, Chest Press and Hip Thrust. No upper-body main lifts.',
+          title: t.programFocusLower,
+          text: t.programFocusLowerText,
         },
         {
           value: 'ultra',
-          title: t.programFocusSbdUltra || t.programProfileKelaniSbdUltra || 'Kelani SBD Ultra',
-          text: t.programFocusSbdUltraText || t.programProfileKelaniSbdUltraText || 'High-frequency SBD meet prep with more Squat, Bench and Deadlift exposure.',
+          title: t.programFocusSbdUltra || t.programProfileKelaniSbdUltra,
+          text: t.programFocusSbdUltraText || t.programProfileKelaniSbdUltraText,
         },
       ],
     },
     {
-      title: t.programStepPreparationTitle || 'Choose preparation',
+      title: t.programStepPreparationTitle,
       key: 'preparationMode',
       selected: draft?.preparationMode,
       options: [
         {
           value: 'off',
-          title: t.programOptionOff || 'Off',
-          text: t.programPreparationOffText || 'No preparation block.',
+          title: t.programOptionOff,
+          text: t.programPreparationOffText,
         },
         {
           value: 'basicFirst',
-          title: t.programPreparationGeneral || 'General',
-          text: t.programPreparationGeneralText || 'General preparation for the first main lift.',
+          title: t.programPreparationGeneral,
+          text: t.programPreparationGeneralText,
         },
         {
           value: 'shoulderThoracic',
-          title: t.programPreparationUpperBackFriendly || 'Upper-body friendly',
-          text: t.programPreparationUpperBackFriendlyText || 'Upper-body friendly shoulder, scapula and thoracic preparation.',
+          title: t.programPreparationUpperBackFriendly,
+          text: t.programPreparationUpperBackFriendlyText,
         },
       ],
     },
     {
-      title: t.programStepAccessoriesTitle || 'Choose accessories',
+      title: t.programStepAccessoriesTitle,
       key: 'accessoryMode',
       selected: draft?.accessoryMode,
       options: [
         {
           value: 'off',
-          title: t.programOptionOff || 'Off',
-          text: t.programAccessoriesOffText || 'No accessories after the main work.',
+          title: t.programOptionOff,
+          text: t.programAccessoriesOffText,
         },
         {
           value: 'standard',
-          title: t.programAccessoriesGeneral || 'General',
-          text: t.programAccessoriesGeneralText || 'General accessories based on the main lift.',
+          title: t.programAccessoriesGeneral,
+          text: t.programAccessoriesGeneralText,
         },
         {
           value: friendlyAccessoryMode,
-          title: t.programAccessoriesUpperBackFriendly || 'Upper-body friendly',
-          text: t.programAccessoriesUpperBackFriendlyText || 'Accessories selected to reduce upper-body stress.',
+          title: t.programAccessoriesUpperBackFriendly,
+          text: t.programAccessoriesUpperBackFriendlyText,
         },
       ],
     },
     {
-      title: t.programStepCooldownTitle || 'Choose cool-down',
+      title: t.programStepCooldownTitle,
       key: 'cooldownMode',
       selected: draft?.cooldownMode,
       options: [
         {
           value: 'off',
-          title: t.programOptionOff || 'Off',
-          text: t.programCooldownOffText || 'No cool-down block.',
+          title: t.programOptionOff,
+          text: t.programCooldownOffText,
         },
         {
           value: 'upperBackFriendly',
-          title: t.programCooldownUpperBackFriendly || 'Upper-body friendly',
-          text: t.programCooldownUpperBackFriendlyText || 'Rhomboid stretch and upper-back massage.',
+          title: t.programCooldownUpperBackFriendly,
+          text: t.programCooldownUpperBackFriendlyText,
         },
       ],
     },
@@ -8595,7 +9017,7 @@ function ProgramProfileSection({
         onClick={openWizard}
         style={programActionButtonStyle(THEME.primary, '6px 0 0')}
       >
-        {t.adjustProgram || 'Adjust program'}
+        {t.adjustProgram}
       </button>
 
       {showProgramOptions && draft && (
@@ -8633,7 +9055,7 @@ function ProgramProfileSection({
                 onClick={() => setStep(prev => Math.max(0, prev - 1))}
                 style={programActionButtonStyle(THEME.primary)}
               >
-                {t.back || 'Back'}
+                {t.back}
               </button>
             )}
 
@@ -8642,7 +9064,7 @@ function ProgramProfileSection({
               onClick={closeWizard}
               style={programActionButtonStyle(THEME.primary)}
             >
-              {t.cancel || 'Cancel'}
+              {t.cancel}
             </button>
           </div>
 
@@ -8654,7 +9076,7 @@ function ProgramProfileSection({
             lineHeight: 1.35,
             textAlign: 'center'
           }}>
-            {t.programProfileChangeNote || 'Program changes apply to current and future workouts. Completed workouts stay unchanged.'}
+            {t.programProfileChangeNote}
           </div>
         </SettingsModal>
       )}
@@ -9228,7 +9650,7 @@ function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, latestB
       <button
         type="button"
         onClick={() => setShowModal(true)}
-        aria-label={`${t.athleteLevelBadgeLabel || 'Experience level'}: ${levelLabel}`}
+        aria-label={`${t.athleteLevelBadgeLabel}: ${levelLabel}`}
         style={{
           appearance: 'none',
           display: 'inline',
@@ -9248,7 +9670,7 @@ function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, latestB
       </button>
 
       {showModal && (
-        <SettingsModal title={t.athleteLevelModalTitle || 'Your experience level'} onClose={() => setShowModal(false)}>
+        <SettingsModal title={t.athleteLevelModalTitle} onClose={() => setShowModal(false)}>
           <div style={{ textAlign: 'center', marginBottom: 4 }}>
             <div style={{ color: THEME.primary, fontSize: 22, fontWeight: 900, letterSpacing: 0.3 }}>
               {levelLabel}
@@ -9259,11 +9681,11 @@ function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, latestB
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
             <div>
-              <div style={modalLabelStyle}>{t.athleteLevelCurrentRatioLabel || 'Current eStrength'}</div>
+              <div style={modalLabelStyle}>{t.athleteLevelCurrentRatioLabel}</div>
               <div style={modalValueStyle}>{currentRatio.toFixed(2)}x</div>
             </div>
             <div>
-              <div style={modalLabelStyle}>{t.athleteLevelMaxRatioLabel || 'eStrength Max'}</div>
+              <div style={modalLabelStyle}>{t.athleteLevelMaxRatioLabel}</div>
               <div style={modalValueStyle}>{maxRatio.toFixed(2)}x</div>
             </div>
           </div>
@@ -9271,7 +9693,7 @@ function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, latestB
           <div style={modalDividerStyle} />
 
           <div>
-            <div style={modalLabelStyle}>{t.athleteLevelRangeLabel || 'Tier range'}</div>
+            <div style={modalLabelStyle}>{t.athleteLevelRangeLabel}</div>
             <div style={modalValueStyle}>
               {tier.min}x - {tier.max === Infinity ? '∞' : `${tier.max}x`}
             </div>
@@ -9281,7 +9703,7 @@ function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, latestB
 
           {nextLevel ? (
             <div>
-              <div style={modalLabelStyle}>{t.athleteLevelProgressLabel || 'Progress to next level'}</div>
+              <div style={modalLabelStyle}>{t.athleteLevelProgressLabel}</div>
               <div style={modalValueStyle}>
                 {kgToNext !== null
                   ? `≈ ${kgToNext} kg → ${nextLevelLabel}`
@@ -9289,13 +9711,13 @@ function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, latestB
               </div>
             </div>
           ) : (
-            <div style={modalValueStyle}>{t.athleteLevelTopTier || "You've reached the highest level."}</div>
+            <div style={modalValueStyle}>{t.athleteLevelTopTier}</div>
           )}
 
           <div style={modalDividerStyle} />
 
           <div style={{ color: modalMutedText, fontSize: 12, fontWeight: 600, lineHeight: 1.4 }}>
-            {t.athleteLevelExplanation || 'This level determines how often Smart Training schedules each lift per week.'}
+            {t.athleteLevelExplanation}
           </div>
 
           <button
@@ -9303,7 +9725,7 @@ function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, latestB
             onClick={() => setShowModal(false)}
             style={{ ...modalActionButtonStyle('primary'), marginTop: 16 }}
           >
-            {t.back || 'Back'}
+            {t.back}
           </button>
         </SettingsModal>
       )}
@@ -9463,7 +9885,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
         t={t}
         title={
           smartModel
-            ? (t.trainingModelSmart || 'Kelani SBD Smart')
+            ? (t.trainingModelSmart)
             : (
               <span style={{
                 display: 'inline-flex',
@@ -9475,7 +9897,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
                 <span>{getProgramProfileTitle(programProfile, t)}</span>
                 <button
                   type="button"
-                  aria-label={t.programTrainingFactors || 'Training factors'}
+                  aria-label={t.programTrainingFactors}
                   onClick={(event) => {
                     event.stopPropagation();
                     setShowProgramInfo(true);
@@ -9547,7 +9969,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
             background: THEME.card
           }}>
             <div style={{ padding: 8, color: THEME.primary, borderBottom: `1px solid ${THEME.border}` }}>
-              {t.programTrainingFactors || 'Training factors'}
+              {t.programTrainingFactors}
             </div>
             {LIFT_ORDER.map(lift => (
               <div
@@ -9565,7 +9987,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
             ))}
 
             <div style={{ padding: 8, color: THEME.muted }}>
-              {t.programFrequency || 'Frequency'}
+              {t.programFrequency}
             </div>
             {LIFT_ORDER.map(lift => (
               <div key={`program-info-frequency-${lift}`} style={{ padding: 8, textAlign: 'center', borderLeft: `1px solid ${THEME.border}` }}>
@@ -9574,7 +9996,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
             ))}
 
             <div style={{ padding: 8, color: THEME.muted, borderTop: `1px solid ${THEME.border}` }}>
-              {t.programVolume || 'Volume'}
+              {t.programVolume}
             </div>
             {LIFT_ORDER.map(lift => (
               <div key={`program-info-volume-${lift}`} style={{ padding: 8, textAlign: 'center', borderTop: `1px solid ${THEME.border}`, borderLeft: `1px solid ${THEME.border}` }}>
@@ -9583,7 +10005,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
             ))}
 
             <div style={{ padding: 8, color: THEME.muted, borderTop: `1px solid ${THEME.border}` }}>
-              {t.programIntensity || 'Intensity'}
+              {t.programIntensity}
             </div>
             {LIFT_ORDER.map(lift => (
               <div key={`program-info-intensity-${lift}`} style={{ padding: 8, textAlign: 'center', borderTop: `1px solid ${THEME.border}`, borderLeft: `1px solid ${THEME.border}` }}>
@@ -9600,7 +10022,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
             lineHeight: 1.35,
             textAlign: 'center'
           }}>
-            {programSummary.trainingDays} {t.programTrainingDays || 'training days'} · {programSummary.restDays} {t.programRestDays || 'rest days'}
+            {programSummary.trainingDays} {t.programTrainingDays} · {programSummary.restDays} {t.programRestDays}
           </div>
 
           <div style={{
@@ -9611,7 +10033,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
             lineHeight: 1.35,
             textAlign: 'center'
           }}>
-            {t.programIntensityNote || 'Intensity is the average planned percentage of max, weighted by reps.'}
+            {t.programIntensityNote}
           </div>
 
           <button
@@ -9619,7 +10041,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
             onClick={() => setShowProgramInfo(false)}
             style={programActionButtonStyle(THEME.primary, '12px 0 0')}
           >
-            {t.back || 'Back'}
+            {t.back}
           </button>
         </SettingsModal>
       )}
@@ -9968,7 +10390,7 @@ function Onboarding({ onStart, t }) {
           </div>
 
         <div style={{ display: 'contents' }}>
-          <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateColumns: '120px 110px', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 110px', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
             <label style={{ fontWeight: 800, color: THEME.text }}>
               {t.weightUnit}
             </label>
@@ -9993,7 +10415,7 @@ function Onboarding({ onStart, t }) {
             </select>
           </div>
 
-          <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateColumns: '120px 110px', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 110px', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
             <label htmlFor="onboarding-bodyweight" style={{ fontWeight: 800, color: THEME.text }}>
               {t.bodyweight}
             </label>
@@ -10398,8 +10820,8 @@ function App() {
     });
     const endTime = Date.now() + effectiveSeconds * 1000;
     const currentTranslations = translations[language] || translations.en || {};
-    const doneTitle = currentTranslations.restTimerDone || 'Rest finished';
-    const doneMessage = currentTranslations.restTimerDoneMessage || 'Your next set is ready.';
+    const doneTitle = currentTranslations.restTimerDone;
+    const doneMessage = currentTranslations.restTimerDoneMessage;
 
     const nextTimer = {
       id: Date.now(),
@@ -10491,7 +10913,66 @@ function App() {
   const [showWorkoutEffortPrompt, setShowWorkoutEffortPrompt] = useState(false);
   const [currentCycle, setCurrentCycle] = useState(1);
   const [bodyWeights, setBodyWeights] = useState([]);
-  const athleteLevel = getAthleteLevel({ prs, history, bodyWeights });
+  const athleteLevel = useMemo(
+    () => getAthleteLevel({ prs, history, bodyWeights }),
+    [prs, history, bodyWeights]
+  );
+  const anonymousUsageMetrics = useMemo(
+    () => buildAnonymousUsageMetrics({
+      history,
+      appVersion: import.meta.env.VITE_APP_VERSION || 'dev',
+      language,
+      weightUnit,
+      trainingModel,
+      athleteLevel,
+      preparationMode,
+      accessoryMode,
+      cooldownMode,
+    }),
+    [
+      history,
+      language,
+      weightUnit,
+      trainingModel,
+      athleteLevel,
+      preparationMode,
+      accessoryMode,
+      cooldownMode,
+    ]
+  );
+  const bestMaxesFromHistory = useMemo(
+    () => calculateBestMaxesFromHistory(history),
+    [history]
+  );
+  const achievedMaxesFromHistory = useMemo(
+    () => calculateAchievedMaxesFromHistory(history),
+    [history]
+  );
+  const dashboardRecentPrEvents = useMemo(
+    () => buildDashboardRecentPrEvents(history),
+    [history]
+  );
+  const currentCycleBestMaxes = useMemo(
+    () => getCurrentCycleBestMaxes(history, currentCycle),
+    [history, currentCycle]
+  );
+  const latestBodyDataEntry = useMemo(
+    () => getLatestBodyDataValues(bodyWeights),
+    [bodyWeights]
+  );
+  const latestBodyWeightEntry = useMemo(
+    () => [...bodyWeights].reverse().find(entry => entry.bodyWeight),
+    [bodyWeights]
+  );
+  const strengthRatioMaxes = useMemo(
+    () => calculateStrengthRatioMaxes({
+      prs,
+      oneRMs,
+      history,
+      bodyWeights,
+    }),
+    [prs, oneRMs, history, bodyWeights]
+  );
   const [meetPlannerAttempts, setMeetPlannerAttempts] = useState({});
   const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -10508,8 +10989,8 @@ function App() {
     if (!hasLoadedData || !Capacitor.isNativePlatform()) return undefined;
 
     const currentTranslations = translations[language] || translations.en || {};
-    const doneTitle = currentTranslations.restTimerDone || 'Rest finished';
-    const doneMessage = currentTranslations.restTimerDoneMessage || 'Your next set is ready.';
+    const doneTitle = currentTranslations.restTimerDone;
+    const doneMessage = currentTranslations.restTimerDoneMessage;
 
     const reconcileNativeTimer = () => {
       const restoredTimer = readPersistedRestTimerState();
@@ -14051,9 +14532,6 @@ function changeScreen(nextScreen) {
   window.scrollTo({ top: 0, behavior: 'auto' });
 }
 
-const bestMaxesFromHistory = calculateBestMaxesFromHistory(history);
-const achievedMaxesFromHistory = calculateAchievedMaxesFromHistory(history);
-
 const best1RMs = {
   Squat: Number(oneRMs.Squat) || bestMaxesFromHistory.Squat.oneRM || 0,
   Bench: Number(oneRMs.Bench) || bestMaxesFromHistory.Bench.oneRM || 0,
@@ -14080,22 +14558,18 @@ const dashboardE1RMMetrics = buildDashboardE1RMMetrics(
   best1RMs,
   bestE1RMs
 );
-const dashboardRecentPrEvents = buildDashboardRecentPrEvents(history);
 
 // Meet-plan readiness (blockers, gap-to-target) is scoped to what has
 // actually been achieved within the active cycle - an all-time best from a
 // previous cycle must not make this cycle's blocker list look resolved.
 // This must stay computed the same way buildSmartMeetPlanReadiness scopes
 // its own currentCycleBestE1RM, or the two disagree.
-const currentCycleBestMaxes = getCurrentCycleBestMaxes(history, currentCycle);
 const currentCycleE1RMs = {
   Squat: roundDashboardWeightKg(currentCycleBestMaxes.Squat.e1rm),
   Bench: roundDashboardWeightKg(currentCycleBestMaxes.Bench.e1rm),
   Deadlift: roundDashboardWeightKg(currentCycleBestMaxes.Deadlift.e1rm),
 };
 
-const latestBodyDataEntry = getLatestBodyDataValues(bodyWeights);
-const latestBodyWeightEntry = [...bodyWeights].filter(entry => entry.bodyWeight).slice(-1)[0];
 const latestBodyWeight = latestBodyWeightEntry?.bodyWeight || null;
 
 function buildCompletedSummaryForRender(workout) {
@@ -14247,12 +14721,7 @@ const eStrengthRatio = latestBodyWeight
   ? Math.round((totalE1RM / latestBodyWeight) * 100) / 100
   : null;
 
-const { strengthMax, eStrengthMax } = calculateStrengthRatioMaxes({
-  prs,
-  oneRMs,
-  history,
-  bodyWeights,
-});
+const { strengthMax, eStrengthMax } = strengthRatioMaxes;
 
 const latestBodyDataRows = [
   {
@@ -14262,16 +14731,16 @@ const latestBodyDataRows = [
   },
   {
     key: 'strength',
-    label: t.strengthWithMax || 'Strength / Max',
+    label: t.strengthWithMax,
     recentPrGain: dashboardRecentPrEvents.ratios.strengthMaxGain,
-    recentPrLabel: t.newStrengthMaxPR || 'New Strength Max',
+    recentPrLabel: t.newStrengthMaxPR,
     value: formatStrengthRatioWithMax(strengthRatio, strengthMax),
   },
   {
     key: 'eStrength',
-    label: t.eStrengthWithMax || 'eStrength / Max',
+    label: t.eStrengthWithMax,
     recentPrGain: dashboardRecentPrEvents.ratios.eStrengthMaxGain,
-    recentPrLabel: t.newEStrengthMaxPR || 'New eStrength Max',
+    recentPrLabel: t.newEStrengthMaxPR,
     value: formatStrengthRatioWithMax(eStrengthRatio, eStrengthMax),
   },
 ].filter(row => row.value);
@@ -14368,8 +14837,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
     <AppHeader
       t={t}
       title={dashboardMeetState.isMeetDay
-        ? (t.sbdMeetDay || t.meetDay || 'SBD Meet Day')
-        : (t.appName || 'Kelani SBD Tracker')}
+        ? (t.sbdMeetDay || t.meetDay)
+        : (t.appName)}
       subtitle={(
         <DashboardCycleWorkoutLabel
           t={t}
@@ -14520,7 +14989,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       );
       const readinessGap = Math.max(readinessTarget - cycleE1RM, 0);
       const blockerRouteText = primaryBlockerLift && cycleE1RM > 0 && readinessTarget > 0
-        ? `${t.smartPrimaryBlocker || 'Primary blocker'}: ${primaryBlockerLift} (${t.smartOpenerGapShort || 'Gap'} ${formatWeightFromKg(readinessGap, weightUnit)})`
+        ? `${t.smartPrimaryBlocker}: ${primaryBlockerLift} (${t.smartOpenerGapShort} ${formatWeightFromKg(readinessGap, weightUnit)})`
         : null;
       const { meetPlan: dashboardMeetPlan, meetTotals: dashboardMeetTotals } = dashboardSuggestedMeetPlan;
 
@@ -14541,13 +15010,13 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             }}
           >
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: THEME.meet, fontSize: dashboardUsesExpandedLayout ? 'clamp(14px, 3.3vw, 16px)' : 'clamp(12px, 2.9vw, 14px)', fontWeight: 900, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4 }}>
-              <span>{t.dashboardMeetRouteTitle || 'Route to meet'}</span>
+              <span>{t.dashboardMeetRouteTitle}</span>
               <TapInfoIcon color={THEME.meet} />
             </div>
             <div style={{ color: THEME.text, fontSize: dashboardUsesExpandedLayout ? 'clamp(16px, 3.8vw, 19px)' : 'clamp(14px, 3.3vw, 16px)', fontWeight: 800, marginBottom: dashboardMeetProjection?.available && dashboardMeetProjection.limitingLift ? 2 : 6, lineHeight: 1.35 }}>
               {dashboardMeetProjection?.available
-                ? `${t.expectedMeetWindow || 'Expected meet'}: ${dashboardMeetProjection.label}`
-                : (t.smartProjectionUnavailable || 'Not enough active-cycle data for a reliable projection.')}
+                ? `${t.expectedMeetWindow}: ${dashboardMeetProjection.label}`
+                : (t.smartProjectionUnavailable)}
             </div>
             {blockerRouteText && (
               <div style={{ color: THEME.meet, fontSize: dashboardUsesExpandedLayout ? 'clamp(14px, 3.3vw, 16px)' : 'clamp(12px, 2.9vw, 14px)', fontWeight: 900, lineHeight: 1.3 }}>
@@ -14601,7 +15070,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           },
           {
             key: 'Total',
-            label: t.total || 'Total',
+            label: t.total,
             color: THEME.meet,
             background: `${THEME.meet}20`,
             ...dashboardE1RMMetrics.total,
@@ -14696,7 +15165,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                           marginTop: 2,
                           whiteSpace: 'nowrap'
                         }}>
-                          {t.new1RMPR || 'New 1RM PR'} +{formatWeightFromKg(card.recentPr.oneRMGain, weightUnit)}
+                          {t.new1RMPR} +{formatWeightFromKg(card.recentPr.oneRMGain, weightUnit)}
                         </div>
                       )}
                     </div>
@@ -14708,7 +15177,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                         : 'clamp(13px, 3.2vw, 16px)',
                       fontWeight: 900
                     }}>
-                      {t.e1RM || 'e1RM'}
+                      {t.e1RM}
                     </span>
                     <div style={{ textAlign: 'right', minWidth: 0 }}>
                       <strong style={{
@@ -14730,7 +15199,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                           marginTop: 2,
                           whiteSpace: 'nowrap'
                         }}>
-                          {t.newE1RMPR || 'New e1RM PR'} +{formatWeightFromKg(card.recentPr.e1RMGain, weightUnit)}
+                          {t.newE1RMPR} +{formatWeightFromKg(card.recentPr.e1RMGain, weightUnit)}
                         </div>
                       )}
                     </div>
@@ -14945,7 +15414,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         t={t}
       />
 
-      <AboutSupportSection t={t} />
+      <AboutSupportSection t={t} usageMetrics={anonymousUsageMetrics} />
     </div>
 
     <div data-testid="start-over-settings-row">
@@ -14973,9 +15442,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
 
         <h2 style={{ margin: '0 0 6px', color: THEME.brown }}>
           {completedWorkoutIsMeet ? t.meetCompleted
-            : completedWorkoutCanStartNewCycle ? (t.cycleCompleted || 'Cycle complete')
+            : completedWorkoutCanStartNewCycle ? (t.cycleCompleted)
             : completedWorkout?.type === 'rest'
-              ? 'Rest day complete'
+              ? (t.restDayCompleted)
               : t.workoutCompleted}
         </h2>
 
@@ -14986,9 +15455,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           padding: '0 2px',
         }}>
           {completedWorkoutIsMeet ? t.meetCompletedSaved
-            : completedWorkoutCanStartNewCycle ? (t.workoutAndCycleSaved || 'Cycle saved. Start the next cycle when ready.')
+            : completedWorkoutCanStartNewCycle ? (t.workoutAndCycleSaved)
             : completedWorkout?.type === 'rest'
-              ? 'Rest day saved. You can continue to the next workout.'
+              ? (t.restDayCompletedSaved)
               : t.goodJobSaved}
         </p>
 
@@ -15089,7 +15558,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   margin: '2px 0 0',
                   textAlign: 'left'
                 }}>
-                  {(t.workoutEffortAutoTooMuch || 'Automatically marked as TOO MUCH: {count} set(s) failed or skipped.')
+                  {(t.workoutEffortAutoTooMuch)
                     .replace('{count}', autoTooMuchSetCount)}
                 </p>
               )}
@@ -15173,7 +15642,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   marginBottom: 6,
                   textAlign: 'center'
                 }}>
-                  {liftLabel(summary.lift, t)} · 1RM / e1RM
+                  {liftLabel(summary.lift, t)} · {t.oneRME1RMHeading}
                 </div>
 
                 {row(t.oneRMToday, summary.oneRMToday, summary.is1RMPR)}
@@ -15231,7 +15700,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                       t,
                       liftBlock.lift,
                       liftBlock.benchPressVariant || benchPressVariant
-                    )}${set.perSide ? ` ${t.perSideSuffix || '/ side'}` : ''}`;
+                    )}${set.perSide ? ` ${t.perSideSuffix}` : ''}`;
                     const key = [
                       setLabel,
                       set.reps,
@@ -15325,6 +15794,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
     celebration={activeMilestoneCelebration}
     t={t}
     weightUnit={weightUnit}
+    usageMetrics={anonymousUsageMetrics}
     onClose={() => setActiveMilestoneCelebration(null)}
   />
 )}

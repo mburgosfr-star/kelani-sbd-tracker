@@ -792,8 +792,21 @@ test('milestone celebration overlays the already-rendered completed screen and c
   expect(modalOverlay.style.zIndex).toBe('650');
 
   expect(screen.getByRole('button', { name: 'Support' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Feedback' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Share usage data' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Contact' })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Share usage data' }));
+  expect(screen.getByRole('heading', { name: 'Anonymous usage summary' })).toBeInTheDocument();
+  expect(screen.getByText(/No weights, PRs, body data, dates, device data or training history/))
+    .toBeInTheDocument();
+  const openSpy = jest.spyOn(window, 'open').mockImplementation(() => {});
+  fireEvent.click(screen.getByRole('button', { name: 'Email Kelani' }));
+  expect(openSpy.mock.calls.at(-1)[0]).toMatch(
+    /^mailto:mburgosfr@gmail\.com\?subject=Kelani%20anonymous%20usage%20summary&body=/
+  );
+  openSpy.mockRestore();
+
+  fireEvent.click(screen.getAllByRole('button', { name: 'Close' }).at(-1));
   fireEvent.click(screen.getByRole('button', { name: 'Close' }));
   expect(onClose).toHaveBeenCalledTimes(1);
 });
@@ -1109,7 +1122,7 @@ test('Smart recovery status stays above the shifted recovery content and opens i
 
   fireEvent.click(button);
 
-  expect(screen.getByRole('dialog', { name: 'Smart workout info' }))
+  expect(screen.getByRole('dialog', { name: translations.en.smartWorkoutDialogLabel }))
     .toBeInTheDocument();
   expect(button).toHaveAttribute('aria-expanded', 'true');
   expect(screen.getByText(/Recovery day 1 of 3/i))
@@ -1408,6 +1421,7 @@ test('settings combines support, feedback, source, identity and release verifica
   fireEvent.click(screen.getByRole('button', { name: 'View' }));
 
   expect(screen.getByRole('button', { name: 'Support' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Share usage data' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Feedback' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Contact' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Report issue' })).toBeInTheDocument();
@@ -1424,6 +1438,7 @@ test('settings combines support, feedback, source, identity and release verifica
 
   const supportActionButtons = [
     'Support',
+    'Share usage data',
     'Feedback',
     'Contact',
     'Report issue',
@@ -1434,6 +1449,8 @@ test('settings combines support, feedback, source, identity and release verifica
   ].map(name => screen.getByRole('button', { name }));
   expect(new Set(supportActionButtons.map(button => button.style.height)))
     .toEqual(new Set(['clamp(52px, 6.5dvh, 60px)']));
+  expect(screen.getByRole('button', { name: 'Close' }).parentElement.style.width)
+    .toBe('calc(50% - 4px)');
 
   const openSpy = jest.spyOn(window, 'open').mockImplementation(() => {});
   fireEvent.click(screen.getByRole('button', { name: 'Feedback' }));
@@ -1444,7 +1461,7 @@ test('settings combines support, feedback, source, identity and release verifica
   );
   fireEvent.click(screen.getByRole('button', { name: 'Contact' }));
   expect(openSpy).toHaveBeenCalledWith(
-    'mailto:mburgosfr@proton.me?subject=Kelani%20contact',
+    'mailto:mburgosfr@gmail.com?subject=Kelani%20contact',
     '_blank',
     'noopener,noreferrer'
   );

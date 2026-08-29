@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rest_timer_channel_name">Temporitzador de descans de Kelani</string>
+    <string name="rest_timer_channel_description">Alertes del temporitzador de descans</string>
+    <string name="rest_timer_notification_title">Descans acabat</string>
+    <string name="rest_timer_notification_body">La sèrie següent pot començar.</string>
+</resources>

@@ -14,7 +14,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 @CapacitorPlugin(name = "DeviceAlertStatus")
 public class DeviceAlertStatusPlugin extends Plugin {
-    private static final String REST_TIMER_CHANNEL_ID = "kelani_rest_timer_v4";
+    private static final String REST_TIMER_CHANNEL_ID = "kelani_rest_timer_v5";
     private static final String ZEN_MODE_SETTINGS_ACTION = "android.settings.ZEN_MODE_SETTINGS";
 
     @PluginMethod

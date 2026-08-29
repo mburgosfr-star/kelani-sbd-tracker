@@ -50,11 +50,11 @@ export default function PlateCalculator({ weightKg, onClose, theme, t }) {
         }}
       >
         <h3 style={{ margin: '0 0 10px', color: theme.brown || '#a67c52' }}>
-          {t.plateCalculatorTitle || 'Plate Calculator'}
+          {t.plateCalculatorTitle}
         </h3>
 
         <p style={{ margin: '0 0 4px', fontSize: 14, color: theme.muted }}>
-          {t.plateCalculatorTotal || 'Total'}: <strong style={{ color: theme.text }}>{breakdown.requestedTotalKg} kg</strong>
+          {t.plateCalculatorTotal}: <strong style={{ color: theme.text }}>{breakdown.requestedTotalKg} kg</strong>
         </p>
 
         <div style={{ display: 'flex', gap: 8, margin: '10px 0 16px' }}>
@@ -74,19 +74,19 @@ export default function PlateCalculator({ weightKg, onClose, theme, t }) {
                 cursor: 'pointer',
               }}
             >
-              {bw} kg {t.plateCalculatorBar || 'bar'}
+              {bw} kg {t.plateCalculatorBar}
             </button>
           ))}
         </div>
 
         {breakdown.perSidePlates.length === 0 ? (
           <p style={{ fontSize: 14, color: theme.muted }}>
-            {t.plateCalculatorBarOnly || 'Just the empty bar.'}
+            {t.plateCalculatorBarOnly}
           </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
             <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: theme.muted }}>
-              {t.plateCalculatorPerSide || 'Per side'}:
+              {t.plateCalculatorPerSide}:
             </p>
             {breakdown.perSidePlates.map((p) => (
               <div
@@ -121,8 +121,7 @@ export default function PlateCalculator({ weightKg, onClose, theme, t }) {
 
         {!breakdown.isExact && (
           <p style={{ fontSize: 12.5, color: '#f39c12', marginBottom: 12 }}>
-            {t.plateCalculatorNotExact ||
-              `Closest possible: ${breakdown.achievedTotalKg} kg (${breakdown.leftoverPerSideKg} kg short per side).`}
+            {t.plateCalculatorNotExact}
           </p>
         )}
 
@@ -140,7 +139,7 @@ export default function PlateCalculator({ weightKg, onClose, theme, t }) {
             cursor: 'pointer',
           }}
         >
-          {t.plateCalculatorClose || t.resetConfirmCancel || 'Close'}
+          {t.plateCalculatorClose || t.resetConfirmCancel}
         </button>
       </div>
     </div>

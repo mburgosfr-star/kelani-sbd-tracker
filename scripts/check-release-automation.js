@@ -23,6 +23,8 @@ function read(relativePath) {
 const pkg = JSON.parse(read('package.json'));
 
 const expectedScripts = {
+  'privacy:check':
+    'node scripts/check-public-repository-boundary.js',
   'release:build': 'node scripts/build-release-apk.js',
   'release:install': 'node scripts/install-apk.js',
   'release:web-tested':
@@ -66,6 +68,7 @@ for (const [name, expected] of Object.entries(expectedScripts)) {
 }
 
 const requiredFiles = [
+  'scripts/check-public-repository-boundary.js',
   'scripts/release-common.js',
   'scripts/build-release-apk.js',
   'scripts/mark-web-tested.js',
@@ -295,6 +298,7 @@ for (const requiredPath of [
   "vite.config.mjs",
   "android/app/build.gradle",
   "scripts/run-tests.js",
+  "scripts/check-public-repository-boundary.js",
   "scripts/mark-web-tested.js",
   "scripts/prepare-release.js",
   "scripts/install-apk.js",

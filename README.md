@@ -41,13 +41,14 @@ Kelani generates only the next relevant workout, so new performance and feedback
 - Plan competition attempts, follow meet readiness and use a meet-day checklist.
 - Choose kilograms or pounds and use alternative lift profiles when standard SBD is not suitable.
 - Export, import and share local JSON backups; Android also keeps an automatic emergency backup after completed workouts.
+- Review an anonymous usage summary generated entirely on your device, then optionally copy it or email it to Kelani to help improve the app.
 - Use the app in English, Catalan or Dutch.
 
 ## Smart and Classic
 
 New installations start with Smart Training. Classic Training contains the earlier fixed programs and remains available to existing Classic users in maintenance mode. They can continue their current program or switch permanently to Smart Training, which uses their existing training history.
 
-Kelani has no accounts, ads, subscriptions, analytics or cloud synchronization. All training calculations run locally, and your data stays on your device unless you explicitly export or share it.
+Kelani has no accounts, ads, subscriptions, automatic analytics, telemetry or cloud synchronization. All training calculations run locally, and your data stays on your device unless you explicitly export or share it. The optional anonymous usage summary is created locally, shown to you before sharing and sent only through an action you choose.
 
 ## Download
 

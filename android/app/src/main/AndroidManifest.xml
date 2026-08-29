@@ -29,6 +29,10 @@
             </intent-filter>
         </activity>
 
+        <receiver
+            android:name=".RestTimerAlarmReceiver"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

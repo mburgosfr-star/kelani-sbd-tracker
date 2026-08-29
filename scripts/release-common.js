@@ -591,6 +591,7 @@ function releaseScriptHashes(base = root) {
     "vite.config.mjs",
     "android/app/build.gradle",
     "scripts/run-tests.js",
+    "scripts/check-public-repository-boundary.js",
     "scripts/build-release-apk.js",
     "scripts/mark-web-tested.js",
     "scripts/prepare-release.js",

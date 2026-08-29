@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rest_timer_channel_name">Kelani-rusttimer</string>
+    <string name="rest_timer_channel_description">Rusttimermeldingen</string>
+    <string name="rest_timer_notification_title">Rusttijd voorbij</string>
+    <string name="rest_timer_notification_body">Je volgende set kan beginnen.</string>
+</resources>

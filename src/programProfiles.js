@@ -1,6 +1,7 @@
 import { TRAINING_MODELS } from './smartTrainingConstants';
 import { WEIGHT_UNITS, displayWeightToKg, formatWeightFromKg } from './workoutUnits';
 import { LIFT_ORDER, normalizeAccessoryMode } from './workoutHistoryStats';
+import { translations } from './translations';
 
 export function getWorkoutTypeKey(workout) {
   if (!workout) return null;
@@ -119,37 +120,37 @@ export function isSmartTrainingModel(model) {
   return normalizeTrainingModel(model) === TRAINING_MODELS.SMART;
 }
 
-export function getProgramProfileTitle(profile, t = {}) {
+export function getProgramProfileTitle(profile, t = translations.en) {
   const normalizedProfile = normalizeProgramProfile(profile);
 
   if (normalizedProfile === 'kelaniSbdUltra') {
-    return t.programProfileKelaniSbdUltra || 'Kelani SBD Ultra';
+    return t.programProfileKelaniSbdUltra;
   }
 
   if (
     normalizedProfile === 'kelaniSbdLower' ||
     normalizedProfile === 'kelaniSbdLowerPlus'
   ) {
-    return t.programProfileKelaniSbdLower || 'Kelani Adapt';
+    return t.programProfileKelaniSbdLower;
   }
 
-  return t.programProfileKelaniSbd || 'Kelani SBD';
+  return t.programProfileKelaniSbd;
 }
-export function getProgramProfileDescription(profile, t = {}) {
+export function getProgramProfileDescription(profile, t = translations.en) {
   const normalizedProfile = normalizeProgramProfile(profile);
 
   if (normalizedProfile === 'kelaniSbdUltra') {
-    return t.programProfileKelaniSbdUltraText || 'Goal: stronger meet-day readiness. Frequency: high · Volume: high · Intensity: controlled.';
+    return t.programProfileKelaniSbdUltraText;
   }
 
   if (
     normalizedProfile === 'kelaniSbdLower' ||
     normalizedProfile === 'kelaniSbdLowerPlus'
   ) {
-    return t.programProfileKelaniSbdLowerText || 'Goal: adapted training with Squat, Chest Press and Hip Thrust. Frequency: moderate · Volume: moderate · Intensity: controlled.';
+    return t.programProfileKelaniSbdLowerText;
   }
 
-  return t.programProfileKelaniSbdText || 'Goal: balanced meet prep. Frequency: moderate · Volume: moderate · Intensity: controlled high.';
+  return t.programProfileKelaniSbdText;
 }
 
 
@@ -245,27 +246,27 @@ export function workoutLiftLabel(lift, t, benchPressVariant = 'standard', squatV
   const normalizedSquatVariant = normalizeSquatVariant(squatVariant);
 
   if (lift === 'Squat' && normalizedSquatVariant === 'beltSquat') {
-    return t.squatAlternativeWorkout || 'Belt Squat';
+    return t.squatAlternativeWorkout;
   }
 
   if (lift === 'Squat' && normalizedSquatVariant === 'zercherSquat') {
-    return t.squatAlternativeZercherSquat || 'Zercher Squat';
+    return t.squatAlternativeZercherSquat;
   }
 
   if (lift === 'Bench' && normalizedBenchPressVariant === 'standingLandminePress') {
-    return t.benchPressStandingLandminePress || 'Landmine';
+    return t.benchPressStandingLandminePress;
   }
 
   if (lift === 'Bench' && normalizedBenchPressVariant === 'shoulderPress') {
-    return t.benchPressShoulderPress || 'Shoulder Press';
+    return t.benchPressShoulderPress;
   }
 
   if (lift === 'Bench' && normalizedBenchPressVariant === 'goodMorning') {
-    return t.benchPressGoodMorning || 'Good Morning';
+    return t.benchPressGoodMorning;
   }
 
   if (lift === 'Bench' && normalizedBenchPressVariant === 'machineAlternative') {
-    return t.benchPressMachineAlternativeWorkout || 'Chest Press';
+    return t.benchPressMachineAlternativeWorkout;
   }
 
   return liftLabel(lift, t);
@@ -282,11 +283,11 @@ export function workoutLiftBlockLabel(liftBlock, t, benchPressVariant = 'standar
   }
 
   if (liftBlock?.lift === 'Deadlift' && normalizeDeadliftVariant(liftBlock?.deadliftVariant) === 'hipThrust') {
-    return t.deadliftHipThrustWorkout || 'Barbell Hip Thrust';
+    return t.deadliftHipThrustWorkout;
   }
 
   if (isDeadliftAlternativeLiftBlock(liftBlock)) {
-    return t.deadliftAlternativeWorkout || 'Posterior Chain';
+    return t.deadliftAlternativeWorkout;
   }
 
   return workoutLiftLabel(
@@ -317,7 +318,7 @@ export function formatWorkoutWeightFromKg(weightKg, weightUnit = WEIGHT_UNITS.KG
   const formatted = formatWeightFromKg(workoutDisplayWeightKg(weightKg, lift, benchPressVariant), weightUnit);
 
   return isStandingLandminePress(lift, benchPressVariant)
-    ? `${formatted.replace(/\s/g, '\u00a0')}\u00a0${(t.perArm || '/ arm').replace(/\s/g, '\u00a0')}`
+    ? `${formatted.replace(/\s/g, '\u00a0')}\u00a0${(t.perArm).replace(/\s/g, '\u00a0')}`
     : formatted;
 }
 

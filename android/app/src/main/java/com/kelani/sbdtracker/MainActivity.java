@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(DeviceAlertStatusPlugin.class);
+        registerPlugin(RestTimerAlarmPlugin.class);
         super.onCreate(savedInstanceState);
 
         Window window = getWindow();

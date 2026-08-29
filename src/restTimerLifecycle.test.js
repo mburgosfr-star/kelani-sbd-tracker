@@ -1,12 +1,14 @@
 import {
+  classifyRestTimerTestStatus,
   createRestTimerNotificationQueue,
   getRestTimerNotificationChannelStatus,
-  hasPendingRestTimerNotification,
+  hasPendingNativeRestTimerAlarm,
   hasMoreMeetSets,
   normalizePersistedNavigationState,
   normalizePersistedRestTimerState,
   normalizeRestTimerDoNotDisturbStatus,
   resolveRestoredNavigationState,
+  scheduleNativeRestTimerAlarmWithPermissions,
   shouldPlayRestTimerInAppAlert,
   shouldTriggerRestTimerWebAlert,
 } from './App';
@@ -68,13 +70,109 @@ test('an active timer restores its workout instead of the dashboard', () => {
   });
 });
 
-test('pending notification verification recognizes only the Kelani timer alarm', () => {
-  expect(hasPendingRestTimerNotification({
-    notifications: [{ id: 1208 }],
-  })).toBe(true);
-  expect(hasPendingRestTimerNotification({
-    notifications: [{ id: 99 }],
-  })).toBe(false);
+test('native alarm verification requires the Kelani id and exact deadline', () => {
+  expect(hasPendingNativeRestTimerAlarm({
+    pending: true,
+    id: 1208,
+    at: 20_000,
+  }, 20_000)).toBe(true);
+  expect(hasPendingNativeRestTimerAlarm({
+    pending: true,
+    id: 1208,
+    at: 19_000,
+  }, 20_000)).toBe(false);
+  expect(hasPendingNativeRestTimerAlarm({
+    pending: true,
+    id: 99,
+    at: 20_000,
+  }, 20_000)).toBe(false);
+  expect(hasPendingNativeRestTimerAlarm({
+    pending: false,
+    id: 1208,
+    at: 20_000,
+  }, 20_000)).toBe(false);
+});
+
+test('native rest timer scheduling is the first and only operation when permissions exist', async () => {
+  const events = [];
+  const result = await scheduleNativeRestTimerAlarmWithPermissions({
+    nativeRequest: { at: 20_000 },
+    scheduleAlarm: async request => {
+      events.push(['schedule', request.at]);
+      return { scheduled: true };
+    },
+    requestNotificationPermission: async () => {
+      events.push(['notification-permission']);
+      return { display: 'granted' };
+    },
+    requestExactAlarmPermission: async () => {
+      events.push(['exact-alarm-permission']);
+    },
+  });
+
+  expect(result).toEqual({ scheduled: true });
+  expect(events).toEqual([['schedule', 20_000]]);
+});
+
+test('a fresh Android install can grant both permissions and then schedule', async () => {
+  const events = [];
+  let scheduleAttempt = 0;
+  const result = await scheduleNativeRestTimerAlarmWithPermissions({
+    nativeRequest: { at: 20_000 },
+    scheduleAlarm: async () => {
+      scheduleAttempt += 1;
+      events.push(`schedule-${scheduleAttempt}`);
+      if (scheduleAttempt === 1) {
+        throw { code: 'NOTIFICATION_PERMISSION_REQUIRED' };
+      }
+      if (scheduleAttempt === 2) {
+        throw { code: 'EXACT_ALARM_PERMISSION_REQUIRED' };
+      }
+      return { scheduled: true };
+    },
+    requestNotificationPermission: async () => {
+      events.push('notification-permission');
+      return { display: 'granted' };
+    },
+    requestExactAlarmPermission: async () => {
+      events.push('exact-alarm-permission');
+    },
+  });
+
+  expect(result).toEqual({ scheduled: true });
+  expect(events).toEqual([
+    'schedule-1',
+    'notification-permission',
+    'schedule-2',
+    'exact-alarm-permission',
+    'schedule-3',
+  ]);
+});
+
+test('native alert self-test distinguishes scheduled, delivered and missed alarms', () => {
+  const scheduled = {
+    id: 1209,
+    pending: true,
+    scheduledAt: 10_000,
+    targetAt: 25_000,
+    deliveredAt: 0,
+  };
+
+  expect(classifyRestTimerTestStatus(scheduled, 15_000)).toBe('scheduled');
+  expect(classifyRestTimerTestStatus({
+    ...scheduled,
+    pending: false,
+    delivered: true,
+    deliveredAt: 25_100,
+  }, 26_000)).toBe('delivered');
+  expect(classifyRestTimerTestStatus({
+    ...scheduled,
+    pending: false,
+  }, 31_000)).toBe('not-delivered');
+  expect(classifyRestTimerTestStatus({
+    ...scheduled,
+    id: 1208,
+  }, 15_000)).toBe('idle');
 });
 
 test('web rest timer alerts depend on the deadline and visibility, not the active screen', () => {
@@ -116,7 +214,7 @@ test('web rest timer alerts depend on the deadline and visibility, not the activ
 test('rest timer diagnostics report the actual Android channel settings', () => {
   expect(getRestTimerNotificationChannelStatus([
     {
-      id: 'kelani_rest_timer_v4',
+      id: 'kelani_rest_timer_v5',
       sound: 'android.resource://com.kelani.sbdtracker/raw/kelani_rest_timer_quiet',
       vibration: true,
       importance: 5,
@@ -133,7 +231,7 @@ test('rest timer diagnostics report the actual Android channel settings', () => 
 test('rest timer diagnostics expose muted or missing Android channels', () => {
   expect(getRestTimerNotificationChannelStatus([
     {
-      id: 'kelani_rest_timer_v4',
+      id: 'kelani_rest_timer_v5',
       sound: null,
       vibration: false,
       importance: 2,
@@ -204,6 +302,13 @@ test.each(['nl', 'en', 'ca'])('rest timer channel diagnostics are translated in 
     restTimerStatusOff: expect.any(String),
     restTimerStatusMissing: expect.any(String),
     restTimerStatusUnknown: expect.any(String),
+    restTimerTestAlert: expect.any(String),
+    restTimerTestNotificationTitle: expect.any(String),
+    restTimerTestNotificationBody: expect.any(String),
+    restTimerTestScheduled: expect.any(String),
+    restTimerTestDelivered: expect.any(String),
+    restTimerTestNotDelivered: expect.any(String),
+    restTimerTestFailedToSchedule: expect.any(String),
   });
 });
 

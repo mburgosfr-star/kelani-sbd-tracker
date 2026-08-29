@@ -9,6 +9,26 @@ const unsupportedJestArguments = new Set([
 const forwardedArguments = process.argv
   .slice(2)
   .filter(argument => !unsupportedJestArguments.has(argument));
+const boundaryCheck = spawnSync(
+  process.execPath,
+  ['scripts/check-public-repository-boundary.js'],
+  {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: 'inherit',
+    shell: false,
+  }
+);
+
+if (boundaryCheck.error) {
+  console.error(`Could not start repository boundary check: ${boundaryCheck.error.message}`);
+  process.exit(1);
+}
+
+if (boundaryCheck.status !== 0) {
+  process.exit(boundaryCheck.status ?? 1);
+}
+
 const result = spawnSync(
   process.platform === 'win32' ? 'vitest.cmd' : 'vitest',
   ['run', ...forwardedArguments],

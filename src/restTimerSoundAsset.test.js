@@ -53,6 +53,6 @@ function readPcm16PeakRatio(wav) {
 test('rest timer notification sound is audible without approaching clipping', () => {
   const peakRatio = readPcm16PeakRatio(fs.readFileSync(soundPath));
 
-  expect(peakRatio).toBeGreaterThanOrEqual(0.35);
+  expect(peakRatio).toBeGreaterThanOrEqual(0.65);
   expect(peakRatio).toBeLessThanOrEqual(0.8);
 });
