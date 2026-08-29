@@ -17,6 +17,7 @@ const {
 const defaultRepository = 'mburgosfr-star/kelani-sbd-tracker';
 const trustedSourceRepository = 'mburgosfr-star/kelani-sbd-tracker';
 const izzyBaseUrl = 'https://apt.izzysoft.de';
+const izzyPropagationGraceMs = 24 * 60 * 60 * 1000;
 
 function parseArguments(argv, { localVersion } = {}) {
   const resolvedLocalVersion = localVersion || JSON.parse(
@@ -107,16 +108,11 @@ function expectedGithubAssets(release, version) {
   return { apk: apk[0], checksum: checksum[0] };
 }
 
-function assertIzzyPage(html, version, repository) {
+function assertIzzyIdentity(html, repository) {
   const sourceUrl = `https://github.com/${repository}`;
-  const escapedVersion = version.replace(/\./g, '\\.');
 
   if (!html.includes(`AppID:</b></td><td>${packageName}</td>`)) {
     fail(`IzzyOnDroid page does not identify ${packageName}.`);
-  }
-
-  if (!new RegExp(`Version ${escapedVersion} \\(`).test(html)) {
-    fail(`IzzyOnDroid does not list version ${version}.`);
   }
 
   for (const expectedUrl of [
@@ -127,6 +123,35 @@ function assertIzzyPage(html, version, repository) {
     if (!html.includes(`href='${expectedUrl}'`)) {
       fail(`IzzyOnDroid is missing expected link: ${expectedUrl}`);
     }
+  }
+}
+
+function izzyListsVersion(html, version) {
+  const escapedVersion = version.replace(/\./g, '\\.');
+  return new RegExp(`Version ${escapedVersion} \\(`).test(html);
+}
+
+function isWithinIzzyPropagationGrace(release, nowMs = Date.now()) {
+  const publishedAtMs = Date.parse(release?.published_at || '');
+
+  if (!Number.isFinite(publishedAtMs)) {
+    fail('GitHub release published_at is missing or invalid.');
+  }
+
+  const ageMs = nowMs - publishedAtMs;
+
+  if (ageMs < 0) {
+    fail('GitHub release publication time is in the future.');
+  }
+
+  return ageMs < izzyPropagationGraceMs;
+}
+
+function assertIzzyPage(html, version, repository) {
+  assertIzzyIdentity(html, repository);
+
+  if (!izzyListsVersion(html, version)) {
+    fail(`IzzyOnDroid does not list version ${version}.`);
   }
 
   const apkPath = html.match(
@@ -159,7 +184,11 @@ function assertSameMetadata(githubMetadata, izzyMetadata, version) {
   }
 }
 
-async function checkDistribution({ version, githubRepository }) {
+async function checkDistribution({
+  version,
+  githubRepository,
+  nowMs = Date.now(),
+}) {
   const tag = `v${version}`;
   const releaseApi =
     `https://api.github.com/repos/${githubRepository}/releases/tags/${tag}`;
@@ -179,6 +208,35 @@ async function checkDistribution({ version, githubRepository }) {
     }
 
     const assets = expectedGithubAssets(release, version);
+    assertIzzyIdentity(izzyHtml, trustedSourceRepository);
+
+    if (!izzyListsVersion(izzyHtml, version)) {
+      if (isWithinIzzyPropagationGrace(release, nowMs)) {
+        const publishedAtMs = Date.parse(release.published_at);
+        const ageHours = (nowMs - publishedAtMs) / (60 * 60 * 1000);
+        const remainingHours = (
+          (izzyPropagationGraceMs - (nowMs - publishedAtMs)) /
+          (60 * 60 * 1000)
+        );
+
+        console.log('\n⚠️ IzzyOnDroid synchronization is still pending');
+        console.log(`✅ GitHub release v${version} is public and structurally valid`);
+        console.log(`⚠️ Published ${ageHours.toFixed(1)} hours ago`);
+        console.log(
+          `⚠️ IzzyOnDroid has up to ${remainingHours.toFixed(1)} hours ` +
+          'remaining in the propagation grace period'
+        );
+
+        return {
+          version,
+          packageName,
+          status: 'pending-izzy-propagation',
+        };
+      }
+
+      fail(`IzzyOnDroid does not list version ${version}.`);
+    }
+
     const izzyApkUrl = assertIzzyPage(
       izzyHtml,
       version,
@@ -249,6 +307,9 @@ if (require.main === module) {
 module.exports = {
   parseArguments,
   expectedGithubAssets,
+  assertIzzyIdentity,
+  izzyListsVersion,
+  isWithinIzzyPropagationGrace,
   assertIzzyPage,
   assertSameMetadata,
   checkDistribution,
