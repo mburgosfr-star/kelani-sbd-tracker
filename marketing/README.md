@@ -6,4 +6,4 @@ Generated visual assets for Kelani public project spaces.
 - `linkedin-kelani-preview.png` — LinkedIn post/link image.
 - `youtube-channel-banner.png` — YouTube channel banner.
 
-These images use the current app screenshots from `docs/assets/screenshots/`.
+These images use public Kelani brand assets and contain no personal training data.

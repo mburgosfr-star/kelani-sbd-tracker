@@ -77,7 +77,6 @@ const requiredFiles = [
   'scripts/mark-phone-tested.js',
   'scripts/release-preflight.js',
   'scripts/guarded-release.js',
-  'scripts/create-github-release.js',
   'scripts/check-distribution.js',
 ];
 
@@ -85,12 +84,15 @@ for (const file of requiredFiles) {
   read(file);
 }
 
+if (fs.existsSync(path.join(root, 'scripts/create-github-release.js'))) {
+  fail('The obsolete direct GitHub release entry point must remain absent.');
+}
+
 const webTestMarker = read('scripts/mark-web-tested.js');
 const prepareRelease = read('scripts/prepare-release.js');
 const preflight = read('scripts/release-preflight.js');
 const guarded = read('scripts/guarded-release.js');
 const izzy = read('scripts/test-izzy-build.js');
-const directRelease = read('scripts/create-github-release.js');
 const installApk = read('scripts/install-apk.js');
 const releaseCommon = read('scripts/release-common.js');
 const workflow = read(
@@ -256,14 +258,6 @@ for (const signal of [
   }
 }
 
-if (
-  !directRelease.includes(
-    "KELANI_RELEASE_GATE_PASSED !== '1'"
-  )
-) {
-  fail('Direct GitHub release creation is no longer blocked.');
-}
-
 for (const signal of [
   'npm run release:self-check',
   'npm test -- --runInBand',
@@ -302,7 +296,6 @@ for (const requiredPath of [
   "scripts/mark-web-tested.js",
   "scripts/prepare-release.js",
   "scripts/install-apk.js",
-  "scripts/create-github-release.js",
   "scripts/check-release-automation.js",
     ".github/workflows/android-release-sanity.yml",
     ".github/workflows/distribution-integrity.yml",

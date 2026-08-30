@@ -6,7 +6,7 @@ test('canonical body data cannot be replaced by older compatibility values on re
     history: [{
       cycle: 4,
       workoutNumber: 9,
-      date: '25-8-2026',
+      date: '15-1-2030',
       lift: 'Deadlift',
       bodyWeight: 80,
       bodyFat: 20,
@@ -14,9 +14,9 @@ test('canonical body data cannot be replaced by older compatibility values on re
     bodyWeights: [{
       cycle: 4,
       workoutNumber: 9,
-      date: '25-8-2026',
-      timestamp: '2026-08-25T12:00:00.000Z',
-      bodyWeight: 82.1,
+      date: '15-1-2030',
+      timestamp: '2030-01-15T12:00:00.000Z',
+      bodyWeight: 84.6,
       bodyFat: 18,
     }],
   });
@@ -24,8 +24,8 @@ test('canonical body data cannot be replaced by older compatibility values on re
   expect(normalized.at(-1)).toMatchObject({
     cycle: 4,
     workoutNumber: 9,
-    date: '25-8-2026',
-    bodyWeight: 82.1,
+    date: '15-1-2030',
+    bodyWeight: 84.6,
     bodyFat: 18,
   });
 });
@@ -37,22 +37,22 @@ test('daily body data remains distinct while the current workout stays unchanged
       {
         cycle: 4,
         workoutNumber: 9,
-        date: '25-8-2026',
-        timestamp: '2026-08-25T08:00:00.000Z',
-        bodyWeight: 82.1,
+        date: '15-1-2030',
+        timestamp: '2030-01-15T08:00:00.000Z',
+        bodyWeight: 84.6,
       },
       {
         cycle: 4,
         workoutNumber: 9,
-        date: '26-8-2026',
-        timestamp: '2026-08-26T08:00:00.000Z',
-        bodyWeight: 81.8,
+        date: '16-1-2030',
+        timestamp: '2030-01-16T08:00:00.000Z',
+        bodyWeight: 84.2,
       },
     ],
   });
 
   expect(normalized).toHaveLength(2);
-  expect(normalized.map(entry => entry.bodyWeight)).toEqual([82.1, 81.8]);
+  expect(normalized.map(entry => entry.bodyWeight)).toEqual([84.6, 84.2]);
 });
 
 test('generic workout weight is never interpreted as body weight', () => {
@@ -72,7 +72,7 @@ test('repeated reload normalization is stable and never restores an older value'
   const legacyHistory = [{
     cycle: 4,
     workoutNumber: 9,
-    date: '25-8-2026',
+    date: '15-1-2030',
     lift: 'Bench',
     bodyWeight: 80,
     bodyWater: 50,
@@ -83,9 +83,9 @@ test('repeated reload normalization is stable and never restores an older value'
     bodyWeights: [{
       cycle: 4,
       workoutNumber: 9,
-      date: '25-8-2026',
-      timestamp: '2026-08-25T12:00:00.000Z',
-      bodyWeight: 82.1,
+      date: '15-1-2030',
+      timestamp: '2030-01-15T12:00:00.000Z',
+      bodyWeight: 84.6,
       bodyWater: 54,
     }],
   });
@@ -97,7 +97,7 @@ test('repeated reload normalization is stable and never restores an older value'
 
   expect(secondReload).toEqual(firstReload);
   expect(secondReload.at(-1)).toMatchObject({
-    bodyWeight: 82.1,
+    bodyWeight: 84.6,
     bodyWater: 54,
   });
 });

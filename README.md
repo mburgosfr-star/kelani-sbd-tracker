@@ -77,16 +77,6 @@ The two AppIDs have separate Android storage. Training data is not transferred a
 
 Both apps can remain installed side by side during the migration. Never remove the legacy app before creating and verifying a backup. Users already running `com.kelani.sbdtracker` are already on the 2.x identity and do not need to migrate again.
 
-## Screenshots
-
-| Dashboard | Smart Training |
-|---|---|
-| ![Kelani dashboard](docs/assets/screenshots/dashboard.png) | ![Kelani Smart Training](docs/assets/screenshots/smart-training.png) |
-
-| Workout | Statistics |
-|---|---|
-| ![Kelani workout](docs/assets/screenshots/workout.png) | ![Kelani statistics](docs/assets/screenshots/stats.png) |
-
 ## Development
 
 Use Node.js 22 for the web project. Java 21 is additionally required for Android builds.

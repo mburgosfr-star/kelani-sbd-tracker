@@ -43,17 +43,17 @@ test('recognizes only the explicit native share cancellation result', () => {
 });
 
 test('uses the local wall-clock time in manual backup filenames and records the offset', () => {
-  const localDate = new Date(2026, 7, 23, 15, 21, 15, 570);
+  const localDate = new Date(2030, 3, 5, 9, 7, 15, 570);
   const data = makeStoredData();
   const backup = buildBackupPayload(data, { now: localDate, appVersion: 'test' });
 
   expect(buildManualBackupFilename(localDate)).toBe(
-    'kelani-sbd-tracker-backup-2026-08-23-1521.json'
+    'kelani-sbd-tracker-backup-2030-04-05-0907.json'
   );
   expect(backup.exportedAt).toBe(localDate.toISOString());
   expect(backup.exportedAtLocal).toBe(formatLocalIsoTimestamp(localDate));
   expect(backup.exportedAtLocal).toMatch(
-    /^2026-08-23T15:21:15\.570[+-]\d{2}:\d{2}$/
+    /^2030-04-05T09:07:15\.570[+-]\d{2}:\d{2}$/
   );
 });
 
@@ -62,19 +62,19 @@ test('recognizes only a verified manual export status', () => {
     ok: true,
     source: 'manual',
     verified: true,
-    exportedAt: '2026-08-23T13:21:15.570Z',
+    exportedAt: '2030-04-05T07:07:15.570Z',
   })).toBe(true);
   expect(isVerifiedManualBackupStatus({
     ok: true,
     source: 'automatic',
     verified: true,
-    exportedAt: '2026-08-23T13:21:15.570Z',
+    exportedAt: '2030-04-05T07:07:15.570Z',
   })).toBe(false);
   expect(isVerifiedManualBackupStatus({
     ok: true,
     source: 'manual',
     verified: false,
-    exportedAt: '2026-08-23T13:21:15.570Z',
+    exportedAt: '2030-04-05T07:07:15.570Z',
   })).toBe(false);
 });
 

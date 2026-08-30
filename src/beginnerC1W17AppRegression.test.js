@@ -81,7 +81,7 @@ test('generates a correctly non-heavy beginner C1W17 through the full Smart app 
   // Mirrors the app's onboarding seedMax history entries (App.js
   // handleStart) for the starting maxes - meet attempts and the real-1RM
   // basis now come from these, kept separate from whatever a sub-maximal
-  // training set (e.g. a triple) would otherwise imply as her heaviest
+  // training set (e.g. a triple) would otherwise imply as the lifter's heaviest
   // weight touched.
   const seedMax = (lift, weight) => ({
     workoutNumber: 0,

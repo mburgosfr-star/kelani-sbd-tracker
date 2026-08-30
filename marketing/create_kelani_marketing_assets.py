@@ -1,5 +1,5 @@
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "marketing"
@@ -48,21 +48,26 @@ def paste_contained(canvas, img_path, box):
 def draw_logo(canvas, box):
     paste_contained(canvas, ROOT / "public" / "kelani-banner.png", box)
 
-def phone(canvas, img_path, x, y, w, h):
+def feature_panel(canvas, x, y, w, h):
     draw = ImageDraw.Draw(canvas)
-    shadow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    sd = ImageDraw.Draw(shadow)
-    rounded(sd, (x + 18, y + 24, x + w + 18, y + h + 24), 42, (0, 0, 0, 150))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(18))
-    canvas.alpha_composite(shadow)
+    rounded(draw, (x, y, x + w, y + h), 34, PANEL, LINE, 2)
 
-    rounded(draw, (x, y, x + w, y + h), 42, (34, 34, 34), (75, 75, 75), 2)
-    inset = 14
-    img = Image.open(img_path).convert("RGB")
-    img = ImageOps.fit(img, (w - 2 * inset, h - 2 * inset), Image.Resampling.LANCZOS, centering=(0.5, 0.0))
-    mask = Image.new("L", img.size, 0)
-    ImageDraw.Draw(mask).rounded_rectangle((0, 0, img.width, img.height), 32, fill=255)
-    canvas.paste(img, (x + inset, y + inset), mask)
+    heading_font = font(31, True)
+    item_font = font(25, False)
+    draw.text((x + 42, y + 40), "Train independently.", font=heading_font, fill=WHITE)
+    draw.text((x + 42, y + 82), "Do not train blindly.", font=heading_font, fill=YELLOW)
+
+    items = [
+        ("Adaptive SBD programming", ORANGE),
+        ("Offline-first and private", YELLOW),
+        ("No account or subscription", WHITE),
+        ("Meet planning and readiness", ORANGE),
+    ]
+    item_y = y + 168
+    for label, color in items:
+        draw.ellipse((x + 44, item_y + 9, x + 58, item_y + 23), fill=color)
+        draw.text((x + 78, item_y), label, font=item_font, fill=WHITE)
+        item_y += 62
 
 def chips(draw, x, y, labels, chip_font):
     for label in labels:
@@ -98,12 +103,9 @@ def social(size, out_name, linkedin=False):
     y += int(h * 0.085)
     chips(draw, margin, y, ["Free", "Open source", "No ads", "No tracking"], chip_font)
 
-    # Two current app screens, not three cramped old ones.
-    phone_h = int(h * 0.78)
-    phone_w = int(phone_h * 1080 / 2460)
-    right_x = int(w * 0.61)
-    phone(canvas, ROOT / "docs" / "assets" / "screenshots" / "dashboard.png", right_x, int(h * 0.11), phone_w, phone_h)
-    phone(canvas, ROOT / "docs" / "assets" / "screenshots" / "workout.png", right_x + phone_w + 34, int(h * 0.15), phone_w, int(phone_h * 0.94))
+    panel_x = int(w * 0.59)
+    panel_y = int(h * 0.17)
+    feature_panel(canvas, panel_x, panel_y, int(w * 0.36), int(h * 0.66))
 
     canvas.convert("RGB").save(OUT / out_name, quality=95)
 
@@ -168,7 +170,7 @@ Generated visual assets for Kelani public project spaces.
 - `linkedin-kelani-preview.png` — LinkedIn post/link image.
 - `youtube-channel-banner.png` — YouTube channel banner.
 
-These images use the current app screenshots from `docs/assets/screenshots/`.
+These images use public Kelani brand assets and contain no personal training data.
 """)
 
 print("Generated marketing assets")

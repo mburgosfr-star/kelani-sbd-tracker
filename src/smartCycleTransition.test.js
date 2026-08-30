@@ -72,7 +72,7 @@ test('a successful meet plus its recovery automatically starts C2W1', () => {
     history,
     prs: { Squat: 45, Bench: 32.5, Deadlift: 60 },
     oneRMs: { Squat: 45, Bench: 32.5, Deadlift: 60 },
-    bodyWeights: [{ date: '2026-08-25', weight: 55 }],
+    bodyWeights: [{ date: '2030-01-15', weight: 60 }],
     programProfile: 'kelaniSbd',
     accessoryMode: 'off',
     preparationMode: 'off',

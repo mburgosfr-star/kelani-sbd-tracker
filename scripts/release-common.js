@@ -601,7 +601,6 @@ function releaseScriptHashes(base = root) {
     "scripts/release-preflight.js",
     "scripts/guarded-release.js",
     "scripts/release-common.js",
-    "scripts/create-github-release.js",
     "scripts/check-release-build-manifest.js",
     "scripts/check-release-apk-metadata.js",
     "scripts/check-release-apk-hygiene.js",

@@ -160,7 +160,7 @@ test('an e1RM PR is not an eStrength Max PR while a lighter historical ratio rem
   };
   const ratioBodyWeights = [
     { cycle: 1, workoutNumber: 0, bodyWeight: 80 },
-    { cycle: 2, workoutNumber: 0, bodyWeight: 82.1 },
+    { cycle: 2, workoutNumber: 0, bodyWeight: 85 },
   ];
   const before = {
     history: beforeHistory,

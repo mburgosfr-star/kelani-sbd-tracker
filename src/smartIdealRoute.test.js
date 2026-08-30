@@ -58,7 +58,7 @@ const expectedNormalWeek = {
 };
 
 test('legacy route entry uses demonstrated readiness instead of restarting the cycle', () => {
-  const anaLikeReadiness = {
+  const midCycleReadiness = {
     meetPlanReady: false,
     meetPlanHasCurrentCycleEvidence: true,
     meetPlanOpenerReady: true,
@@ -87,30 +87,30 @@ test('legacy route entry uses demonstrated readiness instead of restarting the c
 
   expect(getSmartIdealRouteEntryWorkoutNumber({
     athleteLevel: 'beginner',
-    readiness: anaLikeReadiness,
+    readiness: midCycleReadiness,
   })).toBe(17);
   expect(getSmartIdealRouteEntryWorkoutNumber({
     athleteLevel: 'beginner',
     readiness: {
-      ...anaLikeReadiness,
+      ...midCycleReadiness,
       meetPlanHasCurrentCycleEvidence: false,
     },
   })).toBe(1);
   expect(getSmartIdealRouteEntryWorkoutNumber({
     athleteLevel: 'beginner',
     readiness: {
-      ...anaLikeReadiness,
+      ...midCycleReadiness,
       meetPlanReady: true,
     },
   })).toBe(28);
   expect(getSmartIdealRouteEntryWorkoutNumber({
     athleteLevel: 'beginner',
     readiness: {
-      ...anaLikeReadiness,
+      ...midCycleReadiness,
       meetPlanReadiness: {
-        ...anaLikeReadiness.meetPlanReadiness,
+        ...midCycleReadiness.meetPlanReadiness,
         Deadlift: {
-          ...anaLikeReadiness.meetPlanReadiness.Deadlift,
+          ...midCycleReadiness.meetPlanReadiness.Deadlift,
           projectedMeetReadyExposureCount: 3,
         },
       },
@@ -119,12 +119,12 @@ test('legacy route entry uses demonstrated readiness instead of restarting the c
   expect(getSmartIdealRouteEntryWorkoutNumber({
     athleteLevel: 'beginner',
     readiness: {
-      ...anaLikeReadiness,
+      ...midCycleReadiness,
       meetPlanSecondAttemptReady: true,
       meetPlanReadiness: {
-        ...anaLikeReadiness.meetPlanReadiness,
+        ...midCycleReadiness.meetPlanReadiness,
         Deadlift: {
-          ...anaLikeReadiness.meetPlanReadiness.Deadlift,
+          ...midCycleReadiness.meetPlanReadiness.Deadlift,
           secondAttemptReady: true,
           thirdAttemptPotential: true,
           projectedMeetReadyExposureCount: 0,

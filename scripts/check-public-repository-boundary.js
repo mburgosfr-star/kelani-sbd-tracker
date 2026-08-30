@@ -29,15 +29,13 @@ const trackedFiles = gitOutput(['ls-files', '-z'])
 const tracked = new Set(trackedFiles);
 
 const privatePathPatterns = [
-  /^AGENTS\.md$/,
   /^\.private\//,
   /^backups\//,
   /^exports\//,
   /^release\//,
-  /^docs\/archive\/planning\//,
-  /^marketing\/video-youtube-structure\.md$/,
   /^\.vscode\//,
   /^android\/\.idea\//,
+  /^android\/app\/release\//,
   /__scratch/,
   /\.kelani-backup\.json$/,
   /\.(?:jks|keystore|p12|pfx)$/i,
@@ -51,6 +49,40 @@ if (leakedPrivateFiles.length > 0) {
   fail(
     'Private local files must never be tracked:\n' +
     leakedPrivateFiles.map(file => `- ${file}`).join('\n')
+  );
+}
+
+const privateContentPatterns = [
+  {
+    label: 'an absolute user home path',
+    pattern: /(?:^|[\s"'`(])\/home\/[^/\s]+\//m,
+  },
+  {
+    label: 'private collaboration instructions',
+    pattern: /personal working agreements|private kelani sbd tracker release checklist|alles wat tussen kel en de assistent is/i,
+  },
+];
+const leakedPrivateContent = [];
+
+for (const file of trackedFiles) {
+  if (file === 'scripts/check-public-repository-boundary.js') continue;
+
+  const fullPath = path.join(root, file);
+  if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isFile()) continue;
+
+  const buffer = fs.readFileSync(fullPath);
+  if (buffer.includes(0)) continue;
+
+  const content = buffer.toString('utf8');
+  for (const { label, pattern } of privateContentPatterns) {
+    if (pattern.test(content)) leakedPrivateContent.push(`${file}: ${label}`);
+  }
+}
+
+if (leakedPrivateContent.length > 0) {
+  fail(
+    'Tracked files contain private local information:\n' +
+    leakedPrivateContent.map(item => `- ${item}`).join('\n')
   );
 }
 
@@ -71,7 +103,7 @@ if (missingPublicFiles.length > 0) {
 }
 
 const gitignore = fs.readFileSync(path.join(root, '.gitignore'), 'utf8');
-for (const requiredRule of ['/.private/', '/AGENTS.md']) {
+for (const requiredRule of ['/.private/', '/backups/', '/exports/']) {
   if (!gitignore.split(/\r?\n/).includes(requiredRule)) {
     fail(`Missing mandatory local-only ignore rule: ${requiredRule}`);
   }
