@@ -1770,7 +1770,9 @@ export function statsScreenStyle() {
   };
 }
 
-export function workoutCompletionButtonStyle({ enabled = true } = {}) {
+export function workoutCompletionButtonStyle({ enabled = true, active = false } = {}) {
+  const isActive = enabled && active;
+
   return {
     display: 'block',
     width: 'auto',
@@ -1785,7 +1787,91 @@ export function workoutCompletionButtonStyle({ enabled = true } = {}) {
     cursor: enabled ? 'pointer' : 'not-allowed',
     margin: '14px auto 10px',
     opacity: 1,
+    boxShadow: isActive
+      ? '0 0 0 3px rgba(255, 138, 61, 0.30)'
+      : 'none',
+    animation: isActive
+      ? 'kelaniActiveWorkoutCompletionPulse 1.05s ease-in-out infinite'
+      : 'none',
+    transformOrigin: 'center',
   };
+}
+
+export function shouldFocusWorkoutCompletion({
+  isReadOnly = false,
+  restDay = false,
+  prepDone = true,
+  warmupsDone = true,
+  mainSetsDone = false,
+  accessoriesDone = true,
+  cooldownDone = true,
+} = {}) {
+  if (isReadOnly) return false;
+  if (restDay) return true;
+
+  return Boolean(
+    prepDone &&
+    warmupsDone &&
+    mainSetsDone &&
+    accessoriesDone &&
+    cooldownDone
+  );
+}
+
+export function WorkoutCompletionButton({
+  active = false,
+  enabled = true,
+  disabled = false,
+  style = null,
+  children,
+  ...buttonProps
+}) {
+  const hasDynamicFocus = active && enabled && !disabled;
+
+  return (
+    <>
+      {hasDynamicFocus && (
+        <style>{`
+          @keyframes kelaniActiveWorkoutCompletionPulse {
+            0% {
+              box-shadow:
+                0 0 0 2px rgba(255, 138, 61, 0.34),
+                0 0 0 0 rgba(255, 138, 61, 0.56);
+              transform: scale(1);
+            }
+            50% {
+              box-shadow:
+                0 0 0 4px rgba(255, 138, 61, 0.28),
+                0 0 0 10px rgba(255, 138, 61, 0.00);
+              transform: scale(1.035);
+            }
+            100% {
+              box-shadow:
+                0 0 0 2px rgba(255, 138, 61, 0.34),
+                0 0 0 0 rgba(255, 138, 61, 0.00);
+              transform: scale(1);
+            }
+          }
+        `}</style>
+      )}
+
+      <button
+        {...buttonProps}
+        type="button"
+        disabled={disabled}
+        data-dynamic-focus={hasDynamicFocus ? 'true' : 'false'}
+        style={{
+          ...workoutCompletionButtonStyle({
+            enabled: enabled && !disabled,
+            active: hasDynamicFocus,
+          }),
+          ...(style || {}),
+        }}
+      >
+        {children}
+      </button>
+    </>
+  );
 }
 
 export function workoutCompletionButtonMargin({ isMeetDay = false } = {}) {
@@ -2158,6 +2244,7 @@ function WorkoutWeightPercentLabel({
   weightText,
   percentText = null,
   color = THEME.muted,
+  showPlateCalculatorIcon = false,
 }) {
   return (
     <span
@@ -2172,19 +2259,84 @@ function WorkoutWeightPercentLabel({
       }}
     >
       <span>{weightText}</span>
-      {percentText ? (
+      {(percentText || showPlateCalculatorIcon) ? (
         <span
           style={{
             marginTop: 'var(--workout-weight-percent-margin-top, 2px)',
             fontSize: '0.82em',
             fontWeight: 700,
             opacity: 0.9,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 2,
           }}
         >
-          {percentText}%
+          {percentText ? `${percentText}%` : null}
+          {showPlateCalculatorIcon ? (
+            <span
+              data-testid="workout-weight-plate-icon"
+              aria-hidden="true"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 15,
+                height: 15,
+                boxSizing: 'border-box',
+                borderRadius: '50%',
+                background: `${THEME.primary}20`,
+                color: THEME.primary,
+                flex: '0 0 15px',
+              }}
+            >
+              <PlateIcon size={11} />
+            </span>
+          ) : null}
         </span>
       ) : null}
     </span>
+  );
+}
+
+function WorkoutWeightCalculatorTrigger({
+  children,
+  onShowPlateCalculator,
+  weightKg,
+  label,
+}) {
+  if (!onShowPlateCalculator) return children;
+
+  return (
+    <button
+      type="button"
+      data-testid="workout-weight-calculator-trigger"
+      title={label}
+      aria-label={label}
+      onClick={event => {
+        event.stopPropagation();
+        onShowPlateCalculator(weightKg);
+      }}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        minWidth: 0,
+        minHeight: 28,
+        boxSizing: 'border-box',
+        border: 'none',
+        background: 'transparent',
+        color: 'inherit',
+        font: 'inherit',
+        lineHeight: 'inherit',
+        padding: 0,
+        margin: 0,
+        cursor: 'pointer',
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -2381,48 +2533,21 @@ export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activ
           lift,
           benchPressVariant
         );
+        const warmupAriaLabel = `${warmup.reps} × ${warmupWeight}${warmupPct ? `, ${warmupPct}%` : ''}`;
+        const plateCalculatorLabel = `${t.plateCalculatorTitle}: ${warmupWeight}`;
         const warmupDescription = (
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 4,
-            }}
+          <WorkoutWeightCalculatorTrigger
+            onShowPlateCalculator={onShowPlateCalculator}
+            weightKg={warmup.weight}
+            label={plateCalculatorLabel}
           >
             <WorkoutWeightPercentLabel
               weightText={warmupWeight}
               percentText={warmupPct}
+              showPlateCalculatorIcon={Boolean(onShowPlateCalculator)}
             />
-            {onShowPlateCalculator && (
-              <button
-                type="button"
-                title={t.plateCalculatorTitle}
-                aria-label={t.plateCalculatorTitle}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onShowPlateCalculator(warmup.weight);
-                }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 24,
-                  height: 24,
-                  border: 'none',
-                  borderRadius: '50%',
-                  background: `${THEME.primary}20`,
-                  color: THEME.primary,
-                  padding: 4,
-                  cursor: 'pointer',
-                }}
-              >
-                <PlateIcon size={16} />
-              </button>
-            )}
-          </span>
+          </WorkoutWeightCalculatorTrigger>
         );
-        const warmupAriaLabel = `${warmup.reps} × ${warmupWeight}${warmupPct ? `, ${warmupPct}%` : ''}`;
         const isActive = index === activeIndex;
         const isDone = !!warmup.done;
 
@@ -2662,47 +2787,29 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
   }
 
   const isSetComplete = !!set.done || !!set.skipped;
+  const setWeightText = `${formatWorkoutWeightFromKg(
+    set.weight,
+    weightUnit,
+    t,
+    lift,
+    benchPressVariant
+  )}${set.perSide ? ` ${t.perSideSuffix}` : ''}`;
+  const canShowPlateCalculator = Boolean(onShowPlateCalculator && !set.perSide);
+  const plateCalculatorLabel = `${t.plateCalculatorTitle}: ${setWeightText}`;
 
   const detail = (
-    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+    <WorkoutWeightCalculatorTrigger
+      onShowPlateCalculator={canShowPlateCalculator ? onShowPlateCalculator : null}
+      weightKg={set.weight}
+      label={plateCalculatorLabel}
+    >
       <WorkoutWeightPercentLabel
-        weightText={`${formatWorkoutWeightFromKg(
-          set.weight,
-          weightUnit,
-          t,
-          lift,
-          benchPressVariant
-        )}${set.perSide ? ` ${t.perSideSuffix}` : ''}`}
+        weightText={setWeightText}
         percentText={displayPct}
         color={isAdjusted ? '#f39c12' : THEME.muted}
+        showPlateCalculatorIcon={canShowPlateCalculator}
       />
-      {onShowPlateCalculator && !set.perSide && (
-        <button
-          type="button"
-          title={t.plateCalculatorTitle}
-          aria-label={t.plateCalculatorTitle}
-          onClick={(e) => {
-            e.stopPropagation();
-            onShowPlateCalculator(set.weight);
-          }}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 24,
-            height: 24,
-            border: 'none',
-            borderRadius: '50%',
-            background: `${THEME.primary}20`,
-            color: THEME.primary,
-            padding: 4,
-            cursor: 'pointer',
-          }}
-        >
-          <PlateIcon size={16} />
-        </button>
-      )}
-    </span>
+    </WorkoutWeightCalculatorTrigger>
   );
 
   const meta = effortLabel ? (
@@ -4893,46 +5000,28 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
           const setIsAdjusted =
             Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed) ||
             Number(set.weight) !== Number(set.originalWeight ?? set.weight);
+          const setWeightText = `${formatWorkoutWeightFromKg(
+            set.weight,
+            weightUnit,
+            t,
+            lift,
+            benchPressVariant
+          )}${set.perSide ? ` ${t.perSideSuffix}` : ''}`;
+          const canShowPlateCalculator = Boolean(onShowPlateCalculator && !set.perSide);
+          const plateCalculatorLabel = `${t.plateCalculatorTitle}: ${setWeightText}`;
           const setDescription = (
-            <span style={{ fontSize: RESPONSIVE_WORKOUT_UI.textFontSize, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <WorkoutWeightCalculatorTrigger
+              onShowPlateCalculator={canShowPlateCalculator ? onShowPlateCalculator : null}
+              weightKg={set.weight}
+              label={plateCalculatorLabel}
+            >
               <WorkoutWeightPercentLabel
-                weightText={`${formatWorkoutWeightFromKg(
-                  set.weight,
-                  weightUnit,
-                  t,
-                  lift,
-                  benchPressVariant
-                )}${set.perSide ? ` ${t.perSideSuffix}` : ''}`}
+                weightText={setWeightText}
                 percentText={setDisplayPct}
                 color={setIsAdjusted ? '#f39c12' : THEME.muted}
+                showPlateCalculatorIcon={canShowPlateCalculator}
               />
-              {onShowPlateCalculator && !set.perSide && (
-                <button
-                  type="button"
-                  title={t.plateCalculatorTitle}
-                  aria-label={t.plateCalculatorTitle}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onShowPlateCalculator(set.weight);
-                  }}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 24,
-                    height: 24,
-                    border: 'none',
-                    borderRadius: '50%',
-                    background: `${THEME.primary}20`,
-                    color: THEME.primary,
-                    padding: 4,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <PlateIcon size={16} />
-                </button>
-              )}
-            </span>
+            </WorkoutWeightCalculatorTrigger>
           );
 
           return (
@@ -5105,19 +5194,20 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
           const setTargetText = durationSeconds > 0
             ? `${durationSeconds} s`
             : `${acc.reps} reps`;
+          const canShowPlateCalculator = Boolean(
+            onShowPlateCalculator && !isBodyweight && !acc.perSide
+          );
+          const plateCalculatorLabel = `${t.plateCalculatorTitle}: ${weightText}`;
 
           return (
             <WorkoutCircleItem
               key={index}
               testId={`workout-accessory-set-item-${index}`}
               label={(
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 4,
-                  }}
+                <WorkoutWeightCalculatorTrigger
+                  onShowPlateCalculator={canShowPlateCalculator ? onShowPlateCalculator : null}
+                  weightKg={setWeight}
+                  label={plateCalculatorLabel}
                 >
                   <span
                     style={{
@@ -5128,33 +5218,28 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
                   >
                     {weightText}
                   </span>
-                  {onShowPlateCalculator && !isBodyweight && !acc.perSide && (
-                    <button
-                      type="button"
-                      title={t.plateCalculatorTitle}
-                      aria-label={t.plateCalculatorTitle}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onShowPlateCalculator(setWeight);
-                      }}
+                  {canShowPlateCalculator ? (
+                    <span
+                      data-testid="workout-weight-plate-icon"
+                      aria-hidden="true"
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        width: 24,
-                        height: 24,
-                        border: 'none',
+                        width: 15,
+                        height: 15,
+                        boxSizing: 'border-box',
                         borderRadius: '50%',
                         background: `${THEME.primary}20`,
                         color: THEME.primary,
-                        padding: 4,
-                        cursor: 'pointer',
+                        flex: '0 0 15px',
+                        marginLeft: 2,
                       }}
                     >
-                      <PlateIcon size={16} />
-                    </button>
-                  )}
-                </span>
+                      <PlateIcon size={11} />
+                    </span>
+                  ) : null}
+                </WorkoutWeightCalculatorTrigger>
               )}
             >
               <WorkoutCircle
@@ -7122,14 +7207,13 @@ export function CurrentWorkout({
         </div>
 
         {!isReadOnly && (
-          <button
-            type="button"
+          <WorkoutCompletionButton
             onClick={() => onComplete('easy')}
             data-testid="complete-rest-day-button"
-            style={workoutCompletionButtonStyle()}
+            active={shouldFocusWorkoutCompletion({ restDay: true })}
           >
             {t.completeRestDay}
-          </button>
+          </WorkoutCompletionButton>
         )}
       </div>
     );
@@ -7145,9 +7229,23 @@ export function CurrentWorkout({
     const allAccessoriesDone = (workout.accessories || []).every(acc =>
       (acc.done || []).every(Boolean)
     );
-
     const getVisiblePrepItems = (liftBlock, liftIndex) =>
       liftBlock.prepItems || [];
+    const allPrepDone = (workout.lifts || []).every((liftBlock, liftIndex) =>
+      getVisiblePrepItems(liftBlock, liftIndex).every(item => item.done)
+    );
+    const allWarmupsDone = (workout.lifts || []).every(liftBlock =>
+      (liftBlock.warmups || []).every(warmup => warmup.done)
+    );
+    const allCooldownDone = (workout.cooldownItems || []).every(item => item.done);
+    const completionHasDynamicFocus = shouldFocusWorkoutCompletion({
+      isReadOnly,
+      prepDone: allPrepDone,
+      warmupsDone: allWarmupsDone,
+      mainSetsDone: allMeetDone,
+      accessoriesDone: allAccessoriesDone,
+      cooldownDone: allCooldownDone,
+    });
 
     const firstIncompleteLiftIndex = (workout.lifts || []).findIndex((liftBlock, liftIndex) =>
       getVisiblePrepItems(liftBlock, liftIndex).some(item => !item.done) ||
@@ -7598,25 +7696,22 @@ export function CurrentWorkout({
           />
         )}
 
-        <button
+        <WorkoutCompletionButton
           onClick={() => {
             if (isReadOnly) return;
             onComplete();
           }}
           disabled={!allMeetDone || isReadOnly}
-          style={{
-            ...workoutCompletionButtonStyle({
-              enabled: allMeetDone && !isReadOnly,
-            }),
-            margin: workoutCompletionButtonMargin({ isMeetDay }),
-          }}
+          enabled={allMeetDone && !isReadOnly}
+          active={completionHasDynamicFocus}
+          style={{ margin: workoutCompletionButtonMargin({ isMeetDay }) }}
         >
           {isReadOnly
             ? t.previewNotCompletable
             : allMeetDone
             ? `${t.completeWorkout} ✓`
             : t.completeWorkout}
-        </button>
+        </WorkoutCompletionButton>
       </div>
     );
   }
@@ -7626,6 +7721,16 @@ export function CurrentWorkout({
     (acc.done || []).every(Boolean)
   );
   const allPrepDone = (workout.prepItems || []).every(item => item.done);
+  const allWarmupsDone = (workout.warmups || []).every(warmup => warmup.done);
+  const allCooldownDone = (workout.cooldownItems || []).every(item => item.done);
+  const completionHasDynamicFocus = shouldFocusWorkoutCompletion({
+    isReadOnly,
+    prepDone: allPrepDone,
+    warmupsDone: allWarmupsDone,
+    mainSetsDone: allDone,
+    accessoriesDone: allAccessoriesDone,
+    cooldownDone: allCooldownDone,
+  });
 
   function handleToggle(fn) {
     if (isReadOnly) return;
@@ -7897,21 +8002,20 @@ export function CurrentWorkout({
       )}
 
 
-      <button
+      <WorkoutCompletionButton
         onClick={() => {
           if (isReadOnly) return;
           onComplete();
         }}
         data-testid="complete-workout-button"
         disabled={!allDone || isReadOnly}
-        style={workoutCompletionButtonStyle({
-          enabled: allDone && !isReadOnly,
-        })}
+        enabled={allDone && !isReadOnly}
+        active={completionHasDynamicFocus}
       >
         {isReadOnly
           ? t.previewNotCompletable
           : t.completeWorkout}
-      </button>
+      </WorkoutCompletionButton>
 
       {showNewCycle && !smartModel && (
         <NewCycleModal
