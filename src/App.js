@@ -54,6 +54,8 @@ import {
   getCompletedWorkoutNumbers,
   getRestorableSelectedIndex,
   normalizeBodyWeights,
+  getCelebratedStrengthRatioMaxes,
+  mergeStrengthRatioMaxes,
   ATHLETE_LEVEL_THRESHOLDS,
   getAthleteLevel,
 } from './workoutHistoryStats';
@@ -129,12 +131,16 @@ import {
 } from './oneRMState';
 import { buildMilestoneCelebration } from './milestoneAchievements';
 import {
+  matchesCompletedSmartGeneration,
+  mergeAccessoryPrsFromWorkout,
+} from './completionState';
+import {
   buildAnonymousUsageMetrics,
   buildAnonymousUsageReport,
 } from './anonymousUsageSummary';
+import StatsLineChart from './StatsLineChart';
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { translations } from './translations';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, registerPlugin } from '@capacitor/core';
@@ -315,6 +321,8 @@ export function buildBackupSummary(data) {
   const selectedIndex = data?.inProgress?.selectedIndex;
   const completedWorkoutCount = getCompletedWorkoutCount(data?.history || [], currentCycle);
   const currentWorkout = Math.min((selectedIndex ?? completedWorkoutCount) + 1, totalWorkouts);
+  const bodyWeights = Array.isArray(data?.bodyWeights) ? data.bodyWeights : [];
+  const latestBodyDataEntry = bodyWeights.at(-1) || null;
 
   return {
     backupVersion: 1,
@@ -323,7 +331,14 @@ export function buildBackupSummary(data) {
     currentWorkout,
     totalWorkouts,
     historyEntries: Array.isArray(data?.history) ? data.history.length : 0,
-    bodyDataEntries: Array.isArray(data?.bodyWeights) ? data.bodyWeights.length : 0,
+    bodyDataEntries: bodyWeights.length,
+    latestBodyDataTimestamp: latestBodyDataEntry?.timestamp || null,
+    latestBodyDataCycle: latestBodyDataEntry
+      ? getEntryCycle(latestBodyDataEntry)
+      : null,
+    latestBodyDataWorkout: latestBodyDataEntry
+      ? getEntryWorkoutNumber(latestBodyDataEntry)
+      : null,
   };
 }
 
@@ -1104,6 +1119,21 @@ export function validateImportedBackup(backup) {
     if (!Number.isInteger(version) || version < 1) return false;
   }
   if (data.bodyWeights !== undefined && !Array.isArray(data.bodyWeights)) return false;
+  if (data.strengthRatioMaxes !== undefined) {
+    if (
+      !data.strengthRatioMaxes ||
+      typeof data.strengthRatioMaxes !== 'object' ||
+      Array.isArray(data.strengthRatioMaxes)
+    ) return false;
+
+    const hasInvalidRatioRecord = ['strengthMax', 'eStrengthMax'].some(key => {
+      const value = data.strengthRatioMaxes[key];
+      return value !== undefined && value !== null && (
+        !Number.isFinite(Number(value)) || Number(value) <= 0
+      );
+    });
+    if (hasInvalidRatioRecord) return false;
+  }
 
   if (data.inProgress !== undefined && data.inProgress !== null) {
     if (typeof data.inProgress !== 'object' || Array.isArray(data.inProgress)) return false;
@@ -1149,8 +1179,33 @@ export function storeImportedBackup(storage, data) {
   storage.removeItem(AUTO_BACKUP_STATUS_KEY);
 }
 
-export function shouldRetryAutomaticBackup(status, expectedPath = AUTO_BACKUP_PATH) {
-  return !isVerifiedAutomaticBackupStatus(status) || status?.path !== expectedPath;
+export function shouldRetryAutomaticBackup(
+  status,
+  expectedPath = AUTO_BACKUP_PATH,
+  expectedSummary = null
+) {
+  if (!isVerifiedAutomaticBackupStatus(status) || status?.path !== expectedPath) {
+    return true;
+  }
+
+  if (!expectedSummary) return false;
+
+  const summaryFields = [
+    'backupVersion',
+    'programVersion',
+    'currentCycle',
+    'currentWorkout',
+    'totalWorkouts',
+    'historyEntries',
+    'bodyDataEntries',
+    'latestBodyDataTimestamp',
+    'latestBodyDataCycle',
+    'latestBodyDataWorkout',
+  ];
+
+  return summaryFields.some(field => (
+    (status?.summary?.[field] ?? null) !== (expectedSummary?.[field] ?? null)
+  ));
 }
 
 export function workoutHasAnyUserProgress(workout) {
@@ -1204,6 +1259,41 @@ export function formatAutomaticBackupTimestamp(value) {
   const pad = number => String(number).padStart(2, '0');
 
   return `${pad(date.getDate())}-${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+export function createBodyDataEntry({
+  data,
+  currentCycle,
+  workoutNumber,
+  now = new Date(),
+}) {
+  const bodyData = {
+    bodyWeight: data?.bodyWeight || null,
+    bodyFat: data?.bodyFat || null,
+    bodyWater: data?.bodyWater || null,
+    visceralFat: data?.visceralFat || null,
+    leanMass: data?.leanMass || null,
+    physiqueRating: data?.physiqueRating || null,
+  };
+
+  if (!Object.values(bodyData).some(value => value !== null)) return null;
+
+  return {
+    workoutNumber: Math.max(Number(workoutNumber) || 1, 1),
+    cycle: Math.max(Number(currentCycle) || 1, 1),
+    date: now.toLocaleDateString('nl-NL'),
+    timestamp: now.toISOString(),
+    ...bodyData,
+  };
+}
+
+export function replaceBodyDataEntryForDay(bodyWeights = [], entry) {
+  if (!entry) return bodyWeights;
+
+  return [
+    ...bodyWeights.filter(existing => existing.date !== entry.date),
+    entry,
+  ];
 }
 
 function recordAutomaticBackupFailure(error) {
@@ -1445,11 +1535,11 @@ const RESPONSIVE_STATS_UI = Object.freeze({
   tabGap: 'clamp(5px, 1.5vw, 8px)',
   tabFontSize: 'clamp(13px, 3.2vw, 16px)',
   tabMinHeight: 'clamp(38px, 5dvh, 42px)',
-  cardGap: 'clamp(4px, 0.8dvh, 8px)',
-  cardPadding: 'clamp(3px, 1.2vw, 6px)',
-  chartTitleFontSize: 'clamp(16px, 3.8vw, 19px)',
-  chartTitleHeight: 'clamp(28px, 4dvh, 34px)',
-  chartMinHeight: 108,
+  cardGap: 'clamp(2px, 0.4dvh, 4px)',
+  cardPadding: 'clamp(1px, 0.7vw, 3px)',
+  chartTitleFontSize: 'clamp(18px, 4.4vw, 21px)',
+  chartTitleHeight: 'clamp(24px, 3.2dvh, 28px)',
+  chartMinHeight: 120,
 });
 
 const RESPONSIVE_SETTINGS_UI = Object.freeze({
@@ -8253,257 +8343,301 @@ function MeetPlanModal({ meetPlan, meetTotals, t, weightUnit = WEIGHT_UNITS.KG, 
   );
 }
 
-export function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, totalWorkouts, trainingModel = TRAINING_MODELS.CLASSIC, t, weightUnit = WEIGHT_UNITS.KG, best1RMs = {}, bestE1RMs = {}, athleteLevel, eStrengthRatio, strengthMax, eStrengthMax, latestBodyWeight, activescreen = 'lifts', onChangeTab }) {
+const STATS_LIFT_DATA_KEYS = Object.freeze(['oneRM', 'e1rm']);
+const STATS_STRENGTH_DATA_KEYS = Object.freeze(['strength', 'eStrength']);
+const STATS_STRENGTH_MAX_DATA_KEYS = Object.freeze(['strengthMax', 'eStrengthMax']);
+
+export function StatsScreen({ history, bodyWeights, currentCycle, currentIndex, currentWorkoutNumber = currentIndex, totalWorkouts, trainingModel = TRAINING_MODELS.CLASSIC, t, weightUnit = WEIGHT_UNITS.KG, best1RMs = {}, bestE1RMs = {}, athleteLevel, eStrengthRatio, strengthMax, eStrengthMax, latestBodyWeight, activescreen = 'lifts', onChangeTab }) {
   const setActivescreen = onChangeTab || (() => {});
-  const liftData = {};
-  const totalData = [];
-  const bodyData = [];
-  const strengthData = [];
+  const statsWeightUnit = normalizeWeightUnit(weightUnit);
   const COLORS = {
-  Squat: THEME.red,
-  Bench: THEME.primary,
-  Deadlift: THEME.yellow
-};
-const neutralChartColor = THEME.brown;
+    Squat: THEME.red,
+    Bench: THEME.primary,
+    Deadlift: THEME.yellow,
+  };
+  const neutralChartColor = THEME.brown;
+  const preparedStats = useMemo(() => {
+    const liftData = {};
+    const totalData = [];
+    const bodyData = [];
+    const strengthData = [];
+    const bodyMetricData = {
+      bodyFat: [],
+      bodyWater: [],
+      leanMass: [],
+      visceralFat: [],
+      physiqueRating: [],
+    };
 
-const statsWeightUnit = normalizeWeightUnit(weightUnit);
+    function chartWeightFromKg(weightKg, options = {}) {
+      const displayWeight = kgToDisplayWeight(weightKg, statsWeightUnit);
+      if (displayWeight === '') return null;
 
-function chartWeightFromKg(weightKg, options = {}) {
-  const displayWeight = kgToDisplayWeight(weightKg, statsWeightUnit);
-  if (displayWeight === '') return null;
+      const formatted = formatWeightValue(displayWeight, statsWeightUnit, options);
+      const value = Number(formatted);
+      return Number.isFinite(value) ? value : null;
+    }
 
-  const formatted = formatWeightValue(displayWeight, statsWeightUnit, options);
-  const value = Number(formatted);
-  return Number.isFinite(value) ? value : null;
-}
+    const bestStats = Object.fromEntries(
+      LIFT_ORDER.map(lift => [lift, { oneRM: 0, e1rm: 0 }])
+    );
+    const runningBestPerLift = Object.fromEntries(
+      LIFT_ORDER.map(lift => [lift, { oneRM: 0, e1rm: 0 }])
+    );
+    const currentStatsLabel = currentWorkoutNumber > 0
+      ? getWorkoutLabel({ cycle: currentCycle, workoutNumber: currentWorkoutNumber })
+      : null;
+    const sortedHistory = [...history]
+      .filter(entry => entry && entry.lift)
+      .sort((a, b) => getAbsoluteWorkoutIndex(a) - getAbsoluteWorkoutIndex(b));
 
-function weightMetricTitle(label) {
-  return `${label} (${statsWeightUnit})`;
-}
+    sortedHistory.forEach(entry => {
+      if (!LIFT_ORDER.includes(entry.lift) || entry.completionOnly) return;
 
-const bestStats = {
-  Squat: { oneRM: 0, e1rm: 0 },
-  Bench: { oneRM: 0, e1rm: 0 },
-  Deadlift: { oneRM: 0, e1rm: 0 },
-};
+      const candidates = getHistoryMaxCandidates(entry);
+      const historicalOneRM = getStatsHistoricalOneRM(entry, candidates.oneRM);
+      if (historicalOneRM <= 0 && candidates.e1rm <= 0) return;
 
-const sortedHistory = [...history]
-  .filter(entry => entry && entry.lift)
-  .sort((a, b) => getAbsoluteWorkoutIndex(a) - getAbsoluteWorkoutIndex(b));
+      runningBestPerLift[entry.lift] = entry.manualMax
+        ? { oneRM: historicalOneRM, e1rm: candidates.e1rm }
+        : {
+            oneRM: Math.max(runningBestPerLift[entry.lift].oneRM, historicalOneRM),
+            e1rm: Math.max(runningBestPerLift[entry.lift].e1rm, candidates.e1rm),
+          };
+      bestStats[entry.lift] = { ...runningBestPerLift[entry.lift] };
 
-const runningBestPerLift = {
-  Squat: { oneRM: 0, e1rm: 0 },
-  Bench: { oneRM: 0, e1rm: 0 },
-  Deadlift: { oneRM: 0, e1rm: 0 },
-};
+      if (!liftData[entry.lift]) liftData[entry.lift] = [];
+      const isChartPoint = getEntryWorkoutNumber(entry) > 0 || entry.seedMax || entry.manualMax;
 
-sortedHistory.forEach(entry => {
-  if (!entry.lift || !LIFT_ORDER.includes(entry.lift) || entry.completionOnly) return;
-
-  const candidates = getHistoryMaxCandidates(entry);
-  const historicalOneRM = getStatsHistoricalOneRM(entry, candidates.oneRM);
-
-  if (historicalOneRM <= 0 && candidates.e1rm <= 0) return;
-
-  runningBestPerLift[entry.lift] = entry.manualMax
-    ? {
-        oneRM: historicalOneRM,
-        e1rm: candidates.e1rm,
+      if (isChartPoint) {
+        liftData[entry.lift].push({
+          label: getWorkoutLabel(entry),
+          absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
+          oneRM: chartWeightFromKg(runningBestPerLift[entry.lift].oneRM),
+          e1rm: chartWeightFromKg(runningBestPerLift[entry.lift].e1rm),
+        });
       }
-    : {
-        oneRM: Math.max(runningBestPerLift[entry.lift].oneRM, historicalOneRM),
-        e1rm: Math.max(runningBestPerLift[entry.lift].e1rm, candidates.e1rm),
+
+      if (
+        isChartPoint &&
+        runningBestPerLift.Squat.oneRM &&
+        runningBestPerLift.Bench.oneRM &&
+        runningBestPerLift.Deadlift.oneRM
+      ) {
+        totalData.push({
+          label: getWorkoutLabel(entry),
+          workoutNumber: getEntryWorkoutNumber(entry),
+          absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
+          date: entry.date,
+          oneRM: LIFT_ORDER.reduce(
+            (sum, lift) => sum + runningBestPerLift[lift].oneRM,
+            0
+          ),
+          e1rm: LIFT_ORDER.reduce(
+            (sum, lift) => sum + runningBestPerLift[lift].e1rm,
+            0
+          ),
+        });
+      }
+    });
+
+    LIFT_ORDER.forEach(lift => {
+      const currentOneRM = Number(best1RMs?.[lift]) || bestStats[lift].oneRM || 0;
+      const currentE1RM = Number(bestE1RMs?.[lift]) || bestStats[lift].e1rm || 0;
+      const currentE1RMChartValue = chartWeightFromKg(currentE1RM);
+
+      liftData[lift] = capRunningBestChart(
+        liftData[lift],
+        'e1rm',
+        currentE1RMChartValue
+      );
+      liftData[lift] = replaceCurrentChartEndpoint(liftData[lift], {
+        oneRM: chartWeightFromKg(currentOneRM),
+        e1rm: currentE1RMChartValue,
+        ...(currentStatsLabel ? { label: currentStatsLabel } : {}),
+      });
+    });
+
+    if (totalData.length > 0) {
+      const currentTotalOneRM = LIFT_ORDER.reduce(
+        (sum, lift) => sum + (Number(best1RMs?.[lift]) || 0),
+        0
+      );
+      const currentTotalE1RM = LIFT_ORDER.reduce(
+        (sum, lift) => sum + (Number(bestE1RMs?.[lift]) || 0),
+        0
+      );
+      const cappedTotalData = capRunningBestChart(
+        totalData,
+        'e1rm',
+        currentTotalE1RM
+      );
+      const currentTotalPoint = replaceCurrentChartEndpoint(cappedTotalData, {
+        oneRM: currentTotalOneRM,
+        e1rm: currentTotalE1RM,
+        ...(currentStatsLabel ? { label: currentStatsLabel } : {}),
+      }).at(-1);
+
+      totalData.splice(0, totalData.length, ...cappedTotalData);
+      totalData[totalData.length - 1] = currentTotalPoint;
+    }
+
+    const bodyWeightsByRecordedTime = bodyWeights
+      .map((entry, sourceIndex) => {
+        const recordedTime = entry?.timestamp
+          ? new Date(entry.timestamp).getTime()
+          : NaN;
+
+        return { entry, sourceIndex, recordedTime };
+      })
+      .sort((a, b) => {
+        const aHasTime = Number.isFinite(a.recordedTime);
+        const bHasTime = Number.isFinite(b.recordedTime);
+
+        if (aHasTime && bHasTime && a.recordedTime !== b.recordedTime) {
+          return a.recordedTime - b.recordedTime;
+        }
+        if (aHasTime !== bHasTime) return aHasTime ? 1 : -1;
+        return a.sourceIndex - b.sourceIndex;
+      })
+      .map(record => record.entry);
+    const statsBodyWeights = bodyWeightsByRecordedTime;
+
+    statsBodyWeights.forEach(entry => {
+      const workoutNumber = getEntryWorkoutNumber(entry);
+      const base = {
+        label: getWorkoutLabel(entry),
+        cycle: getEntryCycle(entry),
+        workoutNumber,
+        absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
       };
 
-  bestStats[entry.lift] = { ...runningBestPerLift[entry.lift] };
+      if (entry.bodyWeight) {
+        bodyData.push({
+          ...base,
+          gewicht: chartWeightFromKg(entry.bodyWeight, { body: true }),
+        });
+      }
 
-  if (!liftData[entry.lift]) liftData[entry.lift] = [];
+      ['bodyFat', 'bodyWater', 'leanMass', 'visceralFat', 'physiqueRating']
+        .forEach(key => {
+          const value = Number(entry[key]);
+          if (!Number.isFinite(value) || value <= 0) return;
 
-  if (getEntryWorkoutNumber(entry) > 0 || entry.seedMax || entry.manualMax) {
-    liftData[entry.lift].push({
-      label: getWorkoutLabel(entry),
-      absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
-      oneRM: chartWeightFromKg(runningBestPerLift[entry.lift].oneRM),
-      e1rm: chartWeightFromKg(runningBestPerLift[entry.lift].e1rm),
+          bodyMetricData[key].push({
+            ...base,
+            [key]: key === 'leanMass'
+              ? chartWeightFromKg(value, { body: true })
+              : value,
+          });
+        });
     });
-  }
 
-  if ((getEntryWorkoutNumber(entry) > 0 || entry.seedMax || entry.manualMax) && runningBestPerLift.Squat.oneRM && runningBestPerLift.Bench.oneRM && runningBestPerLift.Deadlift.oneRM) {
-    totalData.push({
-      label: getWorkoutLabel(entry),
-      workoutNumber: getEntryWorkoutNumber(entry),
-      absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
-      date: entry.date,
-      oneRM:
-        runningBestPerLift.Squat.oneRM +
-        runningBestPerLift.Bench.oneRM +
-        runningBestPerLift.Deadlift.oneRM,
-      e1rm:
-        runningBestPerLift.Squat.e1rm +
-        runningBestPerLift.Bench.e1rm +
-        runningBestPerLift.Deadlift.e1rm,
+    // Both arrays are ordered by absolute workout index, so bodyweight can be
+    // paired to every total in one pass. The former implementation rescanned
+    // the complete body-data history for every individual total point.
+    const sortedBodyWeights = [...statsBodyWeights].sort(
+      (a, b) => getAbsoluteWorkoutIndex(a) - getAbsoluteWorkoutIndex(b)
+    );
+    const firstRecordedBodyWeight = sortedBodyWeights.find(entry => entry.bodyWeight) || null;
+    let bodyWeightIndex = 0;
+    let activeBodyWeight = null;
+    let runningStrengthMax = 0;
+    let runningEStrengthMax = 0;
+
+    totalData.forEach(entry => {
+      while (
+        bodyWeightIndex < sortedBodyWeights.length &&
+        getAbsoluteWorkoutIndex(sortedBodyWeights[bodyWeightIndex]) <= entry.absoluteWorkoutIndex
+      ) {
+        if (sortedBodyWeights[bodyWeightIndex].bodyWeight) {
+          activeBodyWeight = sortedBodyWeights[bodyWeightIndex];
+        }
+        bodyWeightIndex += 1;
+      }
+
+      const bodyWeightForWorkout = activeBodyWeight?.bodyWeight || (
+        entry.absoluteWorkoutIndex <= 0
+          ? firstRecordedBodyWeight?.bodyWeight
+          : null
+      );
+      if (!bodyWeightForWorkout) return;
+
+      const strength = Math.round((entry.oneRM / bodyWeightForWorkout) * 100) / 100;
+      const eStrength = Math.round((entry.e1rm / bodyWeightForWorkout) * 100) / 100;
+      runningStrengthMax = Math.max(runningStrengthMax, strength);
+      runningEStrengthMax = Math.max(runningEStrengthMax, eStrength);
+      strengthData.push({
+        label: entry.label,
+        absoluteWorkoutIndex: entry.absoluteWorkoutIndex,
+        strength,
+        eStrength,
+        strengthMax: runningStrengthMax,
+        eStrengthMax: runningEStrengthMax,
+      });
     });
-  }
-});
 
-LIFT_ORDER.forEach(lift => {
-  const currentOneRM = Number(best1RMs?.[lift]) || bestStats[lift].oneRM || 0;
-  const currentE1RM = Number(bestE1RMs?.[lift]) || bestStats[lift].e1rm || 0;
-
-  bestStats[lift] = {
-    oneRM: currentOneRM,
-    e1rm: currentE1RM,
-  };
-
-  // Keep every historical point exactly as stored, but make the live end
-  // point agree with Dashboard/SMART's canonical rounded current e1RM.
-  // This is a running-best chart, so an older raw maximum always floors the
-  // endpoint; rounding must never make a 1RM/e1RM line move downward.
-  // This also normalizes a just-completed legacy-shaped entry (e.g. W46
-  // Deadlift stored as 181.33) to the canonical 182.5kg value.
-  const currentE1RMChartValue = chartWeightFromKg(currentE1RM);
-  liftData[lift] = capRunningBestChart(
-    liftData[lift],
-    'e1rm',
-    currentE1RMChartValue
-  );
-  liftData[lift] = replaceCurrentChartEndpoint(liftData[lift], {
-    oneRM: chartWeightFromKg(currentOneRM),
-    e1rm: currentE1RMChartValue,
-  });
-});
-
-if (totalData.length > 0) {
-  const currentTotalOneRM = LIFT_ORDER.reduce(
-    (sum, lift) => sum + (Number(best1RMs?.[lift]) || 0),
-    0
-  );
-  const currentTotalE1RM = LIFT_ORDER.reduce(
-    (sum, lift) => sum + (Number(bestE1RMs?.[lift]) || 0),
-    0
-  );
-  const cappedTotalData = capRunningBestChart(
-    totalData,
-    'e1rm',
-    currentTotalE1RM
-  );
-  const currentTotalPoint = replaceCurrentChartEndpoint(cappedTotalData, {
-    oneRM: currentTotalOneRM,
-    e1rm: currentTotalE1RM,
-  }).at(-1);
-
-  totalData.splice(0, totalData.length, ...cappedTotalData);
-  totalData[totalData.length - 1] = currentTotalPoint;
-}
-
-const bodyMetricData = {
-  bodyFat: [],
-  bodyWater: [],
-  leanMass: [],
-  visceralFat: [],
-  physiqueRating: [],
-};
-
-bodyWeights.forEach(entry => {
-  const workoutNumber = getEntryWorkoutNumber(entry);
-  const base = {
-    label: getWorkoutLabel(entry),
-    workoutNumber,
-    absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
-  };
-
-  if (entry.bodyWeight) {
-    bodyData.push({
-      ...base,
-      gewicht: chartWeightFromKg(entry.bodyWeight, { body: true }),
-    });
-  }
-
-  [
-    'bodyFat',
-    'bodyWater',
-    'leanMass',
-    'visceralFat',
-    'physiqueRating',
-  ].forEach(key => {
-    const value = Number(entry[key]);
-
-    if (!Number.isFinite(value) || value <= 0) return;
-
-    bodyMetricData[key].push({
-      ...base,
-      [key]: (key === 'leanMass' || key === 'boneMass')
-        ? chartWeightFromKg(value, { body: true })
-        : value,
-    });
-  });
-});
-
-const sortedBodyWeights = [...bodyWeights].sort(
-  (a, b) => getAbsoluteWorkoutIndex(a) - getAbsoluteWorkoutIndex(b)
-);
-
-function getBodyWeightForWorkoutIndex(absoluteWorkoutIndex) {
-  let latest = null;
-
-  sortedBodyWeights.forEach(entry => {
-    if (getAbsoluteWorkoutIndex(entry) <= absoluteWorkoutIndex && entry.bodyWeight) {
-      latest = entry;
+    if (strengthData.length > 0) {
+      const latest = strengthData.at(-1);
+      latest.strengthMax = Math.max(latest.strengthMax, Number(strengthMax) || 0);
+      latest.eStrengthMax = Math.max(latest.eStrengthMax, Number(eStrengthMax) || 0);
     }
-  });
 
-  if (!latest && absoluteWorkoutIndex <= 0) {
-    latest = sortedBodyWeights.find(entry => entry.bodyWeight) || null;
+    return {
+      liftData,
+      totalChartData: totalData.map(entry => ({
+        ...entry,
+        oneRM: chartWeightFromKg(entry.oneRM),
+        e1rm: chartWeightFromKg(entry.e1rm),
+      })),
+      bodyData,
+      bodyMetricData,
+      strengthData,
+    };
+  }, [
+    history,
+    bodyWeights,
+    statsWeightUnit,
+    best1RMs?.Squat,
+    best1RMs?.Bench,
+    best1RMs?.Deadlift,
+    bestE1RMs?.Squat,
+    bestE1RMs?.Bench,
+    bestE1RMs?.Deadlift,
+    strengthMax,
+    eStrengthMax,
+    currentCycle,
+    currentIndex,
+    currentWorkoutNumber,
+  ]);
+  const {
+    liftData,
+    totalChartData,
+    bodyData,
+    bodyMetricData,
+    strengthData,
+  } = preparedStats;
+
+  function weightMetricTitle(label) {
+    return `${label} (${statsWeightUnit})`;
   }
 
-  return latest?.bodyWeight || null;
-}
+  function chartMetricLabel(key) {
+    if (key === 'oneRM') return weightMetricTitle('1RM');
+    if (key === 'e1rm') return weightMetricTitle(t.e1RM);
+    if (key === 'gewicht') return weightMetricTitle(t.bodyweight);
+    if (key === 'strength') return t.strength;
+    if (key === 'eStrength') return t.eStrength;
+    if (key === 'strengthMax') return t.strengthMax;
+    if (key === 'eStrengthMax') return t.eStrengthMax;
+    if (key === 'bodyFat') return `${t.bodyFatPercent} (%)`;
+    if (key === 'bodyWater') return `${t.bodyWaterPercent} (%)`;
+    if (key === 'leanMass') return weightMetricTitle(t.leanMassKg);
+    if (key === 'visceralFat') return `${t.visceralFatRating} rating`;
+    if (key === 'physiqueRating') return t.physiqueRating;
 
-let runningStrengthMax = 0;
-let runningEStrengthMax = 0;
-
-totalData.forEach(entry => {
-  const bodyWeightForWorkout = getBodyWeightForWorkoutIndex(entry.absoluteWorkoutIndex);
-
-  if (!bodyWeightForWorkout) return;
-
-  const strength = Math.round((entry.oneRM / bodyWeightForWorkout) * 100) / 100;
-  const eStrength = Math.round((entry.e1rm / bodyWeightForWorkout) * 100) / 100;
-  runningStrengthMax = Math.max(runningStrengthMax, strength);
-  runningEStrengthMax = Math.max(runningEStrengthMax, eStrength);
-
-  strengthData.push({
-    label: entry.label,
-    absoluteWorkoutIndex: entry.absoluteWorkoutIndex,
-    strength,
-    eStrength,
-    strengthMax: runningStrengthMax,
-    eStrengthMax: runningEStrengthMax,
-  });
-});
-
-if (strengthData.length > 0) {
-  const latest = strengthData.at(-1);
-  latest.strengthMax = Math.max(latest.strengthMax, Number(strengthMax) || 0);
-  latest.eStrengthMax = Math.max(latest.eStrengthMax, Number(eStrengthMax) || 0);
-}
-
-function chartMetricLabel(key) {
-  if (key === 'oneRM') return weightMetricTitle('1RM');
-  if (key === 'e1rm') return weightMetricTitle(t.e1RM);
-  if (key === 'gewicht') return weightMetricTitle(t.bodyweight);
-  if (key === 'strength') return t.strength;
-  if (key === 'eStrength') return t.eStrength;
-  if (key === 'strengthMax') return t.strengthMax;
-  if (key === 'eStrengthMax') return t.eStrengthMax;
-  if (key === 'bodyFat') return `${t.bodyFatPercent} (%)`;
-  if (key === 'bodyWater') return `${t.bodyWaterPercent} (%)`;
-  if (key === 'leanMass') return weightMetricTitle(t.leanMassKg);
-  if (key === 'visceralFat') return `${t.visceralFatRating} rating`;
-  if (key === 'physiqueRating') return t.physiqueRating;
-
-  return key;
-}
+    return key;
+  }
 
   function renderChart(data, dataKeys, colors, emptyMessage = t.noStatsData) {
     if (!data || data.length === 0) {
@@ -8524,87 +8658,6 @@ function chartMetricLabel(key) {
       );
     }
 
-    const visibleSourceData = data.length <= 10
-      ? data
-      : Array.from({ length: 10 }, (_, index) => {
-          const sourceIndex = Math.round(index * (data.length - 1) / 9);
-          return data[sourceIndex];
-        });
-
-    const visibleData = visibleSourceData.map((item, index) => ({
-      ...item,
-      chartIndex: index + 1,
-    }));
-
-    const yValues = visibleData
-      .flatMap(item => dataKeys.map(key => Number(item[key])))
-      .filter(value => Number.isFinite(value));
-
-    let yDomain = ['auto', 'auto'];
-    let yTicks = undefined;
-
-    function midpointTicks(lower, upper) {
-      const midpoint = (lower + upper) / 2;
-      return [lower, midpoint, upper].map(value => {
-        const rounded = Math.round(value * 100) / 100;
-        return Object.is(rounded, -0) ? 0 : rounded;
-      });
-    }
-
-    function chooseDomainUnit(minY, maxY) {
-      const largest = Math.max(Math.abs(minY), Math.abs(maxY));
-
-      if (largest >= 1000) return 100;
-      if (largest >= 100) return 10;
-      if (largest >= 10) return 10;
-      if (largest >= 2) return 1;
-      return 0.1;
-    }
-
-    if (yValues.length > 0) {
-      const minY = Math.min(...yValues);
-      const maxY = Math.max(...yValues);
-      const unit = chooseDomainUnit(minY, maxY);
-
-      let lower = Math.floor(minY / unit) * unit;
-      let upper = Math.ceil(maxY / unit) * unit;
-
-      if (lower === upper) {
-        lower -= unit;
-        upper += unit;
-      }
-
-      if (minY <= lower) lower -= unit;
-      if (maxY >= upper) upper += unit;
-
-      lower = Math.round(lower * 100) / 100;
-      upper = Math.round(upper * 100) / 100;
-
-      yDomain = [lower, upper];
-
-      yTicks = midpointTicks(lower, upper);
-    }
-
-    const allXTicks = [...new Set(
-      visibleData
-        .map(item => Number(item.chartIndex))
-        .filter(value => Number.isFinite(value))
-    )];
-
-    const xTicks = allXTicks.length <= 4
-      ? allXTicks
-      : [
-          allXTicks[0],
-          allXTicks[Math.floor(allXTicks.length * 0.33)],
-          allXTicks[Math.floor(allXTicks.length * 0.66)],
-          allXTicks[allXTicks.length - 1],
-        ].filter((value, index, arr) => value !== undefined && arr.indexOf(value) === index);
-
-    const labelByX = visibleData.reduce((labels, item) => {
-      labels[item.chartIndex] = item.label;
-      return labels;
-    }, {});
-
     const isStrengthChart = dataKeys.some(key =>
       ['strength', 'eStrength', 'strengthMax', 'eStrengthMax'].includes(key)
     );
@@ -8619,60 +8672,14 @@ function chartMetricLabel(key) {
     }
 
     return (
-      <div data-testid="stats-chart-frame" style={{ height: '100%', minHeight: RESPONSIVE_STATS_UI.chartMinHeight }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={visibleData} margin={{ top: 2, right: 12, left: 10, bottom: 0 }}>
-          <CartesianGrid stroke={THEME.border} vertical={false} />
-          <XAxis
-            dataKey="chartIndex"
-            type="number"
-            domain={[1, visibleData.length]}
-            ticks={xTicks}
-            tickFormatter={(value) => labelByX[value] || ''}
-            allowDecimals={false}
-            stroke={THEME.text}
-            tick={{ fontSize: 8 }}
-            interval={0}
-            minTickGap={0}
-          />
-          <YAxis
-            stroke={THEME.text}
-            width={58}
-            domain={yDomain}
-            ticks={yTicks}
-            tickFormatter={formatChartValue}
-            tickMargin={4}
-            allowDecimals={true}
-          />
-          <Tooltip
-  labelFormatter={(value, payload) => payload?.[0]?.payload?.label || labelByX[value] || value}
-  formatter={(value, name) => [formatChartValue(value), chartMetricLabel(name)]}
-  contentStyle={{
-    backgroundColor: THEME.card,
-    border: `1px solid ${THEME.border}`,
-    color: THEME.text
-  }}
-/>
-
-<Legend wrapperStyle={{ color: THEME.text }} />
-
-          {dataKeys.map((key, i) => (
-          <Line
-  key={key}
-  type="linear"
-  dataKey={key}
-  stroke={colors[i] || THEME.primary}
-  strokeWidth={3}
-  connectNulls={true}
-  isAnimationActive={false}
-  dot={{ r: 3, fill: colors[i] || THEME.primary, stroke: colors[i] || THEME.primary }}
-  activeDot={{ r: 5, fill: colors[i] || THEME.primary, stroke: '#ffffff' }}
-  name={chartMetricLabel(key)}
-/>
-))}
-        </LineChart>
-      </ResponsiveContainer>
-      </div>
+      <StatsLineChart
+        data={data}
+        dataKeys={dataKeys}
+        colors={colors}
+        getMetricLabel={chartMetricLabel}
+        formatValue={formatChartValue}
+        minHeight={RESPONSIVE_STATS_UI.chartMinHeight}
+      />
     );
   }
 
@@ -8807,7 +8814,7 @@ function chartMetricLabel(key) {
       title: liftLabel,
       color: COLORS[lift],
       data: liftData[lift] || [],
-      dataKeys: ['oneRM', 'e1rm'],
+      dataKeys: STATS_LIFT_DATA_KEYS,
       colors: [THEME.muted, COLORS[lift]],
       emptyMessage: t.noStatsData,
     });
@@ -8821,8 +8828,8 @@ function chartMetricLabel(key) {
             key: 'totalSBD',
             title: t.totalSBD,
             color: THEME.meet,
-            data: totalData.map(entry => ({ ...entry, oneRM: chartWeightFromKg(entry.oneRM), e1rm: chartWeightFromKg(entry.e1rm) })),
-            dataKeys: ['oneRM', 'e1rm'],
+            data: totalChartData,
+            dataKeys: STATS_LIFT_DATA_KEYS,
             colors: [THEME.muted, THEME.meet],
           })}
           {renderChartCard({
@@ -8830,7 +8837,7 @@ function chartMetricLabel(key) {
             title: t.strengthTotalBodyweight,
             color: THEME.meet,
             data: strengthData,
-            dataKeys: ['strength', 'eStrength'],
+            dataKeys: STATS_STRENGTH_DATA_KEYS,
             colors: [THEME.muted, THEME.meet],
             emptyMessage: t.noMetricData || t.noStatsData,
           })}
@@ -8839,7 +8846,7 @@ function chartMetricLabel(key) {
             title: t.strengthMax,
             color: THEME.meet,
             data: strengthData,
-            dataKeys: ['strengthMax', 'eStrengthMax'],
+            dataKeys: STATS_STRENGTH_MAX_DATA_KEYS,
             colors: [THEME.muted, THEME.meet],
             emptyMessage: t.noMetricData || t.noStatsData,
           })}
@@ -9724,7 +9731,7 @@ function TapInfoIcon({ color = THEME.primary, size = 13 }) {
   );
 }
 
-function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight, t }) {
+function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, t }) {
   const [showModal, setShowModal] = useState(false);
 
   const levelLabel = t[ATHLETE_LEVEL_LABEL_KEYS[athleteLevel]] || athleteLevel;
@@ -9734,7 +9741,6 @@ function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, latestB
   const currentRatio = Number(eStrengthRatio) || 0;
   const maxRatio = Number(eStrengthMax) || currentRatio;
   const ratioToNext = nextLevel ? Math.max(tier.max - maxRatio, 0) : 0;
-  const kgToNext = nextLevel && latestBodyWeight ? Math.round(ratioToNext * latestBodyWeight) : null;
 
   const modalMutedText = 'rgba(255, 244, 230, 0.52)';
   const modalDividerStyle = { height: 1, background: 'rgba(255, 244, 230, 0.09)', margin: '14px 0' };
@@ -9809,9 +9815,7 @@ function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, latestB
             <div>
               <div style={modalLabelStyle}>{t.athleteLevelProgressLabel}</div>
               <div style={modalValueStyle}>
-                {kgToNext !== null
-                  ? `≈ ${kgToNext} kg → ${nextLevelLabel}`
-                  : `${ratioToNext.toFixed(2)}x → ${nextLevelLabel}`}
+                {`${ratioToNext.toFixed(2)}x → ${nextLevelLabel}`}
               </div>
             </div>
           ) : (
@@ -11017,9 +11021,31 @@ function App() {
   const [showWorkoutEffortPrompt, setShowWorkoutEffortPrompt] = useState(false);
   const [currentCycle, setCurrentCycle] = useState(1);
   const [bodyWeights, setBodyWeights] = useState([]);
+  const [recordedStrengthRatioMaxes, setRecordedStrengthRatioMaxes] = useState({});
+  const calculatedStrengthRatioMaxes = useMemo(
+    () => calculateStrengthRatioMaxes({
+      prs,
+      oneRMs,
+      history,
+      bodyWeights,
+    }),
+    [prs, oneRMs, history, bodyWeights]
+  );
+  const strengthRatioMaxes = useMemo(
+    () => mergeStrengthRatioMaxes(
+      recordedStrengthRatioMaxes,
+      calculatedStrengthRatioMaxes
+    ),
+    [recordedStrengthRatioMaxes, calculatedStrengthRatioMaxes]
+  );
   const athleteLevel = useMemo(
-    () => getAthleteLevel({ prs, history, bodyWeights }),
-    [prs, history, bodyWeights]
+    () => getAthleteLevel({
+      prs,
+      history,
+      bodyWeights,
+      strengthRatioMaxes,
+    }),
+    [prs, history, bodyWeights, strengthRatioMaxes]
   );
   const anonymousUsageMetrics = useMemo(
     () => buildAnonymousUsageMetrics({
@@ -11068,21 +11094,20 @@ function App() {
     () => [...bodyWeights].reverse().find(entry => entry.bodyWeight),
     [bodyWeights]
   );
-  const strengthRatioMaxes = useMemo(
-    () => calculateStrengthRatioMaxes({
-      prs,
-      oneRMs,
-      history,
-      bodyWeights,
-    }),
-    [prs, oneRMs, history, bodyWeights]
-  );
   const [meetPlannerAttempts, setMeetPlannerAttempts] = useState({});
   const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [plateCalcWeightKg, setPlateCalcWeightKg] = useState(null);
   const automaticBackupKeyRef = useRef(null);
   const automaticBackupStartupAttemptedRef = useRef(false);
+  const pendingBodyDataBackupRef = useRef(null);
+  const completedSmartGenerationRef = useRef(null);
+
+  useEffect(() => {
+    setRecordedStrengthRatioMaxes(previous => (
+      mergeStrengthRatioMaxes(previous, calculatedStrengthRatioMaxes)
+    ));
+  }, [calculatedStrengthRatioMaxes]);
 
   useEffect(() => {
     if (!hasLoadedData) return;
@@ -11347,6 +11372,17 @@ function App() {
         prs: savedPrs,
         history: savedHistory,
       });
+      const restoredBodyWeights = normalizeBodyWeights(data);
+      const restoredStrengthRatioMaxes = mergeStrengthRatioMaxes(
+        data.strengthRatioMaxes,
+        getCelebratedStrengthRatioMaxes(savedHistory),
+        calculateStrengthRatioMaxes({
+          prs: restoredPrs,
+          oneRMs: restoredOneRMs,
+          history: savedHistory,
+          bodyWeights: restoredBodyWeights,
+        })
+      );
       const savedCycle = data.currentCycle || 1;
       const restoredCycleE1RMs = deriveCycleE1RMs({
         savedCycleE1RMs: data.cycleE1RMs,
@@ -11393,7 +11429,8 @@ function App() {
       const savedAthleteLevel = getAthleteLevel({
         prs: restoredPrs,
         history: savedHistory,
-        bodyWeights: normalizeBodyWeights(data),
+        bodyWeights: restoredBodyWeights,
+        strengthRatioMaxes: restoredStrengthRatioMaxes,
       });
       const savedSquatVariant = normalizeSquatVariant(
         data.squatVariant ?? profileSettings.squatVariant ?? localStorage.getItem('squatVariant')
@@ -11459,7 +11496,8 @@ function App() {
       setSmartIdealRouteStartCycle(savedSmartIdealRouteStartCycle);
       setAccessoryPRs(data.accessoryPRs || {});
       setCurrentCycle(savedCycle);
-      setBodyWeights(normalizeBodyWeights(data));
+      setBodyWeights(restoredBodyWeights);
+      setRecordedStrengthRatioMaxes(restoredStrengthRatioMaxes);
       setWeightUnit(savedWeightUnit);
       setMeetPlannerAttempts(data.meetPlannerAttempts || {});
       setMeetPrepChecklist(savedMeetPrepChecklist);
@@ -11539,6 +11577,7 @@ function App() {
       cycleE1RMs,
       smartIdealRouteStartCycle,
       accessoryPRs,
+      strengthRatioMaxes,
       currentCycle,
       bodyWeights,
       weightUnit: normalizeWeightUnit(weightUnit),
@@ -11581,11 +11620,28 @@ function App() {
         );
       } catch (e) {}
 
-      if (shouldRetryAutomaticBackup(savedAutomaticBackupStatus)) {
+      if (shouldRetryAutomaticBackup(
+        savedAutomaticBackupStatus,
+        AUTO_BACKUP_PATH,
+        buildBackupSummary(storedData)
+      )) {
         writeAutomaticBackup(storedData).catch(error => {
           console.error('Automatic backup retry failed', error);
         });
       }
+    }
+
+    if (Capacitor.isNativePlatform() && pendingBodyDataBackupRef.current) {
+      const bodyDataBackupKey = pendingBodyDataBackupRef.current;
+      pendingBodyDataBackupRef.current = null;
+
+      writeAutomaticBackup(storedData).catch(error => {
+        console.error('Automatic body data backup failed', error);
+
+        if (!pendingBodyDataBackupRef.current) {
+          pendingBodyDataBackupRef.current = bodyDataBackupKey;
+        }
+      });
     }
 
     if (Capacitor.isNativePlatform() && screen === 'completed' && completedWorkout) {
@@ -11604,10 +11660,23 @@ function App() {
         });
       }
     }
-  }, [hasLoadedData, history, prs, oneRMs, cycleE1RMs, smartIdealRouteStartCycle, accessoryPRs, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
+  }, [hasLoadedData, history, prs, oneRMs, cycleE1RMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
 
   useEffect(() => {
     if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
+
+    if (matchesCompletedSmartGeneration(completedSmartGenerationRef.current, {
+      history,
+      prs,
+      oneRMs,
+      accessoryPRs,
+      currentIndex,
+      currentCycle,
+    })) {
+      completedSmartGenerationRef.current = null;
+      return;
+    }
+    completedSmartGenerationRef.current = null;
 
     const generationMaxes = isSmartTrainingModel(trainingModel)
       ? normalizeCycleE1RMs(cycleE1RMs, prs)
@@ -11667,6 +11736,7 @@ function App() {
       prs,
       oneRMs,
       bodyWeights,
+      strengthRatioMaxes,
       programProfile,
       accessoryMode,
       accessoryPRs,
@@ -11679,6 +11749,15 @@ function App() {
     });
 
     if (!transition) return;
+
+    completedSmartGenerationRef.current = {
+      history,
+      prs,
+      oneRMs,
+      accessoryPRs,
+      currentIndex: transition.currentIndex,
+      currentCycle: transition.currentCycle,
+    };
 
     setCurrentCycle(transition.currentCycle);
     setCycleE1RMs(transition.cycleE1RMs);
@@ -11703,6 +11782,7 @@ function App() {
     prs,
     oneRMs,
     bodyWeights,
+    strengthRatioMaxes,
     programProfile,
     accessoryMode,
     accessoryPRs,
@@ -11835,6 +11915,7 @@ function App() {
     setCycleE1RMs(initialCycleE1RMs);
     setSmartIdealRouteStartCycle(1);
     setAccessoryPRs({});
+    setRecordedStrengthRatioMaxes({});
     setMeetPlannerAttempts({});
     setMeetPrepChecklist({});
     setBodyWeights(initialBodyData ? [
@@ -11886,6 +11967,7 @@ function handleResetApp() {
   setCycleE1RMs({});
   setSmartIdealRouteStartCycle(1);
   setAccessoryPRs({});
+  setRecordedStrengthRatioMaxes({});
   setMeetPlannerAttempts({});
   setMeetPrepChecklist({});
   setShowNewCycle(false);
@@ -12816,6 +12898,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     nextWorkoutIndex,
     nextPrs = prs,
     nextOneRMs = oneRMs,
+    nextAccessoryPRs = accessoryPRs,
   }) {
     return regenerateSmartWorkoutsAfterCompletion({
       workouts,
@@ -12830,7 +12913,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         bench: cycleE1RMs.Bench,
         deadlift: cycleE1RMs.Deadlift,
         accessoryMode,
-        accessoryPRs,
+        accessoryPRs: nextAccessoryPRs,
         preparationMode,
         // Computed fresh from nextPrs/nextHistory (not the render-time
         // athleteLevel const) since this runs right after a workout
@@ -12839,6 +12922,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
           prs: nextPrs,
           history: nextHistory,
           bodyWeights,
+          strengthRatioMaxes,
         }),
         deadliftVariant,
         benchPressVariant,
@@ -12861,12 +12945,19 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     nextOneRMs,
   }) {
     const celebration = buildMilestoneCelebration({
-      before: { history, prs, oneRMs, bodyWeights },
+      before: {
+        history,
+        prs,
+        oneRMs,
+        bodyWeights,
+        strengthRatioMaxes,
+      },
       after: {
         history: nextHistory,
         prs: nextPrs,
         oneRMs: nextOneRMs,
         bodyWeights,
+        strengthRatioMaxes,
       },
       completionId: `${currentCycle}:${finishedWorkout.number}:${finishedWorkout.completedAt}`,
     });
@@ -12877,6 +12968,25 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     }
 
     return celebration;
+  }
+
+  function rememberCompletedSmartGeneration({
+    nextHistory,
+    nextPrs,
+    nextOneRMs,
+    nextAccessoryPRs,
+    nextCurrentIndex,
+  }) {
+    if (!isSmartTrainingModel(trainingModel)) return;
+
+    completedSmartGenerationRef.current = {
+      history: nextHistory,
+      prs: nextPrs,
+      oneRMs: nextOneRMs,
+      accessoryPRs: nextAccessoryPRs,
+      currentIndex: nextCurrentIndex,
+      currentCycle,
+    };
   }
 
   function completeWorkout(workoutEffortOverride = null) {
@@ -12904,6 +13014,13 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     const finishedWorkout = JSON.parse(JSON.stringify(workout));
     finishedWorkout.completed = true;
     finishedWorkout.completedAt = new Date().toISOString();
+    const nextAccessoryPRs = mergeAccessoryPrsFromWorkout(
+      accessoryPRs,
+      finishedWorkout
+    );
+    if (nextAccessoryPRs !== accessoryPRs) {
+      setAccessoryPRs(nextAccessoryPRs);
+    }
 
     const completedSmartDayType = isSmartTrainingModel(trainingModel)
       ? finishedWorkout.smartDayType || (
@@ -12976,6 +13093,21 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         : isSmartTrainingModel(trainingModel)
           ? selectedIndex + 1
           : Math.min(selectedIndex + 1, workouts.length - 1);
+      const nextCurrentWorkoutIndex = isSmartTrainingModel(trainingModel)
+        ? smartCycleCompleteAfterRest
+          ? selectedIndex
+          : Math.max(currentIndex, nextWorkoutIndex)
+        : selectedIndex === currentIndex
+          ? nextWorkoutIndex
+          : currentIndex;
+
+      rememberCompletedSmartGeneration({
+        nextHistory,
+        nextPrs: prs,
+        nextOneRMs: oneRMs,
+        nextAccessoryPRs,
+        nextCurrentIndex: nextCurrentWorkoutIndex,
+      });
 
       setWorkouts(
         isSmartTrainingModel(trainingModel) && !smartCycleCompleteAfterRest
@@ -12983,6 +13115,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
             nextHistory,
             finishedWorkout,
             nextWorkoutIndex,
+            nextAccessoryPRs,
           })
           : workouts.map((item, index) =>
             index === selectedIndex ? finishedWorkout : item
@@ -12997,11 +13130,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       setCompletedWorkoutIndex(selectedIndex);
 
       if (isSmartTrainingModel(trainingModel)) {
-        setCurrentWorkoutIndex(
-          smartCycleCompleteAfterRest
-            ? selectedIndex
-            : Math.max(currentIndex, nextWorkoutIndex)
-        );
+        setCurrentWorkoutIndex(nextCurrentWorkoutIndex);
       } else if (selectedIndex === currentIndex) {
         setCurrentWorkoutIndex(nextWorkoutIndex);
       }
@@ -13149,6 +13278,21 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     : isSmartTrainingModel(trainingModel)
       ? selectedIndex + 1
       : Math.min(selectedIndex + 1, workouts.length - 1);
+  const nextCurrentWorkoutIndex = isSmartTrainingModel(trainingModel)
+    ? smartCycleCompleteAfterMeet
+      ? selectedIndex
+      : Math.max(currentIndex, nextWorkoutIndex)
+    : selectedIndex === currentIndex
+      ? nextWorkoutIndex
+      : currentIndex;
+
+  rememberCompletedSmartGeneration({
+    nextHistory,
+    nextPrs,
+    nextOneRMs,
+    nextAccessoryPRs,
+    nextCurrentIndex: nextCurrentWorkoutIndex,
+  });
 
   setWorkouts(
     isSmartTrainingModel(trainingModel) && !smartCycleCompleteAfterMeet
@@ -13158,17 +13302,14 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         nextWorkoutIndex,
         nextPrs,
         nextOneRMs,
+        nextAccessoryPRs,
       })
       : workouts.map((item, index) =>
         index === selectedIndex ? finishedWorkout : item
       )
   );
   if (isSmartTrainingModel(trainingModel)) {
-    setCurrentWorkoutIndex(
-      smartCycleCompleteAfterMeet
-        ? selectedIndex
-        : Math.max(currentIndex, nextWorkoutIndex)
-    );
+    setCurrentWorkoutIndex(nextCurrentWorkoutIndex);
   } else if (selectedIndex === currentIndex) {
     setCurrentWorkoutIndex(nextWorkoutIndex);
   }
@@ -13455,21 +13596,24 @@ setHistory(nextHistory);
 }
 }
 
-  if (workout.accessories) {
-    workout.accessories.forEach(acc => {
-      const bestWeight = Math.max(...acc.weights);
-      const name = acc.key || acc.name;
-
-      setAccessoryPRs(prev => {
-        const current = prev[name] || 0;
-        return bestWeight > current ? { ...prev, [name]: bestWeight } : prev;
-      });
-    });
-  }
-
   const nextWorkoutIndex = isSmartTrainingModel(trainingModel)
     ? selectedIndex + 1
     : Math.min(selectedIndex + 1, workouts.length - 1);
+  const nextCurrentWorkoutIndex = isSmartTrainingModel(trainingModel)
+    ? Math.max(currentIndex, nextWorkoutIndex)
+    : selectedIndex === currentIndex
+      ? nextWorkoutIndex
+      : currentIndex;
+
+  if (completedTrainingHistory) {
+    rememberCompletedSmartGeneration({
+      nextHistory: completedTrainingHistory,
+      nextPrs: completedTrainingPrs,
+      nextOneRMs: completedTrainingOneRMs,
+      nextAccessoryPRs,
+      nextCurrentIndex: nextCurrentWorkoutIndex,
+    });
+  }
 
   setWorkouts(
     isSmartTrainingModel(trainingModel) && completedTrainingHistory
@@ -13479,6 +13623,7 @@ setHistory(nextHistory);
         nextWorkoutIndex,
         nextPrs: completedTrainingPrs,
         nextOneRMs: completedTrainingOneRMs,
+        nextAccessoryPRs,
       })
       : workouts.map((item, index) =>
         index === selectedIndex ? finishedWorkout : item
@@ -13489,7 +13634,7 @@ setHistory(nextHistory);
   setCompletedWorkoutIndex(selectedIndex);
 
   if (isSmartTrainingModel(trainingModel)) {
-    setCurrentWorkoutIndex(Math.max(currentIndex, nextWorkoutIndex));
+    setCurrentWorkoutIndex(nextCurrentWorkoutIndex);
   } else if (selectedIndex === currentIndex) {
     setCurrentWorkoutIndex(nextWorkoutIndex);
   }
@@ -14600,30 +14745,16 @@ if (screen === 'current' && !workouts[selectedIndex]) {
 }
 
 function saveBodyWeight(data) {
-  const today = new Date().toLocaleDateString('nl-NL');
+  const activeWorkoutNumber = getEntryWorkoutNumber(workouts[currentIndex]) || (currentIndex + 1);
+  const entry = createBodyDataEntry({
+    data,
+    currentCycle,
+    workoutNumber: activeWorkoutNumber,
+  });
+  if (!entry) return;
 
-  const bodyData = {
-    bodyWeight: data.bodyWeight || null,
-    bodyFat: data.bodyFat || null,
-    bodyWater: data.bodyWater || null,
-    visceralFat: data.visceralFat || null,
-    leanMass: data.leanMass || null,
-    physiqueRating: data.physiqueRating || null,
-  };
-
-  const hasAnyValue = Object.values(bodyData).some(value => value !== null);
-  if (!hasAnyValue) return;
-
-  setBodyWeights(prev => [
-    ...prev.filter(entry => entry.date !== today),
-    {
-      workoutNumber: currentIndex,
-      cycle: currentCycle,
-      date: today,
-      timestamp: new Date().toISOString(),
-      ...bodyData,
-    },
-  ]);
+  pendingBodyDataBackupRef.current = `body-data:${entry.timestamp}`;
+  setBodyWeights(prev => replaceBodyDataEntryForDay(prev, entry));
 }
 
 function changeScreen(nextScreen) {
@@ -15455,6 +15586,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           bodyWeights={bodyWeights}
           currentCycle={currentCycle}
           currentIndex={currentIndex}
+          currentWorkoutNumber={getEntryWorkoutNumber(workouts[currentIndex]) || (currentIndex + 1)}
           totalWorkouts={workouts.length}
           trainingModel={trainingModel}
           t={t}

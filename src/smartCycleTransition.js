@@ -33,6 +33,7 @@ export function buildAutomaticNextSmartCycle({
   prs = {},
   oneRMs = {},
   bodyWeights = [],
+  strengthRatioMaxes = {},
   programProfile = 'kelaniSbd',
   accessoryMode = 'off',
   accessoryPRs = {},
@@ -61,6 +62,7 @@ export function buildAutomaticNextSmartCycle({
     prs,
     history,
     bodyWeights,
+    strengthRatioMaxes,
   });
   const workouts = generateWorkoutsForTrainingModel(trainingModel, {
     programProfile,

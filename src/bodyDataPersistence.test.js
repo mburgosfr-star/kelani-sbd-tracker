@@ -1,4 +1,12 @@
-import { normalizeBodyWeights } from './workoutHistoryStats';
+import {
+  getAbsoluteWorkoutIndex,
+  normalizeBodyWeights,
+} from './workoutHistoryStats';
+
+test('variable-length smart cycles always sort before the next cycle', () => {
+  expect(getAbsoluteWorkoutIndex({ cycle: 3, workoutNumber: 45 }))
+    .toBeLessThan(getAbsoluteWorkoutIndex({ cycle: 4, workoutNumber: 15 }));
+});
 
 test('canonical body data cannot be replaced by older compatibility values on reload', () => {
   const normalized = normalizeBodyWeights({

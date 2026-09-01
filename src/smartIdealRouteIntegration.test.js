@@ -441,6 +441,9 @@ test('a beginner beyond the legacy route range with no cross-lift evidence start
         minimumWorkoutsBeforeMeet: 27,
         projectedByIdealRoute: true,
       });
+      expect(
+        workout.smartDecisionSummary?.readiness?.meetProjection?.projectedBySimulation
+      ).not.toBe(true);
     }
 
     const projection = workout.smartDecisionSummary?.readiness?.meetProjection;

@@ -1,4 +1,4 @@
-import { ATHLETE_LEVEL_THRESHOLDS, calculateBestMaxesFromHistory, calculateEStrengthRatio, calculateStrengthRatioMaxes, classifyAthleteLevel, getAthleteLevel, roundE1RM } from './workoutHistoryStats';
+import { ATHLETE_LEVEL_THRESHOLDS, calculateBestMaxesFromHistory, calculateEStrengthRatio, calculateStrengthRatioMaxes, classifyAthleteLevel, getAthleteLevel, getCelebratedStrengthRatioMaxes, mergeStrengthRatioMaxes, roundE1RM } from './workoutHistoryStats';
 
 test('preserves raw historical graph values while current e1RM can be rounded separately', () => {
   const seedHistory = [
@@ -160,4 +160,127 @@ describe('calculateEStrengthRatio / getAthleteLevel', () => {
 
     expect(result).toEqual({ strengthMax: null, eStrengthMax: 3.75 });
   });
+
+  test('recovers established historical real 1RMs at the bodyweight recorded then', () => {
+    const sharedSnapshot = {
+      completedSummary: {
+        type: 'multiTraining',
+        results: [
+          {
+            lift: 'Squat',
+            previousBest1RM: 145,
+            previousBestE1RM: 145,
+            oneRMToday: 97.5,
+            e1RMToday: 110.5,
+            topSet: { weight: 97.5, reps: 4 },
+          },
+          {
+            lift: 'Bench',
+            previousBest1RM: 97.5,
+            previousBestE1RM: 97.5,
+            oneRMToday: 60,
+            e1RMToday: 68,
+            topSet: { weight: 60, reps: 4 },
+          },
+        ],
+      },
+    };
+    const history = [
+      { cycle: 1, workoutNumber: 0, seedMax: true, lift: 'Squat', topWeight: 100, e1rm: 100 },
+      { cycle: 1, workoutNumber: 0, seedMax: true, lift: 'Bench', topWeight: 70, e1rm: 70 },
+      { cycle: 1, workoutNumber: 0, seedMax: true, lift: 'Deadlift', topWeight: 180, e1rm: 180 },
+      {
+        cycle: 3,
+        workoutNumber: 10,
+        lift: 'Squat',
+        topWeight: 97.5,
+        topReps: 4,
+        e1rm: 110.5,
+        workoutSnapshot: sharedSnapshot,
+      },
+      {
+        cycle: 3,
+        workoutNumber: 10,
+        lift: 'Bench',
+        topWeight: 60,
+        topReps: 4,
+        e1rm: 68,
+        workoutSnapshot: sharedSnapshot,
+      },
+    ];
+
+    expect(calculateStrengthRatioMaxes({
+      history,
+      bodyWeights: [{ cycle: 3, workoutNumber: 10, bodyWeight: 79.3 }],
+    })).toEqual({
+      strengthMax: 5.33,
+      eStrengthMax: 5.33,
+    });
+  });
+
+  test('persisted Strength Max records can only increase', () => {
+    const records = mergeStrengthRatioMaxes(
+      { strengthMax: 5.24, eStrengthMax: 5.36 },
+      { strengthMax: 5.1, eStrengthMax: 5.2 }
+    );
+
+    expect(records).toEqual({ strengthMax: 5.24, eStrengthMax: 5.36 });
+    expect(mergeStrengthRatioMaxes(records, {
+      strengthMax: 5.3,
+      eStrengthMax: 5.4,
+    })).toEqual({ strengthMax: 5.3, eStrengthMax: 5.4 });
+  });
+
+  test('a saved eStrength Max prevents the athlete level from moving backwards', () => {
+    expect(getAthleteLevel({
+      prs: { Squat: 150, Bench: 100, Deadlift: 180 },
+      history: [],
+      bodyWeights: [{ bodyWeight: 80 }],
+      strengthRatioMaxes: { eStrengthMax: 6.1 },
+    })).toBe('advanced');
+  });
+
+  test('recovers ratio records that older versions already celebrated', () => {
+    const sharedSnapshot = {
+      milestoneCelebration: {
+        achievements: [
+          { type: 'strengthMax', previous: 5.2, value: 5.24 },
+          { type: 'eStrengthMax', previous: 5.3, value: 5.36 },
+        ],
+      },
+    };
+
+    expect(getCelebratedStrengthRatioMaxes([
+      { lift: 'Squat', workoutSnapshot: sharedSnapshot },
+      { lift: 'Bench', workoutSnapshot: sharedSnapshot },
+    ])).toEqual({ strengthMax: 5.24, eStrengthMax: 5.36 });
+  });
+
+  test('keeps long strength and body-data histories fast enough for workout completion', () => {
+    const entryCount = 5000;
+    const history = Array.from({ length: entryCount }, (_, index) => ({
+      cycle: Math.floor(index / 48) + 1,
+      workoutNumber: (index % 48) + 1,
+      lift: ['Squat', 'Bench', 'Deadlift'][index % 3],
+      topWeight: [150, 100, 180][index % 3],
+      topReps: 1,
+      e1rm: [150, 100, 180][index % 3],
+    }));
+    const bodyWeights = Array.from({ length: entryCount }, (_, index) => ({
+      cycle: Math.floor(index / 48) + 1,
+      workoutNumber: (index % 48) + 1,
+      bodyWeight: 80 + ((index % 5) / 10),
+    }));
+    const startedAt = Date.now();
+
+    const result = calculateStrengthRatioMaxes({
+      prs: { Squat: 150, Bench: 100, Deadlift: 180 },
+      oneRMs: { Squat: 150, Bench: 100, Deadlift: 180 },
+      history,
+      bodyWeights,
+    });
+
+    expect(result.eStrengthMax).toBeGreaterThan(5);
+    expect(Date.now() - startedAt).toBeLessThan(2000);
+  }, 5000);
 });

@@ -3,13 +3,16 @@ import path from 'node:path';
 import {
   AUTO_BACKUP_PATH,
   buildBackupPayload,
+  buildBackupSummary,
   buildManualBackupFilename,
+  createBodyDataEntry,
   formatAutomaticBackupTimestamp,
   formatLocalIsoTimestamp,
   isVerifiedAutomaticBackupStatus,
   isVerifiedManualBackupStatus,
   isShareCancellation,
   removeLegacyBrowserAutomaticBackup,
+  replaceBodyDataEntryForDay,
   shouldRetryAutomaticBackup,
   storeImportedBackup,
   validateBackupPayload,
@@ -204,6 +207,62 @@ test('rejects an automatic backup containing stale workout progress', () => {
   expect(validateBackupPayload(staleBackup, currentData)).toBe(false);
 });
 
+test('a body update during C4W17 replaces the earlier daily point and is included in the backup', () => {
+  const earlierEntry = {
+    cycle: 4,
+    workoutNumber: 15,
+    date: '5-4-2030',
+    timestamp: '2030-04-05T07:00:00.000Z',
+    bodyWeight: 82.8,
+  };
+  const currentEntry = createBodyDataEntry({
+    data: {
+      bodyWeight: 82.6,
+      bodyFat: 16.9,
+      bodyWater: 55.4,
+    },
+    currentCycle: 4,
+    workoutNumber: 17,
+    now: new Date(2030, 3, 5, 13, 27, 35),
+  });
+  const bodyWeights = replaceBodyDataEntryForDay(
+    [{ ...earlierEntry, date: currentEntry.date }],
+    currentEntry
+  );
+  const data = makeStoredData({
+    currentCycle: 4,
+    bodyWeights,
+    inProgress: {
+      programVersion: 'test-program',
+      currentCycle: 4,
+      currentIndex: 16,
+      selectedIndex: 16,
+      workouts: Array.from({ length: 17 }, (_, index) => ({ number: index + 1 })),
+    },
+  });
+  const backup = buildBackupPayload(data);
+
+  expect(bodyWeights).toHaveLength(1);
+  expect(backup.data.bodyWeights).toEqual([
+    expect.objectContaining({
+      cycle: 4,
+      workoutNumber: 17,
+      bodyWeight: 82.6,
+      bodyFat: 16.9,
+      bodyWater: 55.4,
+    }),
+  ]);
+  expect(backup.summary).toMatchObject({
+    currentCycle: 4,
+    currentWorkout: 17,
+    bodyDataEntries: 1,
+    latestBodyDataTimestamp: currentEntry.timestamp,
+    latestBodyDataCycle: 4,
+    latestBodyDataWorkout: 17,
+  });
+  expect(validateBackupPayload(backup, data)).toBe(true);
+});
+
 test('accepts a well-formed legacy-compatible manual backup', () => {
   const data = makeStoredData({
     inProgress: undefined,
@@ -250,6 +309,13 @@ test('rejects malformed manual backup data before it can replace saved data', ()
     data: {
       ...validEnvelope.data,
       smartIdealRouteStartCycle: 0,
+    },
+  })).toBe(false);
+  expect(validateImportedBackup({
+    ...validEnvelope,
+    data: {
+      ...validEnvelope.data,
+      strengthRatioMaxes: { eStrengthMax: -1 },
     },
   })).toBe(false);
 });
@@ -316,4 +382,49 @@ test('retries missing, failed or legacy-path automatic backups', () => {
     exportedAt: '2026-07-12T10:00:00.000Z',
     path: currentPath,
   }, currentPath)).toBe(false);
+});
+
+test('refreshes a verified automatic backup when local body data is newer', () => {
+  const currentPath = AUTO_BACKUP_PATH;
+  const olderData = makeStoredData({
+    bodyWeights: [{
+      cycle: 4,
+      workoutNumber: 15,
+      timestamp: '2030-04-05T08:00:00.000Z',
+      bodyWeight: 82.8,
+    }],
+  });
+  const currentData = makeStoredData({
+    bodyWeights: [{
+      cycle: 4,
+      workoutNumber: 17,
+      timestamp: '2030-04-05T13:27:35.000Z',
+      bodyWeight: 82.6,
+    }],
+  });
+  const currentSummary = buildBackupSummary(currentData);
+  const olderStatus = {
+    ok: true,
+    source: 'automatic',
+    verified: true,
+    exportedAt: '2030-04-05T08:00:01.000Z',
+    path: currentPath,
+    summary: buildBackupSummary(olderData),
+  };
+  const currentStatus = {
+    ...olderStatus,
+    exportedAt: '2030-04-05T13:27:36.000Z',
+    summary: currentSummary,
+  };
+
+  expect(shouldRetryAutomaticBackup(
+    olderStatus,
+    currentPath,
+    currentSummary
+  )).toBe(true);
+  expect(shouldRetryAutomaticBackup(
+    currentStatus,
+    currentPath,
+    currentSummary
+  )).toBe(false);
 });

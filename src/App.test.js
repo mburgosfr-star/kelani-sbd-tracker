@@ -697,13 +697,142 @@ test('stats tabs keep the same chart frame size, including empty charts', () => 
 
   expect(liftFrames).toHaveLength(3);
   expect(new Set(liftFrames.map(frame => frame.style.height))).toEqual(new Set(['100%']));
-  expect(new Set(liftFrames.map(frame => frame.style.minHeight))).toEqual(new Set(['108px']));
+  expect(new Set(liftFrames.map(frame => frame.style.minHeight))).toEqual(new Set(['120px']));
 
   view.rerender(<StatsScreen {...commonProps} activescreen="totaal" />);
   const totalFrames = screen.getAllByTestId('stats-chart-frame');
 
   expect(totalFrames).toHaveLength(3);
   expect(totalFrames.map(frame => frame.style.height)).toEqual(liftFrames.map(frame => frame.style.height));
+});
+
+test('stats pairs strength totals with the bodyweight recorded for that workout', () => {
+  const history = [
+    { cycle: 1, workoutNumber: 1, lift: 'Squat', seedMax: true, topWeight: 100, e1rm: 100 },
+    { cycle: 1, workoutNumber: 1, lift: 'Bench', seedMax: true, topWeight: 60, e1rm: 60 },
+    { cycle: 1, workoutNumber: 1, lift: 'Deadlift', seedMax: true, topWeight: 120, e1rm: 120 },
+  ];
+
+  render(
+    <StatsScreen
+      history={history}
+      bodyWeights={[{ cycle: 1, workoutNumber: 1, bodyWeight: 70 }]}
+      currentCycle={1}
+      currentIndex={0}
+      totalWorkouts={28}
+      t={translations.en}
+      best1RMs={{ Squat: 100, Bench: 60, Deadlift: 120 }}
+      bestE1RMs={{ Squat: 100, Bench: 60, Deadlift: 120 }}
+      strengthMax={4}
+      eStrengthMax={4}
+      activescreen="totaal"
+    />
+  );
+
+  expect(screen.getByRole('button', { name: 'C1W1: Strength 4' }))
+    .toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'C1W1: eStrength 4' }))
+    .toBeInTheDocument();
+});
+
+test('stats labels the live endpoint with the current position after a long smart cycle', () => {
+  const history = ['Squat', 'Bench', 'Deadlift'].map((lift, index) => ({
+    cycle: 3,
+    workoutNumber: 45,
+    lift,
+    seedMax: true,
+    topWeight: [140, 95, 175][index],
+    e1rm: [145, 100, 180][index],
+  }));
+
+  render(
+    <StatsScreen
+      history={history}
+      bodyWeights={[]}
+      currentCycle={4}
+      currentIndex={15}
+      totalWorkouts={28}
+      t={translations.en}
+      best1RMs={{ Squat: 147.5, Bench: 100, Deadlift: 180 }}
+      bestE1RMs={{ Squat: 150, Bench: 105, Deadlift: 185 }}
+      activescreen="lifts"
+    />
+  );
+
+  expect(screen.getByRole('button', { name: 'C4W15: 1RM (kg) 147.5' }))
+    .toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'C4W15: e1RM (kg) 105' }))
+    .toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /C3W45: e1RM/ }))
+    .not.toBeInTheDocument();
+});
+
+test('stats labels body data updated today with the current training position', () => {
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  render(
+    <StatsScreen
+      history={[]}
+      bodyWeights={[
+        {
+          cycle: 4,
+          workoutNumber: 15,
+          date: now.toLocaleDateString('nl-NL'),
+          timestamp: now.toISOString(),
+          bodyWeight: 82,
+        },
+        {
+          cycle: 4,
+          workoutNumber: 13,
+          date: yesterday.toLocaleDateString('nl-NL'),
+          timestamp: yesterday.toISOString(),
+          bodyWeight: 81,
+        },
+      ]}
+      currentCycle={4}
+      currentIndex={15}
+      totalWorkouts={28}
+      t={translations.en}
+      activescreen="lichaam"
+    />
+  );
+
+  expect(screen.getByRole('button', { name: 'C4W15: Body weight (kg) 82' }))
+    .toBeInTheDocument();
+});
+
+test('stats keeps body data attached to its real measurement workout', () => {
+  render(
+    <StatsScreen
+      history={[]}
+      bodyWeights={[
+        {
+          cycle: 4,
+          workoutNumber: 13,
+          timestamp: '2026-08-29T10:01:09.356Z',
+          bodyWeight: 82.3,
+        },
+        {
+          cycle: 4,
+          workoutNumber: 16,
+          timestamp: '2026-09-01T12:00:00.000Z',
+          bodyWeight: 82.6,
+        },
+      ]}
+      currentCycle={4}
+      currentIndex={16}
+      currentWorkoutNumber={17}
+      totalWorkouts={28}
+      t={translations.en}
+      activescreen="lichaam"
+    />
+  );
+
+  expect(screen.getByRole('button', { name: 'C4W16: Body weight (kg) 82.6' }))
+    .toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /C4W17: Body weight/ }))
+    .not.toBeInTheDocument();
 });
 
 test('settings rows use responsive text and phone-sized action targets', () => {
@@ -916,6 +1045,8 @@ test('only the meet-plan card opens the meet workout, not the level badge', () =
   expect(onOpenWorkout).not.toHaveBeenCalled();
   expect(screen.getByText(translations.nl.athleteLevelModalTitle))
     .toBeInTheDocument();
+  expect(screen.getByText('0.90x → Advanced')).toBeInTheDocument();
+  expect(screen.queryByText(/≈ .* kg → Advanced/)).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', {
     name: translations.nl.openWorkout || translations.nl.workout,

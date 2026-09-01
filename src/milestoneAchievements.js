@@ -3,6 +3,7 @@ import {
   calculateAchievedMaxesFromHistory,
   calculateStrengthRatioMaxes,
   getAthleteLevel,
+  mergeStrengthRatioMaxes,
   roundE1RM,
 } from './workoutHistoryStats';
 import {
@@ -17,6 +18,7 @@ function buildMilestoneSnapshot({
   prs = {},
   oneRMs = {},
   bodyWeights = [],
+  strengthRatioMaxes = {},
 } = {}) {
   const establishedOneRMs = mergeHigherOneRMs(
     oneRMs,
@@ -36,19 +38,27 @@ function buildMilestoneSnapshot({
     oneRM: result.oneRM + lifts[lift].oneRM,
     e1RM: result.e1RM + lifts[lift].e1RM,
   }), { oneRM: 0, e1RM: 0 });
-  const ratioMaxes = calculateStrengthRatioMaxes({
-    prs,
-    oneRMs: establishedOneRMs,
-    history,
-    bodyWeights,
-  });
+  const ratioMaxes = mergeStrengthRatioMaxes(
+    strengthRatioMaxes,
+    calculateStrengthRatioMaxes({
+      prs,
+      oneRMs: establishedOneRMs,
+      history,
+      bodyWeights,
+    })
+  );
 
   return {
     lifts,
     totals,
     strengthMax: Number(ratioMaxes.strengthMax) || 0,
     eStrengthMax: Number(ratioMaxes.eStrengthMax) || 0,
-    athleteLevel: getAthleteLevel({ prs, history, bodyWeights }),
+    athleteLevel: getAthleteLevel({
+      prs,
+      history,
+      bodyWeights,
+      strengthRatioMaxes: ratioMaxes,
+    }),
   };
 }
 

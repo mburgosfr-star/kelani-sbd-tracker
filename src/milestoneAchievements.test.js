@@ -235,3 +235,20 @@ test('rest and failed work cannot create a milestone', () => {
     after: { ...baseline, history: failedHistory },
   })).toBeNull();
 });
+
+test('a persisted ratio record is the floor for later milestone comparisons', () => {
+  const savedRecords = { strengthMax: 5.24, eStrengthMax: 5.36 };
+  const celebration = buildMilestoneCelebration({
+    before: {
+      ...baseline,
+      strengthRatioMaxes: savedRecords,
+    },
+    after: {
+      ...baseline,
+      strengthRatioMaxes: savedRecords,
+      bodyWeights: [{ cycle: 1, workoutNumber: 1, bodyWeight: 100 }],
+    },
+  });
+
+  expect(celebration).toBeNull();
+});

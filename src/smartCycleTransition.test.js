@@ -154,3 +154,24 @@ test('a prior-cycle meet never advances an imported active cycle', () => {
     oneRMs: { Squat: 147.5, Bench: 100, Deadlift: 180 },
   })).toBeNull();
 });
+
+test('a recorded level cannot regress when the next Smart cycle starts', () => {
+  const history = completedMeetAndRecoveryHistory();
+  const transition = buildAutomaticNextSmartCycle({
+    trainingModel: TRAINING_MODELS.SMART,
+    currentCycle: 1,
+    history,
+    prs: { Squat: 45, Bench: 32.5, Deadlift: 60 },
+    oneRMs: { Squat: 45, Bench: 32.5, Deadlift: 60 },
+    bodyWeights: [{ cycle: 1, workoutNumber: 46, bodyWeight: 80 }],
+    strengthRatioMaxes: { eStrengthMax: 6.1 },
+    programProfile: 'kelaniSbd',
+    accessoryMode: 'off',
+    preparationMode: 'off',
+    cooldownMode: 'off',
+    smartIdealRouteStartCycle: 1,
+  });
+
+  expect(transition).not.toBeNull();
+  expect(transition.workouts[0].smartIdealRoute.athleteLevel).toBe('advanced');
+});

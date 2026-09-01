@@ -5798,7 +5798,11 @@ export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
   const currentWorkout = workouts[currentIndex];
   const readiness = currentWorkout?.smartDecisionSummary?.readiness;
 
-  if (!readiness?.meetProjection?.available || currentWorkout.type === 'meet') {
+  if (
+    !readiness?.meetProjection?.available ||
+    readiness.meetProjection.projectedByIdealRoute ||
+    currentWorkout.type === 'meet'
+  ) {
     return workouts;
   }
 

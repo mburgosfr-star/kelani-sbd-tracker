@@ -485,7 +485,10 @@ export function getEntryWorkoutNumber(entry) {
 }
 
 export function getAbsoluteWorkoutIndex(entry) {
-  return ((getEntryCycle(entry) - 1) * 28) + getEntryWorkoutNumber(entry);
+  // Smart cycles can legitimately continue far beyond Workout 28. Keep each
+  // cycle in its own wide chronological range so a late workout in an older
+  // cycle can never sort after a newer cycle (for example C3W45 vs C4W15).
+  return ((getEntryCycle(entry) - 1) * 1_000_000) + getEntryWorkoutNumber(entry);
 }
 
 export function getWorkoutLabel(entry) {
@@ -576,31 +579,10 @@ export function calculateStrengthRatioMaxes({
   let activeBodyWeight = null;
   let strengthMax = 0;
   let eStrengthMax = 0;
+  let historyIndex = 0;
 
-  sortedHistory.forEach(entry => {
-    const absoluteWorkoutIndex = getAbsoluteWorkoutIndex(entry);
-    while (
-      bodyIndex < sortedBodyWeights.length &&
-      getAbsoluteWorkoutIndex(sortedBodyWeights[bodyIndex]) <= absoluteWorkoutIndex
-    ) {
-      activeBodyWeight = Number(sortedBodyWeights[bodyIndex].bodyWeight) || null;
-      bodyIndex += 1;
-    }
-
-    if (entry.completionOnly) return;
-
-    const candidates = getHistoryMaxCandidates(entry);
-    if (candidates.oneRM <= 0 && candidates.e1rm <= 0) return;
-
-    runningBest[entry.lift] = entry.manualMax
-      ? { oneRM: candidates.oneRM, e1rm: candidates.e1rm }
-      : {
-          oneRM: Math.max(runningBest[entry.lift].oneRM, candidates.oneRM),
-          e1rm: Math.max(runningBest[entry.lift].e1rm, candidates.e1rm),
-        };
-
-    if (!activeBodyWeight) return;
-
+  const recordRatios = bodyWeight => {
+    if (!(Number(bodyWeight) > 0)) return;
     const hasCompleteOneRMTotal = LIFT_ORDER.every(lift => runningBest[lift].oneRM > 0);
     const hasCompleteE1RMTotal = LIFT_ORDER.every(lift => (
       Math.max(runningBest[lift].oneRM, runningBest[lift].e1rm) > 0
@@ -611,7 +593,7 @@ export function calculateStrengthRatioMaxes({
         (sum, lift) => sum + runningBest[lift].oneRM,
         0
       );
-      strengthMax = Math.max(strengthMax, totalOneRM / activeBodyWeight);
+      strengthMax = Math.max(strengthMax, totalOneRM / bodyWeight);
     }
 
     if (hasCompleteE1RMTotal) {
@@ -619,49 +601,77 @@ export function calculateStrengthRatioMaxes({
         (sum, lift) => sum + Math.max(runningBest[lift].oneRM, runningBest[lift].e1rm),
         0
       );
-      eStrengthMax = Math.max(eStrengthMax, totalE1RM / activeBodyWeight);
+      eStrengthMax = Math.max(eStrengthMax, totalE1RM / bodyWeight);
     }
-  });
+  };
 
-  // A weigh-in can happen between workouts. Record its then-available
-  // running strength as well, otherwise a lighter legitimate weigh-in would
-  // disappear from the max merely because no lift was completed that day.
-  sortedBodyWeights.forEach(bodyEntry => {
-    const bodyWeight = Number(bodyEntry.bodyWeight) || 0;
-    if (!(bodyWeight > 0)) return;
+  const applyHistoryEntry = entry => {
+    if (entry.completionOnly) return;
 
-    const maxesAtWeighIn = calculateBestMaxesFromHistory(
-      sortedHistory.filter(entry =>
-        getAbsoluteWorkoutIndex(entry) <= getAbsoluteWorkoutIndex(bodyEntry)
-      )
+    const candidates = getHistoryMaxCandidates(entry);
+    const establishedOneRM = entry.manualMax
+      ? 0
+      : getEstablishedOneRMFromHistoryEntry(entry, entry.lift);
+    if (
+      Math.max(candidates.oneRM, establishedOneRM) <= 0 &&
+      candidates.e1rm <= 0
+    ) return;
+
+    runningBest[entry.lift] = entry.manualMax
+      ? { oneRM: candidates.oneRM, e1rm: candidates.e1rm }
+      : {
+          oneRM: Math.max(
+            runningBest[entry.lift].oneRM,
+            candidates.oneRM,
+            establishedOneRM
+          ),
+          e1rm: Math.max(runningBest[entry.lift].e1rm, candidates.e1rm),
+        };
+  };
+
+  // Merge the two already-sorted timelines once. The former implementation
+  // filtered and rescanned the complete history for every body-data entry,
+  // which made workout completion progressively slower as both histories
+  // grew. Body data at the same workout applies to that workout, and every
+  // weigh-in is still evaluated separately so a legitimate lighter value can
+  // establish a ratio record even when no lift was completed that day.
+  while (
+    historyIndex < sortedHistory.length ||
+    bodyIndex < sortedBodyWeights.length
+  ) {
+    const nextHistoryAbsoluteIndex = historyIndex < sortedHistory.length
+      ? getAbsoluteWorkoutIndex(sortedHistory[historyIndex])
+      : Infinity;
+    const nextBodyAbsoluteIndex = bodyIndex < sortedBodyWeights.length
+      ? getAbsoluteWorkoutIndex(sortedBodyWeights[bodyIndex])
+      : Infinity;
+    const absoluteWorkoutIndex = Math.min(
+      nextHistoryAbsoluteIndex,
+      nextBodyAbsoluteIndex
     );
-    const hasRecordedStrengthAtWeighIn = LIFT_ORDER.every(lift =>
-      Number(maxesAtWeighIn?.[lift]?.oneRM) > 0
-    );
-    const hasRecordedEStrengthAtWeighIn = LIFT_ORDER.every(lift => (
-      Math.max(
-        Number(maxesAtWeighIn?.[lift]?.oneRM) || 0,
-        Number(maxesAtWeighIn?.[lift]?.e1rm) || 0
-      ) > 0
-    ));
+    const bodyWeightsAtIndex = [];
 
-    if (hasRecordedStrengthAtWeighIn) {
-      const totalOneRMAtWeighIn = LIFT_ORDER.reduce((sum, lift) => (
-        sum + (Number(maxesAtWeighIn?.[lift]?.oneRM) || 0)
-      ), 0);
-      strengthMax = Math.max(strengthMax, totalOneRMAtWeighIn / bodyWeight);
+    while (
+      bodyIndex < sortedBodyWeights.length &&
+      getAbsoluteWorkoutIndex(sortedBodyWeights[bodyIndex]) === absoluteWorkoutIndex
+    ) {
+      const bodyWeight = Number(sortedBodyWeights[bodyIndex].bodyWeight) || 0;
+      bodyWeightsAtIndex.push(bodyWeight);
+      activeBodyWeight = bodyWeight || activeBodyWeight;
+      bodyIndex += 1;
     }
 
-    if (hasRecordedEStrengthAtWeighIn) {
-      const totalE1RMAtWeighIn = LIFT_ORDER.reduce((sum, lift) => (
-        sum + Math.max(
-          Number(maxesAtWeighIn?.[lift]?.oneRM) || 0,
-          Number(maxesAtWeighIn?.[lift]?.e1rm) || 0
-        )
-      ), 0);
-      eStrengthMax = Math.max(eStrengthMax, totalE1RMAtWeighIn / bodyWeight);
+    while (
+      historyIndex < sortedHistory.length &&
+      getAbsoluteWorkoutIndex(sortedHistory[historyIndex]) === absoluteWorkoutIndex
+    ) {
+      applyHistoryEntry(sortedHistory[historyIndex]);
+      recordRatios(activeBodyWeight);
+      historyIndex += 1;
     }
-  });
+
+    bodyWeightsAtIndex.forEach(recordRatios);
+  }
 
   const bestMaxes = calculateBestMaxesFromHistory(history);
   const hasExplicitOneRMs = LIFT_ORDER.every(lift => Number(oneRMs?.[lift]) > 0);
@@ -714,9 +724,82 @@ export function calculateStrengthRatioMaxes({
   };
 }
 
-export function getAthleteLevel({ prs, history, bodyWeights } = {}) {
+export function mergeStrengthRatioMaxes(...sources) {
+  const normalized = sources.reduce((result, source) => ({
+    strengthMax: Math.max(
+      result.strengthMax,
+      Number(source?.strengthMax) > 0 ? Number(source.strengthMax) : 0
+    ),
+    eStrengthMax: Math.max(
+      result.eStrengthMax,
+      Number(source?.eStrengthMax) > 0 ? Number(source.eStrengthMax) : 0
+    ),
+  }), { strengthMax: 0, eStrengthMax: 0 });
+  const merged = {
+    strengthMax: normalized.strengthMax > 0
+      ? Math.round(normalized.strengthMax * 100) / 100
+      : null,
+    eStrengthMax: normalized.eStrengthMax > 0
+      ? Math.round(normalized.eStrengthMax * 100) / 100
+      : null,
+  };
+  const first = sources[0];
+
+  if (
+    first &&
+    typeof first === 'object' &&
+    !Array.isArray(first) &&
+    (Number(first.strengthMax) || null) === merged.strengthMax &&
+    (Number(first.eStrengthMax) || null) === merged.eStrengthMax
+  ) {
+    return first;
+  }
+
+  return merged;
+}
+
+// Older installs did not persist the ratio records separately. Recover any
+// value that was already celebrated so upgrading cannot silently forget an
+// achievement that is still present in workout history.
+export function getCelebratedStrengthRatioMaxes(history = []) {
+  const recovered = { strengthMax: null, eStrengthMax: null };
+
+  (Array.isArray(history) ? history : []).forEach(entry => {
+    const achievements = entry?.workoutSnapshot?.milestoneCelebration?.achievements;
+    if (!Array.isArray(achievements)) return;
+
+    achievements.forEach(achievement => {
+      if (!['strengthMax', 'eStrengthMax'].includes(achievement?.type)) return;
+
+      const value = Math.max(
+        Number(achievement.value) || 0,
+        Number(achievement.previous) || 0
+      );
+      if (value <= 0) return;
+
+      recovered[achievement.type] = Math.max(
+        Number(recovered[achievement.type]) || 0,
+        value
+      );
+    });
+  });
+
+  return mergeStrengthRatioMaxes(recovered);
+}
+
+export function getAthleteLevel({
+  prs,
+  history,
+  bodyWeights,
+  strengthRatioMaxes,
+} = {}) {
+  const lifetimeRatioMaxes = mergeStrengthRatioMaxes(
+    strengthRatioMaxes,
+    calculateStrengthRatioMaxes({ prs, history, bodyWeights })
+  );
+
   return classifyAthleteLevel(
-    calculateStrengthRatioMaxes({ prs, history, bodyWeights }).eStrengthMax
+    lifetimeRatioMaxes.eStrengthMax
   );
 }
 
