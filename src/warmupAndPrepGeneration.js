@@ -238,6 +238,17 @@ export function generatePrepItems(lift, preparationMode = 'basicFirst') {
   }));
 }
 
+export function generateSmartPrepItems(lift, preparationMode = 'basicFirst', liftIndex = 0) {
+  const mode = normalizePreparationMode(preparationMode);
+
+  // The shoulder/thoracic routine is shared preparation for the whole day.
+  // General preparation is lift-specific, including for legacy basicFirst
+  // settings, so every main lift gets its own routine in Smart Training.
+  if (mode === 'shoulderThoracic' && liftIndex > 0) return [];
+
+  return generatePrepItems(lift, mode);
+}
+
 const UNIVERSAL_WARMUP_START_KG = 20;
 const UNIVERSAL_WARMUP_ANCHOR_STEP_KG = 50;
 const UNIVERSAL_WARMUP_MAX_JUMP_KG = 50;

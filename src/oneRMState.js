@@ -44,9 +44,9 @@ export function calculateActualOneRMsFromHistory(history = []) {
     // Legacy completed summaries carry the established real 1RM that was
     // already known before that workout. This is essential when an older
     // imported history no longer contains the original meet's raw set row.
-    // Do not use summary.best1RM here: older training summaries could call a
-    // heavy multi-rep set a 1RM. A genuine new single is already detected by
-    // getHistoryMaxCandidates above.
+    // Do not use summary.best1RM here: it is a running display value rather
+    // than evidence from this workout. Successful work-set weights are
+    // already detected by getHistoryMaxCandidates above, regardless of reps.
     if (entryLift) {
       result[entryLift] = Math.max(
         result[entryLift],
@@ -71,7 +71,7 @@ export function calculateActualOneRMsFromHistory(history = []) {
 
 // Version 1 briefly inferred established 1RMs by rounding e1RMs from doubles
 // and triples. That is not a real 1RM. Unversioned/v1 records therefore
-// rebuild from successful singles (including seed/manual maxes) and the
+// rebuild from successful non-warm-up work sets (including seed/manual maxes) and the
 // established real-1RM baselines preserved in legacy completed summaries.
 // Version 2 values are explicit confirmed 1RMs and remain valid even when the
 // confirming lift happened outside the recorded Kelani workout history.

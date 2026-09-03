@@ -1,4 +1,3 @@
-import { buildNextCycleE1RMs } from './smartCycleBasis';
 import {
   generateWorkoutsForTrainingModel,
   isSmartCycleCompleteAfterHistory,
@@ -6,6 +5,7 @@ import {
 import { isSmartIdealRouteEnabled } from './smartIdealRoute';
 import { getAthleteLevel } from './workoutHistoryStats';
 import { isSmartTrainingModel } from './programProfiles';
+import { normalizeOneRMs } from './oneRMState';
 
 export function shouldAutomaticallyStartNextSmartCycle({
   trainingModel,
@@ -53,11 +53,7 @@ export function buildAutomaticNextSmartCycle({
   }
 
   const nextCycle = Math.max(Number(currentCycle) || 1, 1) + 1;
-  const nextCycleE1RMs = buildNextCycleE1RMs({
-    prs,
-    history,
-    nextCycle,
-  });
+  const loadMaxes = normalizeOneRMs(oneRMs, prs);
   const athleteLevel = getAthleteLevel({
     prs,
     history,
@@ -66,9 +62,9 @@ export function buildAutomaticNextSmartCycle({
   });
   const workouts = generateWorkoutsForTrainingModel(trainingModel, {
     programProfile,
-    squat: nextCycleE1RMs.Squat,
-    bench: nextCycleE1RMs.Bench,
-    deadlift: nextCycleE1RMs.Deadlift,
+    squat: loadMaxes.Squat,
+    bench: loadMaxes.Bench,
+    deadlift: loadMaxes.Deadlift,
     accessoryMode,
     accessoryPRs,
     preparationMode,
@@ -90,7 +86,6 @@ export function buildAutomaticNextSmartCycle({
 
   return {
     currentCycle: nextCycle,
-    cycleE1RMs: nextCycleE1RMs,
     workouts,
     currentIndex: 0,
     selectedIndex: 0,

@@ -106,6 +106,21 @@ test('does not treat an unperformed planned accessory as recent work', () => {
   ]);
 });
 
+test('Bench keeps Row even when it was the most recently completed accessory', () => {
+  const history = [{
+    cycle: 1,
+    workoutNumber: 3,
+    workoutSnapshot: { accessories: [{ key: 'row', done: [true, true, true, true] }] },
+  }];
+  const benchAccessories = [accessory('hipThrust'), accessory('row')];
+  const squatAccessories = [accessory('pulldown'), accessory('legCurl')];
+
+  expect(selectSmartAccessoriesForWorkout([benchAccessories, squatAccessories], { history }))
+    .toEqual([accessory('row'), accessory('pulldown')]);
+  expect(selectSmartAccessoriesForWorkout([squatAccessories, benchAccessories], { history }))
+    .toEqual([accessory('pulldown'), accessory('row')]);
+});
+
 test('recognizes a safe exact recent prescription repeat', () => {
   const candidate = {
     type: 'training',

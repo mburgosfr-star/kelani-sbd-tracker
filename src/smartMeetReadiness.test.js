@@ -367,6 +367,7 @@ test('uses the confirmed real 1RM target and identifies the actual limiter', () 
   const result = buildSmartMeetPlanReadiness({
     history,
     prs: { Squat: 145, Bench: 97.5, Deadlift: 180 },
+    oneRMs: { Squat: 145, Bench: 97.5, Deadlift: 180 },
     currentCycle: 3,
     meetPlannerAttempts: {
       Squat: attempts([130, 142.5, 147.5]),
@@ -685,7 +686,7 @@ test('a later clean heavy Deadlift clears an earlier heavy-failure taper debt', 
   });
 });
 
-test('ignores failed top work and keeps successful multi-rep work as e1RM-only evidence', () => {
+test('ignores failed top work and keeps successful multi-rep work as real-1RM and e1RM evidence', () => {
   const history = [makeTrainingEntry({
     cycle: 2,
     workoutNumber: 7,
@@ -699,7 +700,7 @@ test('ignores failed top work and keeps successful multi-rep work as e1RM-only e
 
   const achieved = calculateAchievedMaxesFromHistory(history);
 
-  expect(achieved.Squat.oneRM).toBe(0);
+  expect(achieved.Squat.oneRM).toBe(100);
   expect(achieved.Squat.e1rm).toBeCloseTo(113.3333333333);
   expect(achieved.Squat.e1rm).toBeLessThan(135);
 });

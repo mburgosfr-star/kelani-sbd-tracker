@@ -1,6 +1,10 @@
 import { normalizeAccessoryMode } from './workoutHistoryStats';
-import { setHasUserState, workoutHasUserProgress } from './workoutStateMerge';
+import { accessoriesHaveUserProgress, setHasUserState, workoutHasUserProgress } from './workoutStateMerge';
 import { roundMeetWeight } from './warmupAndPrepGeneration';
+
+const ROW_TEMPLATE = {
+  key: 'row', labelKey: 'accessoryRow', sets: 4, reps: 10, source: 'deadlift', pct: 0.25,
+};
 
 const ACCESSORY_TEMPLATES = {
   standard: {
@@ -10,7 +14,7 @@ const ACCESSORY_TEMPLATES = {
     ],
     Bench: [
       { key: 'hipThrust', labelKey: 'accessoryHipThrust', sets: 4, reps: 8, source: 'deadlift', pct: 0.60 },
-      { key: 'row', labelKey: 'accessoryRow', sets: 4, reps: 10, source: 'deadlift', pct: 0.25 },
+      ROW_TEMPLATE,
     ],
     Deadlift: [
       { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 4, reps: 12, source: 'squat', pct: 0.35 },
@@ -24,6 +28,7 @@ const ACCESSORY_TEMPLATES = {
     ],
     Bench: [
       { key: 'lateralRaise', labelKey: 'accessoryLateralRaise', sets: 4, reps: 12, source: 'fixed', weight: 5, perSide: true },
+      ROW_TEMPLATE,
     ],
     Deadlift: [
       { key: 'plank', labelKey: 'accessoryPlank', sets: 4, durationSeconds: 30, source: 'bodyweight' },
@@ -37,6 +42,7 @@ const ACCESSORY_TEMPLATES = {
     ],
     Bench: [
       { key: 'legExtension', labelKey: 'accessoryLegExtension', sets: 4, reps: 12, source: 'squat', pct: 0.35 },
+      ROW_TEMPLATE,
     ],
     Deadlift: [
       { key: 'legCurl', labelKey: 'accessoryLegCurl', sets: 4, reps: 12, source: 'squat', pct: 0.35 },
@@ -191,19 +197,29 @@ export function generateDeadliftHomeAlternativeSets(oneRMs = {}) {
   }));
 }
 
-export function generateAccessoriesForLift(lift, accessoryMode = 'off', accessoryPRs = {}, oneRMs = {}) {
+export function generateAccessoriesForLift(
+  lift,
+  accessoryMode = 'off',
+  accessoryPRs = {},
+  oneRMs = {},
+  { lightRow = false } = {}
+) {
   const normalizedMode = normalizeAccessoryMode(accessoryMode);
   if (normalizedMode === 'off') return [];
 
   return (ACCESSORY_TEMPLATES[normalizedMode]?.[lift] || [])
     .map(template => {
-      const weight = getAccessoryBaseWeight(template, oneRMs, accessoryPRs);
+      const baseWeight = getAccessoryBaseWeight(template, oneRMs, accessoryPRs);
+      const isLightRow = template.key === 'row' && (lightRow || normalizedMode !== 'standard');
+      // Keep four accessible grid cells, but halve both reps and load for a
+      // light Row. Reduce AFTER the PR floor so a saved Row PR cannot undo it.
+      const weight = isLightRow ? Math.max(2.5, roundMeetWeight(baseWeight * 0.5)) : baseWeight;
 
       return {
         key: template.key,
         nameKey: template.labelKey,
         name: template.labelKey,
-        reps: template.reps,
+        reps: isLightRow ? 5 : template.reps,
         durationSeconds: template.durationSeconds,
         bodyweight: template.source === 'bodyweight',
         perSide: !!template.perSide,
@@ -266,9 +282,12 @@ export function selectSmartAccessoriesForWorkout(
       .sort((a, b) => {
         const aKey = a.accessory?.key || a.accessory?.nameKey || a.accessory?.name;
         const bKey = b.accessory?.key || b.accessory?.nameKey || b.accessory?.name;
+        // Bench always keeps its Row slot; recency only rotates the other
+        // accessories, without adding another group to a multi-lift day.
+        const requiredOrder = Number(bKey === 'row') - Number(aKey === 'row');
         const aRecency = accessoryRecency.has(aKey) ? accessoryRecency.get(aKey) : -1;
         const bRecency = accessoryRecency.has(bKey) ? accessoryRecency.get(bKey) : -1;
-        return aRecency - bRecency || a.templateIndex - b.templateIndex;
+        return requiredOrder || aRecency - bRecency || a.templateIndex - b.templateIndex;
       });
     const selected = candidates[0]?.accessory;
 
@@ -278,6 +297,40 @@ export function selectSmartAccessoriesForWorkout(
     usedKeys.add(key);
     return [selected];
   });
+}
+
+export function generateAccessoriesForWorkout(workout, {
+  accessoryMode = 'off',
+  accessoryPRs = {},
+  oneRMs = {},
+  history = [],
+  smart = false,
+} = {}) {
+  if (workout?.type !== 'training' || normalizeAccessoryMode(accessoryMode) === 'off') return [];
+
+  const lifts = [...new Set(workout.lifts?.length
+    ? workout.lifts.map(block => block.lift)
+    : [workout.lift].filter(Boolean))];
+  const isTaper = workout.accessoryIntensity === 'light' || workout.smartIdealRoute?.stage === 'taper';
+  const lightRow = isTaper || workout.smartGeneratedDeload || workout.smartDayType === 'deload';
+  const accessoriesByLift = lifts.map(lift => generateAccessoriesForLift(
+    lift, accessoryMode, accessoryPRs, oneRMs, { lightRow }
+  ));
+  const row = accessoriesByLift[lifts.indexOf('Bench')]?.find(item => item.key === 'row');
+
+  // Taper keeps only the light Bench/Row pairing, not the regular accessory
+  // programme. Meet and recovery days were excluded above.
+  if (isTaper) return row ? [row] : [];
+
+  const accessories = smart
+    ? selectSmartAccessoriesForWorkout(accessoriesByLift, { history })
+    : (accessoriesByLift[0] || []);
+
+  // Classic retains its primary-lift accessory plan, with the same Row rule
+  // when Bench is secondary. Smart selects its Bench slot above.
+  return row && !accessories.some(item => item.key === 'row')
+    ? [...accessories, row]
+    : accessories;
 }
 
 export function applyAccessoryPlanToWorkouts(
@@ -297,21 +350,8 @@ export function applyAccessoryPlanToWorkouts(
     return accessory?.key || accessory?.nameKey || accessory?.name;
   }
 
-  function accessoriesHaveUserProgress(accessories = []) {
-    return (accessories || []).some(accessory =>
-      (accessory.done || []).some(Boolean) ||
-      (accessory.failed || []).some(Boolean) ||
-      (accessory.skipped || []).some(Boolean) ||
-      (accessory.adjustedFromFailedSet || []).some(Boolean) ||
-      (accessory.adjustedFromOriginal || []).some(Boolean) ||
-      (accessory.weights || []).some((weight, index) =>
-        Number(weight) !== Number(accessory.originalWeights?.[index] ?? weight)
-      )
-    );
-  }
-
   function mergeAccessory(currentAccessory, generatedAccessory) {
-    if (!currentAccessory) return generatedAccessory;
+    if (!currentAccessory || !accessoriesHaveUserProgress([currentAccessory])) return generatedAccessory;
 
     const generatedDone = generatedAccessory.done || [];
     const currentDone = currentAccessory.done || [];
@@ -464,6 +504,12 @@ export function applyAccessoryPlanToWorkouts(
     );
     const primaryLiftBlock = mergedLifts[0] || {};
     const mergedCooldownItems = mergeCooldownItems(workout.cooldownItems, generated.cooldownItems);
+    const requiredRow = generated.type === 'training' && mergedLifts.some(block => block.lift === 'Bench')
+      ? (generated.accessories || []).find(accessory => accessoryKey(accessory) === 'row')
+      : null;
+    const startedAccessories = requiredRow && !currentAccessoriesByKey.has('row')
+      ? [...(workout.accessories || []), requiredRow]
+      : (workout.accessories || []);
 
     return {
       ...generated,
@@ -473,7 +519,7 @@ export function applyAccessoryPlanToWorkouts(
       lifts: mergedLifts,
       cooldownItems: mergedCooldownItems,
       accessories: preserveStartedAccessories
-        ? workout.accessories || []
+        ? startedAccessories
         : (generated.accessories || []).map(generatedAccessory =>
           mergeAccessory(currentAccessoriesByKey.get(accessoryKey(generatedAccessory)), generatedAccessory)
         ),

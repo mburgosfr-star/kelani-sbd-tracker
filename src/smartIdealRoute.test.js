@@ -182,7 +182,7 @@ test('normal heavy loading is 90% triple, 95% double and 100% single with the ag
     expect(phase.key).toBe(phaseKey);
     expect(heavy.prescription).toMatchObject({
       kind: 'top-set-with-backoffs',
-      basis: 'cycle-e1rm',
+      basis: 'real-1rm',
       topSet: { reps: topReps, pct: topPct },
       backoff: {
         reps: backoffReps,
@@ -212,7 +212,7 @@ test.each([
   prescriptions.forEach(prescription => {
     expect(prescription).toMatchObject({
       kind: 'work-sets',
-      basis: 'cycle-e1rm',
+      basis: 'real-1rm',
       pct,
       repRange: { min: 4, max: 6 },
       maxTotalWorkReps: 24,
@@ -275,7 +275,7 @@ const expectedTaper = {
 };
 
 test.each(SMART_IDEAL_LEVELS)(
-  '%s follows the agreed W22-W27 taper and disables accessories',
+  '%s follows the agreed W22-W27 taper and disables the regular accessory plan',
   level => {
     const workouts = Array.from({ length: 6 }, (_, index) =>
       getSmartIdealRouteWorkout({
@@ -304,7 +304,7 @@ test('taper heavy is one 90% opener without normal back-offs; medium/light targe
     if (item.intensityRole === 'heavy') {
       expect(item.prescription).toEqual({
         kind: 'opener-single',
-        basis: 'cycle-e1rm',
+        basis: 'real-1rm',
         topSet: { reps: 1, pct: 0.90 },
         normalBackoffs: false,
         fullGridRequired: true,
@@ -314,7 +314,7 @@ test('taper heavy is one 90% opener without normal back-offs; medium/light targe
 
     expect(item.prescription).toMatchObject({
       kind: 'taper-work-sets',
-      basis: 'cycle-e1rm',
+      basis: 'real-1rm',
       pct: item.intensityRole === 'medium' ? 0.70 : 0.60,
       targetTotalWorkReps: 12,
       targetIsApproximate: true,
@@ -347,15 +347,14 @@ test.each(SMART_IDEAL_LEVELS)('%s has the full simulated meet at W28', level => 
   });
 });
 
-test('the ideal route freezes cycle e1RM and uses 2.5kg / 2.5-percentage-point precision', () => {
+test('the ideal route uses confirmed real 1RM with 2.5kg / 2.5-percentage-point precision', () => {
   expect(SMART_IDEAL_LOAD_POLICY).toEqual({
-    basis: 'cycle-e1rm',
-    cycleE1RMFixed: true,
+    basis: 'real-1rm',
     workWeightIncrementKg: 2.5,
     achievedE1RMIncrementKg: 2.5,
     displayedPercentageIncrement: 0.025,
     heavyPhaseMinimumIncreaseKg: 2.5,
-    heavyPhaseCap: 'cycle-e1rm',
+    heavyPhaseCap: 'real-1rm',
   });
 });
 
@@ -378,7 +377,7 @@ test('meet policy uses real 1RM attempts without requiring the third attempt to 
   expect(SMART_IDEAL_MEET_POLICY.readinessEvidence).toEqual([
     'successful-90-percent-triple',
     'successful-95-percent-double',
-    'achieved-e1rm-at-least-cycle-e1rm',
+    'achieved-current-cycle-e1rm-at-least-real-1rm',
     'successful-100-percent-single',
     'successful-taper-opener',
   ]);

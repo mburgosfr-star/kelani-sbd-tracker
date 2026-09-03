@@ -255,7 +255,7 @@ test('shows the full readiness/blocker/fatigue detail on a deload or rest day to
     },
     {
       label: 'Deadlift',
-      value: 'Cycle e1RM 157.5 kg → 180 kg (Gap 22.5 kg)',
+      value: 'Best e1RM this cycle 157.5 kg → 180 kg (Gap 22.5 kg)',
       kind: 'lift-readiness',
     },
     {
@@ -271,13 +271,13 @@ test('shows the full readiness/blocker/fatigue detail on a deload or rest day to
 
 test('the Gap is always exactly (displayed target) - (displayed current) - simple, visible arithmetic on the two numbers shown right above it', () => {
   // Reproduces the C3W33 diagnosis boundary: the UI showed
-  // "Cycle e1RM: 170 kg" and "Real 1RM target: 185 kg" but a Gap of "13.8 kg" -
+  // "Best e1RM this cycle: 170 kg" and "Real 1RM target: 185 kg" but a Gap of "13.8 kg" -
   // a flat contradiction of the two rounded numbers right above it (the
   // expects 185 - 170 = 15). Whether a lift still counts as a blocker at
   // all is decided separately from raw (unrounded) values in
   // smartTrainingEngine.js (isEffectivelyMet), but once a lift IS shown as
   // the blocker, its Gap must match simple subtraction of the displayed
-  // Cycle e1RM and target - never a more "precise" number that doesn't add
+  // Best e1RM this cycle and target - never a more "precise" number that doesn't add
   // up against what's on screen.
   const workout = workoutWith([smartLift({ lift: 'Deadlift' })]);
   workout.smartDecisionSummary.readiness.meetPlanReadiness.Deadlift = {
@@ -292,7 +292,7 @@ test('the Gap is always exactly (displayed target) - (displayed current) - simpl
   const rows = getSmartModalDetailRows(workout);
   const liftRow = rows.find(row => row.label === 'Deadlift');
 
-  expect(liftRow.value).toBe('Cycle e1RM 170 kg → 185 kg (Gap 15 kg)');
+  expect(liftRow.value).toBe('Best e1RM this cycle 170 kg → 185 kg (Gap 15 kg)');
 });
 
 function secondaryLiftBlock(lift, { volumePct = 0.75, volumeReps = 6, volumeCount = 6 } = {}) {
@@ -430,9 +430,9 @@ test('lists every lift still short of its real 1RM as a blocker, not just the si
   // own row, including Bench even though it's already fully ready (not
   // omitted), just compacted to one line each instead of three cells.
   expect(rows).toEqual(expect.arrayContaining([
-    { label: 'Deadlift', value: 'Cycle e1RM 170 kg → 185 kg (Gap 15 kg)', kind: 'lift-readiness' },
-    { label: 'Squat', value: 'Cycle e1RM 137.5 kg → 147.5 kg (Gap 10 kg)', kind: 'lift-readiness' },
-    { label: 'Bench', value: 'Ready (Cycle e1RM 102.5 kg)', kind: 'lift-readiness' },
+    { label: 'Deadlift', value: 'Best e1RM this cycle 170 kg → 185 kg (Gap 15 kg)', kind: 'lift-readiness' },
+    { label: 'Squat', value: 'Best e1RM this cycle 137.5 kg → 147.5 kg (Gap 10 kg)', kind: 'lift-readiness' },
+    { label: 'Bench', value: 'Ready (Best e1RM this cycle 102.5 kg)', kind: 'lift-readiness' },
   ]));
 });
 
@@ -459,8 +459,8 @@ test('live dashboard e1RMs override stale 5kg workout snapshots in the Smart mod
   });
 
   expect(rows).toEqual(expect.arrayContaining([
-    { label: 'Bench', value: 'Cycle e1RM 102.5 kg → 105 kg (Gap 2.5 kg)', kind: 'lift-readiness' },
-    { label: 'Deadlift', value: 'Cycle e1RM 182.5 kg → 185 kg (Gap 2.5 kg)', kind: 'lift-readiness' },
+    { label: 'Bench', value: 'Best e1RM this cycle 102.5 kg → 105 kg (Gap 2.5 kg)', kind: 'lift-readiness' },
+    { label: 'Deadlift', value: 'Best e1RM this cycle 182.5 kg → 185 kg (Gap 2.5 kg)', kind: 'lift-readiness' },
   ]));
 });
 

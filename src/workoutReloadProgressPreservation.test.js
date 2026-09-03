@@ -1,4 +1,5 @@
 import { mergeGeneratedWorkoutStructure } from './workoutStateMerge';
+import { applyAccessoryPlanToWorkouts, generateAccessoriesForWorkout } from './accessoryGeneration';
 
 function multiLiftWorkout({ done }) {
   return {
@@ -54,6 +55,47 @@ test('still adopts the freshly generated workout when the slot has never been to
 
   expect(result[0].label).toBe('Freshly Regenerated');
 });
+
+test.each(['training', 'meet'])('preserves preparation-only progress across a %s reload', type => {
+  const saved = multiLiftWorkout({ done: false });
+  saved.type = type;
+  saved.lifts[0].prepItems = [{ labelKey: 'prepHipOpeners', done: true }];
+  const generated = multiLiftWorkout({ done: false });
+  generated.type = type;
+  generated.lifts[0].prepItems = [{ labelKey: 'prepHipOpeners', done: false }];
+
+  const [restored] = mergeGeneratedWorkoutStructure(
+    JSON.parse(JSON.stringify([saved])), [generated], [], 1
+  );
+
+  expect(restored.lifts[0].prepItems[0].done).toBe(true);
+  expect(restored.lifts[0].warmups[0].done).toBe(false);
+  expect(restored.lifts[0].sets[0].done).toBe(false);
+});
+
+test.each(['adjusted', 'done', 'failed', 'skipped'])(
+  'preserves a Row that was %s before the main work, across reload and accessory regeneration', state => {
+    const generated = multiLiftWorkout({ done: false });
+    generated.lift = 'Bench';
+    generated.lifts[0].lift = 'Bench';
+    generated.accessories = generateAccessoriesForWorkout(generated, {
+      accessoryMode: 'standard', oneRMs: { Squat: 100, Bench: 70, Deadlift: 120 }, smart: true,
+    });
+    const saved = JSON.parse(JSON.stringify(generated));
+    const savedRow = saved.accessories.find(item => item.key === 'row');
+    if (state === 'adjusted') {
+      savedRow.weights[0] = 25;
+      savedRow.adjustedFromOriginal[0] = true;
+    } else {
+      savedRow[state] = [true, false, false, false];
+    }
+
+    const reloaded = mergeGeneratedWorkoutStructure(JSON.parse(JSON.stringify([saved])), [generated], [], 1);
+    const [restored] = applyAccessoryPlanToWorkouts(reloaded, [generated], new Set(), generated.number);
+    expect(restored.accessories.find(item => item.key === 'row')).toEqual(savedRow);
+    expect(restored.lifts[0].sets[0].done).toBe(false);
+  }
+);
 
 test('preserves in-progress data for a flat (non-multi-lift) workout too', () => {
   const restoredWorkout = {

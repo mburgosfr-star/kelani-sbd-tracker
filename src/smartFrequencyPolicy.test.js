@@ -4,6 +4,7 @@ import {
   isHeavySmartLiftBlock,
   roundBarbellWeight,
 } from './smartFrequencyPolicy';
+import { generateAccessoriesForWorkout } from './accessoryGeneration';
 
 function makeLiftBlock(lift, heavy = false, setCount = 1) {
   return {
@@ -248,6 +249,13 @@ describe('Smart rolling seven-workout frequency policy', () => {
     });
 
     expect(result.summary.supplementedLifts).toEqual(['Bench']);
+    // Accessory finalization must follow the new primary lift, even though
+    // frequency replacement has cleared the old candidate's accessories.
+    expect(result.workout.accessories).toEqual([]);
+    const finalAccessories = generateAccessoriesForWorkout(result.workout, {
+      accessoryMode: 'standard', oneRMs: { Squat: 150, Bench: 100, Deadlift: 200 }, smart: true,
+    });
+    expect(finalAccessories.map(item => item.key)).toEqual(['row', 'legExtension']);
     expect(result.summary.countsAfter.Bench).toEqual({
       total: 4,
       heavy: 1,

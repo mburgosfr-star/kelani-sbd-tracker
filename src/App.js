@@ -92,12 +92,21 @@ import {
 } from './workoutStateMerge';
 import {
   removeDeprecatedPrepItemsFromWorkouts,
-  roundMeetWeight,
   getSetPctForWeight,
   isGroupedWorkoutSet,
   getWorkoutSetGroupEntries,
   getWorkoutSetGroupLabel,
 } from './warmupAndPrepGeneration';
+import {
+  changeOpenAccessorySetWeight,
+  changeOpenMeetAttemptWeights,
+  changeOpenWorkoutSetWeight,
+  markOpenAccessorySetFailed,
+  markOpenWorkoutSetFailed,
+  restoreOpenAccessorySetWeight,
+  restoreOpenMeetAttemptWeights,
+  restoreOpenWorkoutSetWeight,
+} from './workoutSetActions';
 import { applyAccessoryPlanToWorkouts } from './accessoryGeneration';
 import {
   buildMeetAttemptsFromOneRM,
@@ -112,11 +121,6 @@ import {
   isSmartCycleCompleteAfterHistory,
   countFailedOrSkippedSetsFromSnapshot,
 } from './smartTrainingEngine';
-import {
-  buildNextCycleE1RMs,
-  deriveCycleE1RMs,
-  normalizeCycleE1RMs,
-} from './smartCycleBasis';
 import { buildAutomaticNextSmartCycle } from './smartCycleTransition';
 import {
   isSmartIdealRouteEnabled,
@@ -1088,19 +1092,9 @@ export function validateImportedBackup(backup) {
   });
 
   if (!hasValidMainLiftPrs) return false;
-  if (data.cycleE1RMs !== undefined) {
-    if (
-      !data.cycleE1RMs ||
-      typeof data.cycleE1RMs !== 'object' ||
-      Array.isArray(data.cycleE1RMs)
-    ) return false;
-
-    const hasValidCycleE1RMs = LIFT_ORDER.every(lift => {
-      const value = Number(data.cycleE1RMs[lift]);
-      return Number.isFinite(value) && value > 0;
-    });
-    if (!hasValidCycleE1RMs) return false;
-  }
+  // `cycleE1RMs` was a frozen load basis in older backups. It is deliberately
+  // ignored now, including when incomplete, so every legacy backup remains
+  // importable without letting that obsolete value affect new workouts.
   if (data.oneRMs !== undefined) {
     if (
       !data.oneRMs ||
@@ -1232,24 +1226,6 @@ export function canSwitchClassicToSmart(trainingModel, currentWorkout) {
     !isSmartTrainingModel(trainingModel) &&
     !workoutHasAnyUserProgress(currentWorkout)
   );
-}
-
-export function isMeetAttemptPlanLocked(workout = {}) {
-  const directProgress = [
-    ...(workout.meetPrepItems || []),
-    ...(workout.prepItems || []),
-    ...(workout.warmups || []),
-    ...(workout.sets || []),
-  ];
-  const liftProgress = (workout.lifts || []).flatMap(liftBlock => [
-    ...(liftBlock.prepItems || []),
-    ...(liftBlock.warmups || []),
-    ...(liftBlock.sets || []),
-  ]);
-
-  return [...directProgress, ...liftProgress].some(item => (
-    item?.done || item?.failed || item?.skipped
-  ));
 }
 
 export function formatAutomaticBackupTimestamp(value) {
@@ -4916,6 +4892,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
   const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
+  const editableSet = firstOpenEntry?.set || firstSet;
   const latestActionEntry = [...(entries || [])]
     .reverse()
     .find(({ set }) => set.done || set.failed || set.skipped);
@@ -4927,13 +4904,13 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
     failedEntry &&
     entries[entries.length - 1]?.index === failedEntry.index
   );
-  const [inputVal, setInputVal] = useState(String(firstSet.weight || ''));
+  const [inputVal, setInputVal] = useState(String(editableSet.weight || ''));
 
   useEffect(() => {
     if (editing) {
-      setInputVal(formatWeightValue(kgToDisplayWeight(workoutDisplayWeightKg(firstSet.weight || '', lift, benchPressVariant), weightUnit), weightUnit));
+      setInputVal(formatWeightValue(kgToDisplayWeight(workoutDisplayWeightKg(editableSet.weight || '', lift, benchPressVariant), weightUnit), weightUnit));
     }
-  }, [editing, firstSet.weight, weightUnit, lift, benchPressVariant]);
+  }, [editing, editableSet.weight, weightUnit, lift, benchPressVariant]);
 
   if (!entries?.length) return null;
 
@@ -4949,7 +4926,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
 
   function handleEditClick(e) {
     e.stopPropagation();
-    setInputVal(formatWeightValue(kgToDisplayWeight(workoutDisplayWeightKg(firstSet.weight || '', lift, benchPressVariant), weightUnit), weightUnit));
+    setInputVal(formatWeightValue(kgToDisplayWeight(workoutDisplayWeightKg(editableSet.weight || '', lift, benchPressVariant), weightUnit), weightUnit));
     setEditing(true);
   }
 
@@ -5150,15 +5127,16 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
   const [editing, setEditing] = useState(false);
   const firstWeight = acc.weights?.[0] || 0;
   const firstOpenIndex = (acc.done || []).findIndex(done => !done);
+  const editableWeight = Number(acc.weights?.[firstOpenIndex] ?? firstWeight) || 0;
   const isBodyweight = Boolean(acc.bodyweight);
   const durationSeconds = Number(acc.durationSeconds) || 0;
-  const [inputVal, setInputVal] = useState(String(firstWeight || ''));
+  const [inputVal, setInputVal] = useState(String(editableWeight || ''));
 
   useEffect(() => {
     if (editing) {
-      setInputVal(formatWeightValue(kgToDisplayWeight(firstWeight || '', weightUnit), weightUnit));
+      setInputVal(formatWeightValue(kgToDisplayWeight(editableWeight || '', weightUnit), weightUnit));
     }
-  }, [editing, firstWeight, weightUnit]);
+  }, [editing, editableWeight, weightUnit]);
 
   function confirmEdit() {
     const val = parseFloat(inputVal);
@@ -5172,7 +5150,7 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
 
   function handleEditClick(e) {
     e.stopPropagation();
-    setInputVal(formatWeightValue(kgToDisplayWeight(firstWeight || '', weightUnit), weightUnit));
+    setInputVal(formatWeightValue(kgToDisplayWeight(editableWeight || '', weightUnit), weightUnit));
     setEditing(true);
   }
 
@@ -6333,8 +6311,8 @@ export function getSmartModalDetailRows(workout = {}, t = translations.en, curre
       value: statusText,
     });
 
-    // One compact row per lift instead of three metric cells each (Cycle
-    // e1RM / target / Gap) - the blockers row above can name more than one
+    // One compact row per lift instead of three metric cells each (best e1RM
+    // this cycle / target / gap). The blockers row above can name more than one
     // lift (e.g. Squat AND Deadlift), so every named blocker still needs its
     // own visible numbers, but a lift that has already reached its target
     // doesn't need three cells to say so.
@@ -7052,7 +7030,7 @@ export function SmartDayTypeInline({
 }
 
 export function CurrentWorkout({
-  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkMeetSetFailed, onRestoreMeetSetWeight, onMeetWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight, currentE1RMs = {} }) {
+  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkLiftBlockSetFailed, onRestoreLiftBlockSetWeight, onLiftBlockWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight, currentE1RMs = {} }) {
   const smartModel = isSmartTrainingModel(trainingModel);
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
@@ -7411,6 +7389,7 @@ export function CurrentWorkout({
           return (
             <div
             key={liftBlock.lift}
+              data-testid={`workout-lift-${liftBlock.lift}`}
               style={isMeetDay
                 ? meetWorkoutLiftBlockStyle()
                 : activeWorkoutLiftBlockStyle()}
@@ -7567,9 +7546,9 @@ export function CurrentWorkout({
                         }
                         isReadOnly={isReadOnly}
                         onToggle={index => handleToggle(() => onToggleMeetSet(li, index))}
-                        onEditAll={val => secondarySetEntries.forEach(({ index }) => onMeetWeightChange(li, index, val))}
-                        onRestoreAll={() => secondarySetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
-                        onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
+                        onEditAll={val => secondarySetEntries.forEach(({ index }) => onLiftBlockWeightChange(li, index, val))}
+                        onRestoreAll={() => secondarySetEntries.forEach(({ index }) => onRestoreLiftBlockSetWeight(li, index))}
+                        onMarkFailed={index => handleToggle(() => onMarkLiftBlockSetFailed(li, index))}
                         renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
                         label={groupedSetLabel}
                         t={t}
@@ -7606,9 +7585,9 @@ export function CurrentWorkout({
                         }
                         isReadOnly={isReadOnly}
                         onToggle={index => handleToggle(() => onToggleMeetSet(li, index))}
-                        onEditAll={val => groupedSetEntries.forEach(({ index }) => onMeetWeightChange(li, index, val))}
-                        onRestoreAll={() => groupedSetEntries.forEach(({ index }) => onRestoreMeetSetWeight(li, index))}
-                        onMarkFailed={index => handleToggle(() => onMarkMeetSetFailed(li, index))}
+                        onEditAll={val => groupedSetEntries.forEach(({ index }) => onLiftBlockWeightChange(li, index, val))}
+                        onRestoreAll={() => groupedSetEntries.forEach(({ index }) => onRestoreLiftBlockSetWeight(li, index))}
+                        onMarkFailed={index => handleToggle(() => onMarkLiftBlockSetFailed(li, index))}
                         renderTimer={index => renderInlineTimer({ type: 'meetSet', liftIndex: li, index })}
                         label={groupedSetLabel}
                         t={t}
@@ -7698,9 +7677,9 @@ export function CurrentWorkout({
                     }
                     isReadOnly={isReadOnly}
                     onToggle={() => handleToggle(() => onToggleMeetSet(li, si))}
-                    onMarkFailed={() => handleToggle(() => onMarkMeetSetFailed(li, si))}
-                    onRestoreWeight={() => handleToggle(() => onRestoreMeetSetWeight(li, si))}
-                    onWeightChange={val => onMeetWeightChange(li, si, val)}
+                    onMarkFailed={() => handleToggle(() => onMarkLiftBlockSetFailed(li, si))}
+                    onRestoreWeight={() => handleToggle(() => onRestoreLiftBlockSetWeight(li, si))}
+                    onWeightChange={val => onLiftBlockWeightChange(li, si, val)}
                     t={t}
                     weightUnit={weightUnit}
                     lift={liftBlock.lift}
@@ -11008,7 +10987,6 @@ function App() {
   const [history, setHistory] = useState([]);
   const [prs, setPrs] = useState({});
   const [oneRMs, setOneRMs] = useState({});
-  const [cycleE1RMs, setCycleE1RMs] = useState({});
   const [smartIdealRouteStartCycle, setSmartIdealRouteStartCycle] = useState(1);
   const [accessoryPRs, setAccessoryPRs] = useState({});
   const [showNewCycle, setShowNewCycle] = useState(false);
@@ -11279,7 +11257,7 @@ function App() {
       .filter(Number.isFinite)
   ));
   const currentIndex = Math.max(completedWorkoutCount, currentWorkoutIndex);
-  const PROGRAM_VERSION = 'kelani-program-profiles-v5';
+  const PROGRAM_VERSION = 'kelani-program-profiles-v6';
 
   useEffect(() => {
     if (appViewportRef.current) {
@@ -11384,12 +11362,6 @@ function App() {
         })
       );
       const savedCycle = data.currentCycle || 1;
-      const restoredCycleE1RMs = deriveCycleE1RMs({
-        savedCycleE1RMs: data.cycleE1RMs,
-        prs: restoredPrs,
-        history: savedHistory,
-        currentCycle: savedCycle,
-      });
       const savedTrainingModel = normalizeTrainingModel(
         data.trainingModel || localStorage.getItem('trainingModel')
       );
@@ -11407,7 +11379,7 @@ function App() {
         startCycle: savedSmartIdealRouteStartCycle,
       });
       const generationMaxes = isSmartTrainingModel(savedTrainingModel)
-        ? restoredCycleE1RMs
+        ? normalizeOneRMs(restoredOneRMs, restoredPrs)
         : restoredPrs;
       const hasSavedProgramProfile = Boolean(data.programProfile);
       const savedProgramProfile = hasSavedProgramProfile
@@ -11492,7 +11464,6 @@ function App() {
       setHistory(savedHistory);
       setPrs(restoredPrs);
       setOneRMs(restoredOneRMs);
-      setCycleE1RMs(restoredCycleE1RMs);
       setSmartIdealRouteStartCycle(savedSmartIdealRouteStartCycle);
       setAccessoryPRs(data.accessoryPRs || {});
       setCurrentCycle(savedCycle);
@@ -11574,7 +11545,6 @@ function App() {
       prs,
       oneRMs,
       oneRMStateVersion: ONE_RM_STATE_VERSION,
-      cycleE1RMs,
       smartIdealRouteStartCycle,
       accessoryPRs,
       strengthRatioMaxes,
@@ -11660,7 +11630,7 @@ function App() {
         });
       }
     }
-  }, [hasLoadedData, history, prs, oneRMs, cycleE1RMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
+  }, [hasLoadedData, history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
 
   useEffect(() => {
     if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
@@ -11679,7 +11649,7 @@ function App() {
     completedSmartGenerationRef.current = null;
 
     const generationMaxes = isSmartTrainingModel(trainingModel)
-      ? normalizeCycleE1RMs(cycleE1RMs, prs)
+      ? normalizeOneRMs(oneRMs, prs)
       : prs;
     const generatedWorkouts = generateWorkoutsForTrainingModel(trainingModel, {
       programProfile,
@@ -11717,7 +11687,7 @@ function App() {
         Number(currentIndex) + 1
       ));
     });
-  }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, athleteLevel, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, oneRMs.Squat, oneRMs.Bench, oneRMs.Deadlift, cycleE1RMs.Squat, cycleE1RMs.Bench, cycleE1RMs.Deadlift, smartIdealRouteStartCycle, history, bodyWeights, currentIndex, currentCycle, meetPlannerAttempts]);
+  }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, athleteLevel, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, oneRMs.Squat, oneRMs.Bench, oneRMs.Deadlift, smartIdealRouteStartCycle, history, bodyWeights, currentIndex, currentCycle, meetPlannerAttempts]);
 
   useEffect(() => {
     if (!hasLoadedData || !isSmartTrainingModel(trainingModel)) return;
@@ -11760,7 +11730,6 @@ function App() {
     };
 
     setCurrentCycle(transition.currentCycle);
-    setCycleE1RMs(transition.cycleE1RMs);
     setWorkouts(transition.workouts);
     setCurrentWorkoutIndex(transition.currentIndex);
     setSelectedIndex(transition.selectedIndex);
@@ -11840,11 +11809,6 @@ function App() {
     setDeadliftVariant(defaultDeadliftVariant);
     setCooldownMode(defaultCooldownMode);
 
-    const initialCycleE1RMs = normalizeCycleE1RMs({
-      Squat: s,
-      Bench: b,
-      Deadlift: d,
-    });
     const initialOneRMs = normalizeOneRMs({
       Squat: s,
       Bench: b,
@@ -11852,9 +11816,9 @@ function App() {
     });
     setWorkouts(generateWorkoutsForTrainingModel(defaultTrainingModel, {
       programProfile: defaultProgramProfile,
-      squat: initialCycleE1RMs.Squat,
-      bench: initialCycleE1RMs.Bench,
-      deadlift: initialCycleE1RMs.Deadlift,
+      squat: initialOneRMs.Squat,
+      bench: initialOneRMs.Bench,
+      deadlift: initialOneRMs.Deadlift,
       accessoryMode: defaultAccessoryMode,
       accessoryPRs: {},
       preparationMode: defaultPreparationMode,
@@ -11912,7 +11876,6 @@ function App() {
 
     setPrs({ Squat: s, Bench: b, Deadlift: d });
     setOneRMs(initialOneRMs);
-    setCycleE1RMs(initialCycleE1RMs);
     setSmartIdealRouteStartCycle(1);
     setAccessoryPRs({});
     setRecordedStrengthRatioMaxes({});
@@ -11934,7 +11897,6 @@ function App() {
 function switchClassicToSmart() {
   if (!canSwitchClassicToSmart(trainingModel, workouts[currentIndex])) return;
 
-  setCycleE1RMs(normalizeCycleE1RMs(prs));
   setSmartIdealRouteStartCycle(
     currentCycle
   );
@@ -11964,7 +11926,6 @@ function handleResetApp() {
   setHistory([]);
   setPrs({});
   setOneRMs({});
-  setCycleE1RMs({});
   setSmartIdealRouteStartCycle(1);
   setAccessoryPRs({});
   setRecordedStrengthRatioMaxes({});
@@ -11996,16 +11957,12 @@ function handleStartNewCycle() {
   }
 
   const nextCycle = currentCycle + 1;
-  const nextCycleE1RMs = buildNextCycleE1RMs({
-    prs,
-    history,
-    nextCycle,
-  });
+  const loadMaxes = normalizeOneRMs(oneRMs, prs);
   const newWorkouts = generateWorkoutsForTrainingModel(trainingModel, {
     programProfile,
-    squat: isSmartTrainingModel(trainingModel) ? nextCycleE1RMs.Squat : prs.Squat,
-    bench: isSmartTrainingModel(trainingModel) ? nextCycleE1RMs.Bench : prs.Bench,
-    deadlift: isSmartTrainingModel(trainingModel) ? nextCycleE1RMs.Deadlift : prs.Deadlift,
+    squat: isSmartTrainingModel(trainingModel) ? loadMaxes.Squat : prs.Squat,
+    bench: isSmartTrainingModel(trainingModel) ? loadMaxes.Bench : prs.Bench,
+    deadlift: isSmartTrainingModel(trainingModel) ? loadMaxes.Deadlift : prs.Deadlift,
     accessoryMode,
     accessoryPRs,
     preparationMode,
@@ -12026,7 +11983,6 @@ function handleStartNewCycle() {
   });
 
   setCurrentCycle(nextCycle);
-  setCycleE1RMs(nextCycleE1RMs);
   setMeetPlannerAttempts({});
   setWorkouts(newWorkouts);
   setCurrentWorkoutIndex(0);
@@ -12237,27 +12193,9 @@ function markSetFailed(setIndex) {
 
       return {
         ...w,
-        sets: w.sets.map((s, si) => {
-          if (si !== setIndex) return s;
-
-          const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
-          const originalPct = Number(s.originalPct ?? s.pct) || 0;
-
-          return {
-            ...s,
-            done: true,
-            failed: true,
-            skipped: true,
-            failedAttempts: (Number(s.failedAttempts) || 0) + 1,
-            failedWeight: Number(s.failedWeight ?? s.weight) || 0,
-            originalWeight,
-            originalPct,
-            adjustedWeight: null,
-            adjustedFromFailedSet: false,
-            adjustedFromOriginal: Number(s.weight) !== originalWeight,
-            effort: null,
-          };
-        }),
+        sets: w.sets.map((s, si) =>
+          si === setIndex ? markOpenWorkoutSetFailed(s) : s
+        ),
       };
     })
   );
@@ -12271,42 +12209,15 @@ function restoreSetWeight(setIndex) {
         ? w
         : {
             ...w,
-            sets: w.sets.map((s, si) => {
-              if (si !== setIndex) return s;
-
-              const hasRestoreTarget =
-                s.failed ||
-                s.skipped ||
-                s.adjustedFromFailedSet ||
-                s.adjustedFromOriginal ||
-                s.failedWeight ||
-                s.adjustedWeight;
-
-              if (!hasRestoreTarget) return s;
-
-              const restoredWeight = Number(s.failedWeight ?? s.originalWeight ?? s.weight) || s.weight;
-              const restoredPct = Number(s.originalPct ?? getSetPctForWeight(s, restoredWeight)) || s.pct;
-
-              return {
-                ...s,
-                weight: restoredWeight,
-                pct: restoredPct,
-                done: false,
-                failed: false,
-                skipped: false,
-                failedAttempts: 0,
-                failedWeight: null,
-                adjustedWeight: null,
-                adjustedFromFailedSet: false,
-                adjustedFromOriginal: false,
-              };
-            }),
+            sets: w.sets.map((s, si) =>
+              si === setIndex ? restoreOpenWorkoutSetWeight(s) : s
+            ),
           }
     )
   );
 }
 
-function restoreMeetSetWeight(liftIndex, setIndex) {
+function restoreLiftBlockSetWeight(liftIndex, setIndex) {
   setWorkouts(prev =>
     prev.map((w, wi) => {
       if (wi !== selectedIndex) return w;
@@ -12318,36 +12229,11 @@ function restoreMeetSetWeight(liftIndex, setIndex) {
 
           return {
             ...liftBlock,
-            sets: (liftBlock.sets || []).map((s, si) => {
-              if (si !== setIndex) return s;
-
-              const hasRestoreTarget =
-                s.failed ||
-                s.skipped ||
-                s.adjustedFromFailedSet ||
-                s.adjustedFromOriginal ||
-                s.failedWeight ||
-                s.adjustedWeight;
-
-              if (!hasRestoreTarget) return s;
-
-              const restoredWeight = Number(s.failedWeight ?? s.originalWeight ?? s.weight) || s.weight;
-              const restoredPct = Number(s.originalPct ?? getSetPctForWeight(s, restoredWeight)) || s.pct;
-
-              return {
-                ...s,
-                weight: restoredWeight,
-                pct: restoredPct,
-                done: false,
-                failed: false,
-                skipped: false,
-                failedAttempts: 0,
-                failedWeight: null,
-                adjustedWeight: null,
-                adjustedFromFailedSet: false,
-                adjustedFromOriginal: false,
-              };
-            }),
+            sets: w.type === 'meet'
+              ? restoreOpenMeetAttemptWeights(liftBlock.sets || [], setIndex)
+              : (liftBlock.sets || []).map((s, si) =>
+                  si === setIndex ? restoreOpenWorkoutSetWeight(s) : s
+                ),
           };
         }),
       };
@@ -12423,34 +12309,9 @@ function changeWeight(type, index, val) {
       if (type === 'set') {
         return {
           ...w,
-          sets: w.sets.map((s, i) => {
-            if (i !== index) return s;
-
-            const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
-            const originalPct = Number(s.originalPct ?? s.pct) || 0;
-            const nextPct = getSetPctForWeight(
-              { ...s, originalWeight, originalPct },
-              val
-            );
-
-            const nextWeight = Number(val) || originalWeight;
-
-            return {
-              ...s,
-              weight: nextWeight,
-              pct: nextPct || s.pct,
-              done: false,
-              failed: false,
-              skipped: false,
-              failedAttempts: 0,
-              failedWeight: null,
-              adjustedWeight: null,
-              originalWeight,
-              originalPct,
-              adjustedFromFailedSet: false,
-              adjustedFromOriginal: Number(nextWeight) !== originalWeight,
-            };
-          }),
+          sets: w.sets.map((s, i) =>
+            i === index ? changeOpenWorkoutSetWeight(s, val) : s
+          ),
         };
       }
 
@@ -12616,7 +12477,7 @@ function toggleMeetSet(liftIndex, setIndex) {
   );
 }
 
-function markMeetSetFailed(liftIndex, setIndex) {
+function markLiftBlockSetFailed(liftIndex, setIndex) {
   const workout = workouts[selectedIndex];
 
   if (workout && hasMoreMeetSets(workout, liftIndex, setIndex)) {
@@ -12642,27 +12503,9 @@ function markMeetSetFailed(liftIndex, setIndex) {
 
           return {
             ...liftBlock,
-            sets: (liftBlock.sets || []).map((s, si) => {
-              if (si !== setIndex) return s;
-
-              const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
-              const originalPct = Number(s.originalPct ?? s.pct) || 0;
-
-              return {
-                ...s,
-                done: true,
-                failed: true,
-                skipped: true,
-                failedAttempts: (Number(s.failedAttempts) || 0) + 1,
-                failedWeight: Number(s.failedWeight ?? s.weight) || 0,
-                originalWeight,
-                originalPct,
-                adjustedWeight: null,
-                adjustedFromFailedSet: false,
-                adjustedFromOriginal: Number(s.weight) !== originalWeight,
-                effort: null,
-              };
-            }),
+            sets: (liftBlock.sets || []).map((s, si) =>
+              si === setIndex ? markOpenWorkoutSetFailed(s) : s
+            ),
           };
         }),
       };
@@ -12671,13 +12514,12 @@ function markMeetSetFailed(liftIndex, setIndex) {
 }
 
 
-function changeMeetWeight(liftIndex, setIndex, val) {
-  const roundedVal = roundMeetWeight(val);
-
+// Smart Training and meet day both use lift-block workouts. Their open sets
+// share ordinary edit semantics; only meet attempts add strict progression.
+function changeLiftBlockSetWeight(liftIndex, setIndex, val) {
   setWorkouts(prev =>
     prev.map((w, wi) => {
       if (wi !== selectedIndex) return w;
-      if (isMeetAttemptPlanLocked(w)) return w;
 
       return {
         ...w,
@@ -12686,46 +12528,13 @@ function changeMeetWeight(liftIndex, setIndex, val) {
 
           return {
             ...liftBlock,
-            sets: (() => {
-              const requestedWeights = liftBlock.sets.map((set, index) => (
-                index === setIndex
-                  ? roundedVal
-                  : roundMeetWeight(set.weight)
-              ));
-              const strictWeights = requestedWeights.reduce((weights, weight, index) => {
-                const previousWeight = Number(weights[index - 1]) || 0;
-                weights.push(index === 0
-                  ? weight
-                  : Math.max(weight, previousWeight + 2.5));
-                return weights;
-              }, []);
-
-              return liftBlock.sets.map((s, si) => {
-                const originalWeight = Number(s.originalWeight ?? s.weight) || 0;
-                const originalPct = Number(s.originalPct ?? s.pct) || 0;
-                const nextWeight = strictWeights[si];
-                const nextPct = getSetPctForWeight(
-                  { ...s, originalWeight, originalPct },
-                  nextWeight
-                );
-
-                return {
-                  ...s,
-                  weight: nextWeight,
-                  pct: nextPct || s.pct,
-                  done: false,
-                  failed: false,
-                  skipped: false,
-                  failedAttempts: 0,
-                  failedWeight: null,
-                  adjustedWeight: null,
-                  originalWeight,
-                  originalPct,
-                  adjustedFromFailedSet: false,
-                  adjustedFromOriginal: Number(nextWeight) !== originalWeight,
-                };
-              });
-            })(),
+            sets: w.type === 'meet'
+              ? changeOpenMeetAttemptWeights(liftBlock.sets || [], setIndex, val)
+              : (liftBlock.sets || []).map((set, index) =>
+                  index === setIndex
+                    ? changeOpenWorkoutSetWeight(set, val)
+                    : set
+                ),
           };
         }),
       };
@@ -12766,29 +12575,7 @@ function markAccessorySetFailed(accIndex, setIndex) {
         ...w,
         accessories: (w.accessories || []).map((a, ai) => {
           if (ai !== accIndex) return a;
-
-          return {
-            ...a,
-            done: (a.done || []).map((done, i) => i === setIndex ? true : done),
-            skipped: (a.skipped || (a.done || []).map(() => false)).map((skipped, i) =>
-              i === setIndex ? true : skipped
-            ),
-            failed: (a.failed || (a.done || []).map(() => false)).map((failed, i) =>
-              i === setIndex ? true : failed
-            ),
-            failedWeights: (a.failedWeights || (a.done || []).map(() => null)).map((weight, i) =>
-              i === setIndex ? (Number(weight ?? a.weights?.[i]) || 0) : weight
-            ),
-            originalWeights: (a.originalWeights || a.weights || []).map((weight, i) =>
-              Number(weight || a.weights?.[i]) || 0
-            ),
-            adjustedWeights: (a.adjustedWeights || a.weights || []).map((weight, i) =>
-              i === setIndex ? a.weights?.[i] : weight
-            ),
-            adjustedFromFailedSet: (a.adjustedFromFailedSet || (a.done || []).map(() => false)).map((adjusted, i) =>
-              i === setIndex ? false : adjusted
-            ),
-          };
+          return markOpenAccessorySetFailed(a, setIndex);
         }),
       };
     })
@@ -12805,19 +12592,7 @@ function restoreAccessoryWeight(accIndex, setIndex) {
         ...w,
         accessories: w.accessories.map((a, ai) => {
           if (ai !== accIndex) return a;
-
-          const restoredWeight =
-            Number(a.originalWeights?.[setIndex] || a.failedWeights?.[setIndex] || a.weights?.[setIndex]) || 0;
-
-          return {
-            ...a,
-            weights: a.weights.map((weight, i) => i === setIndex ? restoredWeight : weight),
-            failed: (a.failed || a.done.map(() => false)).map((failed, i) => i === setIndex ? false : failed),
-            failedWeights: (a.failedWeights || a.done.map(() => null)).map((weight, i) => i === setIndex ? null : weight),
-            skipped: (a.skipped || a.done.map(() => false)).map((skipped, i) => i === setIndex ? false : skipped),
-            adjustedFromFailedSet: (a.adjustedFromFailedSet || a.done.map(() => false)).map((adjusted, i) => i === setIndex ? false : adjusted),
-            adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, i) => i === setIndex ? false : adjusted),
-          };
+          return restoreOpenAccessorySetWeight(a, setIndex);
         }),
       };
     })
@@ -12833,17 +12608,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         ...w,
         accessories: w.accessories.map((a, ai) => {
           if (ai !== accIndex) return a;
-
-          const originalWeights = a.originalWeights || a.weights;
-
-          return {
-            ...a,
-            originalWeights,
-            weights: a.weights.map((wt, i) => i === setIndex ? val : wt),
-            adjustedFromOriginal: (a.adjustedFromOriginal || a.done.map(() => false)).map((adjusted, i) =>
-              i === setIndex ? Number(val) !== Number(originalWeights?.[i]) : adjusted
-            ),
-          };
+          return changeOpenAccessorySetWeight(a, setIndex, val);
         }),
       };
     })
@@ -12900,6 +12665,8 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     nextOneRMs = oneRMs,
     nextAccessoryPRs = accessoryPRs,
   }) {
+    const loadMaxes = normalizeOneRMs(nextOneRMs, nextPrs);
+
     return regenerateSmartWorkoutsAfterCompletion({
       workouts,
       finishedWorkout,
@@ -12909,9 +12676,9 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       nextWorkoutIndex,
       generationOptions: {
         programProfile,
-        squat: cycleE1RMs.Squat,
-        bench: cycleE1RMs.Bench,
-        deadlift: cycleE1RMs.Deadlift,
+        squat: loadMaxes.Squat,
+        bench: loadMaxes.Bench,
+        deadlift: loadMaxes.Deadlift,
         accessoryMode,
         accessoryPRs: nextAccessoryPRs,
         preparationMode,
@@ -13899,17 +13666,17 @@ const __kelaniSmartPreviewNextDay = (options = {}) => {
     ];
 
     const nextCurrentIndex = currentIndex + 1;
-    const persistedCycleE1RMs = deriveCycleE1RMs({
-      savedCycleE1RMs: data.cycleE1RMs,
+    const previewOneRMs = deriveOneRMs({
+      savedOneRMs: data.oneRMs,
+      stateVersion: data.oneRMStateVersion,
       prs: data.prs,
-      history: data.history,
-      currentCycle,
+      history: nextHistory,
     });
     const generated = generateWorkoutsForTrainingModel(data.trainingModel || TRAINING_MODELS.SMART, {
       programProfile: data.programProfile,
-      squat: persistedCycleE1RMs.Squat,
-      bench: persistedCycleE1RMs.Bench,
-      deadlift: persistedCycleE1RMs.Deadlift,
+      squat: previewOneRMs.Squat,
+      bench: previewOneRMs.Bench,
+      deadlift: previewOneRMs.Deadlift,
       accessoryMode: data.accessoryMode,
       accessoryPRs: data.accessoryPRs,
       preparationMode: data.preparationMode,
@@ -13926,12 +13693,7 @@ const __kelaniSmartPreviewNextDay = (options = {}) => {
       currentIndex: nextCurrentIndex,
       currentCycle,
       meetPlannerAttempts: data.meetPlannerAttempts || {},
-      oneRMs: deriveOneRMs({
-        savedOneRMs: data.oneRMs,
-        stateVersion: data.oneRMStateVersion,
-        prs: data.prs,
-        history: nextHistory,
-      }),
+      oneRMs: previewOneRMs,
       idealRouteEnabled: isSmartIdealRouteEnabled({
         currentCycle,
         startCycle: data.smartIdealRouteStartCycle,
@@ -14049,40 +13811,36 @@ const __kelaniSmartPreviewRegression = () => {
         entry?.manualMax ||
         Number(entry?.cycle) !== currentCycle
       );
-      const persistedCycleE1RMs = deriveCycleE1RMs({
-        savedCycleE1RMs: data.cycleE1RMs,
+      const previewHistory = [...preservedHistory, ...syntheticHistory];
+      const previewOneRMs = deriveOneRMs({
+        savedOneRMs: data.oneRMs,
+        stateVersion: data.oneRMStateVersion,
         prs,
-        history: data.history,
-        currentCycle,
+        history: previewHistory,
       });
 
       const generated = generateWorkoutsForTrainingModel(data.trainingModel || TRAINING_MODELS.SMART, {
         programProfile: data.programProfile,
-        squat: persistedCycleE1RMs.Squat,
-        bench: persistedCycleE1RMs.Bench,
-        deadlift: persistedCycleE1RMs.Deadlift,
+        squat: previewOneRMs.Squat,
+        bench: previewOneRMs.Bench,
+        deadlift: previewOneRMs.Deadlift,
         accessoryMode: data.accessoryMode,
         accessoryPRs: data.accessoryPRs,
         preparationMode: data.preparationMode,
         athleteLevel: getAthleteLevel({
           prs,
-          history: [...preservedHistory, ...syntheticHistory],
+          history: previewHistory,
           bodyWeights,
         }),
         deadliftVariant: data.deadliftVariant,
         benchPressVariant: data.benchPressVariant,
         squatVariant: data.squatVariant,
         cooldownMode: data.cooldownMode,
-        history: [...preservedHistory, ...syntheticHistory],
+        history: previewHistory,
         currentIndex,
         currentCycle,
         meetPlannerAttempts: data.meetPlannerAttempts || {},
-        oneRMs: deriveOneRMs({
-          savedOneRMs: data.oneRMs,
-          stateVersion: data.oneRMStateVersion,
-          prs,
-          history: [...preservedHistory, ...syntheticHistory],
-        }),
+        oneRMs: previewOneRMs,
       });
 
       const nextWorkout = generated[currentIndex] || generated[generated.length - 1] || null;
@@ -14350,19 +14108,20 @@ const __kelaniSmartResetToW1 = () => {
     const resetHistory = (Array.isArray(data.history) ? data.history : history || []).filter(entry =>
       entry?.seedMax || Number(entry?.workoutNumber) === 0
     );
-    const resetCycleE1RMs = buildNextCycleE1RMs({
+    const resetOneRMs = deriveOneRMs({
+      savedOneRMs: data.oneRMs,
+      stateVersion: data.oneRMStateVersion,
       prs: resolvedPrs,
       history: resetHistory,
-      nextCycle: resetCycle,
     });
 
     const generatedWorkouts = generateWorkoutsForTrainingModel(
       TRAINING_MODELS.SMART,
       {
         programProfile: data.programProfile || programProfile,
-        squat: resetCycleE1RMs.Squat,
-        bench: resetCycleE1RMs.Bench,
-        deadlift: resetCycleE1RMs.Deadlift,
+        squat: resetOneRMs.Squat,
+        bench: resetOneRMs.Bench,
+        deadlift: resetOneRMs.Deadlift,
         accessoryMode: data.accessoryMode || accessoryMode,
         accessoryPRs: data.accessoryPRs || accessoryPRs || {},
         preparationMode: data.preparationMode || preparationMode,
@@ -14379,12 +14138,7 @@ const __kelaniSmartResetToW1 = () => {
         currentIndex: 0,
         currentCycle: resetCycle,
         meetPlannerAttempts: {},
-        oneRMs: deriveOneRMs({
-          savedOneRMs: data.oneRMs,
-          stateVersion: data.oneRMStateVersion,
-          prs: resolvedPrs,
-          history: resetHistory,
-        }),
+        oneRMs: resetOneRMs,
         idealRouteEnabled: true,
       }
     );
@@ -14433,14 +14187,9 @@ const __kelaniSmartResetToW1 = () => {
 
     data.trainingModel = TRAINING_MODELS.SMART;
     data.prs = resolvedPrs;
-    data.oneRMs = deriveOneRMs({
-      savedOneRMs: data.oneRMs,
-      stateVersion: data.oneRMStateVersion,
-      prs: resolvedPrs,
-      history: resetHistory,
-    });
+    data.oneRMs = resetOneRMs;
     data.oneRMStateVersion = ONE_RM_STATE_VERSION;
-    data.cycleE1RMs = resetCycleE1RMs;
+    delete data.cycleE1RMs;
     data.smartIdealRouteStartCycle = resetCycle;
     data.history = resetHistory;
     data.currentCycle = resetCycle;
@@ -14799,7 +14548,7 @@ const dashboardE1RMMetrics = buildDashboardE1RMMetrics(
 // previous cycle must not make this cycle's blocker list look resolved.
 // This must stay computed the same way buildSmartMeetPlanReadiness scopes
 // its own currentCycleBestE1RM, or the two disagree.
-const currentCycleE1RMs = {
+const currentCycleBestE1RMs = {
   Squat: roundDashboardWeightKg(currentCycleBestMaxes.Squat.e1rm),
   Bench: roundDashboardWeightKg(currentCycleBestMaxes.Bench.e1rm),
   Deadlift: roundDashboardWeightKg(currentCycleBestMaxes.Deadlift.e1rm),
@@ -15050,14 +14799,14 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           onToggleMeetPrepItem={toggleMeetPrepItem}
           onToggleMeetWarmup={toggleMeetWarmup}
           onToggleMeetSet={toggleMeetSet}
-          onMarkMeetSetFailed={markMeetSetFailed}
-          onRestoreMeetSetWeight={restoreMeetSetWeight}
-          onMeetWeightChange={changeMeetWeight}
+          onMarkLiftBlockSetFailed={markLiftBlockSetFailed}
+          onRestoreLiftBlockSetWeight={restoreLiftBlockSetWeight}
+          onLiftBlockWeightChange={changeLiftBlockSetWeight}
           athleteLevel={athleteLevel}
           eStrengthRatio={eStrengthRatio}
           eStrengthMax={eStrengthMax}
           latestBodyWeight={latestBodyWeight}
-          currentE1RMs={currentCycleE1RMs}
+          currentE1RMs={currentCycleBestE1RMs}
         />
       )}
 
@@ -15209,7 +14958,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       const primaryBlockerReadiness = primaryBlockerLift
         ? meetReadiness?.meetPlanReadiness?.[primaryBlockerLift]
         : null;
-      const cycleE1RM = roundBarbellWeight(
+      const currentCycleBestE1RM = roundBarbellWeight(
         Number(primaryBlockerReadiness?.currentCycleBestE1RM) || 0,
         'nearest',
         2.5
@@ -15222,8 +14971,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         'nearest',
         2.5
       );
-      const readinessGap = Math.max(readinessTarget - cycleE1RM, 0);
-      const blockerRouteText = primaryBlockerLift && cycleE1RM > 0 && readinessTarget > 0
+      const readinessGap = Math.max(readinessTarget - currentCycleBestE1RM, 0);
+      const blockerRouteText = primaryBlockerLift && currentCycleBestE1RM > 0 && readinessTarget > 0
         ? `${t.smartPrimaryBlocker}: ${primaryBlockerLift} (${t.smartOpenerGapShort} ${formatWeightFromKg(readinessGap, weightUnit)})`
         : null;
       const { meetPlan: dashboardMeetPlan, meetTotals: dashboardMeetTotals } = dashboardSuggestedMeetPlan;

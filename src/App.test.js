@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SettingsListRow, SmartDayTypeInline, StatsScreen, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, isMeetAttemptPlanLocked, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, resolveStoredWeightUnit, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
+import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SettingsListRow, SmartDayTypeInline, StatsScreen, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, resolveStoredWeightUnit, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
 test('dashboard metrics contain values without treating the e1RM and 1RM difference as a new PR', () => {
@@ -1244,7 +1244,8 @@ test.each(['nl', 'en', 'ca'])('meet-readiness labels explain the 90, 95 and 100 
   expect(t.smartE1RM95Readiness).not.toBe('95% e1RM');
   expect(t.smartOneRMReadiness).toMatch(/100%/);
   expect(t.smartReadinessBasisText).toMatch(/e1RM/i);
-  expect(t.smartReadinessBasisText).toContain(t.smartCycleEstimateShort);
+  expect(t.smartReadinessBasisText.toLocaleLowerCase())
+    .toContain(t.smartCycleEstimateShort.toLocaleLowerCase());
 });
 
 test('recovery and deload reasons stay visible beside structured Smart details', () => {
@@ -1320,24 +1321,6 @@ test('ideal-route taper singles show their prescribed 90 percent until the weigh
     prescribedPct: 0.9,
     adjustedFromOriginal: true,
   })).toBe('92.5');
-});
-
-test('meet attempt weights lock as soon as meet execution has started', () => {
-  expect(isMeetAttemptPlanLocked({
-    type: 'meet',
-    lifts: [{
-      warmups: [{ done: false }],
-      sets: [{ done: false, failed: false, skipped: false }],
-    }],
-  })).toBe(false);
-
-  expect(isMeetAttemptPlanLocked({
-    type: 'meet',
-    lifts: [{
-      warmups: [{ done: true }],
-      sets: [{ done: false, failed: false, skipped: false }],
-    }],
-  })).toBe(true);
 });
 
 test('meet planner shows the weight unit inside the attempt value only', () => {
@@ -1454,7 +1437,8 @@ test('finishing the compact setup creates a Smart user with body weight and star
     expect(saved.weightUnit).toBe('kg');
     expect(saved.userProfile).toBeUndefined();
     expect(saved.prs.Squat).toBe(117.5);
-    expect(saved.cycleE1RMs).toEqual({
+    expect(saved.cycleE1RMs).toBeUndefined();
+    expect(saved.oneRMs).toEqual({
       Squat: 117.5,
       Bench: 75,
       Deadlift: 125,
@@ -1469,13 +1453,16 @@ test('finishing the compact setup creates a Smart user with body weight and star
   });
 });
 
-test('a legacy Smart save freezes the reconstructed cycle-start e1RMs on reload', async () => {
+test('a legacy Smart save ignores and removes its frozen cycle e1RM load basis', async () => {
   localStorage.clear();
   localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
     version: 1,
     trainingModel: 'smart',
     currentCycle: 1,
     prs: { Squat: 112.5, Bench: 75, Deadlift: 125 },
+    oneRMs: { Squat: 100, Bench: 75, Deadlift: 125 },
+    oneRMStateVersion: 2,
+    cycleE1RMs: { Squat: 150, Bench: 150, Deadlift: 200 },
     history: [
       { workoutNumber: 0, cycle: 0, seedMax: true, lift: 'Squat', topWeight: 100, topReps: 1, e1rm: 100 },
       { workoutNumber: 0, cycle: 0, seedMax: true, lift: 'Bench', topWeight: 75, topReps: 1, e1rm: 75 },
@@ -1484,16 +1471,16 @@ test('a legacy Smart save freezes the reconstructed cycle-start e1RMs on reload'
         workoutNumber: 1,
         cycle: 1,
         lift: 'Squat',
-        topWeight: 105,
-        topReps: 2,
-        e1rm: 112,
+        topWeight: 90,
+        topReps: 5,
+        e1rm: 105,
         workoutEffort: 'good',
         workoutSnapshot: {
           number: 1,
           type: 'training',
           lifts: [{
             lift: 'Squat',
-            sets: [{ weight: 105, reps: 2, done: true, failed: false, skipped: false }],
+            sets: [{ weight: 90, reps: 5, done: true, failed: false, skipped: false }],
           }],
         },
       },
@@ -1505,11 +1492,8 @@ test('a legacy Smart save freezes the reconstructed cycle-start e1RMs on reload'
   await waitFor(() => {
     const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
     expect(saved.prs.Squat).toBe(112.5);
-    expect(saved.cycleE1RMs).toEqual({
-      Squat: 100,
-      Bench: 75,
-      Deadlift: 125,
-    });
+    expect(saved.oneRMs).toEqual({ Squat: 100, Bench: 75, Deadlift: 125 });
+    expect(saved.cycleE1RMs).toBeUndefined();
     expect(saved.smartIdealRouteStartCycle).toBe(1);
     expect(saved.inProgress.workouts[1]).toMatchObject({
       number: 2,
@@ -1519,6 +1503,8 @@ test('a legacy Smart save freezes the reconstructed cycle-start e1RMs on reload'
         phase: 'triple',
       },
     });
+    expect(saved.inProgress.workouts[1].lifts.find(block => block.lift === 'Deadlift').sets[0])
+      .toMatchObject({ weight: 112.5, reps: 3, pct: 0.9 });
   });
 });
 

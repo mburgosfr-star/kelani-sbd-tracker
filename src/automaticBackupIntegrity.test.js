@@ -303,7 +303,7 @@ test('rejects malformed manual backup data before it can replace saved data', ()
       ...validEnvelope.data,
       cycleE1RMs: { Squat: 145, Bench: 97.5 },
     },
-  })).toBe(false);
+  })).toBe(true);
   expect(validateImportedBackup({
     ...validEnvelope,
     data: {

@@ -158,17 +158,16 @@ export function getActualOneRMFromSets(sets = []) {
         !set?.skipped &&
         !set?.warmup &&
         !set?.isWarmup &&
-        Number(set?.reps) === 1 &&
+        Number(set?.reps) > 0 &&
         Number(set?.weight) > 0
       ))
       .map(set => Number(set.weight) || 0)
   );
 }
 
-// Unlike getActualOneRMFromSets, this is not gated to literal singles: it is
-// the heaviest weight actually put on the bar that day, at any rep count.
-// Used for the "1RM today" workout-complete display, which is distinct from
-// the strictly-demonstrated 1RM tracked for meet readiness.
+// A successful multi-rep work set also proves that its weight can be lifted
+// for at least one rep. It therefore establishes the same real-1RM floor as a
+// successful single. Warm-ups, failed sets and skipped sets never do.
 export function getTopWeightFromSets(sets = []) {
   const weights = (Array.isArray(sets) ? sets : []).map(set => Number(set?.weight) || 0);
   return weights.length ? Math.max(...weights) : 0;
@@ -229,9 +228,8 @@ export function buildCompletedWorkoutLiftSummaries({
 }
 
 // Legacy completed summaries retain the real 1RM that was already
-// established before that workout. This is distinct from `best1RM`: older
-// training summaries could accidentally let a heavy multi-rep weight raise
-// that field. The previous value is the stable historical baseline and lets
+// established before that workout. The previous value is the stable
+// historical baseline and lets
 // migrations and running-best charts place an older meet result at an older
 // history point instead of inventing a jump at today's endpoint.
 export function getEstablishedOneRMFromHistoryEntry(entry, lift = entry?.lift) {
@@ -269,15 +267,21 @@ export function getHistoryMaxCandidates(entry) {
 
   const snapshot = entry.workoutSnapshot || entry;
   const snapshotSets = getSmartLiftSetsFromSnapshot(snapshot, entry.lift);
+  const successfulSnapshotSets = snapshotSets.filter(set => (
+    set?.done !== false &&
+    !set?.failed &&
+    !set?.skipped &&
+    !set?.warmup &&
+    !set?.isWarmup &&
+    Number(set?.weight) > 0 &&
+    Number(set?.reps) > 0
+  ));
   const hasStructuredSetEvidence = snapshotSets.length > 0;
-  const entryTopReps = Number(entry.topReps) || 0;
-  const legacyTopWeight = !hasStructuredSetEvidence && entryTopReps <= 0
+  const legacyTopWeight = !hasStructuredSetEvidence
     ? Number(entry.topWeight) || Number(entry.oneRMToday) || 0
     : 0;
   const oneRMCandidates = [
-    getActualOneRMFromSets(snapshotSets),
-    entryTopReps === 1 ? Number(entry.topWeight) || 0 : 0,
-    entryTopReps === 1 ? Number(entry.oneRMToday) || 0 : 0,
+    getActualOneRMFromSets(successfulSnapshotSets),
     legacyTopWeight,
   ];
 
@@ -286,6 +290,9 @@ export function getHistoryMaxCandidates(entry) {
     Number(entry.e1RMToday) || 0,
     Number(entry.bestE1RM) || 0,
     Number(entry.previousBestE1RM) || 0,
+    ...successfulSnapshotSets.map(set =>
+      epley(Number(set.weight) || 0, Number(set.reps) || 0)
+    ),
   ];
 
   const summary = snapshot?.completedSummary;
@@ -298,9 +305,8 @@ export function getHistoryMaxCandidates(entry) {
   summaryResults
     .filter(result => result?.lift === entry.lift)
     .forEach(result => {
-      const resultTopReps = Number(result?.topSet?.reps) || 0;
       oneRMCandidates.push(
-        resultTopReps === 1 ? Number(result.oneRMToday) || 0 : 0
+        Number(result.oneRMToday) || 0
       );
       e1RMCandidates.push(
         Number(result.e1RMToday) || 0,
@@ -387,16 +393,9 @@ export function getAchievedHistoryMaxCandidates(entry = {}) {
     result => result?.lift === entry.lift
   );
 
-  const entryTopReps = Number(entry.topReps) || 0;
   const oneRMCandidates = [
     getActualOneRMFromSets(successfulSets),
-    entryTopReps === 1 ? Number(entry.oneRMToday) || 0 : 0,
-    entryTopReps === 1 ? Number(entry.topWeight) || 0 : 0,
-    ...matchingSummaryResults.map(result => (
-      Number(result?.topSet?.reps) === 1
-        ? Number(result.oneRMToday) || 0
-        : 0
-    )),
+    ...matchingSummaryResults.map(result => Number(result.oneRMToday) || 0),
   ];
 
   const e1RMCandidates = [

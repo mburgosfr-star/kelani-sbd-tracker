@@ -123,7 +123,7 @@ describe('calculateEStrengthRatio / getAthleteLevel', () => {
     });
   });
 
-  test('never substitutes e1RMs for missing real 1RMs at a historical weigh-in', () => {
+  test('a successful multi-rep set raises the historical real-1RM floor without substituting its e1RM', () => {
     const before = calculateStrengthRatioMaxes({
       prs: { Squat: 100, Bench: 75, Deadlift: 125 },
       oneRMs: { Squat: 95, Bench: 70, Deadlift: 120 },
@@ -145,10 +145,10 @@ describe('calculateEStrengthRatio / getAthleteLevel', () => {
     });
 
     expect(before).toEqual({ strengthMax: 3.56, eStrengthMax: 3.75 });
-    expect(after).toEqual({ strengthMax: 3.56, eStrengthMax: 3.84 });
+    expect(after).toEqual({ strengthMax: 3.63, eStrengthMax: 3.84 });
   });
 
-  test('can record historical eStrength when complete e1RMs exist without complete real 1RMs', () => {
+  test('multi-rep work records both demonstrated real-1RM floors and higher e1RMs', () => {
     const result = calculateStrengthRatioMaxes({
       history: [
         { cycle: 1, workoutNumber: 1, lift: 'Squat', topWeight: 90, topReps: 3, e1rm: 100 },
@@ -158,7 +158,7 @@ describe('calculateEStrengthRatio / getAthleteLevel', () => {
       bodyWeights: [{ cycle: 1, workoutNumber: 0, bodyWeight: 80 }],
     });
 
-    expect(result).toEqual({ strengthMax: null, eStrengthMax: 3.75 });
+    expect(result).toEqual({ strengthMax: 3.34, eStrengthMax: 3.75 });
   });
 
   test('recovers established historical real 1RMs at the bodyweight recorded then', () => {

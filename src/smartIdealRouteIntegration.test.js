@@ -344,7 +344,7 @@ test('a safe successful adaptive workout rejoins the ideal route as soon as poss
   expect(rejoinedW3.type).toBe('training');
 });
 
-test('a legacy unmarked history starts relative ideal-route W1 immediately', () => {
+test('legacy unmarked work is valid evidence and starts at the first unresolved heavy row', () => {
   const history = [legacyEntry({ workoutNumber: 1, effort: 'good' })];
   const routeStartAtActualW2 = generateCurrent({ history, currentIndex: 1 });
 
@@ -358,7 +358,7 @@ test('a legacy unmarked history starts relative ideal-route W1 immediately', () 
   })).toBe(true);
   expect(routeStartAtActualW2.number).toBe(2);
   expect(routeStartAtActualW2.smartIdealRoute).toMatchObject({
-    workoutNumber: 1,
+    workoutNumber: 4,
     stage: 'normal',
     phase: 'triple',
   });
@@ -402,12 +402,12 @@ test('a legacy user starts immediately regardless of how much unmarked history e
   const rejoinedW6 = generateCurrent({ history, currentIndex: 5 });
   expect(rejoinedW6.number).toBe(6);
   expect(rejoinedW6.smartIdealRoute).toMatchObject({
-    workoutNumber: 1,
+    workoutNumber: 4,
     stage: 'normal',
   });
 });
 
-test('a beginner beyond the legacy route range with no cross-lift evidence starts at route W1', () => {
+test('a beginner with only Squat evidence starts at the first unresolved Deadlift row', () => {
   let history = Array.from({ length: 33 }, (_, index) => (
     legacyEntry({
       workoutNumber: index + 1,
@@ -427,7 +427,7 @@ test('a beginner beyond the legacy route range with no cross-lift evidence start
     if (currentIndex === 33) {
       expect(workout.number).toBe(34);
       expect(workout.smartIdealRoute).toMatchObject({
-        workoutNumber: 1,
+        workoutNumber: 3,
         stage: 'normal',
         phase: 'triple',
       });
@@ -436,9 +436,9 @@ test('a beginner beyond the legacy route range with no cross-lift evidence start
       );
       expect(workout.smartDecisionSummary?.readiness?.meetProjection).toMatchObject({
         currentWorkoutNumber: 34,
-        minimumWorkoutNumber: 61,
-        maximumWorkoutNumber: 61,
-        minimumWorkoutsBeforeMeet: 27,
+        minimumWorkoutNumber: 59,
+        maximumWorkoutNumber: 59,
+        minimumWorkoutsBeforeMeet: 25,
         projectedByIdealRoute: true,
       });
       expect(
@@ -459,9 +459,9 @@ test('a beginner beyond the legacy route range with no cross-lift evidence start
     history = completeWorkout(history, workout, 'good');
   }
 
-  expect(new Set(projectedMeetLabels)).toEqual(new Set(['C1W61']));
+  expect(new Set(projectedMeetLabels)).toEqual(new Set(['C1W59']));
   expect(meet).toBeTruthy();
-  expect(meet.number).toBe(61);
+  expect(meet.number).toBe(59);
   expect(meet.smartIdealRoute).toMatchObject({
     workoutNumber: 28,
     stage: 'meet',
@@ -736,6 +736,36 @@ test('normal heavy phase changes guarantee a 2.5 kg rise when the cycle cap allo
   expect(topWeights).toEqual([35, 37.5, 40]);
 });
 
+test('C4W18 top single and backoffs use the confirmed real Bench 1RM', () => {
+  const routeWorkout = getSmartIdealRouteWorkout({
+    workoutNumber: 18,
+    athleteLevel: 'intermediate',
+  });
+  const workout = buildSmartIdealTrainingWorkout({
+    sourceWorkout: { number: 18 },
+    routeWorkout,
+    athleteLevel: 'intermediate',
+    squat: 147.5,
+    bench: 100,
+    deadlift: 180,
+    preparationMode: 'off',
+  });
+  const bench = workout.lifts.find(block => block.lift === 'Bench');
+  const topSingle = bench.sets.find(set => set.labelKey === 'topSingle');
+  const backoffs = bench.sets.filter(set => set.labelKey === 'backoff');
+
+  expect(topSingle).toMatchObject({
+    weight: 100,
+    reps: 1,
+    pct: 1,
+    precisePct: 1,
+  });
+  expect(backoffs.length).toBeGreaterThan(0);
+  expect(backoffs.every(set => (
+    set.weight === 70 && set.pct === 0.7 && set.precisePct === 0.7
+  ))).toBe(true);
+});
+
 test('beginner W22 lets universal warmups determine the remaining taper backoffs', () => {
   const routeWorkout = getSmartIdealRouteWorkout({
     workoutNumber: 22,
@@ -828,7 +858,7 @@ test('beginner W24 uses a useful four-column deadlift ladder and preserves the p
 });
 
 test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
-  '%s live route preserves dose, barbell and grid invariants through the meet',
+  '%s live route preserves dose, barbell, grid and Bench/Row invariants through the meet',
   athleteLevel => {
     let history = [];
 
@@ -837,9 +867,21 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
         history,
         currentIndex: index,
         athleteLevel,
+        options: { accessoryMode: 'standard' },
       });
 
       expectFullLiftGrids(workout);
+      const rows = (workout.accessories || []).filter(item => item.key === 'row');
+      const needsRow = workout.type === 'training' && workout.lifts.some(block => block.lift === 'Bench');
+      expect(rows).toHaveLength(needsRow ? 1 : 0);
+      if (workout.type === 'training' && workout.smartIdealRoute?.stage === 'taper') {
+        expect(workout.accessories).toEqual(rows);
+        rows.forEach(row => {
+          expect(row.reps).toBe(5);
+          expect(row.weights).toEqual([25, 25, 25, 25]);
+        });
+      }
+      if (workout.type !== 'training') expect(workout.accessories).toEqual([]);
 
       (workout.lifts || []).forEach(liftBlock => {
         const workSets = liftBlock.sets || [];

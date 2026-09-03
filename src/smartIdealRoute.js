@@ -14,13 +14,12 @@ export const SMART_IDEAL_INTENSITY_ROLES = Object.freeze({
 });
 
 export const SMART_IDEAL_LOAD_POLICY = Object.freeze({
-  basis: 'cycle-e1rm',
-  cycleE1RMFixed: true,
+  basis: 'real-1rm',
   workWeightIncrementKg: 2.5,
   achievedE1RMIncrementKg: 2.5,
   displayedPercentageIncrement: 0.025,
   heavyPhaseMinimumIncreaseKg: 2.5,
-  heavyPhaseCap: 'cycle-e1rm',
+  heavyPhaseCap: 'real-1rm',
 });
 
 export const SMART_IDEAL_MEET_POLICY = Object.freeze({
@@ -40,7 +39,7 @@ export const SMART_IDEAL_MEET_POLICY = Object.freeze({
   readinessEvidence: Object.freeze([
     'successful-90-percent-triple',
     'successful-95-percent-double',
-    'achieved-e1rm-at-least-cycle-e1rm',
+    'achieved-current-cycle-e1rm-at-least-real-1rm',
     'successful-100-percent-single',
     'successful-taper-opener',
   ]),
@@ -265,6 +264,8 @@ function buildTrainingWorkout({ workoutNumber, stage, phase = null, lifts }) {
     type: 'training',
     stage,
     phase: phase?.key || null,
+    // Regular accessories stop during taper; the workout accessory policy
+    // retains only a light Row on days containing Bench.
     accessoriesAllowed: stage !== 'taper',
     lifts: lifts.map(item => ({
       ...item,

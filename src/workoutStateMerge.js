@@ -17,8 +17,21 @@ export function setHasUserState(set) {
   );
 }
 
+export function accessoriesHaveUserProgress(accessories = []) {
+  return (accessories || []).some(accessory =>
+    (accessory.done || []).some(Boolean) ||
+    (accessory.failed || []).some(Boolean) ||
+    (accessory.skipped || []).some(Boolean) ||
+    (accessory.adjustedFromFailedSet || []).some(Boolean) ||
+    (accessory.adjustedFromOriginal || []).some(Boolean) ||
+    (accessory.weights || []).some((weight, index) =>
+      Number(weight) !== Number(accessory.originalWeights?.[index] ?? weight)
+    )
+  );
+}
+
 // True if the athlete has actually started this workout (a set marked
-// done/failed/skipped/adjusted, or a warmup checked off) — as opposed to a
+// done/failed/skipped/adjusted, or preparation/a warmup checked off) — as opposed to a
 // slot that merely exists in the plan but hasn't been touched yet. Used to
 // decide whether a not-yet-completed workout's in-progress data must be
 // preserved during a merge, or whether it's safe to replace with a freshly
@@ -31,8 +44,9 @@ export function workoutHasUserProgress(workout) {
 
   return liftBlocks.some(block =>
     (block?.sets || []).some(setHasUserState) ||
+    (block?.prepItems || []).some(item => item?.done) ||
     (block?.warmups || []).some(warmup => warmup?.done)
-  );
+  ) || accessoriesHaveUserProgress(workout?.accessories);
 }
 
 function repairPaddedMeetWarmups(workout, generated) {

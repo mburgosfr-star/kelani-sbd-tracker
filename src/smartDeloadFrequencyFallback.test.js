@@ -10,13 +10,13 @@ import intermediateHistory from './intermediateDeloadFrequencyHistory.json';
 // (non-multiple-of-4) grid and an oversized warmup jump. The invariant is:
 // if the deload's own target lift can't be scheduled, give
 // rest instead of an unrelated full-intensity substitute.
-test('falls back to a rest day when a deload\'s target lift is itself frequency-blocked, instead of substituting an unrelated full-intensity lift', () => {
+test.each(['off', 'standard'])('falls back to rest when a deload target is frequency-blocked, even with accessories %s', accessoryMode => {
   const workouts = generateWorkoutsForTrainingModel('smart', {
     programProfile: 'kelaniSbdUltra',
     squat: 145,
     bench: 101.33333333333333,
     deadlift: 180,
-    accessoryMode: 'off',
+    accessoryMode,
     preparationMode: 'off',
     cooldownMode: 'off',
     squatVariant: 'standard',
@@ -32,6 +32,7 @@ test('falls back to a rest day when a deload\'s target lift is itself frequency-
   expect(w35.type).toBe('rest');
   expect(w35.smartDayType).toBe('recovery');
   expect(w35.lifts || []).toHaveLength(0);
+  expect(w35.accessories || []).toEqual([]);
   expect(w35.smartDecisionSummary?.dayType).toBe('recovery');
   // Regression: buildSmartRecoveryWorkout resets smartVisible/smartSelectable
   // to false internally (every other caller re-derives them from an outer

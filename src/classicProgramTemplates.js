@@ -16,7 +16,7 @@ import {
   generateBenchGoodMorningSets,
   generateDeadliftAlternativeSets,
   generateDeadliftHomeAlternativeSets,
-  generateAccessoriesForLift,
+  generateAccessoriesForWorkout,
 } from './accessoryGeneration';
 
 export function generateCooldownItems(cooldownMode = 'upperBackFriendly') {
@@ -199,6 +199,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
       }, liftIndex)
     );
     const primaryLift = liftBlocks[0]?.lift;
+    const accessoryIntensity = day.disableAccessories ? 'light' : 'normal';
 
     workouts.push({
       number: dayIndex + 1,
@@ -210,7 +211,10 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
       prepItems: liftBlocks[0]?.prepItems || [],
       warmups: liftBlocks[0]?.warmups || [],
       sets: liftBlocks[0]?.sets || [],
-      accessories: day.disableAccessories ? [] : generateAccessoriesForLift(primaryLift, accessoryMode, accessoryPRs, oneRMs),
+      accessoryIntensity,
+      accessories: generateAccessoriesForWorkout({
+        type: day.type, lifts: liftBlocks, accessoryIntensity,
+      }, { accessoryMode, accessoryPRs, oneRMs }),
       cooldownItems: generateCooldownItems(normalizedCooldownMode),
     });
   });

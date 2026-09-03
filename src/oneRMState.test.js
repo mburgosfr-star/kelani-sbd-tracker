@@ -14,7 +14,7 @@ const seed = (lift, weight) => ({
   e1rm: weight,
 });
 
-test('legacy migration keeps only real singles and never promotes rounded e1RMs', () => {
+test('legacy migration keeps demonstrated work-set weights and never promotes rounded e1RMs', () => {
   const history = [
     seed('Squat', 142.5),
     seed('Bench', 97.5),
@@ -54,8 +54,8 @@ test('legacy migration restores established real 1RMs carried by completed histo
             lift: 'Bench',
             oneRMToday: 95,
             previousBest1RM: 97.5,
-            // A legacy multi-rep bookkeeping error must not promote this to
-            // a real 100kg single.
+            // A running summary value without set evidence must not invent a
+            // 100kg lift when this workout only demonstrates 95kg.
             best1RM: 100,
             topSet: { weight: 95, reps: 2 },
           },
@@ -95,7 +95,7 @@ test('versioned confirmed 1RMs may include lifts performed outside recorded hist
   })).toEqual({ Squat: 145, Bench: 97.5, Deadlift: 180 });
 });
 
-test('only genuine successful singles raise a persisted established 1RM', () => {
+test('every genuine successful work-set weight can raise a persisted established 1RM', () => {
   const double = {
     lift: 'Squat',
     workoutNumber: 1,
@@ -125,7 +125,7 @@ test('only genuine successful singles raise a persisted established 1RM', () => 
     { Squat: 145, Bench: 100, Deadlift: 180 },
     calculateActualOneRMsFromHistory([double])
   );
-  expect(afterDouble.Squat).toBe(145);
+  expect(afterDouble.Squat).toBe(150);
 
   expect(mergeHigherOneRMs(
     afterDouble,

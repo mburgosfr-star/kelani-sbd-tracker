@@ -10,6 +10,7 @@ const beginnerArgs = {
   squat: 42.5,
   bench: 32.5,
   deadlift: 60,
+  oneRMs: { Squat: 42.5, Bench: 32.5, Deadlift: 60 },
   accessoryMode: 'standard',
   preparationMode: 'basicFirst',
   history: beginnerHistory,
@@ -33,14 +34,10 @@ test('beginner tier produces a fully Smart-generated workout instead of stale Cl
     });
   });
 
-  // Prep items belong only to the primary lift, never a supplemental one.
-  const primaryLift = workout.smartTrainingSelectionSummary?.primaryLift;
+  // Final selection must keep lift-specific preparation for every big lift,
+  // including a supplemental lift selected by the retry/frequency policy.
   workout.lifts.forEach(liftBlock => {
-    if (liftBlock.lift === primaryLift) {
-      expect(liftBlock.prepItems.length).toBeGreaterThan(0);
-    } else {
-      expect(liftBlock.prepItems.length).toBe(0);
-    }
+    expect(liftBlock.prepItems.length).toBeGreaterThan(0);
   });
 
   expect(workout.accessories.length).toBeGreaterThan(0);
@@ -91,6 +88,7 @@ test('a genuinely frequency-exhausted beginner (every lift at/over its weekly ca
     squat: 42.5,
     bench: 32.5,
     deadlift: 60,
+    oneRMs: { Squat: 42.5, Bench: 32.5, Deadlift: 60 },
     accessoryMode: 'off',
     preparationMode: 'off',
     history: beginnerExhaustionHistory,
@@ -131,6 +129,7 @@ test('after resting off a full exhaustion, the next day correctly offers the lif
     squat: 42.5,
     bench: 32.5,
     deadlift: 60,
+    oneRMs: { Squat: 42.5, Bench: 32.5, Deadlift: 60 },
     accessoryMode: 'off',
     preparationMode: 'off',
     history: [...beginnerExhaustionHistory, restW19],

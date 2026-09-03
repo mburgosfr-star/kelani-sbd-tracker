@@ -35,6 +35,7 @@ Kelani generates only the next relevant workout, so new performance and feedback
 ## During and around training
 
 - Follow a set-by-set workout view with preparation, warm-ups, main work, accessories and cooldown options.
+- With accessories enabled, every Bench session includes Row, kept light during taper. Meet day has no accessories.
 - Record completed, failed or skipped sets and rate both sets and the full workout.
 - Use the built-in rest timer and plate calculator while training.
 - Track real 1RM, estimated 1RM, SBD totals, Strength, eStrength and body statistics.
@@ -76,6 +77,16 @@ The two AppIDs have separate Android storage. Training data is not transferred a
 4. Confirm that training history, PRs, body data and in-progress work are present before removing the legacy app.
 
 Both apps can remain installed side by side during the migration. Never remove the legacy app before creating and verifying a backup. Users already running `com.kelani.sbdtracker` are already on the 2.x identity and do not need to migrate again.
+
+## Screenshots
+
+| Dashboard | Smart Training |
+|---|---|
+| ![Kelani dashboard](docs/assets/screenshots/dashboard.png) | ![Kelani Smart Training](docs/assets/screenshots/smart-training.png) |
+
+| Workout | Statistics |
+|---|---|
+| ![Kelani workout](docs/assets/screenshots/workout.png) | ![Kelani statistics](docs/assets/screenshots/stats.png) |
 
 ## Development
 

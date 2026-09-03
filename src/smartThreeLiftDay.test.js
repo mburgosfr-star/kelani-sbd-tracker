@@ -12,6 +12,7 @@ const baseArgs = {
   squat: trainingMaxes.Squat,
   bench: trainingMaxes.Bench,
   deadlift: trainingMaxes.Deadlift,
+  oneRMs: trainingMaxes,
   accessoryMode: 'off',
   preparationMode: 'off',
   cooldownMode: 'off',

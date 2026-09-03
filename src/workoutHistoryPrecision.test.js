@@ -31,28 +31,32 @@ function trainingEntry(sets) {
   };
 }
 
-test('only a successful single counts as an actually achieved 1RM', () => {
+test('every successful work set establishes its weight as a real 1RM floor', () => {
   const sets = [
-    { weight: 105, reps: 2, done: true, failed: false, skipped: false },
-    { weight: 102.5, reps: 1, done: true, failed: false, skipped: false },
+    { weight: 102.5, reps: 5, done: true, failed: false, skipped: false },
+    { weight: 100, reps: 1, done: true, failed: false, skipped: false },
     { weight: 110, reps: 1, done: true, failed: true, skipped: false },
+    { weight: 115, reps: 3, done: true, failed: false, skipped: true },
+    { weight: 120, reps: 5, done: true, failed: false, skipped: false, warmup: true },
   ];
 
   expect(getActualOneRMFromSets(sets)).toBe(102.5);
-  expect(calculateAchievedMaxesFromHistory([trainingEntry(sets)]).Squat)
-    .toMatchObject({ oneRM: 102.5 });
+  const achieved = calculateAchievedMaxesFromHistory([
+    trainingEntry(sets.filter(set => !set.warmup)),
+  ]).Squat;
+  expect(achieved.oneRM).toBe(102.5);
+  expect(achieved.e1rm).toBeCloseTo(119.5833333333);
 });
 
-test('workout-complete "1RM today" shows the heaviest weight lifted, not just a literal single', () => {
+test('workout-complete and real 1RM both use the heaviest successful work-set weight', () => {
   const sets = [
     { weight: 120, reps: 3, done: true, failed: false, skipped: false },
     { weight: 100, reps: 5, done: true, failed: false, skipped: false },
   ];
 
-  // A normal training day rarely includes a literal single. The demonstrated
-  // (meet-readiness) 1RM correctly stays 0 here, but the workout-complete
-  // screen's "1RM today" must still show today's top weight, not 0 kg.
-  expect(getActualOneRMFromSets(sets)).toBe(0);
+  // Five or three successful reps prove that the same weight can be lifted
+  // once, so the real-1RM floor and the completion display agree.
+  expect(getActualOneRMFromSets(sets)).toBe(120);
   expect(getTopWeightFromSets(sets)).toBe(120);
 });
 
@@ -133,7 +137,7 @@ test('a workout already described by workout.lifts is never treated as flat-lega
   expect(isFlatLegacyTrainingWorkout({ type: 'rest' })).toBe(false);
 });
 
-test('a heavier double raises e1RM without moving meet attempts based on real 1RM', () => {
+test('a heavier double raises both the real 1RM floor and e1RM', () => {
   const seed = {
     cycle: 0,
     workoutNumber: 0,
@@ -148,16 +152,16 @@ test('a heavier double raises e1RM without moving meet attempts based on real 1R
   ]);
   const history = [seed, heavierDouble];
 
-  expect(calculateBestMaxesFromHistory(history).Squat.oneRM).toBe(100);
-  expect(calculateBestMaxesFromHistory(history).Squat.e1rm).toBeGreaterThan(100);
+  expect(calculateBestMaxesFromHistory(history).Squat.oneRM).toBe(105);
+  expect(calculateBestMaxesFromHistory(history).Squat.e1rm).toBeGreaterThan(105);
   expect(buildSmartMeetPlanReadiness({
     history,
     prs: { Squat: 112.5, Bench: 75, Deadlift: 125 },
     currentCycle: 1,
   }).byLift.Squat.attempts).toEqual({
-    opener: 90,
-    secondAttempt: 97.5,
-    thirdAttempt: 102.5,
+    opener: 95,
+    secondAttempt: 102.5,
+    thirdAttempt: 107.5,
   });
 });
 
