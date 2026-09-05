@@ -259,11 +259,11 @@ test('shows the full readiness/blocker/fatigue detail on a deload or rest day to
       kind: 'lift-readiness',
     },
     {
-      label: 'Fatigue',
-      value: '6 (recovery required)',
+      label: 'Fatigue score',
+      value: '6/2 (recovery threshold reached)',
     },
     {
-      label: 'Failed',
+      label: 'Failed sets',
       value: '2/2 (recovery selected)',
     },
   ]));
@@ -464,6 +464,47 @@ test('live dashboard e1RMs override stale 5kg workout snapshots in the Smart mod
   ]));
 });
 
+test.each([
+  ['nl', 'Nog geen gegevens in deze cyclus'],
+  ['en', 'No data yet this cycle'],
+  ['ca', 'Encara no hi ha dades en aquest cicle'],
+])('shows every lift and labels missing active-cycle evidence in %s', (language, expected) => {
+  const workout = workoutWith([smartLift({ lift: 'Deadlift' })]);
+  workout.smartDecisionSummary.readiness.meetPlanReadiness = {
+    Squat: {
+      currentCycleBestE1RM: 45,
+      oneRMTargetE1RM: 45,
+      readinessTargetAttempt: 45,
+      readinessPhase: 'ready',
+    },
+    Bench: {
+      currentCycleBestE1RM: 22.5,
+      oneRMTargetE1RM: 35,
+      readinessTargetAttempt: 35,
+      readinessPhase: 'opener',
+    },
+    Deadlift: {
+      currentCycleBestE1RM: 57.5,
+      oneRMTargetE1RM: 62.5,
+      readinessTargetAttempt: 62.5,
+      readinessPhase: 'opener',
+    },
+  };
+
+  const rows = getSmartModalDetailRows(
+    workout,
+    translations[language],
+    { Squat: 45, Bench: 22.5, Deadlift: 0 }
+  );
+
+  expect(rows).toContainEqual({
+    label: 'Deadlift',
+    value: expected,
+    kind: 'lift-readiness',
+  });
+  expect(rows.filter(row => row.kind === 'lift-readiness')).toHaveLength(3);
+});
+
 test("does not add a fatigue detail or 'cause' for an all-clear rest day", () => {
   // completeWorkout's "Complete rest day" button always records
   // workoutEffort: 'easy' for a rest day - technically accurate, but
@@ -474,7 +515,7 @@ test("does not add a fatigue detail or 'cause' for an all-clear rest day", () =>
   workout.smartDecisionSummary.readiness.lastWasRestDay = true;
 
   const rows = getSmartModalDetailRows(workout);
-  expect(rows.find(row => row.label === 'Fatigue')).toBeUndefined();
+  expect(rows.find(row => row.label === 'Fatigue score')).toBeUndefined();
   expect(rows.find(row => row.label === 'Cause')).toBeUndefined();
 });
 

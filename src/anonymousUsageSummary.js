@@ -9,20 +9,46 @@ function sessionKey(entry = {}) {
   return `${cycle}:${workoutNumber}`;
 }
 
-function countFailedOrSkippedSets(value) {
+function countFailedSets(value) {
   if (Array.isArray(value)) {
-    return value.reduce((total, item) => total + countFailedOrSkippedSets(item), 0);
+    return value.reduce((total, item) => total + countFailedSets(item), 0);
   }
 
   if (!value || typeof value !== 'object') return 0;
 
+  const failedFlags = Array.isArray(value.failed) ? value.failed : null;
+  const skippedFlags = Array.isArray(value.skipped) ? value.skipped : null;
+  const isSetCollection = Array.isArray(value.done) && (
+    Array.isArray(value.weights) ||
+    Object.prototype.hasOwnProperty.call(value, 'reps') ||
+    Object.prototype.hasOwnProperty.call(value, 'durationSeconds')
+  );
+  let directFailures = 0;
+
+  if (isSetCollection && (failedFlags || skippedFlags)) {
+    const setCount = Math.max(failedFlags?.length || 0, skippedFlags?.length || 0);
+    for (let index = 0; index < setCount; index += 1) {
+      if (failedFlags?.[index] || skippedFlags?.[index]) {
+        directFailures += 1;
+      }
+    }
+  }
+
   const isSet = Object.prototype.hasOwnProperty.call(value, 'reps') ||
     Object.prototype.hasOwnProperty.call(value, 'weight');
-  if (isSet && (value.failed || value.skipped)) return 1;
+  // Current failure actions set both flags. Older snapshots may contain only
+  // `skipped`, but that still represents the same missed-set outcome.
+  if (!failedFlags && !skippedFlags && isSet && (value.failed || value.skipped)) {
+    directFailures += 1;
+  }
 
-  return Object.values(value).reduce(
-    (total, item) => total + countFailedOrSkippedSets(item),
-    0
+  return Object.entries(value).reduce(
+    (total, [key, item]) => (
+      key === 'failed' || key === 'skipped'
+        ? total
+        : total + countFailedSets(item)
+    ),
+    directFailures
   );
 }
 
@@ -82,7 +108,7 @@ export function buildAnonymousUsageMetrics({
 
   const sessionTypes = { training: 0, recovery: 0, meet: 0 };
   const efforts = { easy: 0, good: 0, hard: 0, tooMuch: 0, unrecorded: 0 };
-  let failedOrSkippedSets = 0;
+  let failedSets = 0;
   let milestoneCelebrations = 0;
 
   groupedSessions.forEach(({ entries, snapshot }) => {
@@ -96,7 +122,7 @@ export function buildAnonymousUsageMetrics({
       efforts.unrecorded += 1;
     }
 
-    failedOrSkippedSets += countFailedOrSkippedSets(safeSnapshot);
+    failedSets += countFailedSets(safeSnapshot);
     if (Array.isArray(safeSnapshot?.milestoneCelebration?.achievements) &&
         safeSnapshot.milestoneCelebration.achievements.length > 0) {
       milestoneCelebrations += 1;
@@ -104,7 +130,7 @@ export function buildAnonymousUsageMetrics({
   });
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     appVersion: String(appVersion || 'dev'),
     language: String(language || 'en'),
     weightUnit: String(weightUnit || 'kg'),
@@ -115,7 +141,7 @@ export function buildAnonymousUsageMetrics({
     recoverySessions: sessionTypes.recovery,
     meetSessions: sessionTypes.meet,
     efforts,
-    failedOrSkippedSets,
+    failedSets,
     milestoneCelebrations,
     preparationMode: String(preparationMode || 'off'),
     accessoryMode: String(accessoryMode || 'off'),
@@ -127,7 +153,7 @@ export function buildAnonymousUsageReport(metrics = {}) {
   const efforts = metrics.efforts || {};
   return [
     'Kelani anonymous usage summary',
-    `schema_version=${Number(metrics.schemaVersion) || 1}`,
+    `schema_version=${Number(metrics.schemaVersion) || 2}`,
     `app_version=${metrics.appVersion || 'dev'}`,
     `language=${metrics.language || 'en'}`,
     `weight_unit=${metrics.weightUnit || 'kg'}`,
@@ -142,7 +168,7 @@ export function buildAnonymousUsageReport(metrics = {}) {
     `effort_hard=${Number(efforts.hard) || 0}`,
     `effort_too_much=${Number(efforts.tooMuch) || 0}`,
     `effort_unrecorded=${Number(efforts.unrecorded) || 0}`,
-    `failed_or_skipped_sets=${Number(metrics.failedOrSkippedSets) || 0}`,
+    `failed_sets=${Number(metrics.failedSets) || 0}`,
     `milestone_celebrations=${Number(metrics.milestoneCelebrations) || 0}`,
     `preparation_mode=${metrics.preparationMode || 'off'}`,
     `accessory_mode=${metrics.accessoryMode || 'off'}`,

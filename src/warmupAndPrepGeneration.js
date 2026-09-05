@@ -181,6 +181,9 @@ export function removeDeprecatedPrepItemsFromWorkout(workout) {
   return {
     ...workout,
     prepItems: cleanPrepItems(workout.prepItems),
+    lifts: Array.isArray(workout.lifts)
+      ? workout.lifts.map(cleanLiftBlock)
+      : workout.lifts,
     liftBlocks: Array.isArray(workout.liftBlocks)
       ? workout.liftBlocks.map(cleanLiftBlock)
       : workout.liftBlocks,
@@ -238,15 +241,47 @@ export function generatePrepItems(lift, preparationMode = 'basicFirst') {
   }));
 }
 
-export function generateSmartPrepItems(lift, preparationMode = 'basicFirst', liftIndex = 0) {
+export function generateSmartWorkoutPrepItems(
+  lifts = [],
+  preparationMode = 'basicFirst'
+) {
   const mode = normalizePreparationMode(preparationMode);
+  const liftNames = [...new Set((lifts || [])
+    .map(lift => typeof lift === 'string' ? lift : lift?.lift)
+    .filter(lift => ['Squat', 'Bench', 'Deadlift'].includes(lift)))];
 
-  // The shoulder/thoracic routine is shared preparation for the whole day.
-  // General preparation is lift-specific, including for legacy basicFirst
-  // settings, so every main lift gets its own routine in Smart Training.
-  if (mode === 'shoulderThoracic' && liftIndex > 0) return [];
+  if (mode === 'off' || liftNames.length === 0) return [];
 
-  return generatePrepItems(lift, mode);
+  // This deliberately complete five-movement routine already prepares the
+  // whole workout and should remain intact as one shared section.
+  if (mode === 'shoulderThoracic') {
+    return generatePrepItems(liftNames[0], mode);
+  }
+
+  const candidatesByLift = liftNames.map(lift => generatePrepItems(lift, mode));
+  const selected = [];
+  let priorityIndex = 0;
+
+  // Each per-lift list is ordered by importance. Selecting in rounds gives
+  // every lift coverage before a lift receives a second movement. With three
+  // lifts, the primary (first) lift receives the fourth slot.
+  while (selected.length < 4) {
+    let addedThisRound = false;
+
+    for (const candidates of candidatesByLift) {
+      const candidate = candidates[priorityIndex];
+      if (!candidate) continue;
+
+      selected.push(candidate);
+      addedThisRound = true;
+      if (selected.length === 4) break;
+    }
+
+    if (!addedThisRound) break;
+    priorityIndex += 1;
+  }
+
+  return selected;
 }
 
 const UNIVERSAL_WARMUP_START_KG = 20;

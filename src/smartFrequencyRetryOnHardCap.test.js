@@ -34,10 +34,11 @@ test('beginner tier produces a fully Smart-generated workout instead of stale Cl
     });
   });
 
-  // Final selection must keep lift-specific preparation for every big lift,
-  // including a supplemental lift selected by the retry/frequency policy.
+  // Final selection must rebuild one shared preparation section after any
+  // supplemental lift replacement made by the retry/frequency policy.
+  expect(workout.prepItems).toHaveLength(4);
   workout.lifts.forEach(liftBlock => {
-    expect(liftBlock.prepItems.length).toBeGreaterThan(0);
+    expect(liftBlock.prepItems).toEqual([]);
   });
 
   expect(workout.accessories.length).toBeGreaterThan(0);

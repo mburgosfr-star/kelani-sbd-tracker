@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SettingsListRow, SmartDayTypeInline, StatsScreen, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, resolveStoredWeightUnit, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
+import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SettingsListRow, SmartDayTypeInline, StatsScreen, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, resolveStoredWeightUnit, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
 test('dashboard metrics contain values without treating the e1RM and 1RM difference as a new PR', () => {
@@ -168,6 +168,230 @@ test('dashboard reads recent Strength Max records from the latest milestone cele
   expect(buildDashboardRecentPrEvents(afterNextStrengthWorkout).ratios).toEqual({
     strengthMaxGain: 0,
     eStrengthMaxGain: 0,
+  });
+});
+
+test('a lighter weigh-in records new Strength Maxes and a newly reached level', () => {
+  const shared = {
+    history: [],
+    prs: { Squat: 100, Bench: 70, Deadlift: 120 },
+    oneRMs: { Squat: 100, Bench: 70, Deadlift: 120 },
+    strengthRatioMaxes: {},
+  };
+
+  expect(buildBodyRatioRecord({
+    before: {
+      ...shared,
+      bodyWeights: [{ cycle: 1, workoutNumber: 1, bodyWeight: 100 }],
+    },
+    after: {
+      ...shared,
+      bodyWeights: [
+        { cycle: 1, workoutNumber: 1, bodyWeight: 100 },
+        { cycle: 1, workoutNumber: 2, bodyWeight: 95 },
+      ],
+    },
+  })).toEqual({
+    version: 1,
+    strengthMaxGain: 0.15,
+    eStrengthMaxGain: 0.15,
+    levelChange: { previous: 'beginner', value: 'intermediate' },
+  });
+});
+
+test('the first recorded body weight establishes a baseline without a PR label', () => {
+  const shared = {
+    history: [],
+    prs: { Squat: 100, Bench: 70, Deadlift: 120 },
+    oneRMs: { Squat: 100, Bench: 70, Deadlift: 120 },
+    strengthRatioMaxes: {},
+  };
+
+  expect(buildBodyRatioRecord({
+    before: { ...shared, bodyWeights: [] },
+    after: {
+      ...shared,
+      bodyWeights: [{ cycle: 1, workoutNumber: 1, bodyWeight: 95 }],
+    },
+  })).toBeNull();
+});
+
+test('weigh-in Strength Max and eStrength Max records remain independent', () => {
+  const shared = {
+    history: [],
+    prs: { Squat: 110, Bench: 75, Deadlift: 125 },
+    oneRMs: { Squat: 100, Bench: 70, Deadlift: 120 },
+  };
+  const beforeBodyWeights = [{ cycle: 1, workoutNumber: 1, bodyWeight: 100 }];
+  const afterBodyWeights = [
+    ...beforeBodyWeights,
+    { cycle: 1, workoutNumber: 2, bodyWeight: 95 },
+  ];
+
+  expect(buildBodyRatioRecord({
+    before: {
+      ...shared,
+      bodyWeights: beforeBodyWeights,
+      strengthRatioMaxes: { strengthMax: 2.9, eStrengthMax: 3.5 },
+    },
+    after: {
+      ...shared,
+      bodyWeights: afterBodyWeights,
+      strengthRatioMaxes: { strengthMax: 2.9, eStrengthMax: 3.5 },
+    },
+  })).toEqual({
+    version: 1,
+    strengthMaxGain: 0.15,
+    eStrengthMaxGain: 0,
+    levelChange: null,
+  });
+});
+
+test('dashboard keeps a weigh-in Strength Max through rest and clears it at the next strength workout', () => {
+  const history = [
+    ...dashboardPrHistory(),
+    { cycle: 4, workoutNumber: 2, restDay: true, completionOnly: true },
+  ];
+  const bodyWeights = [{
+    cycle: 4,
+    workoutNumber: 1,
+    timestamp: '2030-01-15T12:00:00.000Z',
+    bodyWeight: 80,
+    bodyRatioRecord: {
+      version: 1,
+      strengthMaxGain: 0.08,
+      eStrengthMaxGain: 0.12,
+      levelChange: null,
+    },
+  }];
+
+  expect(buildDashboardRecentPrEvents(history, bodyWeights)).toMatchObject({
+    ratios: { strengthMaxGain: 0.08, eStrengthMaxGain: 0.12 },
+    ratioEvent: { source: 'bodyData', cycle: 4, workoutNumber: 1 },
+  });
+
+  const afterNextStrengthWorkout = [
+    ...history,
+    {
+      cycle: 4,
+      workoutNumber: 3,
+      lift: 'Bench',
+      topWeight: 60,
+      topReps: 3,
+      e1rm: 65,
+      workoutSnapshot: {
+        type: 'training',
+        completed: true,
+        completedAt: '2030-01-17T12:00:00.000Z',
+        lift: 'Bench',
+        sets: [{ weight: 60, reps: 3, done: true, failed: false, skipped: false }],
+      },
+    },
+  ];
+
+  expect(buildDashboardRecentPrEvents(afterNextStrengthWorkout, bodyWeights)).toMatchObject({
+    ratios: { strengthMaxGain: 0, eStrengthMaxGain: 0 },
+    ratioEvent: { source: 'workout' },
+  });
+});
+
+test('a later weigh-in without a ratio record clears the earlier weigh-in label', () => {
+  const bodyWeights = [
+    {
+      cycle: 4,
+      workoutNumber: 1,
+      timestamp: '2030-01-15T12:00:00.000Z',
+      bodyWeight: 80,
+      bodyRatioRecord: {
+        version: 1,
+        strengthMaxGain: 0.08,
+        eStrengthMaxGain: 0.12,
+        levelChange: null,
+      },
+    },
+    {
+      cycle: 4,
+      workoutNumber: 2,
+      timestamp: '2030-01-16T12:00:00.000Z',
+      bodyWeight: 81,
+      bodyRatioEvaluationVersion: 1,
+    },
+  ];
+
+  expect(buildDashboardRecentPrEvents(dashboardPrHistory(), bodyWeights)).toMatchObject({
+    ratios: { strengthMaxGain: 0, eStrengthMaxGain: 0 },
+    ratioEvent: { source: 'bodyData', cycle: 4, workoutNumber: 2 },
+  });
+});
+
+test('dashboard reconstructs a recent eStrength Max from a legacy export', () => {
+  const completedSingle = ({ cycle, workoutNumber, lift, oneRM, e1rm, completedAt }) => ({
+    cycle,
+    workoutNumber,
+    lift,
+    topWeight: oneRM,
+    topReps: 1,
+    oneRMToday: oneRM,
+    e1rm,
+    workoutSnapshot: {
+      type: 'training',
+      completed: true,
+      completedAt,
+      lift,
+      sets: [{ weight: oneRM, reps: 1, done: true, failed: false, skipped: false }],
+    },
+  });
+  const history = [
+    completedSingle({ cycle: 1, workoutNumber: 1, lift: 'Squat', oneRM: 140, e1rm: 140 }),
+    completedSingle({ cycle: 1, workoutNumber: 1, lift: 'Bench', oneRM: 95, e1rm: 95 }),
+    completedSingle({ cycle: 1, workoutNumber: 1, lift: 'Deadlift', oneRM: 165, e1rm: 165 }),
+    completedSingle({
+      cycle: 4,
+      workoutNumber: 20,
+      lift: 'Deadlift',
+      oneRM: 180,
+      e1rm: 185,
+      completedAt: '2030-01-20T10:03:49.986Z',
+    }),
+    completedSingle({
+      cycle: 4,
+      workoutNumber: 20,
+      lift: 'Bench',
+      oneRM: 100,
+      e1rm: 105,
+      completedAt: '2030-01-20T10:03:49.986Z',
+    }),
+    completedSingle({
+      cycle: 4,
+      workoutNumber: 20,
+      lift: 'Squat',
+      oneRM: 147.5,
+      e1rm: 150,
+      completedAt: '2030-01-20T10:03:49.986Z',
+    }),
+  ];
+  const bodyWeights = [
+    { cycle: 1, workoutNumber: 1, bodyWeight: 75 },
+    { cycle: 4, workoutNumber: 17, bodyWeight: 82.5 },
+    {
+      cycle: 4,
+      workoutNumber: 21,
+      timestamp: '2030-01-20T10:04:31.725Z',
+      bodyWeight: 82,
+    },
+  ];
+
+  expect(buildDashboardRecentPrEvents(history, bodyWeights, {
+    prs: { Squat: 150, Bench: 105, Deadlift: 185 },
+    oneRMs: { Squat: 147.5, Bench: 100, Deadlift: 180 },
+  })).toMatchObject({
+    ratios: { strengthMaxGain: 0, eStrengthMaxGain: 0.04 },
+    ratioEvent: {
+      source: 'bodyData',
+      cycle: 4,
+      workoutNumber: 21,
+      eStrengthMaxGain: 0.04,
+    },
   });
 });
 
@@ -1009,6 +1233,64 @@ test('meet-day dashboard keeps the cycle, workout and Smart level label', () => 
     .toBeInTheDocument();
 });
 
+test('the level modal explains recent eStrength Max progress from a weigh-in', () => {
+  render(
+    <DashboardCycleWorkoutLabel
+      t={translations.en}
+      currentCycle={4}
+      workoutNumber={18}
+      totalWorkouts={45}
+      smartModel
+      athleteLevel="intermediate"
+      eStrengthRatio={5.1}
+      eStrengthMax={5.2}
+      latestBodyWeight={80}
+      recentBodyRatioEvent={{
+        source: 'bodyData',
+        eStrengthMaxGain: 0.2,
+        levelChange: null,
+      }}
+    />
+  );
+
+  fireEvent.click(screen.getByRole('button', {
+    name: /Experience level: Intermediate/i,
+  }));
+
+  const progress = screen.getByText('Latest weigh-in: +0.20x closer to Advanced.');
+  expect(progress).toBeInTheDocument();
+  expect(progress.style.overflowWrap).toBe('anywhere');
+  expect(progress.style.whiteSpace).toBe('');
+});
+
+test('the level modal names a level reached through the latest weigh-in', () => {
+  render(
+    <DashboardCycleWorkoutLabel
+      t={translations.nl}
+      currentCycle={2}
+      workoutNumber={2}
+      totalWorkouts={45}
+      smartModel
+      athleteLevel="intermediate"
+      eStrengthRatio={3.05}
+      eStrengthMax={3.05}
+      latestBodyWeight={95}
+      recentBodyRatioEvent={{
+        source: 'bodyData',
+        eStrengthMaxGain: 0.15,
+        levelChange: { previous: 'beginner', value: 'intermediate' },
+      }}
+    />
+  );
+
+  fireEvent.click(screen.getByRole('button', {
+    name: /Ervaringsniveau: Intermediate/i,
+  }));
+
+  expect(screen.getByText('Nieuw niveau via je laatste weging: Intermediate.'))
+    .toBeInTheDocument();
+});
+
 test('only the meet-plan card opens the meet workout, not the level badge', () => {
   const onOpenWorkout = jest.fn();
   render(
@@ -1253,6 +1535,29 @@ test('recovery and deload reasons stay visible beside structured Smart details',
   expect(shouldShowSmartReasonWithStructuredDetails('deload')).toBe(true);
   expect(shouldShowSmartReasonWithStructuredDetails('training')).toBe(false);
   expect(shouldShowSmartReasonWithStructuredDetails('meet')).toBe(false);
+});
+
+test.each(['nl', 'en', 'ca'])('fatigue details consistently show score, threshold and reason in %s', language => {
+  const t = translations[language];
+  const summary = {
+    reason: 'fatigue-recovery',
+    dayType: 'recovery',
+    readiness: {
+      recentFatigueScore: 2,
+      recentFailedOrSkippedSetCount: 0,
+    },
+  };
+
+  expect(getSmartModalDetailRows({ smartDecisionSummary: summary }, t))
+    .toContainEqual({
+      label: t.smartBlockerFatigue,
+      value: t.smartFatigueRecoveryThresholdReached
+        .replace('{current}', '2')
+        .replaceAll('{target}', '2'),
+    });
+  expect(getSmartDecisionReasonDisplayText(summary, t))
+    .toBe(t.smartReasonFatigueRecovery);
+  expect(t.smartReasonFatigueRecovery).not.toContain('{details}');
 });
 
 test('Smart recovery status stays above the shifted recovery content and opens its information', () => {

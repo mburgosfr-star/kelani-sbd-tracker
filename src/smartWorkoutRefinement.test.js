@@ -1106,7 +1106,7 @@ test('explains fatigue with score and previous workout effort', () => {
       }
     )
   ).toEqual([
-    'fatigue 1/2 (previous workout HARD)',
+    'fatigue 1/2 (previous workout: Hard)',
     'meet plan',
   ]);
 
@@ -1140,8 +1140,8 @@ test('splits training fallback details into separate modal rows', () => {
       value: 'Meet plan not ready',
     },
     {
-      label: 'Fatigue',
-      value: '1 (below recovery threshold)',
+      label: 'Fatigue score',
+      value: '1/2 (recovery starts at 2)',
     },
   ]);
 });
@@ -1157,8 +1157,8 @@ test('omits zero fatigue and zero missed-set rows from a normal Smart modal', ()
     },
   });
 
-  expect(rows.find(row => row.label === 'Fatigue')).toBeUndefined();
-  expect(rows.find(row => row.label === 'Failed')).toBeUndefined();
+  expect(rows.find(row => row.label === 'Fatigue score')).toBeUndefined();
+  expect(rows.find(row => row.label === 'Failed sets')).toBeUndefined();
 });
 
 test('shows structured recovery details without a combined Reason row', () => {
@@ -1176,11 +1176,11 @@ test('shows structured recovery details without a combined Reason row', () => {
     })
   ).toEqual([
     {
-      label: 'Fatigue',
-      value: '4 (recovery required)',
+      label: 'Fatigue score',
+      value: '4/2 (recovery threshold reached)',
     },
     {
-      label: 'Failed',
+      label: 'Failed sets',
       value: '1/2 (below deload threshold)',
     },
   ]);

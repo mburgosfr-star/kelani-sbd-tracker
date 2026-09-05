@@ -1,5 +1,8 @@
 import { buildSmartIdealTrainingWorkout, generateWorkoutsForTrainingModel } from './smartTrainingEngine';
-import { generatePrepItems, generateSmartPrepItems } from './warmupAndPrepGeneration';
+import {
+  generatePrepItems,
+  generateSmartWorkoutPrepItems,
+} from './warmupAndPrepGeneration';
 import { getSmartIdealRouteWorkout } from './smartIdealRoute';
 import { applyAccessoryPlanToWorkouts } from './accessoryGeneration';
 import { translations } from './translations';
@@ -21,26 +24,44 @@ test('Bench preparation uses four compactly named exercises', () => {
   expect(translations.en.prepBandExternalRotation).toBe('External rotations');
 });
 
+test('shared preparation gives every selected lift coverage before adding a second item', () => {
+  expect(generateSmartWorkoutPrepItems(['Squat']).map(item => item.labelKey)).toEqual([
+    'prepHipOpeners',
+    'prepBodyweightSquats',
+    'prepGluteBridges',
+    'prepBracingBreaths',
+  ]);
+  expect(generateSmartWorkoutPrepItems(['Squat', 'Bench']).map(item => item.labelKey)).toEqual([
+    'prepHipOpeners',
+    'prepBandPullApart',
+    'prepBodyweightSquats',
+    'prepBandExternalRotation',
+  ]);
+  expect(generateSmartWorkoutPrepItems(['Squat', 'Bench', 'Deadlift']).map(item => item.labelKey)).toEqual([
+    'prepHipOpeners',
+    'prepBandPullApart',
+    'prepHipHinges',
+    'prepBodyweightSquats',
+  ]);
+});
+
 function findFirstSmartTrainingWorkout(workouts) {
   return workouts.find(workout => workout?.smartGeneratedPrescription);
 }
 
-test.each([false, true])('Smart Training prepares every main lift by default (ideal route: %s)', idealRouteEnabled => {
+test.each([false, true])('Smart Training puts one shared preparation section before all main lifts (ideal route: %s)', idealRouteEnabled => {
   const workouts = generateWorkoutsForTrainingModel('smart', { ...baseOptions, idealRouteEnabled });
 
   const workout = findFirstSmartTrainingWorkout(workouts);
   expect(workout).toBeTruthy();
-
   expect(workout.lifts.length).toBeGreaterThan(1);
-  workout.lifts.forEach(block => {
-    expect(block.prepItems).toEqual(generatePrepItems(block.lift));
-    expect(block.prepItems).toHaveLength(4);
-  });
-  expect(workout.prepItems).toEqual(workout.lifts[0].prepItems);
+  expect(workout.prepItems).toEqual(generateSmartWorkoutPrepItems(workout.lifts));
+  expect(workout.prepItems).toHaveLength(4);
+  workout.lifts.forEach(block => expect(block.prepItems).toEqual([]));
 });
 
 test.each(['basic', 'basicFirst', 'basicAll'])(
-  '%s prepares every big lift in training and meet templates, including three-lift days', preparationMode => {
+  '%s creates one four-item preparation section for training and meet days', preparationMode => {
     const workouts = generateWorkoutsForTrainingModel('smart', {
       ...baseOptions,
       programProfile: 'kelaniSbdUltra',
@@ -51,12 +72,12 @@ test.each(['basic', 'basicFirst', 'basicAll'])(
     expect(workouts.some(workout => workout.type === 'training' && workout.lifts.length === 3)).toBe(true);
 
     workouts.filter(workout => ['training', 'meet'].includes(workout.type)).forEach(workout => {
-      workout.lifts.forEach(block => {
-        expect(block.prepItems).toEqual(generatePrepItems(block.lift));
-        expect(block.prepItems.every(item => item.done === false)).toBe(true);
-      });
-      const keys = workout.lifts.flatMap(block => block.prepItems.map(item => item.labelKey));
-      expect(new Set(keys).size).toBe(keys.length);
+      expect(workout.prepItems).toEqual(
+        generateSmartWorkoutPrepItems(workout.lifts, preparationMode)
+      );
+      expect(workout.prepItems).toHaveLength(4);
+      expect(workout.prepItems.every(item => item.done === false)).toBe(true);
+      workout.lifts.forEach(block => expect(block.prepItems).toEqual([]));
     });
     workouts.filter(workout => workout.type === 'rest').forEach(workout => {
       expect(workout.prepItems || []).toEqual([]);
@@ -77,19 +98,22 @@ test('Smart Training omits prep items everywhere when preparationMode is off', (
   });
 });
 
-test('the shared shoulder routine is offered once per day, not repeated for each lift', () => {
+test('the complete five-item shoulder routine remains one shared section', () => {
   const workouts = generateWorkoutsForTrainingModel('smart', {
     ...baseOptions,
     preparationMode: 'shoulderThoracic',
   });
 
   workouts.filter(workout => ['training', 'meet'].includes(workout.type)).forEach(workout => {
-    expect(workout.lifts[0].prepItems).toEqual(generatePrepItems(workout.lifts[0].lift, 'shoulderThoracic'));
-    workout.lifts.slice(1).forEach(block => expect(block.prepItems).toEqual([]));
+    expect(workout.prepItems).toEqual(
+      generatePrepItems(workout.lifts[0].lift, 'shoulderThoracic')
+    );
+    expect(workout.prepItems).toHaveLength(5);
+    workout.lifts.forEach(block => expect(block.prepItems).toEqual([]));
   });
 });
 
-test.each([22, 24, 25])('taper workout %s includes preparation for every lift without altering warmups or dose', workoutNumber => {
+test.each([22, 24, 25])('taper workout %s shares preparation without altering warmups or dose', workoutNumber => {
   const options = {
     ...baseOptions,
     routeWorkout: getSmartIdealRouteWorkout({ workoutNumber, athleteLevel: 'intermediate' }),
@@ -98,8 +122,9 @@ test.each([22, 24, 25])('taper workout %s includes preparation for every lift wi
   const withoutPrep = buildSmartIdealTrainingWorkout({ ...options, preparationMode: 'off' });
 
   expect(withPrep).toBeTruthy();
+  expect(withPrep.prepItems).toEqual(generateSmartWorkoutPrepItems(withPrep.lifts));
   withPrep.lifts.forEach((block, index) => {
-    expect(block.prepItems).toEqual(generatePrepItems(block.lift));
+    expect(block.prepItems).toEqual([]);
     expect(block.sets).toEqual(withoutPrep.lifts[index].sets);
     expect(block.warmups).toEqual(withoutPrep.lifts[index].warmups);
   });
@@ -119,17 +144,25 @@ test('preparation covers only the lifts selected for that day and never changes 
   });
 });
 
-test('regeneration adds secondary preparation while preserving existing checkmarks and completed snapshots', () => {
+test('regeneration migrates per-lift preparation progress into the shared section', () => {
   const [generated] = generateWorkoutsForTrainingModel('smart', baseOptions);
   const saved = JSON.parse(JSON.stringify(generated));
-  saved.lifts[0].prepItems[0].done = true;
-  saved.lifts[1].prepItems = [];
+  const completedKey = generated.prepItems[1].labelKey;
+  saved.prepItems = [];
+  saved.lifts = saved.lifts.map(block => ({
+    ...block,
+    prepItems: generatePrepItems(block.lift),
+  }));
+  const completedLegacyItem = saved.lifts
+    .flatMap(block => block.prepItems)
+    .find(item => item.labelKey === completedKey);
+  completedLegacyItem.done = true;
+
   const [merged] = applyAccessoryPlanToWorkouts([saved], [generated], new Set(), 1);
 
-  expect(merged.lifts[0].prepItems[0].done).toBe(true);
-  expect(merged.lifts[1].prepItems).toEqual(generatePrepItems(merged.lifts[1].lift));
+  expect(merged.prepItems.find(item => item.labelKey === completedKey).done).toBe(true);
+  expect(merged.lifts.every(block => block.prepItems.length === 0)).toBe(true);
   expect(merged.lifts[0].sets).toEqual(saved.lifts[0].sets);
-  expect(saved.lifts[1].prepItems).toEqual([]);
 
   const [completed] = applyAccessoryPlanToWorkouts([saved], [generated], new Set([1]), 2);
   expect(completed).toBe(saved);
@@ -139,15 +172,14 @@ test('Classic retains its existing first-lift-only preparation', () => {
   const [workout] = generateWorkoutsForTrainingModel('classic', baseOptions);
   expect(workout.lifts[0].prepItems).toHaveLength(4);
   expect(workout.lifts[1].prepItems).toEqual([]);
+  expect(workout.prepItems).toEqual(workout.lifts[0].prepItems);
 });
 
-test.each(['nl', 'en', 'ca'])('all lift-specific and shared preparation has translated labels in %s', language => {
-  for (const lift of ['Squat', 'Bench', 'Deadlift']) {
-    for (const mode of ['basicFirst', 'shoulderThoracic']) {
-      for (const item of generateSmartPrepItems(lift, mode)) {
-        expect(translations[language][item.labelKey]).toEqual(expect.any(String));
-        expect(translations[language][item.labelKey].trim()).not.toBe('');
-      }
+test.each(['nl', 'en', 'ca'])('all shared preparation has translated labels in %s', language => {
+  for (const mode of ['basicFirst', 'shoulderThoracic']) {
+    for (const item of generateSmartWorkoutPrepItems(['Squat', 'Bench', 'Deadlift'], mode)) {
+      expect(translations[language][item.labelKey]).toEqual(expect.any(String));
+      expect(translations[language][item.labelKey].trim()).not.toBe('');
     }
   }
 });

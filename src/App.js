@@ -417,10 +417,156 @@ export function getLatestBodyDataValues(entries = []) {
   return Object.keys(latest).length ? latest : null;
 }
 
+function getRatioAchievementGain(achievements = [], type) {
+  return Math.max(
+    0,
+    ...(Array.isArray(achievements) ? achievements : [])
+      .filter(achievement => achievement?.type === type)
+      .map(achievement => Number(achievement.gain) || 0)
+  );
+}
+
+function getRelevantEventTimestamp(entry, source) {
+  const value = source === 'bodyData'
+    ? entry?.timestamp
+    : entry?.workoutSnapshot?.completedAt || entry?.completedAt || entry?.timestamp;
+  const timestamp = Date.parse(value || '');
+
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function bodyDataEventIsLatest(bodyEntry, strengthEntry) {
+  if (!bodyEntry) return false;
+  if (!strengthEntry) return true;
+
+  const bodyWorkoutIndex = getAbsoluteWorkoutIndex(bodyEntry);
+  const strengthWorkoutIndex = getAbsoluteWorkoutIndex(strengthEntry);
+  if (bodyWorkoutIndex !== strengthWorkoutIndex) {
+    return bodyWorkoutIndex > strengthWorkoutIndex;
+  }
+
+  const bodyTimestamp = getRelevantEventTimestamp(bodyEntry, 'bodyData');
+  const strengthTimestamp = getRelevantEventTimestamp(strengthEntry, 'workout');
+  if (bodyTimestamp !== null && strengthTimestamp !== null) {
+    return bodyTimestamp >= strengthTimestamp;
+  }
+  if (bodyTimestamp !== null) return true;
+  if (strengthTimestamp !== null) return false;
+
+  // A body entry without legacy timestamps is still an explicit later local
+  // update when both records share the current workout position.
+  return true;
+}
+
+function inferLegacyBodyRatioRecord({
+  history = [],
+  prs = {},
+  oneRMs = {},
+  bodyWeights = [],
+  latestBodyEntry = null,
+} = {}) {
+  if (!latestBodyEntry) return null;
+
+  const latestBodyIndex = bodyWeights.lastIndexOf(latestBodyEntry);
+  if (latestBodyIndex < 0) return null;
+
+  const previousBodyWeights = bodyWeights.filter((entry, index) => (
+    index !== latestBodyIndex && Number(entry?.bodyWeight) > 0
+  ));
+  if (!previousBodyWeights.length) return null;
+
+  // Older exports cannot contain a bodyRatioRecord. Rebuild only the change
+  // caused by the final weigh-in, without feeding the already-updated stored
+  // ratio maxima back into the "before" side of the comparison.
+  return buildBodyRatioRecord({
+    before: {
+      history,
+      prs,
+      oneRMs,
+      bodyWeights: previousBodyWeights,
+      strengthRatioMaxes: {},
+    },
+    after: {
+      history,
+      prs,
+      oneRMs,
+      bodyWeights,
+      strengthRatioMaxes: {},
+    },
+  });
+}
+
+function buildDashboardRatioEvent(
+  latestStrengthEntry,
+  bodyWeights = [],
+  { history = [], prs = {}, oneRMs = {} } = {}
+) {
+  const normalizedBodyWeights = Array.isArray(bodyWeights) ? bodyWeights : [];
+  const latestBodyEntry = [...normalizedBodyWeights]
+    .reverse()
+    .find(entry => Number(entry?.bodyWeight) > 0) || null;
+  const useBodyDataEvent = bodyDataEventIsLatest(latestBodyEntry, latestStrengthEntry);
+
+  if (useBodyDataEvent) {
+    const record = latestBodyEntry?.bodyRatioRecord || (
+      Number(latestBodyEntry?.bodyRatioEvaluationVersion) > 0
+        ? null
+        : inferLegacyBodyRatioRecord({
+            history,
+            prs,
+            oneRMs,
+            bodyWeights: normalizedBodyWeights,
+            latestBodyEntry,
+          })
+    ) || {};
+
+    return {
+      source: 'bodyData',
+      strengthMaxGain: Math.max(Number(record.strengthMaxGain) || 0, 0),
+      eStrengthMaxGain: Math.max(Number(record.eStrengthMaxGain) || 0, 0),
+      levelChange: record.levelChange || null,
+      cycle: Number(latestBodyEntry?.cycle) || 1,
+      workoutNumber: Number(latestBodyEntry?.workoutNumber) || 0,
+      timestamp: latestBodyEntry?.timestamp || null,
+    };
+  }
+
+  if (!latestStrengthEntry) {
+    return {
+      source: null,
+      strengthMaxGain: 0,
+      eStrengthMaxGain: 0,
+      levelChange: null,
+    };
+  }
+
+  const achievements = Array.isArray(
+    latestStrengthEntry?.workoutSnapshot?.milestoneCelebration?.achievements
+  )
+    ? latestStrengthEntry.workoutSnapshot.milestoneCelebration.achievements
+    : [];
+
+  return {
+    source: 'workout',
+    strengthMaxGain: getRatioAchievementGain(achievements, 'strengthMax'),
+    eStrengthMaxGain: getRatioAchievementGain(achievements, 'eStrengthMax'),
+    levelChange: null,
+    cycle: Number(latestStrengthEntry?.cycle) || 1,
+    workoutNumber: Number(latestStrengthEntry?.workoutNumber) || 0,
+    timestamp: getRelevantEventTimestamp(latestStrengthEntry, 'workout'),
+  };
+}
+
 // A rounded seed/max estimate is not a new training PR. The dashboard may
 // still show the all-time best e1RM, but the PR badge requires an achieved
-// training estimate to exceed the real 1RM basis.
-export function buildDashboardRecentPrEvents(history = []) {
+// training estimate to exceed the real 1RM basis. Ratio records can come
+// from that workout or from a later weigh-in, so those two event streams are
+// compared separately while recovery days remain deliberately irrelevant.
+export function buildDashboardRecentPrEvents(
+  history = [],
+  bodyWeights = [],
+  ratioContext = {}
+) {
   const entries = Array.isArray(history) ? history : [];
   const latestStrengthEntry = [...entries].reverse().find(entry => (
     LIFT_ORDER.includes(entry?.lift) &&
@@ -433,12 +579,20 @@ export function buildDashboardRecentPrEvents(history = []) {
   const emptyLifts = Object.fromEntries(
     LIFT_ORDER.map(lift => [lift, { oneRMGain: 0, e1RMGain: 0 }])
   );
+  const ratioEvent = buildDashboardRatioEvent(latestStrengthEntry, bodyWeights, {
+    ...ratioContext,
+    history: entries,
+  });
 
   if (!latestStrengthEntry) {
     return {
       lifts: emptyLifts,
       total: { oneRMGain: 0, e1RMGain: 0 },
-      ratios: { strengthMaxGain: 0, eStrengthMaxGain: 0 },
+      ratios: {
+        strengthMaxGain: ratioEvent.strengthMaxGain,
+        eStrengthMaxGain: ratioEvent.eStrengthMaxGain,
+      },
+      ratioEvent,
     };
   }
 
@@ -453,18 +607,6 @@ export function buildDashboardRecentPrEvents(history = []) {
   const currentOneRMs = calculateActualOneRMsFromHistory(entries);
   const previousAchievedMaxes = calculateAchievedMaxesFromHistory(historyBeforeLatestStrengthWorkout);
   const currentAchievedMaxes = calculateAchievedMaxesFromHistory(entries);
-  const milestoneAchievements = Array.isArray(
-    latestStrengthEntry?.workoutSnapshot?.milestoneCelebration?.achievements
-  )
-    ? latestStrengthEntry.workoutSnapshot.milestoneCelebration.achievements
-    : [];
-  const ratioGain = type => Math.max(
-    0,
-    ...milestoneAchievements
-      .filter(achievement => achievement?.type === type)
-      .map(achievement => Number(achievement.gain) || 0)
-  );
-
   const lifts = Object.fromEntries(LIFT_ORDER.map(lift => {
     const previousOneRM = roundDashboardWeightKg(previousOneRMs[lift]);
     const currentOneRM = roundDashboardWeightKg(currentOneRMs[lift]);
@@ -496,9 +638,10 @@ export function buildDashboardRecentPrEvents(history = []) {
       ),
     },
     ratios: {
-      strengthMaxGain: ratioGain('strengthMax'),
-      eStrengthMaxGain: ratioGain('eStrengthMax'),
+      strengthMaxGain: ratioEvent.strengthMaxGain,
+      eStrengthMaxGain: ratioEvent.eStrengthMaxGain,
     },
+    ratioEvent,
     cycle: latestCycle,
     workoutNumber: latestWorkoutNumber,
   };
@@ -1045,24 +1188,14 @@ export function hasMoreMeetSets(workout, liftIndex, setIndex) {
   const liftBlock = workout?.lifts?.[liftIndex];
   if (!liftBlock) return false;
 
-  const hasMoreSetsInSameLift = (liftBlock.sets || []).some((set, index) =>
+  return (liftBlock.sets || []).some((set, index) =>
     index > setIndex && !set.done && !set.skipped
   );
+}
 
-  if (hasMoreSetsInSameLift) return true;
-
-  const hasMoreLiftWork = (workout?.lifts || []).some((laterLift, index) => (
-    index > liftIndex && (
-      (laterLift.prepItems || []).some(item => !item.done) ||
-      (laterLift.warmups || []).some(warmup => !warmup.done) ||
-      (laterLift.sets || []).some(set => !set.done && !set.skipped)
-    )
-  ));
-
-  if (hasMoreLiftWork) return true;
-
-  return (workout?.accessories || []).some(accessory =>
-    (accessory.done || []).some(done => !done)
+export function hasMoreWorkAfterMainSet(workout, setIndex) {
+  return (workout?.sets || []).some((set, index) =>
+    index > setIndex && !set.done && !set.skipped
   );
 }
 
@@ -1260,6 +1393,32 @@ export function createBodyDataEntry({
     date: now.toLocaleDateString('nl-NL'),
     timestamp: now.toISOString(),
     ...bodyData,
+  };
+}
+
+export function buildBodyRatioRecord({ before = {}, after = {} } = {}) {
+  const hasPreviousBodyWeight = (Array.isArray(before?.bodyWeights)
+    ? before.bodyWeights
+    : []
+  ).some(entry => Number(entry?.bodyWeight) > 0);
+  if (!hasPreviousBodyWeight) return null;
+
+  const celebration = buildMilestoneCelebration({ before, after });
+  const achievements = celebration?.achievements || [];
+  const strengthMaxGain = getRatioAchievementGain(achievements, 'strengthMax');
+  const eStrengthMaxGain = getRatioAchievementGain(achievements, 'eStrengthMax');
+  const levelAchievement = achievements.find(achievement => achievement?.type === 'level');
+
+  if (!(strengthMaxGain > 0 || eStrengthMaxGain > 0)) return null;
+
+  return {
+    version: 1,
+    strengthMaxGain,
+    eStrengthMaxGain,
+    levelChange: levelAchievement ? {
+      previous: levelAchievement.previous,
+      value: levelAchievement.value,
+    } : null,
   };
 }
 
@@ -1893,6 +2052,7 @@ export function WorkoutCompletionButton({
   ...buttonProps
 }) {
   const hasDynamicFocus = active && enabled && !disabled;
+  const buttonRef = useActiveWorkoutAutoScroll(hasDynamicFocus);
 
   return (
     <>
@@ -1923,6 +2083,7 @@ export function WorkoutCompletionButton({
 
       <button
         {...buttonProps}
+        ref={buttonRef}
         type="button"
         disabled={disabled}
         data-dynamic-focus={hasDynamicFocus ? 'true' : 'false'}
@@ -2406,6 +2567,32 @@ function WorkoutWeightCalculatorTrigger({
   );
 }
 
+function useActiveWorkoutAutoScroll(isActive) {
+  const targetRef = useRef(null);
+  const scrolledForCurrentActivation = useRef(false);
+
+  useEffect(() => {
+    if (!isActive) {
+      scrolledForCurrentActivation.current = false;
+      return;
+    }
+
+    if (
+      scrolledForCurrentActivation.current ||
+      typeof targetRef.current?.scrollIntoView !== 'function'
+    ) return;
+
+    scrolledForCurrentActivation.current = true;
+    targetRef.current.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+      inline: 'nearest',
+    });
+  }, [isActive]);
+
+  return targetRef;
+}
+
 function formatWarmupPercentDisplay(warmupWeight, referenceSets = []) {
   const referenceSet = (referenceSets || [])
     .filter(set =>
@@ -2438,8 +2625,10 @@ function WorkoutCircleItem({
   testId,
   fullWidth = false,
   gridSpan = null,
-  containerRef = null,
+  autoScrollActive = false,
 }) {
+  const containerRef = useActiveWorkoutAutoScroll(autoScrollActive);
+
   return (
     <div
       ref={containerRef}
@@ -2496,6 +2685,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t, compact = false }) {
 
   return (
     <WorkoutCircleItem
+      autoScrollActive={isActive}
       label={(
         <div>
           <div
@@ -2621,6 +2811,7 @@ export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activ
           <React.Fragment key={index}>
             <WorkoutCircleItem
               testId={`warmup-row-${index}`}
+              autoScrollActive={isActive}
               label={warmupDescription}
               gridSpan={gridSpan}
             >
@@ -2815,19 +3006,11 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
   const effortLabel = getSetEffortLabel(set.effort, t);
   const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState(String(set.weight));
-  const rowRef = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
     if (editing && inputRef.current) inputRef.current.focus();
   }, [editing]);
-
-  useEffect(() => {
-    if (isActive && rowRef.current && !rowRef.current.dataset.scrolled) {
-      rowRef.current.dataset.scrolled = 'true';
-      rowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [isActive]);
 
   function handleEditClick(e) {
     e.stopPropagation();
@@ -2975,7 +3158,6 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
 
   return (
     <div
-      ref={compactGrid ? null : rowRef}
       data-testid="workout-set-row"
       style={compactGrid ? {
         display: 'contents',
@@ -2996,10 +3178,10 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
       >
         <WorkoutCircleItem
           testId="workout-set-circle-item"
+          autoScrollActive={isActive}
           label={circleLabel}
           fullWidth={!compactGrid}
           gridSpan={gridSpan}
-          containerRef={compactGrid ? rowRef : null}
           footer={meta ? (
             <div
               data-testid="workout-set-effort-label"
@@ -3744,7 +3926,7 @@ export function getAnonymousUsagePreviewRows(metrics = {}, t = translations.en) 
       `${t.workoutEffortTooMuch} ${Number(efforts.tooMuch) || 0}, ` +
       `${t.usageNotRecorded} ${Number(efforts.unrecorded) || 0}`,
     ],
-    [t.usageFailedSkippedSets, Number(metrics.failedOrSkippedSets) || 0],
+    [t.usageFailedSets, Number(metrics.failedSets) || 0],
     [t.usageMilestoneCelebrations, Number(metrics.milestoneCelebrations) || 0],
     [t.usagePreparation, usageModeLabel(metrics.preparationMode, 'preparation', t)],
     [t.usageAccessories, usageModeLabel(metrics.accessoryMode, 'accessories', t)],
@@ -5095,6 +5277,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
             <WorkoutCircleItem
               key={index}
               testId={`workout-set-group-item-${index}`}
+              autoScrollActive={index === activeIndex}
               label={setDescription}
             >
               <WorkoutCircle
@@ -5271,6 +5454,7 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
             <WorkoutCircleItem
               key={index}
               testId={`workout-accessory-set-item-${index}`}
+              autoScrollActive={isActiveGroup && index === firstOpenIndex}
               label={(
                 <WorkoutWeightCalculatorTrigger
                   onShowPlateCalculator={canShowPlateCalculator ? onShowPlateCalculator : null}
@@ -5525,12 +5709,17 @@ function getSmartDayTypeDisplayLabel(dayType, t = translations.en) {
 export function getSmartMeetdayBlockerDisplayLabels(blockers = [], t = translations.en, readiness = {}) {
   t = completeUiTranslations(t);
   const fatigueScore = Number(readiness.recentFatigueScore) || 0;
-  const lastEffort = String(readiness.lastWorkoutEffort || '').trim().toUpperCase();
+  const lastEffort = String(readiness.lastWorkoutEffort || '').trim();
   const fatigueCause = lastEffort
-    ? `previous workout ${lastEffort}`
+    ? formatTranslatedText(t.smartPreviousWorkoutEffort, {
+      effort: getWorkoutEffortLabel(lastEffort, t) || lastEffort,
+    })
     : null;
   const fatigueLabel = fatigueScore > 0
-    ? `fatigue ${fatigueScore}/${SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE}${fatigueCause ? ` (${fatigueCause})` : ''}`
+    ? `${formatTranslatedText(t.smartFatigueProgress, {
+      current: fatigueScore,
+      target: SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE,
+    })}${fatigueCause ? ` (${fatigueCause})` : ''}`
     : (t.smartBlockerFatigue);
 
   const labels = {
@@ -5729,12 +5918,7 @@ export function getSmartDecisionReasonDisplayText(summary, t = translations.en, 
     const key = canMentionSmartMeetPlanReady(readiness)
       ? 'smartReasonFatigueRecoveryMeetReady'
       : 'smartReasonFatigueRecovery';
-    return formatTranslatedText(
-      t[key] || (key === 'smartReasonFatigueRecoveryMeetReady'
-        ? 'Meet plan ready, but {details}. Recovery day.'
-        : '{details}. Recovery day.'),
-      { details: getSmartFatigueFailedDisplayText(readiness, t) }
-    );
+    return t[key];
   }
 
   if (summary.reason === SMART_DECISION_REASONS.FREQUENCY_RECOVERY) {
@@ -6329,16 +6513,28 @@ export function getSmartModalDetailRows(workout = {}, t = translations.en, curre
       // This live source must itself be scoped to the active cycle - an
       // all-time best from a previous cycle must never make this cycle's
       // blocker look resolved while the blocker list above still names it.
-      const liftCycleEstimate =
-        Number(currentE1RMs?.[lift]) ||
-        Number(liftReadiness.currentCycleBestE1RM) ||
-        0;
+      const hasLiveCycleEstimate = Object.prototype.hasOwnProperty.call(
+        currentE1RMs || {},
+        lift
+      );
+      const liftCycleEstimate = hasLiveCycleEstimate
+        ? Number(currentE1RMs?.[lift]) || 0
+        : Number(liftReadiness.currentCycleBestE1RM) || 0;
       const liftReadinessTarget = Number(
         liftReadiness.oneRMTargetE1RM || liftReadiness.currentCycleTarget
           || liftReadiness.readinessTargetAttempt
       ) || 0;
 
-      if (!(liftCycleEstimate > 0 && liftReadinessTarget > 0)) return;
+      if (!(liftReadinessTarget > 0)) return;
+
+      if (!(liftCycleEstimate > 0)) {
+        rows.push({
+          label: lift,
+          value: t.smartCycleNoDataYet,
+          kind: 'lift-readiness',
+        });
+        return;
+      }
 
       const liftDisplayCycleEstimate = roundDashboardWeightKg(liftCycleEstimate);
       const liftDisplayReadinessTarget = roundDashboardWeightKg(liftReadinessTarget);
@@ -6410,9 +6606,15 @@ export function getSmartModalDetailRows(workout = {}, t = translations.en, curre
   if (showFatigueDetail) {
     rows.push({
       label: t.smartBlockerFatigue,
-      value: fatigueScore >= fatigueThreshold
-        ? `${fatigueScore} (recovery required)`
-        : `${fatigueScore} (below recovery threshold)`,
+      value: formatTranslatedText(
+        fatigueScore >= fatigueThreshold
+          ? t.smartFatigueRecoveryThresholdReached
+          : t.smartFatigueBelowRecoveryThreshold,
+        {
+          current: fatigueScore,
+          target: fatigueThreshold,
+        }
+      ),
     });
 
   }
@@ -7030,7 +7232,7 @@ export function SmartDayTypeInline({
 }
 
 export function CurrentWorkout({
-  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetPrepItem, onToggleMeetWarmup, onToggleMeetSet, onMarkLiftBlockSetFailed, onRestoreLiftBlockSetWeight, onLiftBlockWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight, currentE1RMs = {} }) {
+  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetWarmup, onToggleMeetSet, onMarkLiftBlockSetFailed, onRestoreLiftBlockSetWeight, onLiftBlockWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight, currentE1RMs = {} }) {
   const smartModel = isSmartTrainingModel(trainingModel);
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
@@ -7297,11 +7499,9 @@ export function CurrentWorkout({
     const allAccessoriesDone = (workout.accessories || []).every(acc =>
       (acc.done || []).every(Boolean)
     );
-    const getVisiblePrepItems = (liftBlock, liftIndex) =>
-      liftBlock.prepItems || [];
-    const allPrepDone = (workout.lifts || []).every((liftBlock, liftIndex) =>
-      getVisiblePrepItems(liftBlock, liftIndex).every(item => item.done)
-    );
+    const workoutPrepItems = workout.prepItems || [];
+    const firstIncompletePrepItem = workoutPrepItems.findIndex(item => !item.done);
+    const allPrepDone = workoutPrepItems.every(item => item.done);
     const allWarmupsDone = (workout.lifts || []).every(liftBlock =>
       (liftBlock.warmups || []).every(warmup => warmup.done)
     );
@@ -7315,11 +7515,12 @@ export function CurrentWorkout({
       cooldownDone: allCooldownDone,
     });
 
-    const firstIncompleteLiftIndex = (workout.lifts || []).findIndex((liftBlock, liftIndex) =>
-      getVisiblePrepItems(liftBlock, liftIndex).some(item => !item.done) ||
-      (liftBlock.warmups || []).some(w => !w.done) ||
-      (liftBlock.sets || []).some(s => !s.done)
-    );
+    const firstIncompleteLiftIndex = allPrepDone
+      ? (workout.lifts || []).findIndex(liftBlock =>
+          (liftBlock.warmups || []).some(w => !w.done) ||
+          (liftBlock.sets || []).some(s => !s.done)
+        )
+      : -1;
 
     return (
       <div style={isMeetDay ? meetWorkoutScreenStyle() : activeWorkoutScreenStyle()}>
@@ -7377,13 +7578,46 @@ export function CurrentWorkout({
 
         {renderActivateWorkoutCard()}
 
+        {workoutPrepItems.length > 0 && (
+          <div style={{
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 8,
+            overflow: 'hidden',
+            marginBottom: isMeetDay ? 4 : 10,
+          }}>
+            <div style={{
+              padding: isMeetDay ? '2px 10px 4px' : '6px 10px',
+              fontSize: RESPONSIVE_WORKOUT_UI.sectionTitleFontSize,
+              fontWeight: 900,
+              color: THEME.brown,
+              textAlign: 'center',
+            }}>
+              {t.prepTitle}
+            </div>
+
+            <div style={preparationGridStyle(isMeetDay ? 4 : 6)}>
+              {workoutPrepItems.map((item, prepIndex) => (
+                <PrepRow
+                  key={item.labelKey || prepIndex}
+                  item={item}
+                  isActive={
+                    !isReadOnly && prepIndex === firstIncompletePrepItem
+                  }
+                  isReadOnly={isReadOnly}
+                  onToggle={() => handleToggle(() => onTogglePrepItem(prepIndex))}
+                  t={t}
+                  compact
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         <div style={isMeetDay ? undefined : { display: 'flex', flexDirection: 'column' }}>
           {(workout.lifts || []).map((liftBlock, li) => {
-          const visiblePrepItems = getVisiblePrepItems(liftBlock, li);
-          const firstIncompletePrepItem = visiblePrepItems.findIndex(item => !item.done);
           const firstIncompleteWarmup = (liftBlock.warmups || []).findIndex(w => !w.done);
           const firstIncompleteSet = (liftBlock.sets || []).findIndex(s => !s.done);
-          const allPrepDone = visiblePrepItems.every(item => item.done);
           const allWarmupsDone = (liftBlock.warmups || []).every(w => w.done);
 
           return (
@@ -7457,29 +7691,6 @@ export function CurrentWorkout({
                 })()}
               </div>
 
-              {visiblePrepItems.length > 0 && (
-                <div style={{ marginBottom: 10 }}>
-
-                  <div style={preparationGridStyle()}>
-                    {visiblePrepItems.map((item, pi) => (
-                      <PrepRow
-                        key={`prep-${pi}`}
-                        item={item}
-                        isActive={
-                          !isReadOnly &&
-                          li === firstIncompleteLiftIndex &&
-                          pi === firstIncompletePrepItem
-                        }
-                        isReadOnly={isReadOnly}
-                        onToggle={() => handleToggle(() => onToggleMeetPrepItem(li, pi))}
-                        t={t}
-                        compact
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <WorkoutLiftGrid
                 testId={`workout-lift-grid-${li}`}
                 columnCount={isMeetDay ? 12 : 4}
@@ -7503,7 +7714,7 @@ export function CurrentWorkout({
                 }
                 onToggle={wi => handleToggle(() => onToggleMeetWarmup(li, wi))}
                 renderTimer={wi => renderInlineTimer({ type: 'meetWarmup', liftIndex: li, index: wi })}
-                followsPrep={visiblePrepItems.length > 0}
+                followsPrep={li === 0 && workoutPrepItems.length > 0}
                 t={t}
                 weightUnit={weightUnit}
                 lift={liftBlock.lift}
@@ -9643,6 +9854,7 @@ export function DashboardCycleWorkoutLabel({
   eStrengthRatio,
   eStrengthMax,
   latestBodyWeight,
+  recentBodyRatioEvent = null,
 }) {
   return (
     <>
@@ -9659,6 +9871,7 @@ export function DashboardCycleWorkoutLabel({
           eStrengthRatio={eStrengthRatio}
           eStrengthMax={eStrengthMax}
           latestBodyWeight={latestBodyWeight}
+          recentBodyRatioEvent={recentBodyRatioEvent}
           t={t}
         />
       )}
@@ -9710,7 +9923,13 @@ function TapInfoIcon({ color = THEME.primary, size = 13 }) {
   );
 }
 
-function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, t }) {
+function AthleteLevelBadge({
+  athleteLevel,
+  eStrengthRatio,
+  eStrengthMax,
+  recentBodyRatioEvent = null,
+  t,
+}) {
   const [showModal, setShowModal] = useState(false);
 
   const levelLabel = t[ATHLETE_LEVEL_LABEL_KEYS[athleteLevel]] || athleteLevel;
@@ -9720,6 +9939,27 @@ function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, t }) {
   const currentRatio = Number(eStrengthRatio) || 0;
   const maxRatio = Number(eStrengthMax) || currentRatio;
   const ratioToNext = nextLevel ? Math.max(tier.max - maxRatio, 0) : 0;
+  const recentWeighingGain = recentBodyRatioEvent?.source === 'bodyData'
+    ? Math.max(Number(recentBodyRatioEvent.eStrengthMaxGain) || 0, 0)
+    : 0;
+  const recentLevelChange = recentBodyRatioEvent?.levelChange || null;
+  const reachedCurrentLevel = Boolean(
+    recentLevelChange?.value && recentLevelChange.value === athleteLevel
+  );
+  const recentWeighingMessage = recentWeighingGain > 0
+    ? reachedCurrentLevel
+      ? formatTranslatedText(t.athleteLevelRecentWeighingLevel, {
+          level: levelLabel,
+        })
+      : nextLevel
+        ? formatTranslatedText(t.athleteLevelRecentWeighingProgress, {
+            gain: recentWeighingGain.toFixed(2),
+            level: nextLevelLabel,
+          })
+        : formatTranslatedText(t.athleteLevelRecentWeighingMax, {
+            gain: recentWeighingGain.toFixed(2),
+          })
+    : null;
 
   const modalMutedText = 'rgba(255, 244, 230, 0.52)';
   const modalDividerStyle = { height: 1, background: 'rgba(255, 244, 230, 0.09)', margin: '14px 0' };
@@ -9796,9 +10036,35 @@ function AthleteLevelBadge({ athleteLevel, eStrengthRatio, eStrengthMax, t }) {
               <div style={modalValueStyle}>
                 {`${ratioToNext.toFixed(2)}x → ${nextLevelLabel}`}
               </div>
+              {recentWeighingMessage && (
+                <div style={{
+                  color: THEME.green,
+                  fontSize: 13,
+                  fontWeight: 800,
+                  lineHeight: 1.35,
+                  marginTop: 6,
+                  overflowWrap: 'anywhere',
+                }}>
+                  {recentWeighingMessage}
+                </div>
+              )}
             </div>
           ) : (
-            <div style={modalValueStyle}>{t.athleteLevelTopTier}</div>
+            <div>
+              <div style={modalValueStyle}>{t.athleteLevelTopTier}</div>
+              {recentWeighingMessage && (
+                <div style={{
+                  color: THEME.green,
+                  fontSize: 13,
+                  fontWeight: 800,
+                  lineHeight: 1.35,
+                  marginTop: 6,
+                  overflowWrap: 'anywhere',
+                }}>
+                  {recentWeighingMessage}
+                </div>
+              )}
+            </div>
           )}
 
           <div style={modalDividerStyle} />
@@ -11057,8 +11323,8 @@ function App() {
     [history]
   );
   const dashboardRecentPrEvents = useMemo(
-    () => buildDashboardRecentPrEvents(history),
-    [history]
+    () => buildDashboardRecentPrEvents(history, bodyWeights, { prs, oneRMs }),
+    [history, bodyWeights, prs, oneRMs]
   );
   const currentCycleBestMaxes = useMemo(
     () => getCurrentCycleBestMaxes(history, currentCycle),
@@ -12054,16 +12320,6 @@ function togglePrepItem(index) {
       return {
         ...w,
         prepItems: nextPrepItems,
-        lifts: (w.lifts || []).map((liftBlock, liftIndex) => {
-          if (liftIndex !== 0) return liftBlock;
-
-          return {
-            ...liftBlock,
-            prepItems: (liftBlock.prepItems || []).map((item, i) =>
-              i === index ? { ...item, done: !item.done } : item
-            ),
-          };
-        }),
       };
     })
   );
@@ -12091,19 +12347,6 @@ function toggleWarmup(wIndex) {
           }
     )
   );
-}
-
-function hasMoreWorkAfterMainSet(workout, setIndex) {
-  const sets = workout.sets || [];
-  const accessories = workout.accessories || [];
-
-  const hasMoreMainSets = sets.some((set, index) =>
-    index > setIndex && !set.done && !set.skipped
-  );
-
-  const hasAccessories = accessories.some(a => (a.done || []).some(d => !d));
-
-  return hasMoreMainSets || hasAccessories;
 }
 
 function toggleSet(setIndex) {
@@ -12316,30 +12559,6 @@ function changeWeight(type, index, val) {
       }
 
       return w;
-    })
-  );
-}
-
-function toggleMeetPrepItem(liftIndex, prepIndex) {
-  stopTimer();
-
-  setWorkouts(prev =>
-    prev.map((w, wi) => {
-      if (wi !== selectedIndex) return w;
-
-      return {
-        ...w,
-        lifts: (w.lifts || []).map((liftBlock, li) => {
-          if (li !== liftIndex) return liftBlock;
-
-          return {
-            ...liftBlock,
-            prepItems: (liftBlock.prepItems || []).map((item, i) =>
-              i === prepIndex ? { ...item, done: !item.done } : item
-            ),
-          };
-        }),
-      };
     })
   );
 }
@@ -12911,7 +13130,9 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
       const primaryLiftBlock = finishedWorkout.lifts[0];
 
       finishedWorkout.lift = primaryLiftBlock.lift;
-      finishedWorkout.prepItems = primaryLiftBlock.prepItems || [];
+      finishedWorkout.prepItems = Array.isArray(finishedWorkout.prepItems)
+        ? finishedWorkout.prepItems
+        : (primaryLiftBlock.prepItems || []);
       finishedWorkout.warmups = primaryLiftBlock.warmups || [];
       finishedWorkout.sets = primaryLiftBlock.sets || [];
     }
@@ -14495,15 +14716,38 @@ if (screen === 'current' && !workouts[selectedIndex]) {
 
 function saveBodyWeight(data) {
   const activeWorkoutNumber = getEntryWorkoutNumber(workouts[currentIndex]) || (currentIndex + 1);
-  const entry = createBodyDataEntry({
+  const baseEntry = createBodyDataEntry({
     data,
     currentCycle,
     workoutNumber: activeWorkoutNumber,
   });
-  if (!entry) return;
+  if (!baseEntry) return;
+
+  const nextBodyWeights = replaceBodyDataEntryForDay(bodyWeights, baseEntry);
+  const bodyRatioRecord = buildBodyRatioRecord({
+    before: {
+      history,
+      prs,
+      oneRMs,
+      bodyWeights,
+      strengthRatioMaxes,
+    },
+    after: {
+      history,
+      prs,
+      oneRMs,
+      bodyWeights: nextBodyWeights,
+      strengthRatioMaxes,
+    },
+  });
+  const entry = {
+    ...baseEntry,
+    bodyRatioEvaluationVersion: 1,
+    ...(bodyRatioRecord ? { bodyRatioRecord } : {}),
+  };
 
   pendingBodyDataBackupRef.current = `body-data:${entry.timestamp}`;
-  setBodyWeights(prev => replaceBodyDataEntryForDay(prev, entry));
+  setBodyWeights(replaceBodyDataEntryForDay(bodyWeights, entry));
 }
 
 function changeScreen(nextScreen) {
@@ -14796,7 +15040,6 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           weightUnit={weightUnit}
           timer={timer}
           setTimer={stopTimer}
-          onToggleMeetPrepItem={toggleMeetPrepItem}
           onToggleMeetWarmup={toggleMeetWarmup}
           onToggleMeetSet={toggleMeetSet}
           onMarkLiftBlockSetFailed={markLiftBlockSetFailed}
@@ -14834,6 +15077,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           eStrengthRatio={eStrengthRatio}
           eStrengthMax={eStrengthMax}
           latestBodyWeight={latestBodyWeight}
+          recentBodyRatioEvent={dashboardRecentPrEvents.ratioEvent?.source === 'bodyData'
+            ? dashboardRecentPrEvents.ratioEvent
+            : null}
         />
       )}
       titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
@@ -15274,7 +15520,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                       {row.recentPrLabel} +{formatDecimalDisplay(row.recentPrGain, {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
-                      })}
+                      })}x
                     </div>
                   )}
                 </div>

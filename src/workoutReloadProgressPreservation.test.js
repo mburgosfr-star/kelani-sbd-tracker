@@ -56,19 +56,20 @@ test('still adopts the freshly generated workout when the slot has never been to
   expect(result[0].label).toBe('Freshly Regenerated');
 });
 
-test.each(['training', 'meet'])('preserves preparation-only progress across a %s reload', type => {
+test.each(['training', 'meet'])('migrates preparation-only progress into the shared section across a %s reload', type => {
   const saved = multiLiftWorkout({ done: false });
   saved.type = type;
   saved.lifts[0].prepItems = [{ labelKey: 'prepHipOpeners', done: true }];
   const generated = multiLiftWorkout({ done: false });
   generated.type = type;
-  generated.lifts[0].prepItems = [{ labelKey: 'prepHipOpeners', done: false }];
+  generated.prepItems = [{ labelKey: 'prepHipOpeners', done: false }];
+  generated.lifts[0].prepItems = [];
 
   const [restored] = mergeGeneratedWorkoutStructure(
     JSON.parse(JSON.stringify([saved])), [generated], [], 1
   );
 
-  expect(restored.lifts[0].prepItems[0].done).toBe(true);
+  expect(restored.prepItems[0].done).toBe(true);
   expect(restored.lifts[0].warmups[0].done).toBe(false);
   expect(restored.lifts[0].sets[0].done).toBe(false);
 });

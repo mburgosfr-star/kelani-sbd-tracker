@@ -1,5 +1,10 @@
 import { normalizeAccessoryMode } from './workoutHistoryStats';
-import { accessoriesHaveUserProgress, setHasUserState, workoutHasUserProgress } from './workoutStateMerge';
+import {
+  accessoriesHaveUserProgress,
+  mergeWorkoutPrepItems,
+  setHasUserState,
+  workoutHasUserProgress,
+} from './workoutStateMerge';
 import { roundMeetWeight } from './warmupAndPrepGeneration';
 
 const ROW_TEMPLATE = {
@@ -339,13 +344,6 @@ export function applyAccessoryPlanToWorkouts(
   completedWorkoutNumbers = new Set(),
   activeWorkoutNumber = null
 ) {
-  function mergePrepItems(currentItems = [], generatedItems = []) {
-    return (generatedItems || []).map((item, index) => ({
-      ...item,
-      done: currentItems?.[index]?.done ?? item.done ?? false,
-    }));
-  }
-
   function accessoryKey(accessory) {
     return accessory?.key || accessory?.nameKey || accessory?.name;
   }
@@ -449,7 +447,7 @@ export function applyAccessoryPlanToWorkouts(
 
     return {
       ...generatedLiftBlock,
-      prepItems: mergePrepItems(currentLiftBlock.prepItems, generatedLiftBlock.prepItems),
+      prepItems: generatedLiftBlock.prepItems || [],
       warmups: preserveMainLiftProgress
         ? (generatedLiftBlock.warmups || []).map((warmup, index) =>
           mergeWarmup(currentLiftBlock.warmups?.[index], warmup)
@@ -513,7 +511,7 @@ export function applyAccessoryPlanToWorkouts(
 
     return {
       ...generated,
-      prepItems: primaryLiftBlock.prepItems || mergePrepItems(workout.prepItems, generated.prepItems),
+      prepItems: mergeWorkoutPrepItems(workout, generated),
       warmups: primaryLiftBlock.warmups || generated.warmups || [],
       sets: primaryLiftBlock.sets || generated.sets || [],
       lifts: mergedLifts,

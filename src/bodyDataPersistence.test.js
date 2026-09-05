@@ -109,3 +109,68 @@ test('repeated reload normalization is stable and never restores an older value'
     bodyWater: 54,
   });
 });
+
+test('a weigh-in Strength Max record survives save, reload and import normalization', () => {
+  const bodyRatioRecord = {
+    version: 1,
+    strengthMaxGain: 0.08,
+    eStrengthMaxGain: 0.12,
+    levelChange: { previous: 'beginner', value: 'intermediate' },
+  };
+  const firstReload = normalizeBodyWeights({
+    history: [],
+    bodyWeights: [{
+      cycle: 2,
+      workoutNumber: 3,
+      date: '16-1-2030',
+      timestamp: '2030-01-16T12:00:00.000Z',
+      bodyWeight: 55,
+      bodyRatioEvaluationVersion: 1,
+      bodyRatioRecord,
+    }],
+  });
+  const secondReload = normalizeBodyWeights({
+    history: [],
+    bodyWeights: firstReload,
+  });
+
+  expect(firstReload.at(-1).bodyRatioRecord).toEqual(bodyRatioRecord);
+  expect(secondReload).toEqual(firstReload);
+});
+
+test('a newer same-day body update without a record clears an earlier ratio label', () => {
+  const normalized = normalizeBodyWeights({
+    history: [],
+    bodyWeights: [
+      {
+        cycle: 2,
+        workoutNumber: 3,
+        date: '16-1-2030',
+        timestamp: '2030-01-16T08:00:00.000Z',
+        bodyWeight: 55,
+        bodyRatioRecord: {
+          version: 1,
+          strengthMaxGain: 0.08,
+          eStrengthMaxGain: 0.12,
+          levelChange: null,
+        },
+      },
+      {
+        cycle: 2,
+        workoutNumber: 3,
+        date: '16-1-2030',
+        timestamp: '2030-01-16T12:00:00.000Z',
+        bodyWeight: 56,
+        bodyRatioEvaluationVersion: 1,
+      },
+    ],
+  });
+
+  expect(normalized).toHaveLength(1);
+  expect(normalized[0]).not.toHaveProperty('bodyRatioRecord');
+  expect(normalized[0]).toMatchObject({
+    timestamp: '2030-01-16T12:00:00.000Z',
+    bodyWeight: 56,
+    bodyRatioEvaluationVersion: 1,
+  });
+});

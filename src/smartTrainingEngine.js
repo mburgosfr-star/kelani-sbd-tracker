@@ -42,7 +42,7 @@ import {
 import {
   removeDeprecatedPrepItemsFromWorkouts,
   generateWarmups,
-  generateSmartPrepItems,
+  generateSmartWorkoutPrepItems,
   roundMeetWeight,
 } from './warmupAndPrepGeneration';
 import {
@@ -52,6 +52,7 @@ import {
 import { generateProgramForProfile } from './classicProgramTemplates';
 import { buildMeetAttemptsFromOneRM } from './meetAttemptPlanning';
 import {
+  SMART_IDEAL_MEET_WORKOUT_NUMBER,
   SMART_IDEAL_ROUTE_VERSION,
   getSmartIdealRouteEntryWorkoutNumber,
   getSmartIdealRouteWorkout,
@@ -535,7 +536,7 @@ export function getNextSmartIdealRouteWorkoutNumber({
 
   if (!hasCompletedRouteWorkout) {
     const entry = Number(entryWorkoutNumber);
-    return Number.isInteger(entry) && entry >= 1 && entry <= 28
+    return Number.isInteger(entry) && entry >= 1 && entry <= SMART_IDEAL_MEET_WORKOUT_NUMBER
       ? entry
       : 1;
   }
@@ -631,19 +632,18 @@ export function shouldFollowSmartIdealRoute({
     Boolean(snapshot?.smartIdealRoute)
   ));
   const onRouteWorkouts = completed.slice(firstOnRouteIndex);
-  const firstMigratedRouteWorkout = onRouteWorkouts.length === 1
-    ? onRouteWorkouts[0]?.snapshot
-    : null;
+  const latestCompletedRouteWorkout = onRouteWorkouts.at(-1)?.snapshot || null;
 
-  // A legacy user can enter the fixed route immediately before one of its
-  // deliberate rest rows. HARD feedback on that first migrated workout is
-  // not a reason to erase the recovery row that the route already scheduled.
-  // Failed or skipped work still leaves control with autoregulation.
+  // A deliberate route rest is already the conservative response to recent
+  // work. HARD (or other non-GOOD feedback) may end the pristine route, but
+  // it must never turn that already-planned rest into extra training. Keep
+  // the rest whenever the immediately preceding route workout had no failed
+  // or skipped work. Actual failures still hand control to autoregulation so
+  // it can choose a stronger intervention such as a deload.
   if (
-    firstOnRouteIndex > 0 &&
-    firstMigratedRouteWorkout &&
     nextRouteWorkout?.type === 'rest' &&
-    countFailedOrSkippedSetsFromSnapshot(firstMigratedRouteWorkout) === 0
+    latestCompletedRouteWorkout?.smartIdealRoute &&
+    countFailedOrSkippedSetsFromSnapshot(latestCompletedRouteWorkout) === 0
   ) {
     return true;
   }
@@ -903,7 +903,17 @@ export function buildSmartReadinessSignals(context = {}) {
     Number(a.workoutNumber) - Number(b.workoutNumber)
   );
 
-  const lastDay = workoutDays[workoutDays.length - 1] || null;
+  // A previous-cycle meet remains available in `workoutDays` so the
+  // post-meet transition can still determine how much recovery is needed.
+  // It must not participate in the new cycle's active block, fatigue,
+  // frequency, or projection counters. Otherwise a hard meet can leak one
+  // fatigue point into the next cycle even after its post-meet recovery day.
+  const currentCycleWorkoutDays = workoutDays.filter(day =>
+    Number(day.cycle) === targetCycle
+  );
+
+  const lastCompletedDay = workoutDays[workoutDays.length - 1] || null;
+  const lastDay = currentCycleWorkoutDays[currentCycleWorkoutDays.length - 1] || null;
 
   const historyEntriesForPostMeet = (context.history || [])
     .map((entry, index) => ({ entry, index }))
@@ -1036,13 +1046,13 @@ export function buildSmartReadinessSignals(context = {}) {
     !lastMeetDay ||
     postMeetTrainingDaysCompleted >= postMeetMinimumTrainingTarget
   );
-  const lastPostMeetTrainingEffort = String(lastDay?.workoutEffort || '')
+  const lastPostMeetTrainingEffort = String(lastCompletedDay?.workoutEffort || '')
     .trim()
     .toLowerCase();
   const hasSuccessfulPostMeetTraining = Boolean(
     postMeetTrainingDaysCompleted > 0 &&
     ['easy', 'good', 'hard', 'normal'].includes(lastPostMeetTrainingEffort) &&
-    Number(lastDay?.failedOrSkippedSetCount) === 0
+    Number(lastCompletedDay?.failedOrSkippedSetCount) === 0
   );
   const inPostMeetTrainingCooldown = Boolean(
     lastMeetDay &&
@@ -1050,23 +1060,25 @@ export function buildSmartReadinessSignals(context = {}) {
     !hasSuccessfulPostMeetTraining
   );
 
-  const lastRecoveryInterventionIndex = workoutDays.findLastIndex(day =>
+  const lastRecoveryInterventionIndex = currentCycleWorkoutDays.findLastIndex(day =>
     day.restDay ||
     day.smartDayType === SMART_DAY_TYPES.RECOVERY ||
     day.smartDayType === SMART_DAY_TYPES.DELOAD
   );
   const activeBlockDays = lastRecoveryInterventionIndex >= 0
-    ? workoutDays.slice(lastRecoveryInterventionIndex + 1)
-    : workoutDays;
+    ? currentCycleWorkoutDays.slice(lastRecoveryInterventionIndex + 1)
+    : currentCycleWorkoutDays;
   const activeBlockLiftExposureCounts = LIFT_ORDER.reduce((counts, lift) => ({
     ...counts,
     [lift]: activeBlockDays.filter(day => (day.lifts || []).includes(lift)).length,
   }), {});
 
-  const trainingDaysOnly = workoutDays.filter(day =>
+  const trainingDaysOnly = currentCycleWorkoutDays.filter(day =>
     !day.restDay &&
     day.smartDayType !== SMART_DAY_TYPES.RECOVERY &&
     day.smartDayType !== SMART_DAY_TYPES.DELOAD &&
+    day.smartDayType !== SMART_DAY_TYPES.MEET &&
+    day.type !== 'meet' &&
     day.type !== 'rest'
   );
 
@@ -1252,7 +1264,7 @@ export function buildSmartReadinessSignals(context = {}) {
     });
 
   return {
-    completedCount: workoutDays.length,
+    completedCount: currentCycleWorkoutDays.length,
     activeBlockCompletedCount: activeBlockDays.length,
     activeBlockLiftExposureCounts,
     rollingLiftExposureCounts,
@@ -1930,9 +1942,39 @@ export function buildSmartMeetWorkoutProjection({
   );
 
   if (missingEvidence) {
+    const safeCurrentWorkoutNumber = Math.max(
+      1,
+      Number(currentWorkoutNumber) || 1
+    );
+    const defaultMeetWorkoutNumber = SMART_IDEAL_MEET_WORKOUT_NUMBER;
+    const workoutsBeforeMeet = Math.max(
+      defaultMeetWorkoutNumber - safeCurrentWorkoutNumber,
+      0
+    );
+
+    // Before every lift has produced its first successful result in the new
+    // cycle, there is not enough evidence to adjust the calendar estimate.
+    // The ideal route itself still has a valid default destination: W28.
+    // Expose that provisional destination instead of hiding the projection;
+    // otherwise a recovery day says "not enough data" while the following
+    // planned workout suddenly says W28 although no new set was completed.
     return {
-      available: false,
-      reason: 'insufficient-active-cycle-data',
+      available: true,
+      reason: 'default-ideal-route',
+      provisional: true,
+      cycle: Number(currentCycle) || 1,
+      currentWorkoutNumber: safeCurrentWorkoutNumber,
+      minimumWorkoutNumber: defaultMeetWorkoutNumber,
+      maximumWorkoutNumber: defaultMeetWorkoutNumber,
+      label: `C${Number(currentCycle) || 1}W${defaultMeetWorkoutNumber}`,
+      minimumWorkoutsBeforeMeet: workoutsBeforeMeet,
+      maximumWorkoutsBeforeMeet: workoutsBeforeMeet,
+      projectedByIdealRoute: true,
+      assumedSuccessfulFutureWorkouts: true,
+      missingEvidenceLifts: LIFT_ORDER.filter(lift =>
+        !byLift[lift]?.hasCurrentCycleEvidence ||
+        Number(byLift[lift]?.readinessTargetAttempt) <= 0
+      ),
       limitingLift: meetPlanReadiness.weakestLift || null,
       limitingPhase: meetPlanReadiness.weakestPhase || null,
     };
@@ -3755,7 +3797,7 @@ function applySmartIdealRouteMetadata(
     lifts,
     warmups: primaryLiftBlock?.warmups || workout.warmups || [],
     sets: primaryLiftBlock?.sets || workout.sets || [],
-    prepItems: primaryLiftBlock?.prepItems || workout.prepItems || [],
+    prepItems: workout.prepItems || primaryLiftBlock?.prepItems || [],
     smartIdealRoute: buildSmartIdealRouteMetadata(
       routeWorkout,
       athleteLevel
@@ -3890,7 +3932,7 @@ export function buildSmartIdealTrainingWorkout({
       intensityRole: routeLift.intensityRole,
       sets,
       warmups,
-      prepItems: generateSmartPrepItems(routeLift.lift, normalizedPreparationMode, liftIndex),
+      prepItems: [],
       smartPrescription: {
         role,
         intensityRole: routeLift.intensityRole,
@@ -3932,7 +3974,7 @@ export function buildSmartIdealTrainingWorkout({
     lifts: liftBlocks,
     sets: primaryBlock?.sets || [],
     warmups: primaryBlock?.warmups || [],
-    prepItems: primaryBlock?.prepItems || [],
+    prepItems: generateSmartWorkoutPrepItems(liftBlocks, normalizedPreparationMode),
     accessoryIntensity,
     accessories,
     cooldownItems: [],
@@ -4483,7 +4525,7 @@ export function buildGeneratedSmartTrainingWorkout({
       intensityRole: finalIntensityRole,
       sets: doseConstrainedSets,
       warmups: completedWarmups,
-      prepItems: generateSmartPrepItems(selection.lift, normalizedPreparationMode, selectionIndex),
+      prepItems: [],
       smartPrescription: {
         role: selection.role,
         intensityRole: finalIntensityRole,
@@ -4566,7 +4608,7 @@ export function buildGeneratedSmartTrainingWorkout({
     lifts: liftBlocks,
     sets: primaryBlock?.sets || [],
     warmups: primaryBlock?.warmups || [],
-    prepItems: primaryBlock?.prepItems || [],
+    prepItems: generateSmartWorkoutPrepItems(liftBlocks, normalizedPreparationMode),
     accessoryIntensity: 'normal',
     accessories,
     cooldownItems: [],
@@ -4759,9 +4801,9 @@ function generateSmartWorkouts({
       ? 'rest'
       : null;
 
-    if (idealRouteWorkout.workoutNumber <= 28) {
+    if (idealRouteWorkout.workoutNumber <= SMART_IDEAL_MEET_WORKOUT_NUMBER) {
       const workoutsBeforeMeet = Math.max(
-        28 - idealRouteWorkout.workoutNumber,
+        SMART_IDEAL_MEET_WORKOUT_NUMBER - idealRouteWorkout.workoutNumber,
         0
       );
       const projectedMeetWorkoutNumber =
@@ -5456,7 +5498,7 @@ function regenerateSupplementalLiftBlocksInWorkout(workout) {
     lift: primaryLiftBlock?.lift ?? workout.lift,
     warmups: primaryLiftBlock?.warmups ?? workout.warmups,
     sets: primaryLiftBlock?.sets ?? workout.sets,
-    prepItems: primaryLiftBlock?.prepItems ?? workout.prepItems,
+    prepItems: workout.prepItems ?? primaryLiftBlock?.prepItems,
   };
 }
 
@@ -5773,15 +5815,15 @@ export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
   const workouts = generatedWorkouts.map((workout, index) => {
     if (!['training', 'meet'].includes(workout?.type) || workout.completed) return workout;
 
-    const lifts = (workout.lifts || []).map((liftBlock, liftIndex) => ({
+    const lifts = (workout.lifts || []).map(liftBlock => ({
       ...liftBlock,
-      prepItems: generateSmartPrepItems(liftBlock.lift, options.preparationMode, liftIndex),
+      prepItems: [],
     }));
 
     return {
       ...workout,
       lifts,
-      prepItems: lifts[0]?.prepItems || [],
+      prepItems: generateSmartWorkoutPrepItems(lifts, options.preparationMode),
       // Other slots already carry their template's Row rule. Only reselect
       // the live slot; do not rescan the full history for every cached day.
       accessories: index === currentIndex ? generateAccessoriesForWorkout(workout, {

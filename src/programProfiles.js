@@ -383,7 +383,7 @@ export function normalizePreparationMode(mode) {
   if (mode === 'basicAll') return 'basicAll';
   if (mode === 'shoulderThoracic') return 'shoulderThoracic';
 
-  // Backwards compatibility: old "basic" means first big lift only.
+  // Backwards compatibility: old "basic" maps to the general preparation mode.
   if (mode === 'basic' || mode === 'basicFirst') return 'basicFirst';
 
   return 'basicFirst';

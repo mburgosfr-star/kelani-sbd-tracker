@@ -1,7 +1,16 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { AccessoryGroup, BackoffGroup, CurrentWorkout } from './App';
+import {
+  AccessoryGroup,
+  BackoffGroup,
+  CurrentWorkout,
+  WarmupGrid,
+  WorkoutCompletionButton,
+} from './App';
 import { translations } from './translations';
-import { generateSmartPrepItems } from './warmupAndPrepGeneration';
+import {
+  generatePrepItems,
+  generateSmartWorkoutPrepItems,
+} from './warmupAndPrepGeneration';
 import { generateWorkoutsForTrainingModel } from './smartTrainingEngine';
 import { generateAccessoriesForWorkout } from './accessoryGeneration';
 import { displayWeightToKg, formatWeightFromKg } from './workoutUnits';
@@ -17,6 +26,91 @@ beforeAll(() => {
   });
 });
 
+function expectLastAutoScrollTarget(target) {
+  const scrollMock = HTMLElement.prototype.scrollIntoView;
+  const lastCallIndex = scrollMock.mock.calls.length - 1;
+
+  expect(lastCallIndex).toBeGreaterThanOrEqual(0);
+  expect(scrollMock.mock.contexts[lastCallIndex]).toBe(target);
+  expect(scrollMock).toHaveBeenLastCalledWith({
+    behavior: 'smooth',
+    block: 'center',
+    inline: 'nearest',
+  });
+}
+
+test('dynamic focus scrolls each active warm-up and grouped work set into the centre', () => {
+  const scrollMock = HTMLElement.prototype.scrollIntoView;
+  scrollMock.mockClear();
+
+  const warmups = [
+    { weight: 20, reps: 5, done: false },
+    { weight: 60, reps: 3, done: false },
+  ];
+  const warmupProps = {
+    warmups,
+    referenceSets: [{ weight: 100, pct: 1 }],
+    isReadOnly: false,
+    onToggle: jest.fn(),
+    renderTimer: () => null,
+    t: translations.en,
+    lift: 'Squat',
+  };
+  const warmupRender = render(
+    <WarmupGrid {...warmupProps} activeIndex={0} />
+  );
+
+  expectLastAutoScrollTarget(screen.getByTestId('warmup-row-0'));
+
+  warmupRender.rerender(
+    <WarmupGrid {...warmupProps} activeIndex={1} />
+  );
+  expectLastAutoScrollTarget(screen.getByTestId('warmup-row-1'));
+  warmupRender.unmount();
+
+  scrollMock.mockClear();
+  const entries = [
+    { index: 2, set: { weight: 70, pct: 0.7, reps: 4, done: false } },
+    { index: 3, set: { weight: 70, pct: 0.7, reps: 4, done: false } },
+  ];
+  const groupProps = {
+    entries,
+    isReadOnly: false,
+    onToggle: jest.fn(),
+    onEditAll: jest.fn(),
+    onRestoreAll: jest.fn(),
+    onMarkFailed: jest.fn(),
+    renderTimer: () => null,
+    t: translations.en,
+    lift: 'Squat',
+  };
+  const groupRender = render(
+    <BackoffGroup {...groupProps} activeIndex={2} />
+  );
+
+  expectLastAutoScrollTarget(screen.getByTestId('workout-set-group-item-2'));
+
+  groupRender.rerender(
+    <BackoffGroup {...groupProps} activeIndex={3} />
+  );
+  expectLastAutoScrollTarget(screen.getByTestId('workout-set-group-item-3'));
+});
+
+test('the completion action scrolls into the centre when it receives dynamic focus', () => {
+  const scrollMock = HTMLElement.prototype.scrollIntoView;
+  scrollMock.mockClear();
+
+  const completionRender = render(
+    <WorkoutCompletionButton active={false}>Complete workout</WorkoutCompletionButton>
+  );
+  expect(scrollMock).not.toHaveBeenCalled();
+
+  completionRender.rerender(
+    <WorkoutCompletionButton active>Complete workout</WorkoutCompletionButton>
+  );
+  expectLastAutoScrollTarget(screen.getByRole('button', { name: 'Complete workout' }));
+});
+
 function renderCurrentWorkout(workout, { t = translations.en, isReadOnly = false } = {}) {
   const handlers = {
     onTogglePrepItem: jest.fn(),
@@ -28,7 +122,6 @@ function renderCurrentWorkout(workout, { t = translations.en, isReadOnly = false
     onMarkAccessorySetFailed: jest.fn(),
     onRestoreAccessoryWeight: jest.fn(),
     onToggleCooldownItem: jest.fn(),
-    onToggleMeetPrepItem: jest.fn(),
     onToggleMeetWarmup: jest.fn(),
     onToggleMeetSet: jest.fn(),
     onMarkLiftBlockSetFailed: jest.fn(),
@@ -64,28 +157,36 @@ function renderCurrentWorkout(workout, { t = translations.en, isReadOnly = false
   return handlers;
 }
 
-test.each(preparationContexts)('every main lift has translated, independently usable preparation in $language ($type)', ({ language, type }) => {
+test.each(preparationContexts)('one translated preparation section appears before all main lifts in $language ($type)', ({ language, type }) => {
   const t = translations[language];
+  const lifts = ['Squat', 'Bench', 'Deadlift'];
   const workout = {
     number: 1,
     type,
-    lifts: ['Squat', 'Bench', 'Deadlift'].map((lift, index) => ({
+    prepItems: generateSmartWorkoutPrepItems(lifts).map((item, index) => ({
+      ...item,
+      done: index === 0,
+    })),
+    lifts: lifts.map(lift => ({
       lift,
-      prepItems: generateSmartPrepItems(lift).map(item => ({ ...item, done: index === 0 })),
-      warmups: [{ weight: 20, reps: 5, done: index === 0 }],
-      sets: [{ weight: 60, reps: 5, done: index === 0 }],
+      prepItems: [],
+      warmups: [{ weight: 20, reps: 5, done: false }],
+      sets: [{ weight: 60, reps: 5, done: false }],
     })),
   };
   const handlers = renderCurrentWorkout(workout, { t });
 
-  workout.lifts.forEach((block, liftIndex) => {
-    const liftSection = within(screen.getByTestId(`workout-lift-${block.lift}`));
-    block.prepItems.forEach((item, itemIndex) => {
-      const button = liftSection.getByRole('button', { name: t[item.labelKey], exact: true });
-      expect(button).toBeEnabled();
-      fireEvent.click(button);
-      expect(handlers.onToggleMeetPrepItem).toHaveBeenLastCalledWith(liftIndex, itemIndex);
-    });
+  const firstLiftSection = screen.getByTestId('workout-lift-Squat');
+  const prepTitle = screen.getByText(t.prepTitle, { exact: true });
+  expect(prepTitle.compareDocumentPosition(firstLiftSection) & Node.DOCUMENT_POSITION_FOLLOWING)
+    .toBeTruthy();
+
+  workout.prepItems.forEach((item, itemIndex) => {
+    const button = screen.getByRole('button', { name: t[item.labelKey], exact: true });
+    expect(button).toBeEnabled();
+    expect(button.closest('[data-testid^="workout-lift-"]')).toBeNull();
+    fireEvent.click(button);
+    expect(handlers.onTogglePrepItem).toHaveBeenLastCalledWith(itemIndex);
   });
   expect(screen.getByRole('button', { name: t.prepBandPullApart, exact: true }).style.animation)
     .toContain('kelaniActiveWorkoutCirclePulse');
@@ -123,7 +224,7 @@ test.each(preparationContexts)('preparation off adds no controls or completion s
 
   generated.lifts.forEach(block => {
     expect(block.prepItems).toEqual([]);
-    generateSmartPrepItems(block.lift).forEach(item => {
+    generatePrepItems(block.lift).forEach(item => {
       expect(screen.queryByRole('button', {
         name: t[item.labelKey], exact: true,
       })).not.toBeInTheDocument();
@@ -136,16 +237,17 @@ test.each(preparationContexts)('preparation off adds no controls or completion s
   expect(completeButton).toHaveAttribute('data-dynamic-focus', 'true');
   fireEvent.click(completeButton);
   expect(handlers.onComplete).toHaveBeenCalledTimes(1);
-  expect(handlers.onToggleMeetPrepItem).not.toHaveBeenCalled();
+  expect(handlers.onTogglePrepItem).not.toHaveBeenCalled();
 });
 
 test('preparation remains read-only for a completed or future workout', () => {
   const handlers = renderCurrentWorkout({
     number: 2,
     type: 'meet',
+    prepItems: generateSmartWorkoutPrepItems(['Squat', 'Bench', 'Deadlift']),
     lifts: ['Squat', 'Bench', 'Deadlift'].map(lift => ({
       lift,
-      prepItems: generateSmartPrepItems(lift),
+      prepItems: [],
       warmups: [],
       sets: [{ labelKey: 'opener', weight: 60, reps: 1, done: false }],
     })),
@@ -154,7 +256,7 @@ test('preparation remains read-only for a completed or future workout', () => {
   const button = screen.getByRole('button', { name: translations.en.prepHipHinges, exact: true });
   expect(button).toBeDisabled();
   fireEvent.click(button);
-  expect(handlers.onToggleMeetPrepItem).not.toHaveBeenCalled();
+  expect(handlers.onTogglePrepItem).not.toHaveBeenCalled();
 });
 
 function useThreeSetActions({ onRestore, onMissed, onEdit }) {

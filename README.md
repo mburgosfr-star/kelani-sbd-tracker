@@ -10,7 +10,7 @@ Kelani is built for lifters who prefer to train independently but do not want to
 
 Kelani is an offline-first Android app for Squat, Bench and Deadlift. Its main training model, Smart Training, does not give you a long static calendar. It plans one next workout at a time from the training you actually completed and how that work affected your readiness.
 
-After every completed workout, Kelani interprets your recent training load, lift frequency, successful and failed work, skipped sets, workout difficulty, current strength and progress toward your planned meet attempts. It uses those signals to choose what to train next and to prescribe the sets, reps and barbell-loadable weights.
+After every completed workout, Kelani interprets your recent training load, lift frequency, successful and failed work, workout difficulty, current strength and progress toward your planned meet attempts. It uses those signals to choose what to train next and to prescribe the sets, reps and barbell-loadable weights.
 
 ## Philosophy
 
@@ -24,7 +24,7 @@ Smart Training continuously rebuilds the plan around your real training history.
 
 - choose the next lift or combination of lifts based on priority, recent exposure and your training level;
 - balance heavy, medium and light work instead of repeating the same session structure;
-- progress successful work and respond to difficult, failed or skipped work;
+- progress successful work and respond to difficult or failed work;
 - schedule recovery or deload work when fatigue, training streaks or completed workload call for it;
 - generate preparation, warm-ups, top sets, back-off work and optional accessories for the selected session;
 - work toward your Meet Planner attempts, then taper and schedule meet day when the required strength has been demonstrated;
@@ -36,7 +36,7 @@ Kelani generates only the next relevant workout, so new performance and feedback
 
 - Follow a set-by-set workout view with preparation, warm-ups, main work, accessories and cooldown options.
 - With accessories enabled, every Bench session includes Row, kept light during taper. Meet day has no accessories.
-- Record completed, failed or skipped sets and rate both sets and the full workout.
+- Record completed or failed sets and rate both sets and the full workout.
 - Use the built-in rest timer and plate calculator while training.
 - Track real 1RM, estimated 1RM, SBD totals, Strength, eStrength and body statistics.
 - Plan competition attempts, follow meet readiness and use a meet-day checklist.

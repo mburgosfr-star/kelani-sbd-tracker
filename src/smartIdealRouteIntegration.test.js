@@ -277,6 +277,34 @@ test('non-GOOD feedback leaves the ideal path and returns control to autoregulat
   );
 });
 
+test('a hard beginner W1 cannot replace the planned W2 rest with light training', () => {
+  const w1 = generateCurrent({ athleteLevel: 'beginner' });
+  const history = completeWorkout([], w1, 'hard');
+  const w2 = generateCurrent({
+    history,
+    currentIndex: 1,
+    athleteLevel: 'beginner',
+  });
+
+  expect(isSmartIdealRoutePristine({ history, currentCycle: 1 })).toBe(false);
+  expect(w2).toMatchObject({
+    number: 2,
+    type: 'rest',
+    smartDayType: SMART_DAY_TYPES.RECOVERY,
+    smartIdealRoute: {
+      workoutNumber: 2,
+      athleteLevel: 'beginner',
+      stage: 'normal',
+    },
+    smartDecisionSummary: {
+      reason: SMART_DECISION_REASONS.IDEAL_ROUTE,
+      readiness: {
+        recentFatigueScore: 1,
+      },
+    },
+  });
+});
+
 test('failed work on the first migrated route workout does not force its scheduled rest row', () => {
   const failedRouteSnapshot = {
     number: 2,

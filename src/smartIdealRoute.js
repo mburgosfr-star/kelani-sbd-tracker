@@ -156,6 +156,7 @@ export const SMART_IDEAL_POST_MEET = Object.freeze({
 });
 
 export const SMART_IDEAL_ROUTE_VERSION = 1;
+export const SMART_IDEAL_MEET_WORKOUT_NUMBER = 28;
 
 export function resolveSmartIdealRouteStartCycle({
   savedStartCycle,
@@ -323,7 +324,7 @@ export function getSmartIdealRouteWorkout({
 
   if (number <= 27) return buildRestWorkout(number, 'taper');
 
-  if (number === 28) {
+  if (number === SMART_IDEAL_MEET_WORKOUT_NUMBER) {
     const postMeet = SMART_IDEAL_POST_MEET[level];
 
     return {
@@ -393,7 +394,7 @@ export function getSmartIdealRouteEntryWorkoutNumber({
     readiness.meetPlanReady ?? readiness.ready
   );
 
-  if (meetPlanReady) return 28;
+  if (meetPlanReady) return SMART_IDEAL_MEET_WORKOUT_NUMBER;
   if (!hasCurrentCycleEvidence) return 1;
 
   const openerReady = Boolean(

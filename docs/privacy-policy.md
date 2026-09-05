@@ -31,7 +31,7 @@ The summary may contain:
 - Training model and experience level
 - Aggregate counts of completed training, recovery and meet sessions
 - Aggregate workout-feedback counts
-- Counts of failed or skipped sets and milestone celebrations
+- Counts of sets explicitly marked as failed and milestone celebrations. Optional preparation, accessory or cool-down work left unchecked is not counted as failed
 - Selected preparation, accessory and cool-down modes
 
 The summary does not contain:

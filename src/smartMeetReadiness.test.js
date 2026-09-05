@@ -254,6 +254,48 @@ test('a completed meet suppresses another same-cycle meet projection and ends af
   expect(isSmartCycleCompleteAfterHistory(recoveryHistory, 1)).toBe(true);
 });
 
+test('a hard meet from the previous cycle cannot leak fatigue into the new cycle', () => {
+  const history = [
+    ...makeCompletedMeetEntries({
+      workoutNumber: 46,
+      workoutEffort: 'hard',
+      failedOrSkippedSetCount: 0,
+    }),
+    makePostMeetRecoveryEntry(47),
+    makeTrainingEntry({
+      cycle: 2,
+      workoutNumber: 1,
+      lift: 'Squat',
+      weight: 40,
+      reps: 3,
+      e1rm: 45,
+      inheritedBestE1RM: 45,
+      workoutEffort: 'hard',
+    }),
+  ];
+
+  const readiness = buildSmartReadinessSignals({
+    history,
+    currentCycle: 2,
+    currentIndex: 1,
+    prs: { Squat: 45, Bench: 35, Deadlift: 62.5 },
+    oneRMs: { Squat: 45, Bench: 35, Deadlift: 62.5 },
+  });
+
+  expect(readiness).toMatchObject({
+    completedCount: 1,
+    activeBlockCompletedCount: 1,
+    rollingTrainingDayCount: 1,
+    projectionTrainingDayCount: 1,
+    recentHardCount: 1,
+    effortFatigueScore: 1,
+    failedSetFatigueScore: 0,
+    recentFatigueScore: 1,
+    lastWorkoutNumber: 1,
+    lastWorkoutEffort: 'hard',
+  });
+});
+
 test('post-meet recovery is one day plus each missed attempt, capped at ten days', () => {
   const context = {
     currentCycle: 1,
@@ -999,7 +1041,7 @@ test('uses a wider frequency window for the meet projection than for candidate s
     .toEqual(after.projectionLiftExposureCounts);
 });
 
-test('withholds the meet projection until every lift has active-cycle evidence', () => {
+test('uses the ideal W28 destination until every lift has active-cycle evidence', () => {
   const projection = buildSmartMeetWorkoutProjection({
     meetPlanReadiness: {
       weakestLift: 'Bench',
@@ -1010,13 +1052,23 @@ test('withholds the meet projection until every lift has active-cycle evidence',
         Deadlift: { hasCurrentCycleEvidence: true, readinessTargetAttempt: 125 },
       },
     },
-    currentCycle: 1,
-    currentWorkoutNumber: 4,
+    currentCycle: 2,
+    currentWorkoutNumber: 2,
   });
 
-  expect(projection).toEqual({
-    available: false,
-    reason: 'insufficient-active-cycle-data',
+  expect(projection).toMatchObject({
+    available: true,
+    reason: 'default-ideal-route',
+    provisional: true,
+    cycle: 2,
+    currentWorkoutNumber: 2,
+    minimumWorkoutNumber: 28,
+    maximumWorkoutNumber: 28,
+    minimumWorkoutsBeforeMeet: 26,
+    maximumWorkoutsBeforeMeet: 26,
+    label: 'C2W28',
+    projectedByIdealRoute: true,
+    missingEvidenceLifts: ['Bench'],
     limitingLift: 'Bench',
     limitingPhase: 'opener',
   });

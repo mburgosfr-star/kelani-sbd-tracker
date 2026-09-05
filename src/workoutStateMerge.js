@@ -30,6 +30,38 @@ export function accessoriesHaveUserProgress(accessories = []) {
   );
 }
 
+function prepItemKey(item = {}, index = 0) {
+  return item.labelKey || item.key || `${item.prescription || 'prep'}-${index}`;
+}
+
+export function mergeWorkoutPrepItems(
+  currentWorkout = {},
+  generatedWorkout = {},
+  defaultDone = false
+) {
+  const currentItems = [
+    ...(currentWorkout.prepItems || []),
+    ...(currentWorkout.lifts || []).flatMap(liftBlock => liftBlock?.prepItems || []),
+  ];
+  const progressByKey = new Map();
+
+  currentItems.forEach((item, index) => {
+    const key = prepItemKey(item, index);
+    const currentDone = progressByKey.get(key);
+    progressByKey.set(key, Boolean(currentDone || item?.done));
+  });
+
+  return (generatedWorkout.prepItems || []).map((item, index) => {
+    const key = prepItemKey(item, index);
+    return {
+      ...item,
+      done: progressByKey.has(key)
+        ? progressByKey.get(key)
+        : (item.done ?? defaultDone),
+    };
+  });
+}
+
 // True if the athlete has actually started this workout (a set marked
 // done/failed/skipped/adjusted, or preparation/a warmup checked off) — as opposed to a
 // slot that merely exists in the plan but hasn't been touched yet. Used to
@@ -46,7 +78,9 @@ export function workoutHasUserProgress(workout) {
     (block?.sets || []).some(setHasUserState) ||
     (block?.prepItems || []).some(item => item?.done) ||
     (block?.warmups || []).some(warmup => warmup?.done)
-  ) || accessoriesHaveUserProgress(workout?.accessories);
+  ) ||
+    (workout?.prepItems || []).some(item => item?.done) ||
+    accessoriesHaveUserProgress(workout?.accessories);
 }
 
 function repairPaddedMeetWarmups(workout, generated) {
@@ -116,7 +150,11 @@ export function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, hist
         // generated workout would silently wipe that progress on the next
         // app load. Keep their in-progress data instead.
         if (workoutHasUserProgress(workout)) {
-          return repairPaddedMeetWarmups(workout, generated);
+          const repairedWorkout = repairPaddedMeetWarmups(workout, generated);
+          return {
+            ...repairedWorkout,
+            prepItems: mergeWorkoutPrepItems(repairedWorkout, generated),
+          };
         }
 
         return generated;
@@ -124,6 +162,7 @@ export function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, hist
 
       return {
         ...workout,
+        prepItems: mergeWorkoutPrepItems(workout, generated, prepDone),
         lifts: (workout.lifts || generated.lifts || []).map((liftBlock, liftIndex) => {
           const generatedLiftBlock = (generated.lifts || [])[liftIndex] || {};
 
@@ -174,7 +213,7 @@ export function hydrateWorkoutsWithHistory(workouts, history, cycle) {
 
     if (savedSnapshot?.workoutSnapshot) {
       if (workout.type === 'meet') {
-        return {
+        const restoredWorkout = {
           ...savedSnapshot.workoutSnapshot,
           lifts: (savedSnapshot.workoutSnapshot.lifts || workout.lifts || []).map((liftBlock, index) => {
             const generatedLiftBlock = (workout.lifts || [])[index] || {};
@@ -187,6 +226,11 @@ export function hydrateWorkoutsWithHistory(workouts, history, cycle) {
               })),
             };
           }),
+        };
+
+        return {
+          ...restoredWorkout,
+          prepItems: mergeWorkoutPrepItems(restoredWorkout, workout, true),
         };
       }
 
@@ -219,7 +263,7 @@ export function hydrateWorkoutsWithHistory(workouts, history, cycle) {
           ...snapshot,
           lifts: restoredLifts,
           lift: primaryLiftBlock.lift || snapshot.lift,
-          prepItems: primaryLiftBlock.prepItems || snapshot.prepItems || [],
+          prepItems: mergeWorkoutPrepItems(snapshot, workout, true),
           warmups: primaryLiftBlock.warmups || snapshot.warmups || [],
           sets: primaryLiftBlock.sets || snapshot.sets || [],
           accessories: (snapshot.accessories || workout.accessories || []).map(accessory => ({
@@ -269,6 +313,7 @@ export function hydrateWorkoutsWithHistory(workouts, history, cycle) {
       if (workout.type === 'meet') {
         return {
           ...workout,
+          prepItems: (workout.prepItems || []).map(item => ({ ...item, done: true })),
           lifts: (workout.lifts || []).map(liftBlock => ({
             ...liftBlock,
             prepItems: (liftBlock.prepItems || []).map(item => ({ ...item, done: true })),

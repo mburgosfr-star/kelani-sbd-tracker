@@ -3,6 +3,7 @@ import {
   createRestTimerNotificationQueue,
   getRestTimerNotificationChannelStatus,
   hasPendingNativeRestTimerAlarm,
+  hasMoreWorkAfterMainSet,
   hasMoreMeetSets,
   normalizePersistedNavigationState,
   normalizePersistedRestTimerState,
@@ -331,7 +332,7 @@ test('Android uses only its notification sound while visible web uses the in-app
   })).toBe(false);
 });
 
-test('finishing one lift still starts rest when a later lift has work', () => {
+test('finishing a lift does not start rest before the next lift', () => {
   const workout = {
     lifts: [
       {
@@ -347,29 +348,35 @@ test('finishing one lift still starts rest when a later lift has work', () => {
     accessories: [],
   };
 
-  expect(hasMoreMeetSets(workout, 0, 1)).toBe(true);
+  expect(hasMoreMeetSets(workout, 0, 1)).toBe(false);
 });
 
-test('the timer stops only after every later lift and accessory is complete', () => {
-  const completedWorkout = {
+test('rest starts only when the same lift still has another main set', () => {
+  const workout = {
     lifts: [
-      { lift: 'Bench', sets: [{ done: true }] },
+      { lift: 'Bench', sets: [{ done: false }, { done: false }] },
       {
         lift: 'Squat',
-        prepItems: [{ done: true }],
-        warmups: [{ done: true }],
-        sets: [{ done: true }],
+        prepItems: [{ done: false }],
+        warmups: [{ done: false }],
+        sets: [{ done: false }],
       },
     ],
-    accessories: [{ done: [true, true] }],
-  };
-  const pendingAccessoryWorkout = {
-    ...completedWorkout,
-    accessories: [{ done: [true, false] }],
+    accessories: [{ done: [false, false] }],
   };
 
-  expect(hasMoreMeetSets(completedWorkout, 0, 0)).toBe(false);
-  expect(hasMoreMeetSets(pendingAccessoryWorkout, 0, 0)).toBe(true);
+  expect(hasMoreMeetSets(workout, 0, 0)).toBe(true);
+  expect(hasMoreMeetSets(workout, 0, 1)).toBe(false);
+});
+
+test('a flat workout also stops rest after its final main set', () => {
+  const workout = {
+    sets: [{ done: false }, { done: false }],
+    accessories: [{ done: [false, false] }],
+  };
+
+  expect(hasMoreWorkAfterMainSet(workout, 0)).toBe(true);
+  expect(hasMoreWorkAfterMainSet(workout, 1)).toBe(false);
 });
 
 test('notification scheduling and cancellation cannot overtake each other', async () => {

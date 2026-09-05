@@ -864,6 +864,38 @@ export function getRestorableSelectedIndex(inProgress, currentCycle, totalWorkou
   return Math.max(0, Math.min(selectedIndex, totalWorkouts - 1));
 }
 
+function normalizeBodyRatioRecord(record) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return null;
+
+  const normalizedGain = value => {
+    const gain = Number(value);
+    return Number.isFinite(gain) && gain > 0
+      ? Math.round(gain * 100) / 100
+      : 0;
+  };
+  const strengthMaxGain = normalizedGain(record.strengthMaxGain);
+  const eStrengthMaxGain = normalizedGain(record.eStrengthMaxGain);
+  if (!(strengthMaxGain > 0 || eStrengthMaxGain > 0)) return null;
+
+  const validLevels = new Set(['beginner', 'intermediate', 'advanced', 'elite']);
+  const previousLevel = validLevels.has(record.levelChange?.previous)
+    ? record.levelChange.previous
+    : null;
+  const nextLevel = validLevels.has(record.levelChange?.value)
+    ? record.levelChange.value
+    : null;
+  const levelChange = previousLevel && nextLevel && previousLevel !== nextLevel
+    ? { previous: previousLevel, value: nextLevel }
+    : null;
+
+  return {
+    version: 1,
+    strengthMaxGain,
+    eStrengthMaxGain,
+    levelChange,
+  };
+}
+
 export function normalizeBodyWeights(data) {
   const entriesByIdentity = new Map();
   let sourceOrder = 0;
@@ -881,6 +913,12 @@ export function normalizeBodyWeights(data) {
     fallbackWorkoutNumber = 0,
     { allowWeightAlias = false } = {}
   ) {
+    const bodyRatioRecord = normalizeBodyRatioRecord(entry.bodyRatioRecord);
+    const bodyRatioEvaluationVersion = Number.isInteger(
+      Number(entry.bodyRatioEvaluationVersion)
+    ) && Number(entry.bodyRatioEvaluationVersion) > 0
+      ? Number(entry.bodyRatioEvaluationVersion)
+      : null;
     const bodyData = {
       bodyWeight: toOptionalNumber(
         entry.bodyWeight ||
@@ -905,6 +943,10 @@ export function normalizeBodyWeights(data) {
       date: entry.date || null,
       timestamp: entry.timestamp || null,
       ...bodyData,
+      ...(bodyRatioEvaluationVersion
+        ? { bodyRatioEvaluationVersion }
+        : {}),
+      ...(bodyRatioRecord ? { bodyRatioRecord } : {}),
     };
   }
 
@@ -929,6 +971,16 @@ export function normalizeBodyWeights(data) {
         merged[field] = normalized[field];
       }
     });
+    if (normalized.bodyRatioRecord) {
+      merged.bodyRatioRecord = normalized.bodyRatioRecord;
+    } else {
+      delete merged.bodyRatioRecord;
+    }
+    if (normalized.bodyRatioEvaluationVersion) {
+      merged.bodyRatioEvaluationVersion = normalized.bodyRatioEvaluationVersion;
+    } else {
+      delete merged.bodyRatioEvaluationVersion;
+    }
 
     entriesByIdentity.set(identity, {
       entry: merged,
