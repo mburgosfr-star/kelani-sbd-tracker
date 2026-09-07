@@ -1,6 +1,24 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SettingsListRow, SmartDayTypeInline, StatsScreen, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, resolveStoredWeightUnit, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
+import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SettingsListRow, SmartDayTypeInline, StatsScreen, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
+
+test('manual and automatic hard-like outcomes resolve to the single TOO HARD value', () => {
+  expect(resolveWorkoutEffortForCompletion({}, 'hard')).toBe('hard');
+  expect(resolveWorkoutEffortForCompletion({}, 'tooMuch')).toBe('hard');
+  expect(resolveWorkoutEffortForCompletion({
+    lifts: [{
+      lift: 'Bench',
+      sets: [{ done: true, failed: true, skipped: true }],
+    }],
+  }, 'good')).toBe('hard');
+  expect(resolveWorkoutEffortForCompletion({
+    lifts: [{
+      lift: 'Bench',
+      sets: [{ done: true, failed: false, skipped: false, effort: 'max' }],
+    }],
+  }, 'good')).toBe('hard');
+  expect(resolveWorkoutEffortForCompletion({}, 'good')).toBe('good');
+});
 
 test('dashboard metrics contain values without treating the e1RM and 1RM difference as a new PR', () => {
   const metrics = buildDashboardE1RMMetrics(
@@ -1460,6 +1478,38 @@ test.each(['nl', 'en', 'ca'])('ideal-route post-meet recovery explains why the w
   expect(t.smartReasonIdealRoutePostMeetRecovery).toBeTruthy();
   expect(getSmartDecisionReasonDisplayText(workout.smartDecisionSummary, t, workout))
     .toBe(t.smartReasonIdealRoutePostMeetRecovery);
+});
+
+test.each(['nl', 'en', 'ca'])('TOO HARD route recovery explains the one-day adjustment without old fatigue thresholds in %s', language => {
+  const t = translations[language];
+  const workout = {
+    type: 'rest',
+    smartDayType: 'recovery',
+    smartDecisionSummary: {
+      reason: 'ideal-route',
+      dayType: 'recovery',
+      readiness: {
+        recentFatigueScore: 3,
+        recentFailedOrSkippedSetCount: 2,
+        meetdayBlockers: ['fatigue', 'failed-skipped'],
+        meetProjection: { available: true, label: 'C4W29' },
+      },
+    },
+    smartIdealRoute: {
+      stage: 'taper',
+      transitionPending: true,
+      adjustmentReason: 'too-hard-recovery',
+    },
+  };
+
+  expect(getSmartDecisionReasonDisplayText(
+    workout.smartDecisionSummary,
+    t,
+    workout
+  )).toBe(t.smartReasonIdealRouteTooHardRecovery);
+  expect(getSmartModalDetailRows(workout, t)).toEqual([
+    { label: t.smartProjectedMeet, value: 'C4W29' },
+  ]);
 });
 
 test.each(['nl', 'en', 'ca'])('post-meet recovery includes its progress and purpose in %s', language => {

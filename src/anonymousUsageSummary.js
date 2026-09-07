@@ -107,7 +107,7 @@ export function buildAnonymousUsageMetrics({
   });
 
   const sessionTypes = { training: 0, recovery: 0, meet: 0 };
-  const efforts = { easy: 0, good: 0, hard: 0, tooMuch: 0, unrecorded: 0 };
+  const efforts = { easy: 0, good: 0, hard: 0, unrecorded: 0 };
   let failedSets = 0;
   let milestoneCelebrations = 0;
 
@@ -115,9 +115,18 @@ export function buildAnonymousUsageMetrics({
     const safeSnapshot = snapshot || {};
     sessionTypes[classifySession(entries, safeSnapshot)] += 1;
 
-    const effort = safeSnapshot.workoutEffort || entries.find(entry => entry?.workoutEffort)?.workoutEffort;
-    if (Object.prototype.hasOwnProperty.call(efforts, effort)) {
-      efforts[effort] += 1;
+    const effort = String(
+      safeSnapshot.workoutEffort ||
+      entries.find(entry => entry?.workoutEffort)?.workoutEffort ||
+      ''
+    ).trim().toLowerCase();
+    const normalizedEffort = effort === 'normal'
+      ? 'good'
+      : ['hard', 'toomuch', 'veryhard', 'max'].includes(effort)
+        ? 'hard'
+        : effort;
+    if (Object.prototype.hasOwnProperty.call(efforts, normalizedEffort)) {
+      efforts[normalizedEffort] += 1;
     } else {
       efforts.unrecorded += 1;
     }
@@ -130,7 +139,7 @@ export function buildAnonymousUsageMetrics({
   });
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     appVersion: String(appVersion || 'dev'),
     language: String(language || 'en'),
     weightUnit: String(weightUnit || 'kg'),
@@ -153,7 +162,7 @@ export function buildAnonymousUsageReport(metrics = {}) {
   const efforts = metrics.efforts || {};
   return [
     'Kelani anonymous usage summary',
-    `schema_version=${Number(metrics.schemaVersion) || 2}`,
+    `schema_version=${Number(metrics.schemaVersion) || 3}`,
     `app_version=${metrics.appVersion || 'dev'}`,
     `language=${metrics.language || 'en'}`,
     `weight_unit=${metrics.weightUnit || 'kg'}`,
@@ -166,7 +175,6 @@ export function buildAnonymousUsageReport(metrics = {}) {
     `effort_easy=${Number(efforts.easy) || 0}`,
     `effort_good=${Number(efforts.good) || 0}`,
     `effort_hard=${Number(efforts.hard) || 0}`,
-    `effort_too_much=${Number(efforts.tooMuch) || 0}`,
     `effort_unrecorded=${Number(efforts.unrecorded) || 0}`,
     `failed_sets=${Number(metrics.failedSets) || 0}`,
     `milestone_celebrations=${Number(metrics.milestoneCelebrations) || 0}`,

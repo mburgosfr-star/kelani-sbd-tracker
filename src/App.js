@@ -120,6 +120,7 @@ import {
   getSmartMeetCompletedTrainingDays,
   isSmartCycleCompleteAfterHistory,
   countFailedOrSkippedSetsFromSnapshot,
+  hasAutomaticTooHardWorkoutOutcome,
 } from './smartTrainingEngine';
 import { buildAutomaticNextSmartCycle } from './smartCycleTransition';
 import {
@@ -153,8 +154,6 @@ import { Share } from '@capacitor/share';
 import { LocalNotifications } from '@capacitor/local-notifications';
 
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
-// 'tooMuch' is deliberately excluded here - it's never a manual choice, only
-// an automatic outcome of failing/skipping a set (see completeWorkout).
 const WORKOUT_EFFORT_OPTIONS = ['easy', 'good', 'hard'];
 export const AUTO_BACKUP_PATH = 'Kelani SBD Tracker/Automatic Backups/kelani-sbd-tracker-v2-autosave.json';
 const AUTO_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-auto-backup-status';
@@ -2925,6 +2924,8 @@ function getSetEffortLabel(effort, t) {
     good: t.setEffortGood,
     hard: t.setEffortHard,
     max: t.setEffortMax,
+    tooMuch: t.setEffortMax,
+    veryhard: t.setEffortMax,
   }[effort] || null;
 }
 
@@ -2935,7 +2936,9 @@ function getWorkoutEffortLabel(effort, t) {
     easy: t.workoutEffortEasy,
     good: t.workoutEffortGood,
     hard: t.workoutEffortHard,
-    tooMuch: t.workoutEffortTooMuch,
+    tooMuch: t.workoutEffortHard,
+    veryhard: t.workoutEffortHard,
+    max: t.workoutEffortHard,
   }[effort] || null;
 }
 
@@ -2946,6 +2949,20 @@ function getWorkoutEffortText(effort, t) {
   return t.workoutEffortFelt
     ? t.workoutEffortFelt.replace('{effort}', label)
     : label;
+}
+
+export function resolveWorkoutEffortForCompletion(
+  workout = {},
+  workoutEffortOverride = null
+) {
+  if (hasAutomaticTooHardWorkoutOutcome(workout)) return 'hard';
+
+  const effort = String(
+    workoutEffortOverride ?? workout?.workoutEffort ?? ''
+  ).trim().toLowerCase();
+  return ['toomuch', 'veryhard', 'max'].includes(effort)
+    ? 'hard'
+    : effort || null;
 }
 
 function SetActionButton({ title, onClick, borderColor, disabled = false, children }) {
@@ -3923,7 +3940,6 @@ export function getAnonymousUsagePreviewRows(metrics = {}, t = translations.en) 
       `${t.workoutEffortEasy} ${Number(efforts.easy) || 0}, ` +
       `${t.workoutEffortGood} ${Number(efforts.good) || 0}, ` +
       `${t.workoutEffortHard} ${Number(efforts.hard) || 0}, ` +
-      `${t.workoutEffortTooMuch} ${Number(efforts.tooMuch) || 0}, ` +
       `${t.usageNotRecorded} ${Number(efforts.unrecorded) || 0}`,
     ],
     [t.usageFailedSets, Number(metrics.failedSets) || 0],
@@ -5904,6 +5920,13 @@ export function getSmartDecisionReasonDisplayText(summary, t = translations.en, 
         return t.smartReasonIdealRoutePostMeetRecovery;
       }
 
+      if (
+        workout?.smartIdealRoute?.adjustmentReason ===
+        'too-hard-recovery'
+      ) {
+        return t.smartReasonIdealRouteTooHardRecovery;
+      }
+
       return t.smartReasonIdealRouteRecovery;
     }
 
@@ -6384,6 +6407,10 @@ export function getSmartModalDetailRows(workout = {}, t = translations.en, curre
       readiness.inPostMeetRecovery
     )
   );
+  const isTooHardRouteRecovery = Boolean(
+    summary.dayType === SMART_DAY_TYPES.RECOVERY &&
+    workout?.smartIdealRoute?.adjustmentReason === 'too-hard-recovery'
+  );
 
   if (isMeetDay) {
     return [
@@ -6596,12 +6623,16 @@ export function getSmartModalDetailRows(workout = {}, t = translations.en, curre
   const failedCount = Number(readiness.recentFailedOrSkippedSetCount) || 0;
   const meetdayBlockers = readiness.meetdayBlockers || [];
   const showFatigueDetail =
-    isFatigueRecovery ||
-    fatigueScore > 0 ||
-    meetdayBlockers.includes('fatigue');
+    !isTooHardRouteRecovery && (
+      isFatigueRecovery ||
+      fatigueScore > 0 ||
+      meetdayBlockers.includes('fatigue')
+    );
   const showFailureDetail =
-    failedCount > 0 ||
-    meetdayBlockers.includes('failed-skipped');
+    !isTooHardRouteRecovery && (
+      failedCount > 0 ||
+      meetdayBlockers.includes('failed-skipped')
+    );
 
   if (showFatigueDetail) {
     rows.push({
@@ -12977,13 +13008,13 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
 
   function completeWorkout(workoutEffortOverride = null) {
     const baseWorkout = workouts[selectedIndex];
-    // TOO_MUCH is never a manual choice - a single failed or skipped set
-    // makes it the effort automatically, overriding any manual selection and
-    // skipping the effort prompt entirely.
-    const hasFailedOrSkippedSet = countFailedOrSkippedSetsFromSnapshot(baseWorkout) > 0;
-    const resolvedEffortOverride = hasFailedOrSkippedSet
-      ? 'tooMuch'
-      : workoutEffortOverride;
+    // A missed set or legacy MAX set is the same TOO HARD outcome as choosing
+    // TOO HARD manually. It overrides the prompt, but remains factual set
+    // data so failed work can never create a PR.
+    const resolvedEffortOverride = resolveWorkoutEffortForCompletion(
+      baseWorkout,
+      workoutEffortOverride
+    );
     const workout = resolvedEffortOverride
       ? { ...baseWorkout, workoutEffort: resolvedEffortOverride }
       : baseWorkout;
@@ -13786,7 +13817,7 @@ const __kelaniSmartPreviewNextDay = (options = {}) => {
       return { ok: false, reason: 'current-workout-not-found' };
     }
 
-    const effort = options.effort || currentWorkout.workoutEffort || 'good';
+    let effort = options.effort || currentWorkout.workoutEffort || 'good';
     const failedByLift = options.failedByLift || {};
     const smartDayType = options.smartDayType || currentWorkout.smartDayType || (
       currentWorkout.type === 'meet'
@@ -13828,6 +13859,8 @@ const __kelaniSmartPreviewNextDay = (options = {}) => {
         };
       }),
     };
+    effort = resolveWorkoutEffortForCompletion(snapshot, effort);
+    snapshot.workoutEffort = effort;
 
     const previewEntries = (currentWorkout.lifts || []).length > 0
       ? (snapshot.lifts || []).map(liftBlock => {
@@ -14093,56 +14126,53 @@ const __kelaniSmartPreviewRegression = () => {
         name: 'hard-no-fail',
         options: { effort: 'hard', failedByLift: {} },
         expect: result =>
-          result.smartDayType === SMART_DAY_TYPES.TRAINING &&
-          result.reason === SMART_DECISION_REASONS.TRAINING_FALLBACK &&
-          result.deloadSelection === null &&
-          (
-            result.autoregulated === true ||
-            (Array.isArray(result.overlapLifts) && result.overlapLifts.length === 0)
-          ),
+          result.smartDayType === SMART_DAY_TYPES.RECOVERY &&
+          result.reason === SMART_DECISION_REASONS.IDEAL_ROUTE &&
+          result.idealRoute?.adjustmentReason === 'too-hard-recovery' &&
+          result.deloadSelection === null,
       },
       {
-        name: 'too-much-squat-fail',
+        name: 'legacy-too-much-squat-fail',
         options: { effort: 'tooMuch', failedByLift: { Squat: 1 } },
         expect: result =>
           result.smartDayType === SMART_DAY_TYPES.RECOVERY &&
-          result.reason === SMART_DECISION_REASONS.FATIGUE_RECOVERY,
+          result.reason === SMART_DECISION_REASONS.IDEAL_ROUTE &&
+          result.idealRoute?.adjustmentReason === 'too-hard-recovery',
       },
       {
         name: 'good-squat-one-fail',
         options: { effort: 'good', failedByLift: { Squat: 1 } },
         expect: result =>
-          result.smartDayType === SMART_DAY_TYPES.TRAINING &&
-          result.reason === SMART_DECISION_REASONS.TRAINING_FALLBACK &&
-          result.failedByLift?.Squat === 1 &&
-          (
-            !result.lifts.includes('Squat') ||
-            result.adjustedLifts.includes('Squat')
-          ),
+          result.smartDayType === SMART_DAY_TYPES.RECOVERY &&
+          result.reason === SMART_DECISION_REASONS.IDEAL_ROUTE &&
+          result.idealRoute?.adjustmentReason === 'too-hard-recovery',
       },
       {
         name: 'good-squat-two-fail',
         options: { effort: 'good', failedByLift: { Squat: 2 } },
         expect: result =>
-          result.smartDayType === SMART_DAY_TYPES.DELOAD &&
-          result.reason === SMART_DECISION_REASONS.FAILED_SET_DELOAD &&
-          result.deloadSelection?.primaryLift === 'Squat',
+          result.smartDayType === SMART_DAY_TYPES.RECOVERY &&
+          result.reason === SMART_DECISION_REASONS.IDEAL_ROUTE &&
+          result.idealRoute?.adjustmentReason === 'too-hard-recovery' &&
+          result.deloadSelection === null,
       },
       {
         name: 'good-bench-two-fail',
         options: { effort: 'good', failedByLift: { Bench: 2 } },
         expect: result =>
-          result.smartDayType === SMART_DAY_TYPES.DELOAD &&
-          result.reason === SMART_DECISION_REASONS.FAILED_SET_DELOAD &&
-          result.deloadSelection?.primaryLift === 'Bench',
+          result.smartDayType === SMART_DAY_TYPES.RECOVERY &&
+          result.reason === SMART_DECISION_REASONS.IDEAL_ROUTE &&
+          result.idealRoute?.adjustmentReason === 'too-hard-recovery' &&
+          result.deloadSelection === null,
       },
       {
         name: 'good-deadlift-two-fail',
         options: { effort: 'good', failedByLift: { Deadlift: 2 } },
         expect: result =>
-          result.smartDayType === SMART_DAY_TYPES.DELOAD &&
-          result.reason === SMART_DECISION_REASONS.FAILED_SET_DELOAD &&
-          result.deloadSelection?.primaryLift === 'Deadlift',
+          result.smartDayType === SMART_DAY_TYPES.RECOVERY &&
+          result.reason === SMART_DECISION_REASONS.IDEAL_ROUTE &&
+          result.idealRoute?.adjustmentReason === 'too-hard-recovery' &&
+          result.deloadSelection === null,
       },
     ];
 
@@ -14161,6 +14191,7 @@ const __kelaniSmartPreviewRegression = () => {
         type: next.type,
         smartDayType: next.smartDayType,
         reason: next.reason,
+        idealRoute: next.idealRoute || null,
         lifts: (next.lifts || []).map(liftBlock => liftBlock.lift),
         failedByLift: readiness.recentFailedOrSkippedSetCountsByLift || {},
         fatigue: readiness.recentFatigueScore,
@@ -15752,7 +15783,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
             .join(' + ');
 
           const effortLabel = getWorkoutEffortLabel(completedWorkout?.workoutEffort, t);
-          const autoTooMuchSetCount = completedWorkout?.workoutEffort === 'tooMuch'
+          const automaticTooHardSetCount = ['hard', 'tooMuch', 'veryhard', 'max']
+            .includes(completedWorkout?.workoutEffort)
             ? countFailedOrSkippedSetsFromSnapshot(completedWorkout)
             : 0;
 
@@ -15782,7 +15814,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
               {summaryRow(t.workout, completedWorkout?.number || '-')}
               {summaryRow(t.cycle, currentCycle)}
               {summaryRow(t.workoutEffortWas, effortLabel || '-')}
-              {autoTooMuchSetCount > 0 && (
+              {automaticTooHardSetCount > 0 && (
                 <p style={{
                   color: THEME.muted,
                   fontSize: 12,
@@ -15790,7 +15822,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                   textAlign: 'left'
                 }}>
                   {(t.workoutEffortAutoTooMuch)
-                    .replace('{count}', autoTooMuchSetCount)}
+                    .replace('{count}', automaticTooHardSetCount)}
                 </p>
               )}
             </div>

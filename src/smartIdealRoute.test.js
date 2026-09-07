@@ -3,6 +3,8 @@ import {
   SMART_IDEAL_LEVELS,
   SMART_IDEAL_MEET_POLICY,
   SMART_IDEAL_POST_MEET,
+  buildAcceleratedSmartIdealRoutePlan,
+  buildAdjustedSmartIdealRoutePlan,
   getSmartIdealNormalPhase,
   getSmartIdealRouteEntryWorkoutNumber,
   getSmartIdealRouteWorkout,
@@ -292,7 +294,7 @@ test.each(SMART_IDEAL_LEVELS)(
   }
 );
 
-test('taper heavy is one 90% opener without normal back-offs; medium/light target about 12 reps', () => {
+test('every taper lift keeps a meaningful dose around the 90% opener or lighter work', () => {
   const workouts = Array.from({ length: 4 }, (_, index) =>
     getSmartIdealRouteWorkout({
       athleteLevel: 'elite',
@@ -306,6 +308,13 @@ test('taper heavy is one 90% opener without normal back-offs; medium/light targe
         kind: 'opener-single',
         basis: 'real-1rm',
         topSet: { reps: 1, pct: 0.90 },
+        backoff: {
+          reps: 4,
+          pct: 0.60,
+          setCount: 'grid-dependent',
+          minimumSetCount: 1,
+          fullRowWhenAligned: true,
+        },
         normalBackoffs: false,
         fullGridRequired: true,
       });
@@ -316,8 +325,9 @@ test('taper heavy is one 90% opener without normal back-offs; medium/light targe
       kind: 'taper-work-sets',
       basis: 'real-1rm',
       pct: item.intensityRole === 'medium' ? 0.70 : 0.60,
-      targetTotalWorkReps: 12,
-      targetIsApproximate: true,
+      reps: 4,
+      minimumSetCount: 3,
+      minimumRepsPerSet: 4,
       setCount: 'grid-dependent',
       fullGridRequired: true,
     });
@@ -345,6 +355,147 @@ test.each(SMART_IDEAL_LEVELS)('%s has the full simulated meet at W28', level => 
       fullGridRequired: true,
     });
   });
+});
+
+test.each(SMART_IDEAL_LEVELS)(
+  '%s spends one TOO EASY credit by removing the duplicate final rest',
+  level => {
+    const plan = buildAcceleratedSmartIdealRoutePlan({
+      athleteLevel: level,
+      startWorkoutNumber: 23,
+      accelerationCredits: 1,
+    });
+
+    expect(plan).toMatchObject({
+      requestedCredits: 1,
+      appliedCredits: 1,
+      unappliedCredits: 0,
+    });
+    expect(plan.workouts.map(workout => workout.workoutNumber))
+      .not.toContain(27);
+    expect(plan.workouts.at(-1)).toMatchObject({
+      workoutNumber: 28,
+      type: 'meet',
+      accelerationCreditsConsumed: 1,
+      accelerationActions: ['remove-redundant-rest'],
+      skippedRouteWorkoutNumbers: [27],
+    });
+  }
+);
+
+test('a second TOO EASY credit combines the safest compatible taper days', () => {
+  const plan = buildAcceleratedSmartIdealRoutePlan({
+    athleteLevel: 'intermediate',
+    startWorkoutNumber: 24,
+    accelerationCredits: 2,
+  });
+
+  expect(plan).toMatchObject({
+    requestedCredits: 2,
+    appliedCredits: 2,
+    unappliedCredits: 0,
+  });
+  expect(plan.workouts).toHaveLength(3);
+  expect(plan.workouts[0]).toMatchObject({
+    workoutNumber: 25,
+    type: 'training',
+    stage: 'taper',
+    routeWorkoutNumbers: [24, 25],
+    accelerationCreditsConsumed: 1,
+    accelerationActions: ['combine-training'],
+    combinedRouteWorkoutNumbers: [24, 25],
+  });
+  expect(plan.workouts[0].lifts.map(item => [
+    item.lift,
+    item.intensityRole,
+  ])).toEqual([
+    ['Bench', 'heavy'],
+    ['Squat', 'medium'],
+  ]);
+  expect(plan.workouts.at(-1)).toMatchObject({
+    type: 'meet',
+    workoutNumber: 28,
+    accelerationCreditsConsumed: 1,
+    skippedRouteWorkoutNumbers: [27],
+  });
+});
+
+test('a trailing completed rest lets a pending credit skip the duplicate rest now', () => {
+  const plan = buildAcceleratedSmartIdealRoutePlan({
+    athleteLevel: 'intermediate',
+    startWorkoutNumber: 27,
+    accelerationCredits: 1,
+    hasTrailingCompletedRest: true,
+  });
+
+  expect(plan.workouts).toHaveLength(1);
+  expect(plan.workouts[0]).toMatchObject({
+    type: 'meet',
+    workoutNumber: 28,
+    accelerationCreditsConsumed: 1,
+    skippedRouteWorkoutNumbers: [27],
+  });
+});
+
+test('one TOO HARD credit inserts one transition rest without consuming the next route row', () => {
+  const plan = buildAdjustedSmartIdealRoutePlan({
+    athleteLevel: 'intermediate',
+    startWorkoutNumber: 23,
+    delayCredits: 1,
+  });
+
+  expect(plan).toMatchObject({
+    requestedDelayCredits: 1,
+    appliedDelayCredits: 1,
+    unappliedDelayCredits: 0,
+  });
+  expect(plan.workouts[0]).toMatchObject({
+    workoutNumber: 23,
+    type: 'rest',
+    transitionPending: true,
+    adjustmentReason: 'too-hard-recovery',
+    delayCreditsConsumed: 1,
+  });
+  expect(plan.workouts[1]).toMatchObject({
+    workoutNumber: 23,
+    type: 'training',
+  });
+  expect(plan.workouts.findIndex(workout => workout.type === 'meet')).toBe(6);
+});
+
+test('TOO HARD inserts an extra rest even when the next ideal route row is already rest', () => {
+  const plan = buildAdjustedSmartIdealRoutePlan({
+    athleteLevel: 'beginner',
+    startWorkoutNumber: 2,
+    delayCredits: 1,
+  });
+
+  expect(plan.workouts.slice(0, 2)).toMatchObject([
+    {
+      workoutNumber: 2,
+      type: 'rest',
+      transitionPending: true,
+      delayCreditsConsumed: 1,
+    },
+    {
+      workoutNumber: 2,
+      type: 'rest',
+    },
+  ]);
+  expect(plan.workouts[1].transitionPending).not.toBe(true);
+});
+
+test('one TOO EASY and one TOO HARD credit change the meet date by a net zero days', () => {
+  const plan = buildAdjustedSmartIdealRoutePlan({
+    athleteLevel: 'intermediate',
+    startWorkoutNumber: 23,
+    accelerationCredits: 1,
+    delayCredits: 1,
+  });
+
+  expect(plan.appliedCredits).toBe(1);
+  expect(plan.appliedDelayCredits).toBe(1);
+  expect(plan.workouts.findIndex(workout => workout.type === 'meet')).toBe(5);
 });
 
 test('the ideal route uses confirmed real 1RM with 2.5kg / 2.5-percentage-point precision', () => {

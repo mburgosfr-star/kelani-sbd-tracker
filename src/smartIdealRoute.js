@@ -239,6 +239,13 @@ function buildTaperPrescription(intensityRole) {
       kind: 'opener-single',
       basis: SMART_IDEAL_LOAD_POLICY.basis,
       topSet: { reps: 1, pct: 0.90 },
+      backoff: {
+        reps: 4,
+        pct: 0.60,
+        setCount: 'grid-dependent',
+        minimumSetCount: 1,
+        fullRowWhenAligned: true,
+      },
       normalBackoffs: false,
       fullGridRequired: true,
     };
@@ -248,8 +255,9 @@ function buildTaperPrescription(intensityRole) {
     kind: 'taper-work-sets',
     basis: SMART_IDEAL_LOAD_POLICY.basis,
     pct: intensityRole === M ? 0.70 : 0.60,
-    targetTotalWorkReps: 12,
-    targetIsApproximate: true,
+    reps: 4,
+    minimumSetCount: 3,
+    minimumRepsPerSet: 4,
     setCount: 'grid-dependent',
     fullGridRequired: true,
   };
@@ -377,6 +385,348 @@ export function getSmartIdealRouteWorkout({
     phase: null,
     accessoriesAllowed: false,
     lifts: [],
+  };
+}
+
+const ACCELERATION_ACTIONS = Object.freeze({
+  REMOVE_REDUNDANT_REST: 'remove-redundant-rest',
+  COMBINE_TRAINING: 'combine-training',
+  REMOVE_TRAINING: 'remove-training',
+  REMOVE_FINAL_REST: 'remove-final-rest',
+});
+
+function getRouteWorkoutNumbers(workout = {}) {
+  const explicitNumbers = Array.isArray(workout.routeWorkoutNumbers)
+    ? workout.routeWorkoutNumbers
+    : [workout.workoutNumber];
+
+  return [...new Set(explicitNumbers
+    .map(Number)
+    .filter(number => Number.isInteger(number) && number >= 1))]
+    .sort((a, b) => a - b);
+}
+
+function addAccelerationMetadata(workout, {
+  sourceWorkouts = [],
+  action,
+  skippedRouteWorkoutNumbers = [],
+  combinedRouteWorkoutNumbers = [],
+} = {}) {
+  const sources = sourceWorkouts.filter(Boolean);
+  const inheritedCredits = sources.reduce(
+    (total, source) => total + (
+      Number(source.accelerationCreditsConsumed) || 0
+    ),
+    0
+  );
+  const inheritedActions = sources.flatMap(source => (
+    Array.isArray(source.accelerationActions)
+      ? source.accelerationActions
+      : []
+  ));
+  const inheritedSkippedNumbers = sources.flatMap(source => (
+    Array.isArray(source.skippedRouteWorkoutNumbers)
+      ? source.skippedRouteWorkoutNumbers
+      : []
+  ));
+  const inheritedCombinedNumbers = sources.flatMap(source => (
+    Array.isArray(source.combinedRouteWorkoutNumbers)
+      ? source.combinedRouteWorkoutNumbers
+      : []
+  ));
+
+  return {
+    ...workout,
+    accelerationCreditsConsumed: inheritedCredits + 1,
+    accelerationActions: [...inheritedActions, action].filter(Boolean),
+    skippedRouteWorkoutNumbers: [...new Set([
+      ...inheritedSkippedNumbers,
+      ...skippedRouteWorkoutNumbers,
+    ])].sort((a, b) => a - b),
+    combinedRouteWorkoutNumbers: [...new Set([
+      ...inheritedCombinedNumbers,
+      ...combinedRouteWorkoutNumbers,
+    ])].sort((a, b) => a - b),
+  };
+}
+
+function removeRoutePlanEntry(plan, index, action) {
+  if (index < 0 || index >= plan.length - 1) return null;
+
+  const removed = plan[index];
+  const next = plan[index + 1];
+  const replacement = addAccelerationMetadata(next, {
+    sourceWorkouts: [removed, next],
+    action,
+    skippedRouteWorkoutNumbers: getRouteWorkoutNumbers(removed),
+  });
+
+  return [
+    ...plan.slice(0, index),
+    replacement,
+    ...plan.slice(index + 2),
+  ];
+}
+
+function findRedundantRestIndex(plan, hasTrailingCompletedRest) {
+  const candidates = [];
+
+  plan.forEach((workout, index) => {
+    if (workout.type !== 'rest') return;
+
+    const previousIsRest = index === 0
+      ? hasTrailingCompletedRest
+      : plan[index - 1]?.type === 'rest';
+    const nextIsRest = plan[index + 1]?.type === 'rest';
+
+    if (previousIsRest || nextIsRest) candidates.push(index);
+  });
+
+  // Keep the earlier recovery day and remove the latest duplicate. This
+  // preserves recovery immediately before the meet whenever possible.
+  return candidates.at(-1) ?? -1;
+}
+
+function canCombineRouteTrainingWorkouts(first, second) {
+  if (first?.type !== 'training' || second?.type !== 'training') return false;
+  if (first.stage !== second.stage || first.phase !== second.phase) return false;
+
+  const firstLifts = new Set((first.lifts || []).map(item => item.lift));
+  const secondLifts = new Set((second.lifts || []).map(item => item.lift));
+  if ([...firstLifts].some(liftName => secondLifts.has(liftName))) return false;
+
+  const combinedLifts = [...(first.lifts || []), ...(second.lifts || [])];
+  const heavyCount = combinedLifts.filter(
+    item => item.intensityRole === H
+  ).length;
+
+  return combinedLifts.length <= 3 && heavyCount <= 1;
+}
+
+function combineRouteTrainingWorkouts(first, second) {
+  const intensityOrder = { heavy: 0, medium: 1, light: 2 };
+  const routeWorkoutNumbers = [
+    ...getRouteWorkoutNumbers(first),
+    ...getRouteWorkoutNumbers(second),
+  ].sort((a, b) => a - b);
+  const combined = {
+    ...second,
+    workoutNumber: Math.max(...routeWorkoutNumbers),
+    stage: first.stage,
+    phase: first.phase,
+    accessoriesAllowed: Boolean(
+      first.accessoriesAllowed && second.accessoriesAllowed
+    ),
+    routeWorkoutNumbers,
+    lifts: [...(first.lifts || []), ...(second.lifts || [])]
+      .sort((a, b) => (
+        (intensityOrder[a.intensityRole] ?? 9) -
+        (intensityOrder[b.intensityRole] ?? 9)
+      )),
+  };
+
+  return addAccelerationMetadata(combined, {
+    sourceWorkouts: [first, second],
+    action: ACCELERATION_ACTIONS.COMBINE_TRAINING,
+    combinedRouteWorkoutNumbers: routeWorkoutNumbers,
+  });
+}
+
+function findSafestTrainingCombinationIndex(plan) {
+  for (let index = plan.length - 2; index >= 0; index -= 1) {
+    if (canCombineRouteTrainingWorkouts(plan[index], plan[index + 1])) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function getTrainingRemovalRisk(workout = {}) {
+  return (workout.lifts || []).reduce((risk, item) => {
+    if (item.intensityRole === H) return risk + 100;
+    if (item.intensityRole === M) return risk + 10;
+    return risk + 1;
+  }, 0);
+}
+
+function findSafestTrainingRemovalIndex(plan) {
+  return plan.reduce((bestIndex, workout, index) => {
+    if (workout.type !== 'training' || index >= plan.length - 1) {
+      return bestIndex;
+    }
+    if (bestIndex < 0) return index;
+
+    const risk = getTrainingRemovalRisk(workout);
+    const bestRisk = getTrainingRemovalRisk(plan[bestIndex]);
+
+    // Prefer the lightest dose. On equal risk, preserve the nearer workout
+    // and remove the later one so the immediate plan changes as little as
+    // possible.
+    return risk < bestRisk || (risk === bestRisk && index > bestIndex)
+      ? index
+      : bestIndex;
+  }, -1);
+}
+
+/**
+ * Spend one route-compression credit for every clean "too easy" workout.
+ * Each applied action removes exactly one future calendar slot. The order is
+ * deliberately conservative: duplicate recovery, a compatible combined day,
+ * the lightest remaining training day, and only then the final rest day.
+ */
+export function buildAcceleratedSmartIdealRoutePlan({
+  athleteLevel = 'intermediate',
+  startWorkoutNumber = 1,
+  accelerationCredits = 0,
+  hasTrailingCompletedRest = false,
+} = {}) {
+  const start = Math.max(Number(startWorkoutNumber) || 1, 1);
+  const requestedCredits = Math.max(
+    Math.floor(Number(accelerationCredits) || 0),
+    0
+  );
+  let workouts = [];
+
+  if (start > SMART_IDEAL_MEET_WORKOUT_NUMBER) {
+    const postMeetWorkout = getSmartIdealRouteWorkout({
+      athleteLevel,
+      workoutNumber: start,
+    });
+    if (postMeetWorkout) workouts.push(postMeetWorkout);
+  }
+
+  for (
+    let workoutNumber = start;
+    workoutNumber <= SMART_IDEAL_MEET_WORKOUT_NUMBER;
+    workoutNumber += 1
+  ) {
+    const workout = getSmartIdealRouteWorkout({
+      athleteLevel,
+      workoutNumber,
+    });
+    if (workout) workouts.push(workout);
+  }
+
+  let appliedCredits = 0;
+
+  while (appliedCredits < requestedCredits && workouts.length > 1) {
+    const redundantRestIndex = findRedundantRestIndex(
+      workouts,
+      hasTrailingCompletedRest
+    );
+    if (redundantRestIndex >= 0) {
+      workouts = removeRoutePlanEntry(
+        workouts,
+        redundantRestIndex,
+        ACCELERATION_ACTIONS.REMOVE_REDUNDANT_REST
+      );
+      appliedCredits += 1;
+      continue;
+    }
+
+    const combinationIndex = findSafestTrainingCombinationIndex(workouts);
+    if (combinationIndex >= 0) {
+      workouts = [
+        ...workouts.slice(0, combinationIndex),
+        combineRouteTrainingWorkouts(
+          workouts[combinationIndex],
+          workouts[combinationIndex + 1]
+        ),
+        ...workouts.slice(combinationIndex + 2),
+      ];
+      appliedCredits += 1;
+      continue;
+    }
+
+    const trainingRemovalIndex = findSafestTrainingRemovalIndex(workouts);
+    if (trainingRemovalIndex >= 0) {
+      workouts = removeRoutePlanEntry(
+        workouts,
+        trainingRemovalIndex,
+        ACCELERATION_ACTIONS.REMOVE_TRAINING
+      );
+      appliedCredits += 1;
+      continue;
+    }
+
+    const finalRestIndex = workouts.findLastIndex(
+      (workout, index) => workout.type === 'rest' && index < workouts.length - 1
+    );
+    if (finalRestIndex >= 0) {
+      workouts = removeRoutePlanEntry(
+        workouts,
+        finalRestIndex,
+        ACCELERATION_ACTIONS.REMOVE_FINAL_REST
+      );
+      appliedCredits += 1;
+      continue;
+    }
+
+    break;
+  }
+
+  return {
+    workouts,
+    requestedCredits,
+    appliedCredits,
+    unappliedCredits: Math.max(requestedCredits - appliedCredits, 0),
+  };
+}
+
+/**
+ * Apply the two symmetric calendar corrections to the remaining ideal route.
+ * TOO EASY removes one future calendar slot through the conservative
+ * compression policy above. TOO HARD inserts one real recovery day before
+ * the next untouched route row. Keeping the inserted day transition-only
+ * means it consumes a calendar day without also consuming that route row.
+ */
+export function buildAdjustedSmartIdealRoutePlan({
+  athleteLevel = 'intermediate',
+  startWorkoutNumber = 1,
+  accelerationCredits = 0,
+  delayCredits = 0,
+  hasTrailingCompletedRest = false,
+} = {}) {
+  const acceleratedPlan = buildAcceleratedSmartIdealRoutePlan({
+    athleteLevel,
+    startWorkoutNumber,
+    accelerationCredits,
+    hasTrailingCompletedRest,
+  });
+  const requestedDelayCredits = Math.max(
+    Math.floor(Number(delayCredits) || 0),
+    0
+  );
+  const nextRouteWorkout = acceleratedPlan.workouts[0] || null;
+  const insertedRecoveryDays = Array.from(
+    { length: requestedDelayCredits },
+    () => ({
+      workoutNumber: Number(nextRouteWorkout?.workoutNumber) ||
+        Math.max(Number(startWorkoutNumber) || 1, 1),
+      type: 'rest',
+      stage: nextRouteWorkout?.stage || 'normal',
+      phase: nextRouteWorkout?.phase || null,
+      accessoriesAllowed: false,
+      lifts: [],
+      transitionPending: true,
+      adjustmentReason: 'too-hard-recovery',
+      delayCreditsConsumed: 1,
+    })
+  );
+
+  return {
+    ...acceleratedPlan,
+    workouts: [
+      ...insertedRecoveryDays,
+      ...acceleratedPlan.workouts,
+    ],
+    requestedDelayCredits,
+    appliedDelayCredits: insertedRecoveryDays.length,
+    unappliedDelayCredits: Math.max(
+      requestedDelayCredits - insertedRecoveryDays.length,
+      0
+    ),
   };
 }
 

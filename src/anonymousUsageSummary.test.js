@@ -39,25 +39,50 @@ test('anonymous usage metrics count completed sessions once and exclude personal
   });
 
   expect(metrics).toMatchObject({
-    schemaVersion: 2,
+    schemaVersion: 3,
     completedSessions: 3,
     trainingSessions: 1,
     recoverySessions: 1,
     meetSessions: 1,
     failedSets: 1,
     milestoneCelebrations: 1,
-    efforts: { easy: 1, good: 1, hard: 1, tooMuch: 0, unrecorded: 0 },
+    efforts: { easy: 1, good: 1, hard: 1, unrecorded: 0 },
   });
 
   const report = buildAnonymousUsageReport(metrics);
-  expect(report).toContain('schema_version=2');
+  expect(report).toContain('schema_version=3');
   expect(report).toContain('completed_sessions=3');
   expect(report).toContain('failed_sets=1');
   expect(report).not.toContain('failed_or_skipped_sets');
+  expect(report).not.toContain('effort_too_much');
   expect(report).not.toContain('137.5');
   expect(report).not.toContain('92.5');
   expect(report).not.toContain('150');
   expect(report).not.toContain('2.5');
+});
+
+test('legacy hard-like feedback is combined into the single TOO HARD metric', () => {
+  const metrics = buildAnonymousUsageMetrics({
+    history: ['hard', 'tooMuch', 'veryhard', 'max'].map((workoutEffort, index) => ({
+      cycle: 1,
+      workoutNumber: index + 1,
+      lift: 'Squat',
+      workoutSnapshot: {
+        type: 'training',
+        workoutEffort,
+        lifts: [],
+      },
+    })),
+  });
+
+  expect(metrics.efforts).toEqual({
+    easy: 0,
+    good: 0,
+    hard: 4,
+    unrecorded: 0,
+  });
+  expect(buildAnonymousUsageReport(metrics)).toContain('effort_hard=4');
+  expect(buildAnonymousUsageReport(metrics)).not.toContain('effort_too_much');
 });
 
 test('failed-set metric counts each missed set once and ignores untouched optional work', () => {
@@ -105,6 +130,6 @@ test('failed-set metric counts each missed set once and ignores untouched option
 test('anonymous usage report contains only the documented aggregate fields', () => {
   const report = buildAnonymousUsageReport(buildAnonymousUsageMetrics());
 
-  expect(report.split('\n')).toHaveLength(21);
+  expect(report.split('\n')).toHaveLength(20);
   expect(report).not.toMatch(/body|date|device|history|one_rm|e1rm/i);
 });

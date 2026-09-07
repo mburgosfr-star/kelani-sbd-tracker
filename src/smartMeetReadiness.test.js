@@ -303,13 +303,22 @@ test('post-meet recovery is one day plus each missed attempt, capped at ten days
     oneRMs: { Squat: 100, Bench: 80, Deadlift: 140 },
   };
 
-  expect(buildSmartReadinessSignals({
-    ...context,
-    history: makeCompletedMeetEntries({
-      workoutEffort: 'tooMuch',
-      failedOrSkippedSetCount: 0,
-    }),
-  }).postMeetRecoveryTarget).toBe(1);
+  ['easy', 'good', 'hard', 'tooMuch', 'max'].forEach(workoutEffort => {
+    expect(buildSmartReadinessSignals({
+      ...context,
+      history: makeCompletedMeetEntries({
+        workoutEffort,
+        failedOrSkippedSetCount: 0,
+      }),
+    }).postMeetRecoveryTarget).toBe(1);
+  });
+
+  [1, 2, 3].forEach(failedOrSkippedSetCount => {
+    expect(buildSmartReadinessSignals({
+      ...context,
+      history: makeCompletedMeetEntries({ failedOrSkippedSetCount }),
+    }).postMeetRecoveryTarget).toBe(1 + failedOrSkippedSetCount);
+  });
 
   expect(buildSmartReadinessSignals({
     ...context,

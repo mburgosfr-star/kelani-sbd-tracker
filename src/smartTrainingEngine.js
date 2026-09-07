@@ -44,6 +44,7 @@ import {
   generateWarmups,
   generateSmartWorkoutPrepItems,
   roundMeetWeight,
+  warmupLoadJumpsNeverIncrease,
 } from './warmupAndPrepGeneration';
 import {
   generateAccessoriesForWorkout,
@@ -54,6 +55,7 @@ import { buildMeetAttemptsFromOneRM } from './meetAttemptPlanning';
 import {
   SMART_IDEAL_MEET_WORKOUT_NUMBER,
   SMART_IDEAL_ROUTE_VERSION,
+  buildAdjustedSmartIdealRoutePlan,
   getSmartIdealRouteEntryWorkoutNumber,
   getSmartIdealRouteWorkout,
 } from './smartIdealRoute';
@@ -182,9 +184,50 @@ function hasUnrecoveredSmartHardEffort(readiness = {}) {
 export function countFailedOrSkippedSetsFromSnapshot(snapshot = {}) {
   const liftSets = (snapshot?.lifts || []).flatMap(liftBlock => liftBlock?.sets || []);
   const directSets = snapshot?.sets || [];
-  const allSets = liftSets.length > 0 ? liftSets : directSets;
+  const mainSets = liftSets.length > 0 ? liftSets : directSets;
+  const failedAccessorySetCount = (snapshot?.accessories || []).reduce(
+    (total, accessory) => {
+      const failed = accessory?.failed || [];
+      const skipped = accessory?.skipped || [];
+      const setCount = Math.max(failed.length, skipped.length);
 
-  return allSets.filter(set => set?.failed || set?.skipped).length;
+      return total + Array.from({ length: setCount }, (_, index) => (
+        Boolean(failed[index] || skipped[index])
+      )).filter(Boolean).length;
+    },
+    0
+  );
+
+  return mainSets.filter(set => set?.failed || set?.skipped).length +
+    failedAccessorySetCount;
+}
+
+function hasMaximumSetEffortFromSnapshot(snapshot = {}) {
+  const liftSets = (snapshot?.lifts || []).flatMap(liftBlock => liftBlock?.sets || []);
+  const directSets = snapshot?.sets || [];
+  const mainSets = liftSets.length > 0 ? liftSets : directSets;
+
+  return mainSets.some(set => (
+    ['max', 'toomuch', 'veryhard'].includes(
+      String(set?.effort || '').trim().toLowerCase()
+    )
+  ));
+}
+
+export function hasAutomaticTooHardWorkoutOutcome(snapshot = {}) {
+  return (
+    countFailedOrSkippedSetsFromSnapshot(snapshot) > 0 ||
+    hasMaximumSetEffortFromSnapshot(snapshot)
+  );
+}
+
+function hasTooHardRouteOutcome(snapshot = {}) {
+  const effort = String(snapshot?.workoutEffort || '').trim().toLowerCase();
+
+  return (
+    ['hard', 'toomuch', 'veryhard', 'max'].includes(effort) ||
+    hasAutomaticTooHardWorkoutOutcome(snapshot)
+  );
 }
 
 function countFailedOrSkippedSetsForLiftFromSnapshot(snapshot = {}, lift = null) {
@@ -495,6 +538,75 @@ function getUniqueCompletedSmartWorkoutSnapshots(history = [], currentCycle = 1)
     .map(([workoutNumber, snapshot]) => ({ workoutNumber, snapshot }));
 }
 
+function getSmartIdealRouteAdjustmentState({
+  history = [],
+  currentCycle = 1,
+} = {}) {
+  const completed = getUniqueCompletedSmartWorkoutSnapshots(
+    history,
+    currentCycle
+  );
+  const firstRouteIndex = completed.findIndex(({ snapshot }) => (
+    Boolean(snapshot?.smartIdealRoute)
+  ));
+
+  // Do not reinterpret older, unmarked history under a policy that did not
+  // exist when those workouts were completed. Once the ideal route starts,
+  // both route and adaptive training days can earn a compression credit.
+  const activeRouteHistory = firstRouteIndex >= 0
+    ? completed.slice(firstRouteIndex)
+    : [];
+  const earnedAccelerationCredits = activeRouteHistory.filter(({ snapshot }) => {
+    if (snapshot?.type !== 'training') return false;
+    if (hasAutomaticTooHardWorkoutOutcome(snapshot)) return false;
+
+    return String(snapshot.workoutEffort || '')
+      .trim()
+      .toLowerCase() === 'easy';
+  }).length;
+  const consumedAccelerationCredits = activeRouteHistory.reduce(
+    (total, { snapshot }) => total + Math.max(
+      Number(snapshot?.smartIdealRoute?.accelerationCreditsConsumed) || 0,
+      0
+    ),
+    0
+  );
+  const earnedDelayCredits = activeRouteHistory.filter(({ snapshot }) => (
+    snapshot?.type === 'training' && hasTooHardRouteOutcome(snapshot)
+  )).length;
+  const consumedDelayCredits = activeRouteHistory.reduce(
+    (total, { snapshot }) => total + Math.max(
+      Number(snapshot?.smartIdealRoute?.delayCreditsConsumed) || 0,
+      0
+    ),
+    0
+  );
+  const latestActiveRouteSnapshot = activeRouteHistory.at(-1)?.snapshot || null;
+  const pendingDelayCredits = Boolean(
+    latestActiveRouteSnapshot?.type === 'training' &&
+    hasTooHardRouteOutcome(latestActiveRouteSnapshot)
+  ) ? 1 : 0;
+
+  return {
+    earnedAccelerationCredits,
+    consumedAccelerationCredits,
+    pendingAccelerationCredits: Math.max(
+      earnedAccelerationCredits - consumedAccelerationCredits,
+      0
+    ),
+    earnedDelayCredits,
+    consumedDelayCredits,
+    // A delay is consumed by the immediately generated transition rest. Its
+    // calendar effect then persists naturally because the real workout index
+    // advanced while the ideal-route coordinate did not. Looking only at the
+    // latest completed route day avoids retroactively adding recovery for old
+    // HARD records that already continued under an earlier app version.
+    pendingDelayCredits,
+    hasTrailingCompletedRest:
+      activeRouteHistory.at(-1)?.snapshot?.type === 'rest',
+  };
+}
+
 export function isSmartIdealRoutePristine({
   history = [],
   currentCycle = 1,
@@ -579,7 +691,8 @@ export function getNextSmartIdealRouteWorkoutNumber({
     // mid-cycle migration. This prevents duplicate or triple recovery days.
     if (
       snapshot?.type === 'rest' &&
-      pendingRouteWorkout?.type === 'rest'
+      pendingRouteWorkout?.type === 'rest' &&
+      !snapshot?.smartIdealRoute?.transitionPending
     ) {
       nextRouteWorkoutNumber += 1;
     }
@@ -589,14 +702,28 @@ export function getNextSmartIdealRouteWorkoutNumber({
 }
 
 function isSuccessfulSmartIdealRouteSnapshot(snapshot = {}) {
-  if (countFailedOrSkippedSetsFromSnapshot(snapshot) > 0) return false;
   if (snapshot.type === 'rest') return true;
+  if (snapshot.type === 'meet') {
+    return countFailedOrSkippedSetsFromSnapshot(snapshot) === 0;
+  }
 
   const effort = String(snapshot.workoutEffort || '')
     .trim()
     .toLowerCase();
 
-  return effort === 'good' || effort === 'normal';
+  // TOO EASY and TOO HARD are controlled calendar deviations, not exits
+  // from the ideal route. Their respective credit is applied by the route
+  // plan builder. A missed non-meet set is likewise handled by exactly one
+  // TOO HARD recovery day. isSmartIdealRoutePristine remains stricter above.
+  return [
+    'easy',
+    'good',
+    'normal',
+    'hard',
+    'toomuch',
+    'veryhard',
+    'max',
+  ].includes(effort) || hasAutomaticTooHardWorkoutOutcome(snapshot);
 }
 
 export function shouldFollowSmartIdealRoute({
@@ -634,12 +761,10 @@ export function shouldFollowSmartIdealRoute({
   const onRouteWorkouts = completed.slice(firstOnRouteIndex);
   const latestCompletedRouteWorkout = onRouteWorkouts.at(-1)?.snapshot || null;
 
-  // A deliberate route rest is already the conservative response to recent
-  // work. HARD (or other non-GOOD feedback) may end the pristine route, but
-  // it must never turn that already-planned rest into extra training. Keep
-  // the rest whenever the immediately preceding route workout had no failed
-  // or skipped work. Actual failures still hand control to autoregulation so
-  // it can choose a stronger intervention such as a deload.
+  // An unknown legacy feedback value must never turn a deliberate route rest
+  // into training. TOO EASY and TOO HARD outcomes are handled as successful
+  // route deviations below; their calendar adjustment is owned by the route
+  // plan rather than by the old autoregulation branches.
   if (
     nextRouteWorkout?.type === 'rest' &&
     latestCompletedRouteWorkout?.smartIdealRoute &&
@@ -3728,18 +3853,84 @@ function getSmartIdealHeavyTopWeight({
   return Math.min(Math.max(target, minimum), realOneRMCap);
 }
 
-function distributeSmartIdealTaperReps(sets = [], targetTotalReps = 12) {
-  const count = sets.length;
-  if (count === 0) return sets;
+function getSmartIdealTaperVolumeWeight({
+  realOneRM = 0,
+  pct = 0.60,
+} = {}) {
+  const numericRealOneRM = Number(realOneRM) || 0;
+  const prescribedPct = Number(pct) || 0.60;
 
-  const baseReps = Math.max(1, Math.floor(targetTotalReps / count));
-  let remainder = Math.max(targetTotalReps - baseReps * count, 0);
+  return Math.max(
+    roundBarbellWeight(numericRealOneRM * prescribedPct),
+    roundBarbellWeight(numericRealOneRM * 0.60, 'up')
+  );
+}
 
-  return sets.map(set => {
-    const reps = baseReps + (remainder > 0 ? 1 : 0);
-    remainder = Math.max(remainder - 1, 0);
-    return { ...set, reps };
-  });
+function taperWarmupSubsetIsSafe(warmups = [], targetWeight = 0) {
+  const weights = warmups.map(item => Number(item?.weight) || 0);
+  const target = Number(targetWeight) || 0;
+
+  if (target < 30) return weights.length === 0;
+  if (!weights.length || weights[0] !== 20) return false;
+  if (weights.some(weight => weight <= 0 || weight >= target || weight % 10 !== 0)) {
+    return false;
+  }
+
+  const firstJump = weights.length > 1
+    ? weights[1] - weights[0]
+    : target - weights[0];
+
+  return (
+    firstJump <= 50 &&
+    warmupLoadJumpsNeverIncrease(weights, target)
+  );
+}
+
+function trimTaperWarmupsForFixedWorkSets({
+  warmups = [],
+  workSetCount = 0,
+  targetWeight = 0,
+} = {}) {
+  const removeCount = (
+    warmups.length + Number(workSetCount || 0)
+  ) % SMART_LIFT_GRID_COLUMNS;
+
+  if (removeCount === 0 || removeCount >= warmups.length) return warmups;
+
+  // Keep the universal 20kg starting set. Try later warm-ups first, so a
+  // redundant final rung is removed before an earlier load bridge. At most
+  // three removals are ever needed for the four-column grid.
+  const removableIndexes = Array.from(
+    { length: Math.max(warmups.length - 1, 0) },
+    (_, index) => warmups.length - 1 - index
+  );
+  let safeSubset = null;
+
+  function search(startIndex, selectedIndexes) {
+    if (safeSubset) return;
+    if (selectedIndexes.length === removeCount) {
+      const removed = new Set(selectedIndexes);
+      const candidate = warmups.filter((_, index) => !removed.has(index));
+      if (taperWarmupSubsetIsSafe(candidate, targetWeight)) {
+        safeSubset = candidate;
+      }
+      return;
+    }
+
+    for (
+      let index = startIndex;
+      index < removableIndexes.length;
+      index += 1
+    ) {
+      search(index + 1, [
+        ...selectedIndexes,
+        removableIndexes[index],
+      ]);
+    }
+  }
+
+  search(0, []);
+  return safeSubset || warmups;
 }
 
 function getSmartIdealTopSetLabel(reps) {
@@ -3760,6 +3951,32 @@ function buildSmartIdealRouteMetadata(routeWorkout, athleteLevel) {
     postMeetRecoveryTarget:
       Number(routeWorkout.postMeetRecoveryTarget) || null,
     nextCycleWorkout: Number(routeWorkout.nextCycleWorkout) || null,
+    routeWorkoutNumbers: Array.isArray(routeWorkout.routeWorkoutNumbers)
+      ? [...routeWorkout.routeWorkoutNumbers]
+      : null,
+    accelerationCreditsConsumed: Math.max(
+      Number(routeWorkout.accelerationCreditsConsumed) || 0,
+      0
+    ),
+    accelerationActions: Array.isArray(routeWorkout.accelerationActions)
+      ? [...routeWorkout.accelerationActions]
+      : [],
+    skippedRouteWorkoutNumbers: Array.isArray(
+      routeWorkout.skippedRouteWorkoutNumbers
+    )
+      ? [...routeWorkout.skippedRouteWorkoutNumbers]
+      : [],
+    combinedRouteWorkoutNumbers: Array.isArray(
+      routeWorkout.combinedRouteWorkoutNumbers
+    )
+      ? [...routeWorkout.combinedRouteWorkoutNumbers]
+      : [],
+    transitionPending: routeWorkout.transitionPending ? true : undefined,
+    adjustmentReason: routeWorkout.adjustmentReason || null,
+    delayCreditsConsumed: Math.max(
+      Number(routeWorkout.delayCreditsConsumed) || 0,
+      0
+    ),
   };
 }
 
@@ -3853,7 +4070,7 @@ export function buildSmartIdealTrainingWorkout({
         prescribedPct: isTaper ? topSet.pct : null,
       })];
 
-      if (prescription.backoff) {
+      if (prescription.backoff && !isTaper) {
         sets.push(...Array.from({ length: 3 }, () => buildSmartIdealSet({
           lift: routeLift.lift,
           labelKey: 'backoff',
@@ -3867,10 +4084,17 @@ export function buildSmartIdealTrainingWorkout({
       sets = Array.from({ length: 3 }, () => buildSmartIdealSet({
         lift: routeLift.lift,
         labelKey: 'workSets',
-        reps: 4,
+        reps: Number(prescription.reps) || 4,
         pct: prescription.pct,
         realOneRM,
         groupKey: `${routeLift.lift}-worksets`,
+        weightOverride: isTaper
+          ? getSmartIdealTaperVolumeWeight({
+            realOneRM,
+            pct: prescription.pct,
+          })
+          : null,
+        prescribedPct: isTaper ? prescription.pct : null,
       }));
     }
 
@@ -3880,24 +4104,41 @@ export function buildSmartIdealTrainingWorkout({
       routeWorkout.lifts.length === 1
     );
 
-    // A taper opener remains the only fixed main set, but its universal
-    // warm-up count determines how many light back-offs fit in the remaining
-    // four-column cells. Do not manufacture duplicate warm-ups for layout.
-    if (isTaper && isHeavy && !sets.some(set => set.labelKey === 'backoff')) {
-      const addCount = (
+    // A taper opener is followed by enough light 4-rep back-offs to finish
+    // its current visual row. If the opener already finishes a row, add one
+    // complete row of four back-offs instead of treating the single as the
+    // whole lift session.
+    if (isTaper && isHeavy) {
+      const taperBackoff = prescription.backoff || {
+        reps: 4,
+        pct: 0.60,
+      };
+      const addCount = ((
         SMART_LIFT_GRID_COLUMNS -
         ((warmups.length + sets.length) % SMART_LIFT_GRID_COLUMNS)
-      ) % SMART_LIFT_GRID_COLUMNS;
+      ) % SMART_LIFT_GRID_COLUMNS) || SMART_LIFT_GRID_COLUMNS;
 
       sets.push(...Array.from({ length: addCount }, () => buildSmartIdealSet({
         lift: routeLift.lift,
         labelKey: 'backoff',
-        reps: 3,
-        pct: 0.60,
+        reps: Number(taperBackoff.reps) || 4,
+        pct: Number(taperBackoff.pct) || 0.60,
         realOneRM,
         groupKey: `${routeLift.lift}-taper-backoff`,
-        prescribedPct: 0.60,
+        weightOverride: getSmartIdealTaperVolumeWeight({
+          realOneRM,
+          pct: taperBackoff.pct,
+        }),
+        prescribedPct: Number(taperBackoff.pct) || 0.60,
       })));
+    }
+
+    if (isTaper && !isHeavy) {
+      warmups = trimTaperWarmupsForFixedWorkSets({
+        warmups,
+        workSetCount: sets.length,
+        targetWeight: sets[0]?.weight,
+      });
     }
 
     if (sets.some(set => ['backoff', 'workSets'].includes(set.labelKey))) {
@@ -3907,18 +4148,13 @@ export function buildSmartIdealTrainingWorkout({
         minimumVolumeSets: 3,
       });
 
-      if (isTaper && !isHeavy) {
-        sets = distributeSmartIdealTaperReps(
+      if (!isTaper) {
+        warmups = generateWarmups(
           sets,
-          Number(prescription.targetTotalWorkReps) || 12
+          routeLift.lift,
+          routeWorkout.lifts.length === 1
         );
       }
-
-      warmups = generateWarmups(
-        sets,
-        routeLift.lift,
-        routeWorkout.lifts.length === 1
-      );
     }
 
     const role = liftIndex === 0
@@ -4758,12 +4994,23 @@ function generateSmartWorkouts({
     entryWorkoutNumber: idealRouteEntryWorkoutNumber,
     athleteLevel,
   });
-  const nextIdealRouteWorkout = idealRouteEnabled
-    ? getSmartIdealRouteWorkout({
-      workoutNumber: idealRouteWorkoutNumber,
+  const idealRouteAdjustments = getSmartIdealRouteAdjustmentState({
+    history,
+    currentCycle,
+  });
+  const adjustedIdealRoutePlan = idealRouteEnabled
+    ? buildAdjustedSmartIdealRoutePlan({
       athleteLevel,
+      startWorkoutNumber: idealRouteWorkoutNumber,
+      accelerationCredits:
+        idealRouteAdjustments.pendingAccelerationCredits,
+      delayCredits: idealRouteAdjustments.pendingDelayCredits,
+      hasTrailingCompletedRest:
+        idealRouteAdjustments.hasTrailingCompletedRest,
     })
     : null;
+  const nextIdealRouteWorkout = adjustedIdealRoutePlan?.workouts?.[0]
+    || null;
   const candidateIdealRouteWorkout = (
     idealRouteEnabled &&
     shouldFollowSmartIdealRoute({
@@ -4802,10 +5049,14 @@ function generateSmartWorkouts({
       : null;
 
     if (idealRouteWorkout.workoutNumber <= SMART_IDEAL_MEET_WORKOUT_NUMBER) {
-      const workoutsBeforeMeet = Math.max(
-        SMART_IDEAL_MEET_WORKOUT_NUMBER - idealRouteWorkout.workoutNumber,
-        0
-      );
+      const meetPlanIndex = adjustedIdealRoutePlan?.workouts
+        ?.findIndex(workout => workout.type === 'meet');
+      const workoutsBeforeMeet = meetPlanIndex >= 0
+        ? meetPlanIndex
+        : Math.max(
+          SMART_IDEAL_MEET_WORKOUT_NUMBER - idealRouteWorkout.workoutNumber,
+          0
+        );
       const projectedMeetWorkoutNumber =
         decisionWorkoutNumber + workoutsBeforeMeet;
       const meetPlanReady = Boolean(smartDecision.readiness?.meetPlanReady);
@@ -4835,6 +5086,14 @@ function generateSmartWorkouts({
             ? 6
             : workoutsBeforeMeet,
           projectedByIdealRoute: true,
+          acceleratedByTooEasyCount:
+            adjustedIdealRoutePlan?.appliedCredits || 0,
+          pendingTooEasyAccelerationCount:
+            idealRouteAdjustments.pendingAccelerationCredits,
+          delayedByTooHardCount:
+            adjustedIdealRoutePlan?.appliedDelayCredits || 0,
+          pendingTooHardDelayCount:
+            idealRouteAdjustments.pendingDelayCredits,
           assumedSuccessfulFutureWorkouts: true,
         },
       };

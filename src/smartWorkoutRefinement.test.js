@@ -1106,7 +1106,7 @@ test('explains fatigue with score and previous workout effort', () => {
       }
     )
   ).toEqual([
-    'fatigue 1/2 (previous workout: Hard)',
+    'fatigue 1/2 (previous workout: Too hard)',
     'meet plan',
   ]);
 

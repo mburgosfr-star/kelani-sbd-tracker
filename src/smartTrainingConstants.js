@@ -68,7 +68,7 @@ export const SMART_DELOAD = {
 // used for ordinary medium work.
 export const SMART_PRIMARY_BACKOFF_MAX_PCT = 0.75;
 
-export const SMART_PRESCRIPTION_VERSION = 11;
+export const SMART_PRESCRIPTION_VERSION = 12;
 
 export const SMART_GENERATED_FLAGS = {
   RECOVERY: 'smartGeneratedRecovery',
