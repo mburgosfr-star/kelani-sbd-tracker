@@ -1,6 +1,7 @@
 import { roundBarbellWeight } from './smartFrequencyPolicy';
 import { isTopSetLabel, isMainOrAttemptLabelKey } from './workoutHistoryStats';
 import { normalizePreparationMode } from './programProfiles';
+import { getWorkoutPreparation } from './workoutSetup';
 
 const DEPRECATED_PREP_LABEL_KEYS = new Set([
   'prepThoracicRotationSideLying',
@@ -243,14 +244,26 @@ export function generatePrepItems(lift, preparationMode = 'basicFirst') {
 
 export function generateSmartWorkoutPrepItems(
   lifts = [],
-  preparationMode = 'basicFirst'
+  preparationMode = 'basicFirst',
+  workoutSetup = null
 ) {
   const mode = normalizePreparationMode(preparationMode);
   const liftNames = [...new Set((lifts || [])
     .map(lift => typeof lift === 'string' ? lift : lift?.lift)
     .filter(lift => ['Squat', 'Bench', 'Deadlift'].includes(lift)))];
 
-  if (mode === 'off' || liftNames.length === 0) return [];
+  if (liftNames.length === 0) return [];
+
+  if (workoutSetup) {
+    return getWorkoutPreparation(workoutSetup, liftNames).map(item => ({
+      labelKey: item.labelKey,
+      prescription: `${item.sets}×${item.reps || item.durationSeconds}`,
+      perSide: !!item.perSide,
+      done: false,
+    }));
+  }
+
+  if (mode === 'off') return [];
 
   // This deliberately complete five-movement routine already prepares the
   // whole workout and should remain intact as one shared section.

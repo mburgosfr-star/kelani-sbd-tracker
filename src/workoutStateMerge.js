@@ -136,6 +136,13 @@ export function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, hist
   const completedWorkoutNumbers = getCompletedWorkoutNumbers(history, cycle);
 
   return workouts.map((workout, index) => {
+    const completedSnapshot = history.find(entry =>
+      Number(entry.workoutNumber) === Number(workout.number) &&
+      Number(getEntryCycle(entry)) === Number(cycle) &&
+      entry.workoutSnapshot?.completed
+    )?.workoutSnapshot;
+    if (completedSnapshot) return completedSnapshot;
+    if (workout.completed) return workout;
     const generated = generatedWorkouts[index];
     if (!generated) return workout;
 
@@ -203,6 +210,13 @@ export function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, hist
 
 export function hydrateWorkoutsWithHistory(workouts, history, cycle) {
   return workouts.map(workout => {
+    const completedSnapshot = history.find(entry =>
+      Number(entry.workoutNumber) === Number(workout.number) &&
+      Number(getEntryCycle(entry)) === Number(cycle) &&
+      entry.workoutSnapshot?.completed
+    )?.workoutSnapshot;
+    if (completedSnapshot) return completedSnapshot;
+    if (workout.completed) return workout;
     const savedSnapshot = history.find(
       entry =>
         entry.workoutNumber === workout.number &&

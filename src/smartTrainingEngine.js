@@ -4036,6 +4036,7 @@ export function buildSmartIdealTrainingWorkout({
   benchPressVariant = 'standard',
   squatVariant = 'standard',
   history = [],
+  workoutSetup = null,
 } = {}) {
   if (routeWorkout?.type !== 'training') return null;
 
@@ -4198,7 +4199,7 @@ export function buildSmartIdealTrainingWorkout({
   const accessoryIntensity = isTaper ? 'light' : 'normal';
   const accessories = generateAccessoriesForWorkout({
     type: 'training', lifts: liftBlocks, accessoryIntensity,
-  }, { accessoryMode, accessoryPRs, oneRMs: realOneRMs, history, smart: true });
+  }, { accessoryMode, accessoryPRs, oneRMs: realOneRMs, history, smart: true, workoutSetup });
 
   return applySmartIdealRouteMetadata({
     ...resetSmartWorkoutProgress(sourceWorkout),
@@ -4210,7 +4211,7 @@ export function buildSmartIdealTrainingWorkout({
     lifts: liftBlocks,
     sets: primaryBlock?.sets || [],
     warmups: primaryBlock?.warmups || [],
-    prepItems: generateSmartWorkoutPrepItems(liftBlocks, normalizedPreparationMode),
+    prepItems: generateSmartWorkoutPrepItems(liftBlocks, normalizedPreparationMode, workoutSetup),
     accessoryIntensity,
     accessories,
     cooldownItems: [],
@@ -4929,6 +4930,7 @@ function generateSmartWorkouts({
   meetPlannerAttempts = {},
   oneRMs = {},
   idealRouteEnabled = false,
+  workoutSetup = null,
 }) {
   const smartContext = buildSmartTrainingContext({
     history,
@@ -4948,6 +4950,7 @@ function generateSmartWorkouts({
     benchPressVariant,
     squatVariant,
     cooldownMode
+    , workoutSetup
   );
 
   const generatedWorkouts = buildSmartWorkoutPool(
@@ -5015,6 +5018,7 @@ function generateSmartWorkouts({
     idealRouteEnabled &&
     shouldFollowSmartIdealRoute({
       history,
+      workoutSetup,
       currentCycle,
       readiness: smartDecision.readiness,
       nextRouteWorkout: nextIdealRouteWorkout,
@@ -5152,6 +5156,7 @@ function generateSmartWorkouts({
       benchPressVariant,
       squatVariant,
       history,
+      workoutSetup,
     });
   }
 
@@ -5618,6 +5623,7 @@ export function generateWorkoutsForTrainingModelUnconstrained(model, args = {}) 
     meetPlannerAttempts: args.meetPlannerAttempts || {},
     oneRMs: args.oneRMs || args.data?.oneRMs || {},
     idealRouteEnabled: Boolean(args.idealRouteEnabled),
+    workoutSetup: args.workoutSetup || null,
   };
 
   if (isSmartTrainingModel(model)) {
@@ -5636,6 +5642,7 @@ export function generateWorkoutsForTrainingModelUnconstrained(model, args = {}) 
     workoutArgs.benchPressVariant,
     workoutArgs.squatVariant,
     workoutArgs.cooldownMode
+    , workoutArgs.workoutSetup
   );
 }
 
@@ -6082,7 +6089,7 @@ export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
     return {
       ...workout,
       lifts,
-      prepItems: generateSmartWorkoutPrepItems(lifts, options.preparationMode),
+      prepItems: generateSmartWorkoutPrepItems(lifts, options.preparationMode, options.workoutSetup),
       // Other slots already carry their template's Row rule. Only reselect
       // the live slot; do not rescan the full history for every cached day.
       accessories: index === currentIndex ? generateAccessoriesForWorkout(workout, {
@@ -6091,6 +6098,7 @@ export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
         oneRMs: { Squat: options.squat, Bench: options.bench, Deadlift: options.deadlift },
         history: options.history || options.data?.history || [],
         smart: true,
+        workoutSetup: options.workoutSetup,
       }) : workout.accessories,
     };
   });

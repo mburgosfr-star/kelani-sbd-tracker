@@ -1,4 +1,4 @@
-import { mergeGeneratedWorkoutStructure } from './workoutStateMerge';
+import { hydrateWorkoutsWithHistory, mergeGeneratedWorkoutStructure } from './workoutStateMerge';
 import { applyAccessoryPlanToWorkouts, generateAccessoriesForWorkout } from './accessoryGeneration';
 
 function multiLiftWorkout({ done }) {
@@ -21,6 +21,23 @@ function multiLiftWorkout({ done }) {
     accessories: [],
   };
 }
+
+test('completed snapshots remain identical after regeneration, hydration and JSON reload', () => {
+  const snapshot = {
+    ...multiLiftWorkout({ done: true }), completed: true,
+    prepItems: [{ labelKey: 'prepHipHinges', done: true }, { labelKey: 'prepBandPullApart', done: false }],
+    cooldownItems: [{ labelKey: 'cooldown', done: false }],
+  };
+  const generated = { ...multiLiftWorkout({ done: false }),
+    prepItems: [{ labelKey: 'prepLightRows', done: false }],
+  };
+  const history = [{ cycle: 2, workoutNumber: 5, lift: 'Squat', workoutSnapshot: snapshot }];
+  const hydrated = hydrateWorkoutsWithHistory([generated], history, 2);
+  expect(hydrated[0]).toEqual(snapshot);
+  const merged = mergeGeneratedWorkoutStructure(hydrated, [generated], history, 2);
+  expect(merged[0]).toEqual(snapshot);
+  expect(hydrateWorkoutsWithHistory(JSON.parse(JSON.stringify(merged)), history, 2)[0]).toEqual(snapshot);
+});
 
 test('preserves a checked-off in-progress workout across a reload merge instead of wiping it', () => {
   const restoredWorkout = multiLiftWorkout({ done: true });

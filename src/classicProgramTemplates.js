@@ -7,7 +7,7 @@ import {
   normalizeSquatVariant,
   normalizeDeadliftVariant,
 } from './programProfiles';
-import { generatePrepItems, generateWarmups } from './warmupAndPrepGeneration';
+import { generatePrepItems, generateSmartWorkoutPrepItems, generateWarmups } from './warmupAndPrepGeneration';
 import {
   generateSquatAlternativeSets,
   generateSquatHomeAlternativeSets,
@@ -37,7 +37,7 @@ export function generateCooldownItems(cooldownMode = 'upperBackFriendly') {
   ];
 }
 
-function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly', programOverride = null) {
+function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly', workoutSetup = null, programOverride = null) {
   function round25(w) {
   return roundBarbellWeight(w);
 }
@@ -208,13 +208,15 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
       label: day.label,
       labelKey: day.labelKey,
       lifts: liftBlocks,
-      prepItems: liftBlocks[0]?.prepItems || [],
+      prepItems: workoutSetup
+        ? generateSmartWorkoutPrepItems(liftBlocks, preparationMode, workoutSetup)
+        : liftBlocks[0]?.prepItems || [],
       warmups: liftBlocks[0]?.warmups || [],
       sets: liftBlocks[0]?.sets || [],
       accessoryIntensity,
       accessories: generateAccessoriesForWorkout({
         type: day.type, lifts: liftBlocks, accessoryIntensity,
-      }, { accessoryMode, accessoryPRs, oneRMs }),
+      }, { accessoryMode, accessoryPRs, oneRMs, workoutSetup }),
       cooldownItems: generateCooldownItems(normalizedCooldownMode),
     });
   });
@@ -264,7 +266,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
   return workouts;
 }
 
-export function generateUltraProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly') {
+export function generateUltraProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly', workoutSetup = null) {
   const ultraProgram = [
     // Ultra block 1: high-frequency base, all lifts practiced often.
     { type: 'training', label: 'Ultra Primary SBD', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.725, labelKey: 'topTriple' }, { sets: 2, reps: 5, pct: 0.625, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'workSets' }] }, { lift: 'Deadlift', blocks: [{ sets: 2, reps: 3, pct: 0.600, labelKey: 'workSets' }] }] },
@@ -315,14 +317,15 @@ export function generateUltraProgram(s, b, d, accessoryMode = 'off', accessoryPR
     benchPressVariant,
     squatVariant,
     cooldownMode,
+    workoutSetup,
     ultraProgram
   );
 }
 
-export function generateProgramForProfile(programProfile, s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly') {
+export function generateProgramForProfile(programProfile, s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly', workoutSetup = null) {
   if (normalizeProgramProfile(programProfile) === 'kelaniSbdUltra') {
-    return generateUltraProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode);
+    return generateUltraProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode, workoutSetup);
   }
 
-  return generateProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode);
+  return generateProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode, workoutSetup);
 }

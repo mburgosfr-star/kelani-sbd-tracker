@@ -3,6 +3,15 @@ import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, Dashboard
 import { translations } from './translations';
 
 test('manual and automatic hard-like outcomes resolve to the single TOO HARD value', () => {
+  const accessoryFailures = {
+    accessories: [{
+      done: [true, true, true, true],
+      failed: [false, false, true, true],
+      skipped: [false, false, true, true],
+    }],
+  };
+  expect(resolveWorkoutEffortForCompletion(accessoryFailures)).toBe('hard');
+  expect(resolveWorkoutEffortForCompletion(accessoryFailures, 'easy')).toBe('hard');
   expect(resolveWorkoutEffortForCompletion({}, 'hard')).toBe('hard');
   expect(resolveWorkoutEffortForCompletion({}, 'tooMuch')).toBe('hard');
   expect(resolveWorkoutEffortForCompletion({
@@ -595,7 +604,7 @@ test('meet warmups and attempts each consume one complete 12-column row', () => 
   expect(meetWorkoutGridSpan(4) * 4).toBe(12);
 });
 
-test('the current meet screen always permits natural overflow scrolling', () => {
+test('all workout screens permit natural overflow scrolling before measurement', () => {
   expect(shouldAllowAppVerticalScroll({
     screen: 'current',
     workout: { type: 'meet' },
@@ -605,7 +614,12 @@ test('the current meet screen always permits natural overflow scrolling', () => 
     screen: 'current',
     workout: { type: 'training' },
     measuredOverflow: false,
-  })).toBe(false);
+  })).toBe(true);
+  expect(shouldAllowAppVerticalScroll({
+    screen: 'current',
+    workout: { type: 'training', completed: true },
+    measuredOverflow: false,
+  })).toBe(true);
   expect(shouldAllowAppVerticalScroll({
     screen: 'settings',
     measuredOverflow: true,
@@ -619,7 +633,7 @@ test('the current meet screen always permits natural overflow scrolling', () => 
     screen: 'current',
     workout: { type: 'training' },
     measuredNeedsClearance: false,
-  })).toBe(false);
+  })).toBe(true);
   expect(shouldReserveWorkoutBottomNavSpace({
     screen: 'current',
     workout: { type: 'training' },
@@ -1279,6 +1293,23 @@ test('the level modal explains recent eStrength Max progress from a weigh-in', (
   expect(progress).toBeInTheDocument();
   expect(progress.style.overflowWrap).toBe('anywhere');
   expect(progress.style.whiteSpace).toBe('');
+});
+
+test.each(['en', 'nl', 'ca'])('the level modal shows small workout record gains in %s', language => {
+  const t = translations[language];
+  render(<DashboardCycleWorkoutLabel
+    t={t} currentCycle={2} workoutNumber={4} totalWorkouts={28}
+    smartModel athleteLevel="beginner" eStrengthRatio={2.6} eStrengthMax={2.6}
+    recentBodyRatioEvent={{ source: 'workout', eStrengthMaxGain: 0.01 }}
+  />);
+  fireEvent.click(screen.getByRole('button'));
+  expect(screen.getByText(t.athleteLevelRecentWorkoutProgress
+    .replace('{gain}', '0.01').replace('{level}', t.athleteLevelIntermediate)))
+    .toBeInTheDocument();
+  const back = screen.getByRole('button', { name: t.back });
+  expect(back.style.width).toBe('min(160px, 100%)');
+  fireEvent.click(back);
+  expect(screen.queryByText(t.athleteLevelModalTitle)).not.toBeInTheDocument();
 });
 
 test('the level modal names a level reached through the latest weigh-in', () => {

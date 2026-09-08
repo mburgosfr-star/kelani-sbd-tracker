@@ -109,6 +109,13 @@ import {
 } from './workoutSetActions';
 import { applyAccessoryPlanToWorkouts } from './accessoryGeneration';
 import {
+  ACCESSORY_CATALOG,
+  BIG_LIFTS,
+  PREPARATION_CATALOG,
+  createWorkoutSetup,
+  normalizeWorkoutSetup,
+} from './workoutSetup';
+import {
   buildMeetAttemptsFromOneRM,
   ensureStrictMeetAttempts as ensureStrictMeetAttemptKeys,
 } from './meetAttemptPlanning';
@@ -1631,7 +1638,7 @@ export function shouldAllowAppVerticalScroll({
 } = {}) {
   return Boolean(
     measuredOverflow ||
-    (screen === 'current' && workout?.type === 'meet')
+    screen === 'current'
   );
 }
 
@@ -1642,7 +1649,7 @@ export function shouldReserveWorkoutBottomNavSpace({
 } = {}) {
   return Boolean(
     measuredNeedsClearance ||
-    (screen === 'current' && workout?.type === 'meet')
+    screen === 'current'
   );
 }
 
@@ -7295,7 +7302,7 @@ export function CurrentWorkout({
 
 
   function renderActivateWorkoutCard() {
-    if (!isReadOnly) return null;
+    if (!isReadOnly || workout.completed) return null;
 
     const workoutNumber = workout?.number || '-';
     const confirmText = t.activateWorkoutConfirmText
@@ -8017,7 +8024,7 @@ export function CurrentWorkout({
           active={completionHasDynamicFocus}
           style={{ margin: workoutCompletionButtonMargin({ isMeetDay }) }}
         >
-          {isReadOnly
+          {workout.completed ? t.workoutCompleted : isReadOnly
             ? t.previewNotCompletable
             : allMeetDone
             ? `${t.completeWorkout} ✓`
@@ -8323,8 +8330,8 @@ export function CurrentWorkout({
         enabled={allDone && !isReadOnly}
         active={completionHasDynamicFocus}
       >
-        {isReadOnly
-          ? t.previewNotCompletable
+        {workout.completed ? t.workoutCompleted : isReadOnly
+            ? t.previewNotCompletable
           : t.completeWorkout}
       </WorkoutCompletionButton>
 
@@ -9137,6 +9144,103 @@ function programActionButtonStyle(accentColor = THEME.primary, margin = '0') {
   };
 }
 
+function WorkoutSetupSection({ workoutSetup, onSave, t }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(() => normalizeWorkoutSetup(workoutSetup));
+
+  function openModal() {
+    setDraft(normalizeWorkoutSetup(workoutSetup));
+    setOpen(true);
+  }
+
+  function toggleSection(section) {
+    setDraft(current => {
+      const currentSection = current[section];
+      const nextEnabled = !currentSection.enabled;
+      const hasSelections = BIG_LIFTS.some(lift =>
+        (currentSection.byLift?.[lift] || []).length > 0
+      );
+      const defaults = createWorkoutSetup({
+        preparationMode: 'basicFirst',
+        accessoryMode: 'standard',
+      })[section];
+
+      return {
+        ...current,
+        [section]: {
+          ...currentSection,
+          enabled: nextEnabled,
+          byLift: nextEnabled && !hasSelections
+            ? defaults.byLift
+            : currentSection.byLift,
+        },
+      };
+    });
+  }
+
+  function toggleItem(section, lift, template) {
+    setDraft(current => {
+      const items = current[section].byLift[lift] || [];
+      const found = items.find(item => item.key === template.key);
+      const nextItems = found
+        ? items.filter(item => item.key !== template.key)
+        : [...items, { key: template.key, sets: template.sets, reps: template.reps, durationSeconds: template.durationSeconds }];
+      return { ...current, [section]: { ...current[section], byLift: { ...current[section].byLift, [lift]: nextItems } } };
+    });
+  }
+
+  function updateItem(section, lift, key, field, value) {
+    setDraft(current => ({
+      ...current,
+      [section]: {
+        ...current[section],
+        byLift: {
+          ...current[section].byLift,
+          [lift]: (current[section].byLift[lift] || []).map(item => item.key === key ? { ...item, [field]: value } : item),
+        },
+      },
+    }));
+  }
+
+  function renderSection(section, catalog, title) {
+    const enabled = Boolean(draft[section]?.enabled);
+    return (
+      <section style={{ paddingTop: 12, marginTop: 12 }}>
+        <button type="button" onClick={() => toggleSection(section)} style={{ ...programActionButtonStyle(enabled ? THEME.primary : THEME.muted), margin: '0 0 10px' }}>
+          {title}: {enabled ? t.enabled : t.disabled}
+        </button>
+        {enabled && BIG_LIFTS.map(lift => (
+          <div key={lift} style={{ marginBottom: 14 }}>
+            <div style={{ color: getLiftThemeColor(lift), fontWeight: 900, marginBottom: 6 }}>{lift}</div>
+            {(catalog[lift] || []).map(template => {
+              const item = (draft[section].byLift[lift] || []).find(entry => entry.key === template.key);
+              return <div key={template.key} style={{ display: 'grid', gridTemplateColumns: '24px minmax(0, 1fr)', gap: 6, alignItems: 'center', marginBottom: 7 }}>
+                <input aria-label={t[template.labelKey]} type="checkbox" checked={Boolean(item)} onChange={() => toggleItem(section, lift, template)} />
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 13 }}>{t[template.labelKey]}</div>
+                  {item && <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    <label style={{ fontSize: 11 }}>{t.sets}<input aria-label={`${t.sets} ${t[template.labelKey]}`} type="number" min="1" max="12" value={item.sets} onChange={event => updateItem(section, lift, template.key, 'sets', event.target.value)} style={{ width: 42, marginLeft: 3 }} /></label>
+                    <label style={{ fontSize: 11 }}>{template.durationSeconds ? t.seconds : t.reps}<input aria-label={`${template.durationSeconds ? t.seconds : t.reps} ${t[template.labelKey]}`} type="number" min="1" max={template.durationSeconds ? '600' : '100'} value={template.durationSeconds ? item.durationSeconds : item.reps} onChange={event => updateItem(section, lift, template.key, template.durationSeconds ? 'durationSeconds' : 'reps', event.target.value)} style={{ width: 48, marginLeft: 3 }} /></label>
+                  </div>}
+                </div>
+              </div>;
+            })}
+          </div>
+        ))}
+      </section>
+    );
+  }
+
+  return <>
+    <SettingsListRow label={t.workoutSetup} actionLabel={t.adjust} onAction={openModal} />
+    {open && <SettingsModal title={t.workoutSetup} onClose={() => setOpen(false)}>
+      {renderSection('preparation', PREPARATION_CATALOG, t.preparation)}
+      {renderSection('accessories', ACCESSORY_CATALOG, t.accessories)}
+      <button type="button" onClick={() => { onSave(normalizeWorkoutSetup(draft)); setOpen(false); }} style={{ ...programActionButtonStyle(THEME.primary), marginTop: 14 }}>{t.save}</button>
+    </SettingsModal>}
+  </>;
+}
+
 function ProgramProfileSection({
   programProfile,
   preparationMode = 'off',
@@ -9187,7 +9291,7 @@ function ProgramProfileSection({
   function selectAndContinue(key, value) {
     updateDraft(key, value);
 
-    if (step < 3) {
+    if (step < steps.length - 1) {
       setStep(prev => prev + 1);
       return;
     }
@@ -9252,8 +9356,6 @@ function ProgramProfileSection({
     );
   }
 
-  const friendlyAccessoryMode = draft?.focus === 'lower' ? 'lowerBodyFriendly' : 'upperBackFriendly';
-
   const steps = [
     {
       title: t.programStepFocusTitle,
@@ -9274,50 +9376,6 @@ function ProgramProfileSection({
           value: 'ultra',
           title: t.programFocusSbdUltra || t.programProfileKelaniSbdUltra,
           text: t.programFocusSbdUltraText || t.programProfileKelaniSbdUltraText,
-        },
-      ],
-    },
-    {
-      title: t.programStepPreparationTitle,
-      key: 'preparationMode',
-      selected: draft?.preparationMode,
-      options: [
-        {
-          value: 'off',
-          title: t.programOptionOff,
-          text: t.programPreparationOffText,
-        },
-        {
-          value: 'basicFirst',
-          title: t.programPreparationGeneral,
-          text: t.programPreparationGeneralText,
-        },
-        {
-          value: 'shoulderThoracic',
-          title: t.programPreparationUpperBackFriendly,
-          text: t.programPreparationUpperBackFriendlyText,
-        },
-      ],
-    },
-    {
-      title: t.programStepAccessoriesTitle,
-      key: 'accessoryMode',
-      selected: draft?.accessoryMode,
-      options: [
-        {
-          value: 'off',
-          title: t.programOptionOff,
-          text: t.programAccessoriesOffText,
-        },
-        {
-          value: 'standard',
-          title: t.programAccessoriesGeneral,
-          text: t.programAccessoriesGeneralText,
-        },
-        {
-          value: friendlyAccessoryMode,
-          title: t.programAccessoriesUpperBackFriendly,
-          text: t.programAccessoriesUpperBackFriendlyText,
         },
       ],
     },
@@ -9970,24 +10028,25 @@ function AthleteLevelBadge({
   const currentRatio = Number(eStrengthRatio) || 0;
   const maxRatio = Number(eStrengthMax) || currentRatio;
   const ratioToNext = nextLevel ? Math.max(tier.max - maxRatio, 0) : 0;
-  const recentWeighingGain = recentBodyRatioEvent?.source === 'bodyData'
-    ? Math.max(Number(recentBodyRatioEvent.eStrengthMaxGain) || 0, 0)
-    : 0;
+  const recentWeighingGain = Math.max(Number(recentBodyRatioEvent?.eStrengthMaxGain) || 0, 0);
+  const progressCopy = recentBodyRatioEvent?.source === 'workout'
+    ? { level: t.athleteLevelRecentWorkoutLevel, progress: t.athleteLevelRecentWorkoutProgress, max: t.athleteLevelRecentWorkoutMax }
+    : { level: t.athleteLevelRecentWeighingLevel, progress: t.athleteLevelRecentWeighingProgress, max: t.athleteLevelRecentWeighingMax };
   const recentLevelChange = recentBodyRatioEvent?.levelChange || null;
   const reachedCurrentLevel = Boolean(
     recentLevelChange?.value && recentLevelChange.value === athleteLevel
   );
   const recentWeighingMessage = recentWeighingGain > 0
     ? reachedCurrentLevel
-      ? formatTranslatedText(t.athleteLevelRecentWeighingLevel, {
+      ? formatTranslatedText(progressCopy.level, {
           level: levelLabel,
         })
       : nextLevel
-        ? formatTranslatedText(t.athleteLevelRecentWeighingProgress, {
+        ? formatTranslatedText(progressCopy.progress, {
             gain: recentWeighingGain.toFixed(2),
             level: nextLevelLabel,
           })
-        : formatTranslatedText(t.athleteLevelRecentWeighingMax, {
+        : formatTranslatedText(progressCopy.max, {
             gain: recentWeighingGain.toFixed(2),
           })
     : null;
@@ -10107,7 +10166,7 @@ function AthleteLevelBadge({
           <button
             type="button"
             onClick={() => setShowModal(false)}
-            style={{ ...modalActionButtonStyle('primary'), marginTop: 16 }}
+            style={{ ...modalActionButtonStyle('primary'), display: 'block', width: 'min(160px, 100%)', margin: '16px auto 0' }}
           >
             {t.back}
           </button>
@@ -11181,6 +11240,7 @@ function App() {
   );
   const [accessoryMode, setAccessoryMode] = useState('off');
   const [preparationMode, setPreparationMode] = useState('basicFirst');
+  const [workoutSetup, setWorkoutSetup] = useState(() => createWorkoutSetup());
   const [cooldownMode, setCooldownMode] = useState(() =>
     normalizeCooldownMode(localStorage.getItem('cooldownMode'))
   );
@@ -11695,6 +11755,10 @@ function App() {
       const savedPreparationMode = normalizePreparationMode(
         data.preparationMode ?? profileSettings.preparationMode
       );
+      const savedWorkoutSetup = normalizeWorkoutSetup(data.workoutSetup, {
+        preparationMode: savedPreparationMode,
+        accessoryMode: savedAccessoryMode,
+      });
       const savedAthleteLevel = getAthleteLevel({
         prs: restoredPrs,
         history: savedHistory,
@@ -11722,6 +11786,7 @@ function App() {
         accessoryMode: savedAccessoryMode,
         accessoryPRs: data.accessoryPRs || {},
         preparationMode: savedPreparationMode,
+        workoutSetup: savedWorkoutSetup,
         athleteLevel: savedAthleteLevel,
         deadliftVariant: savedDeadliftVariant,
         benchPressVariant: savedBenchPressVariant,
@@ -11774,6 +11839,7 @@ function App() {
       setProgramProfile(savedProgramProfile);
       setAccessoryMode(savedAccessoryMode);
       setPreparationMode(savedPreparationMode);
+      setWorkoutSetup(savedWorkoutSetup);
       setCooldownMode(savedCooldownMode);
       setSquatVariant(savedSquatVariant);
       setDeadliftVariant(savedDeadliftVariant);
@@ -11855,6 +11921,7 @@ function App() {
       programProfile,
       accessoryMode,
       preparationMode,
+      workoutSetup,
       cooldownMode,
       squatVariant,
       deadliftVariant,
@@ -11927,7 +11994,7 @@ function App() {
         });
       }
     }
-  }, [hasLoadedData, history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
+  }, [hasLoadedData, history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, workoutSetup, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
 
   useEffect(() => {
     if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
@@ -11956,6 +12023,7 @@ function App() {
       accessoryMode,
       accessoryPRs,
       preparationMode,
+      workoutSetup,
       athleteLevel,
       deadliftVariant,
       benchPressVariant,
@@ -11984,7 +12052,7 @@ function App() {
         Number(currentIndex) + 1
       ));
     });
-  }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, athleteLevel, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, oneRMs.Squat, oneRMs.Bench, oneRMs.Deadlift, smartIdealRouteStartCycle, history, bodyWeights, currentIndex, currentCycle, meetPlannerAttempts]);
+  }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, workoutSetup, athleteLevel, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, oneRMs.Squat, oneRMs.Bench, oneRMs.Deadlift, smartIdealRouteStartCycle, history, bodyWeights, currentIndex, currentCycle, meetPlannerAttempts]);
 
   useEffect(() => {
     if (!hasLoadedData || !isSmartTrainingModel(trainingModel)) return;
@@ -12008,6 +12076,7 @@ function App() {
       accessoryMode,
       accessoryPRs,
       preparationMode,
+      workoutSetup,
       deadliftVariant,
       benchPressVariant,
       squatVariant,
@@ -12101,6 +12170,11 @@ function App() {
     setProgramProfile(defaultProgramProfile);
     setAccessoryMode(defaultAccessoryMode);
     setPreparationMode(defaultPreparationMode);
+    const defaultWorkoutSetup = createWorkoutSetup({
+      preparationMode: defaultPreparationMode,
+      accessoryMode: defaultAccessoryMode,
+    });
+    setWorkoutSetup(defaultWorkoutSetup);
     setSquatVariant(defaultSquatVariant);
     setBenchPressVariant(defaultBenchPressVariant);
     setDeadliftVariant(defaultDeadliftVariant);
@@ -12119,6 +12193,7 @@ function App() {
       accessoryMode: defaultAccessoryMode,
       accessoryPRs: {},
       preparationMode: defaultPreparationMode,
+      workoutSetup: defaultWorkoutSetup,
       athleteLevel: getAthleteLevel({
         prs: { Squat: s, Bench: b, Deadlift: d },
         history: [],
@@ -12932,6 +13007,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         accessoryMode,
         accessoryPRs: nextAccessoryPRs,
         preparationMode,
+        workoutSetup,
         // Computed fresh from nextPrs/nextHistory (not the render-time
         // athleteLevel const) since this runs right after a workout
         // completion, before React has re-rendered with the new state.
@@ -15044,7 +15120,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           workout={workouts[selectedIndex]}
           currentCycle={currentCycle}
           totalWorkouts={workouts.length}
-          isReadOnly={selectedIndex > currentIndex}
+          isReadOnly={selectedIndex > currentIndex || Boolean(workouts[selectedIndex]?.completed)}
           onShowPlateCalculator={(weightKg) => setPlateCalcWeightKg(weightKg)}
           onTogglePrepItem={togglePrepItem}
           onToggleWarmup={toggleWarmup}
@@ -15108,9 +15184,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           eStrengthRatio={eStrengthRatio}
           eStrengthMax={eStrengthMax}
           latestBodyWeight={latestBodyWeight}
-          recentBodyRatioEvent={dashboardRecentPrEvents.ratioEvent?.source === 'bodyData'
-            ? dashboardRecentPrEvents.ratioEvent
-            : null}
+          recentBodyRatioEvent={dashboardRecentPrEvents.ratioEvent}
         />
       )}
       titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
@@ -15656,6 +15730,12 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       />
 
       <RestTimeSection
+        t={t}
+      />
+
+      <WorkoutSetupSection
+        workoutSetup={workoutSetup}
+        onSave={setWorkoutSetup}
         t={t}
       />
 

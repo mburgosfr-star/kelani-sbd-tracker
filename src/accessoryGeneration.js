@@ -6,6 +6,7 @@ import {
   workoutHasUserProgress,
 } from './workoutStateMerge';
 import { roundMeetWeight } from './warmupAndPrepGeneration';
+import { getWorkoutAccessories } from './workoutSetup';
 
 const ROW_TEMPLATE = {
   key: 'row', labelKey: 'accessoryRow', sets: 4, reps: 10, source: 'deadlift', pct: 0.25,
@@ -310,14 +311,39 @@ export function generateAccessoriesForWorkout(workout, {
   oneRMs = {},
   history = [],
   smart = false,
+  workoutSetup = null,
 } = {}) {
-  if (workout?.type !== 'training' || normalizeAccessoryMode(accessoryMode) === 'off') return [];
+  if (workout?.type !== 'training' || (!workoutSetup && normalizeAccessoryMode(accessoryMode) === 'off')) return [];
 
   const lifts = [...new Set(workout.lifts?.length
     ? workout.lifts.map(block => block.lift)
     : [workout.lift].filter(Boolean))];
   const isTaper = workout.accessoryIntensity === 'light' || workout.smartIdealRoute?.stage === 'taper';
   const lightRow = isTaper || workout.smartGeneratedDeload || workout.smartDayType === 'deload';
+
+  if (workoutSetup) {
+    return getWorkoutAccessories(workoutSetup, lifts).map(template => {
+      const baseWeight = getAccessoryBaseWeight(template, oneRMs, accessoryPRs);
+      const intensity = lightRow ? 0.6 : 1;
+      const weight = template.source === 'bodyweight' ? 0 : Math.max(2.5, roundMeetWeight(baseWeight * intensity));
+      return {
+        key: template.key,
+        nameKey: template.labelKey,
+        name: template.labelKey,
+        reps: template.reps,
+        durationSeconds: template.durationSeconds,
+        bodyweight: template.source === 'bodyweight',
+        perSide: !!template.perSide,
+        weights: Array.from({ length: template.sets }, () => weight),
+        originalWeights: Array.from({ length: template.sets }, () => weight),
+        done: Array.from({ length: template.sets }, () => false),
+        failed: Array.from({ length: template.sets }, () => false),
+        failedWeights: Array.from({ length: template.sets }, () => null),
+        adjustedFromFailedSet: Array.from({ length: template.sets }, () => false),
+        adjustedFromOriginal: Array.from({ length: template.sets }, () => false),
+      };
+    });
+  }
   const accessoriesByLift = lifts.map(lift => generateAccessoriesForLift(
     lift, accessoryMode, accessoryPRs, oneRMs, { lightRow }
   ));
