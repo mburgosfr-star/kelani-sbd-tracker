@@ -3781,6 +3781,42 @@ export function completeSmartLiftGrid({
   return completedSets;
 }
 
+function ensureMinimumSmartLiftGridRows({
+  sets = [],
+  warmups = [],
+  minimumRows = 1,
+} = {}) {
+  const completedSets = (sets || []).map(set => ({ ...set }));
+  const minimumItemCount = Math.max(
+    Number(minimumRows) || 1,
+    1
+  ) * SMART_LIFT_GRID_COLUMNS;
+  const isVolumeSet = set => {
+    const label = String(set?.labelKey || '').toLowerCase();
+    return label === 'backoff' || label === 'worksets';
+  };
+  const template = [...completedSets].reverse().find(isVolumeSet);
+
+  if (!template && (warmups.length + completedSets.length) < minimumItemCount) {
+    throw new Error('Smart lift grid minimum requires volume sets.');
+  }
+
+  while ((warmups.length + completedSets.length) < minimumItemCount) {
+    completedSets.push({
+      ...template,
+      done: false,
+      failed: false,
+      skipped: false,
+    });
+  }
+
+  if ((warmups.length + completedSets.length) % SMART_LIFT_GRID_COLUMNS !== 0) {
+    throw new Error('Smart lift grid row minimum invariant failed.');
+  }
+
+  return completedSets;
+}
+
 function buildSmartIdealSet({
   lift,
   labelKey,
@@ -4147,6 +4183,12 @@ export function buildSmartIdealTrainingWorkout({
         sets,
         warmups,
         minimumVolumeSets: 3,
+      });
+
+      sets = ensureMinimumSmartLiftGridRows({
+        sets,
+        warmups,
+        minimumRows: routeWorkout.minimumLiftGridRows,
       });
 
       if (!isTaper) {

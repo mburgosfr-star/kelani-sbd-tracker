@@ -42,16 +42,16 @@ const expectedNormalWeek = {
   advanced: [
     'Squat H → Bench L',
     'Deadlift M → Bench M',
-    'Squat M',
+    'Squat M → Bench L',
     'Bench H → Deadlift L',
-    'Squat L → Bench L',
-    'Deadlift H → Bench M → Squat L',
+    'Bench M → Squat L',
+    'Deadlift H → Squat L',
     'Rust',
   ],
   elite: [
     'Squat H → Bench L → Deadlift L',
-    'Deadlift M → Bench M → Squat L',
-    'Bench L',
+    'Deadlift M → Bench M',
+    'Bench L → Squat L',
     'Bench H → Squat M → Deadlift L',
     'Squat M → Bench M',
     'Deadlift H → Bench L → Squat L',
@@ -166,6 +166,17 @@ test.each(SMART_IDEAL_LEVELS)(
   }
 );
 
+test('the normal ideal route contains no single-lift gym days', () => {
+  SMART_IDEAL_LEVELS.forEach(level => {
+    for (let workoutNumber = 1; workoutNumber <= 21; workoutNumber += 1) {
+      const workout = getSmartIdealRouteWorkout({ athleteLevel: level, workoutNumber });
+      if (workout.type === 'training') {
+        expect(workout.lifts.length).toBeGreaterThanOrEqual(2);
+      }
+    }
+  });
+});
+
 test('normal heavy loading is 90% triple, 95% double and 100% single with the agreed back-offs', () => {
   const expected = [
     [1, 'triple', 3, 0.90, 6, 0.60],
@@ -241,6 +252,20 @@ test.each(SMART_IDEAL_LEVELS)(
   }
 );
 
+test('only beginner W25 remains a single-lift taper day', () => {
+  const singleLiftDays = SMART_IDEAL_LEVELS.flatMap(level =>
+    Array.from({ length: 4 }, (_, index) => {
+      const workoutNumber = index + 22;
+      const workout = getSmartIdealRouteWorkout({ athleteLevel: level, workoutNumber });
+      return workout.type === 'training' && workout.lifts.length === 1
+        ? `${level}-${workoutNumber}`
+        : null;
+    }).filter(Boolean)
+  );
+
+  expect(singleLiftDays).toEqual(['beginner-25']);
+});
+
 const expectedTaper = {
   beginner: [
     'Squat H → Bench L',
@@ -253,8 +278,8 @@ const expectedTaper = {
   intermediate: [
     'Squat H → Bench L',
     'Deadlift H → Bench M',
-    'Squat M',
-    'Bench H',
+    'Rust',
+    'Bench H → Squat M',
     'Rust',
     'Rust',
   ],
@@ -383,7 +408,7 @@ test.each(SMART_IDEAL_LEVELS)(
   }
 );
 
-test('a second TOO EASY credit combines the safest compatible taper days', () => {
+test('a second TOO EASY credit removes the new optional W24 rest', () => {
   const plan = buildAcceleratedSmartIdealRoutePlan({
     athleteLevel: 'intermediate',
     startWorkoutNumber: 24,
@@ -400,10 +425,9 @@ test('a second TOO EASY credit combines the safest compatible taper days', () =>
     workoutNumber: 25,
     type: 'training',
     stage: 'taper',
-    routeWorkoutNumbers: [24, 25],
     accelerationCreditsConsumed: 1,
-    accelerationActions: ['combine-training'],
-    combinedRouteWorkoutNumbers: [24, 25],
+    accelerationActions: ['remove-optional-rest'],
+    skippedRouteWorkoutNumbers: [24],
   });
   expect(plan.workouts[0].lifts.map(item => [
     item.lift,
@@ -568,7 +592,7 @@ test('the current athlete level immediately changes the next ideal workout', () 
   }))).toBe('Deadlift M → Bench M');
   expect(signature(getSmartIdealRouteWorkout({
     athleteLevel: 'elite', workoutNumber: 2,
-  }))).toBe('Deadlift M → Bench M → Squat L');
+  }))).toBe('Deadlift M → Bench M');
 });
 
 test('every prescribed lift keeps the full-grid invariant and heavy-medium-light order', () => {

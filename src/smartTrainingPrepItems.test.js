@@ -113,7 +113,7 @@ test('the complete five-item shoulder routine remains one shared section', () =>
   });
 });
 
-test.each([22, 24, 25])('taper workout %s shares preparation without altering warmups or dose', workoutNumber => {
+test.each([22, 23, 25])('taper workout %s shares preparation without altering warmups or dose', workoutNumber => {
   const options = {
     ...baseOptions,
     routeWorkout: getSmartIdealRouteWorkout({ workoutNumber, athleteLevel: 'intermediate' }),

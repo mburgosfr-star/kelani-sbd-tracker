@@ -316,7 +316,6 @@ test('GOOD completion advances to W2 and the current level changes the route imm
     .toEqual([
       ['Deadlift', 'medium'],
       ['Bench', 'medium'],
-      ['Squat', 'light'],
     ]);
   expectFullLiftGrids(eliteW2);
 });
@@ -671,9 +670,9 @@ test('two TOO EASY taper workouts move the meet exactly two days closer', () => 
   expect(combinedW24.smartIdealRoute).toMatchObject({
     workoutNumber: 25,
     stage: 'taper',
-    routeWorkoutNumbers: [24, 25],
     accelerationCreditsConsumed: 1,
-    accelerationActions: ['combine-training'],
+    accelerationActions: ['remove-optional-rest'],
+    skippedRouteWorkoutNumbers: [24],
   });
   expect(combinedW24.lifts.map(({ lift, intensityRole }) => [
     lift,
@@ -1249,6 +1248,39 @@ test('C4W22 gives the reported intermediate Squat four backoffs and Bench three 
   expect(bench.warmups.length + bench.sets.length).toBe(4);
 });
 
+test('beginner W25 fills three complete grids with a heavy single and useful backoffs', () => {
+  const routeWorkout = getSmartIdealRouteWorkout({
+    workoutNumber: 25,
+    athleteLevel: 'beginner',
+  });
+  const workout = buildSmartIdealTrainingWorkout({
+    sourceWorkout: { number: 25 },
+    routeWorkout,
+    athleteLevel: 'beginner',
+    squat: 42.5,
+    bench: 35,
+    deadlift: 60,
+    preparationMode: 'off',
+  });
+  const bench = workout.lifts[0];
+
+  expect(bench.lift).toBe('Bench');
+  expect(bench.warmups.length + bench.sets.length).toBe(12);
+  expect(bench.sets[0]).toMatchObject({
+    labelKey: 'topSingle',
+    reps: 1,
+    prescribedPct: 0.9,
+  });
+  bench.sets.slice(1).forEach(set => {
+    expect(set).toMatchObject({
+      labelKey: 'backoff',
+      reps: 4,
+      prescribedPct: 0.6,
+    });
+    expect(Number(set.weight)).toBeGreaterThanOrEqual(35 * 0.6);
+  });
+});
+
 test('every ideal-route taper day preserves the universal taper dose from 10kg through 1000kg', () => {
   SMART_IDEAL_LEVELS.forEach(athleteLevel => {
     for (let workoutNumber = 22; workoutNumber <= 25; workoutNumber += 1) {
@@ -1314,7 +1346,12 @@ test('every ideal-route taper day preserves the universal taper dose from 10kg t
               topReps: 1,
             });
             expect(backoffs.length).toBeGreaterThanOrEqual(1);
-            expect(backoffs.length).toBeLessThanOrEqual(4);
+            if (routeWorkout.lifts.length === 1) {
+              expect(warmups.length + workSets.length)
+                .toBeGreaterThanOrEqual(12);
+            } else {
+              expect(backoffs.length).toBeLessThanOrEqual(4);
+            }
             backoffs.forEach(set => {
               expect({
                 ...diagnostic,

@@ -80,16 +80,16 @@ export const SMART_IDEAL_NORMAL_ROUTE = Object.freeze({
   advanced: Object.freeze({
     1: route(lift('Squat', H), lift('Bench', L)),
     2: route(lift('Deadlift', M), lift('Bench', M)),
-    3: route(lift('Squat', M)),
+    3: route(lift('Squat', M), lift('Bench', L)),
     4: route(lift('Bench', H), lift('Deadlift', L)),
-    5: route(lift('Squat', L), lift('Bench', L)),
-    6: route(lift('Deadlift', H), lift('Bench', M), lift('Squat', L)),
+    5: route(lift('Bench', M), lift('Squat', L)),
+    6: route(lift('Deadlift', H), lift('Squat', L)),
     7: route(),
   }),
   elite: Object.freeze({
     1: route(lift('Squat', H), lift('Bench', L), lift('Deadlift', L)),
-    2: route(lift('Deadlift', M), lift('Bench', M), lift('Squat', L)),
-    3: route(lift('Bench', L)),
+    2: route(lift('Deadlift', M), lift('Bench', M)),
+    3: route(lift('Bench', L), lift('Squat', L)),
     4: route(lift('Bench', H), lift('Squat', M), lift('Deadlift', L)),
     5: route(lift('Squat', M), lift('Bench', M)),
     6: route(lift('Deadlift', H), lift('Bench', L), lift('Squat', L)),
@@ -131,8 +131,8 @@ export const SMART_IDEAL_TAPER_ROUTE = Object.freeze({
   intermediate: Object.freeze({
     22: route(lift('Squat', H), lift('Bench', L)),
     23: route(lift('Deadlift', H), lift('Bench', M)),
-    24: route(lift('Squat', M)),
-    25: route(lift('Bench', H)),
+    24: route(),
+    25: route(lift('Bench', H), lift('Squat', M)),
   }),
   advanced: Object.freeze({
     22: route(lift('Squat', H), lift('Bench', L)),
@@ -276,6 +276,7 @@ function buildTrainingWorkout({ workoutNumber, stage, phase = null, lifts }) {
     // Regular accessories stop during taper; the workout accessory policy
     // retains only a light Row on days containing Bench.
     accessoriesAllowed: stage !== 'taper',
+    minimumLiftGridRows: lifts.length === 1 ? 3 : 1,
     lifts: lifts.map(item => ({
       ...item,
       prescription: prescriptionFor(item.intensityRole),
@@ -391,6 +392,7 @@ export function getSmartIdealRouteWorkout({
 const ACCELERATION_ACTIONS = Object.freeze({
   REMOVE_REDUNDANT_REST: 'remove-redundant-rest',
   COMBINE_TRAINING: 'combine-training',
+  REMOVE_OPTIONAL_REST: 'remove-optional-rest',
   REMOVE_TRAINING: 'remove-training',
   REMOVE_FINAL_REST: 'remove-final-rest',
 });
@@ -569,11 +571,20 @@ function findSafestTrainingRemovalIndex(plan) {
   }, -1);
 }
 
+function findOptionalRestIndex(plan) {
+  return plan.findIndex((workout, index) => (
+    workout.type === 'rest' &&
+    index < plan.length - 1 &&
+    plan[index + 1]?.type !== 'meet'
+  ));
+}
+
 /**
  * Spend one route-compression credit for every clean "too easy" workout.
  * Each applied action removes exactly one future calendar slot. The order is
  * deliberately conservative: duplicate recovery, a compatible combined day,
- * the lightest remaining training day, and only then the final rest day.
+ * an optional non-final recovery day, the lightest remaining training day,
+ * and only then the final rest day.
  */
 export function buildAcceleratedSmartIdealRoutePlan({
   athleteLevel = 'intermediate',
@@ -635,6 +646,17 @@ export function buildAcceleratedSmartIdealRoutePlan({
         ),
         ...workouts.slice(combinationIndex + 2),
       ];
+      appliedCredits += 1;
+      continue;
+    }
+
+    const optionalRestIndex = findOptionalRestIndex(workouts);
+    if (optionalRestIndex >= 0) {
+      workouts = removeRoutePlanEntry(
+        workouts,
+        optionalRestIndex,
+        ACCELERATION_ACTIONS.REMOVE_OPTIONAL_REST
+      );
       appliedCredits += 1;
       continue;
     }
