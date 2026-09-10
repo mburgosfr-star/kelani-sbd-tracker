@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SettingsListRow, SmartDayTypeInline, StatsScreen, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
+import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SettingsListRow, SmartDayTypeInline, StatsScreen, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
 test('manual and automatic hard-like outcomes resolve to the single TOO HARD value', () => {
@@ -585,7 +585,8 @@ test('activeWorkoutLiftBlockStyle uses normal margins', () => {
 
 test('meet workout keeps the standard top spacing and balanced compact lift spacing', () => {
   expect(meetWorkoutScreenStyle()).toMatchObject({
-    display: 'block',
+    display: 'flex',
+    flexDirection: 'column',
     paddingBottom: 4,
   });
   expect(meetWorkoutScreenStyle().paddingTop).toBeUndefined();
@@ -596,6 +597,14 @@ test('meet workout keeps the standard top spacing and balanced compact lift spac
   expect(meetWorkoutLiftBlockStyle().marginTop).toBeUndefined();
   expect(workoutCompletionButtonMargin({ isMeetDay: true })).toBe('8px auto 0');
   expect(workoutCompletionButtonMargin({ isMeetDay: false })).toBe('2px auto 18px');
+});
+
+test('meet workout uses spare height between lift blocks instead of below completion', () => {
+  expect(meetWorkoutLiftCollectionStyle()).toEqual({
+    flex: '1 0 auto',
+    display: 'grid',
+    alignContent: 'space-evenly',
+  });
 });
 
 test('meet warmups and attempts each consume one complete 12-column row', () => {

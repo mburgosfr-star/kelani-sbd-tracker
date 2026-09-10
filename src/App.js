@@ -1864,10 +1864,19 @@ export function meetWorkoutScreenStyle() {
   return {
     ...responsiveContentScreenStyle(),
     // A meet contains three full lift blocks plus the completion action.
-    // Let the document scroll naturally instead of stretching the blocks
-    // over one viewport with space-between.
-    display: 'block',
+    // The lift collection may absorb genuinely free viewport height, while
+    // its intrinsic height still makes smaller screens scroll naturally.
+    display: 'flex',
+    flexDirection: 'column',
     paddingBottom: 4,
+  };
+}
+
+export function meetWorkoutLiftCollectionStyle() {
+  return {
+    flex: '1 0 auto',
+    display: 'grid',
+    alignContent: 'space-evenly',
   };
 }
 
@@ -7652,7 +7661,9 @@ export function CurrentWorkout({
           </div>
         )}
 
-        <div style={isMeetDay ? undefined : { display: 'flex', flexDirection: 'column' }}>
+        <div style={isMeetDay
+          ? meetWorkoutLiftCollectionStyle()
+          : { display: 'flex', flexDirection: 'column' }}>
           {(workout.lifts || []).map((liftBlock, li) => {
           const firstIncompleteWarmup = (liftBlock.warmups || []).findIndex(w => !w.done);
           const firstIncompleteSet = (liftBlock.sets || []).findIndex(s => !s.done);
