@@ -45,6 +45,90 @@ function generateCurrent({
   })[currentIndex];
 }
 
+test('Smart exposes the full provisional ideal route through meet and one recovery day', () => {
+  const workouts = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
+    ...baseOptions,
+    athleteLevel: 'intermediate',
+    history: [],
+    currentIndex: 0,
+  });
+  const visible = workouts.filter(workout => workout.smartVisible !== false);
+
+  expect(visible).toHaveLength(29);
+  expect(visible[0]).toMatchObject({
+    number: 1,
+    type: 'training',
+    smartSelectable: true,
+  });
+  expect(visible.slice(1).every(workout => (
+    workout.smartFuturePreview === true && workout.smartSelectable === false
+  ))).toBe(true);
+  expect(visible[27]).toMatchObject({
+    number: 28,
+    type: 'meet',
+    smartIdealRoute: { workoutNumber: 28, stage: 'meet' },
+  });
+  expect(visible[28]).toMatchObject({
+    number: 29,
+    type: 'rest',
+    smartIdealRoute: { workoutNumber: 29, stage: 'post-meet' },
+  });
+
+  visible
+    .filter(workout => workout.type === 'training')
+    .forEach(workout => {
+      expect(workout.lifts.length).toBeGreaterThan(0);
+      workout.lifts.forEach(liftBlock => {
+        expect(liftBlock.sets.length).toBeGreaterThan(0);
+      });
+    });
+});
+
+test('Smart previews every required recovery day after a meet with failed attempts', () => {
+  let history = [];
+
+  for (let index = 0; index < 28; index += 1) {
+    const workout = generateCurrent({
+      history,
+      currentIndex: index,
+      athleteLevel: 'intermediate',
+    });
+    history = workout.type === 'meet'
+      ? completeWorkoutWithFailures(history, workout, { failedSetCount: 3 })
+      : completeWorkout(history, workout);
+  }
+
+  const workouts = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
+    ...baseOptions,
+    athleteLevel: 'intermediate',
+    history,
+    currentIndex: 28,
+  });
+  const recoveryPreview = workouts
+    .filter(workout => workout.smartVisible !== false)
+    .slice(28);
+
+  expect(recoveryPreview).toHaveLength(3);
+  expect(recoveryPreview.map(workout => ({
+    number: workout.number,
+    type: workout.type,
+    stage: workout.smartIdealRoute?.stage,
+    target: workout.smartIdealRoute?.postMeetRecoveryTarget,
+  }))).toEqual(Array.from({ length: 3 }, (_, offset) => ({
+    number: 29 + offset,
+    type: 'rest',
+    stage: 'post-meet',
+    target: 3,
+  })));
+  expect(recoveryPreview[0]).toMatchObject({
+    number: 29,
+    smartSelectable: true,
+  });
+  expect(recoveryPreview.slice(1).every(workout => (
+    workout.smartFuturePreview === true && workout.smartSelectable === false
+  ))).toBe(true);
+});
+
 function completeWorkout(history, workout, effort = 'good') {
   const completed = {
     ...workout,
@@ -627,9 +711,6 @@ test('C4W22 TOO EASY keeps ideal W23 and moves the meet from W28 to W27', () => 
     smartIdealRoute: {
       workoutNumber: 28,
       stage: 'meet',
-      accelerationCreditsConsumed: 1,
-      accelerationActions: ['remove-redundant-rest'],
-      skippedRouteWorkoutNumbers: [27],
     },
     smartDecisionSummary: {
       readiness: {

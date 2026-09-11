@@ -409,11 +409,14 @@ export function shouldVaryRepeatedSmartPrescription(
 
 function getSmartPostMeetRecoveryTarget(day = {}) {
   const failedCount = Number(day?.failedOrSkippedSetCount) || 0;
+  const effort = String(day?.workoutEffort || 'good').trim().toLowerCase();
 
-  return Math.min(
-    Math.max(1 + failedCount, 1),
-    SMART_THRESHOLDS.POST_MEET_RECOVERY_MAX_DAYS
-  );
+  if (failedCount > 0) {
+    return SMART_THRESHOLDS.POST_MEET_RECOVERY_MAX_DAYS;
+  }
+  if (effort === 'easy') return 0;
+  if (['hard', 'toomuch', 'veryhard', 'max'].includes(effort)) return 2;
+  return 1;
 }
 
 function getSmartPostMeetRecoveryReason(day = {}) {
@@ -833,12 +836,12 @@ function getSmartIdealPostMeetCompletion(history = [], currentCycle = 1) {
     snapshot?.type === 'rest' &&
     snapshot?.smartIdealRoute?.stage === 'post-meet'
   ));
-  const latestRouteMetadata = idealPostMeetRests.at(-1)?.snapshot?.smartIdealRoute
-    || idealMeet.snapshot.smartIdealRoute;
-  const target = Math.max(
-    Number(latestRouteMetadata?.postMeetRecoveryTarget) || 0,
-    1
-  );
+  const target = getSmartPostMeetRecoveryTarget({
+    ...idealMeet.snapshot,
+    failedOrSkippedSetCount: countFailedOrSkippedSetsFromSnapshot(
+      idealMeet.snapshot
+    ),
+  });
 
   return {
     target,
@@ -4995,7 +4998,7 @@ function generateSmartWorkouts({
     , workoutSetup
   );
 
-  const generatedWorkouts = buildSmartWorkoutPool(
+  let generatedWorkouts = buildSmartWorkoutPool(
     baseGeneratedWorkouts,
     smartContext.currentIndex
   );
@@ -5054,8 +5057,62 @@ function generateSmartWorkouts({
         idealRouteAdjustments.hasTrailingCompletedRest,
     })
     : null;
-  const nextIdealRouteWorkout = adjustedIdealRoutePlan?.workouts?.[0]
-    || null;
+  const idealRoutePreviewPlan = idealRouteEnabled && adjustedIdealRoutePlan
+    ? (() => {
+      const readiness = smartDecision.readiness || {};
+      const recoveryTarget = Math.max(
+        Number(readiness.postMeetRecoveryTarget) || 0,
+        1
+      );
+      const recoveryCompleted = Math.max(
+        Number(readiness.postMeetRecoveryDaysCompleted) || 0,
+        0
+      );
+
+      if (readiness.inPostMeetRecovery) {
+        const remainingRecoveryDays = Math.max(
+          recoveryTarget - recoveryCompleted,
+          0
+        );
+        return Array.from({ length: remainingRecoveryDays }, (_, offset) => ({
+          workoutNumber: SMART_IDEAL_MEET_WORKOUT_NUMBER + 1 + recoveryCompleted + offset,
+          type: 'rest',
+          stage: 'post-meet',
+          phase: null,
+          accessoriesAllowed: false,
+          postMeetRecoveryTarget: recoveryTarget,
+          nextCycleWorkout: SMART_IDEAL_MEET_WORKOUT_NUMBER + 1 + recoveryTarget,
+          lifts: [],
+        }));
+      }
+
+      if (readiness.completedMeetInCurrentCycle) return [];
+
+      const remainingRoute = [...(adjustedIdealRoutePlan.workouts || [])];
+      const includesMeet = remainingRoute.some(workout => workout.type === 'meet');
+      const postMeetRecovery = includesMeet
+        ? getSmartIdealRouteWorkout({
+          athleteLevel,
+          workoutNumber: SMART_IDEAL_MEET_WORKOUT_NUMBER + 1,
+        })
+        : null;
+
+      return postMeetRecovery?.type === 'rest'
+        ? [...remainingRoute, postMeetRecovery]
+        : remainingRoute;
+    })()
+    : [];
+  const idealRoutePreviewLength = idealRoutePreviewPlan.length;
+  const requiredPreviewLength = visibleThroughIndex + idealRoutePreviewLength;
+  if (idealRouteEnabled && generatedWorkouts.length < requiredPreviewLength) {
+    generatedWorkouts = buildSmartWorkoutPool(
+      generatedWorkouts,
+      requiredPreviewLength - 1
+    );
+  }
+  const nextIdealRouteWorkout = smartDecision.readiness?.inPostMeetRecovery
+    ? idealRoutePreviewPlan[0] || null
+    : adjustedIdealRoutePlan?.workouts?.[0] || null;
   const candidateIdealRouteWorkout = (
     idealRouteEnabled &&
     shouldFollowSmartIdealRoute({
@@ -5074,7 +5131,7 @@ function generateSmartWorkouts({
   )
     ? null
     : candidateIdealRouteWorkout?.stage === 'post-meet' &&
-      !hasCompletedSuccessfulSmartIdealMeet(history, currentCycle)
+      !hasCompletedSmartMeetInCycle(history, currentCycle)
       ? null
       : candidateIdealRouteWorkout;
   const hasActiveIdealRouteWorkout = [
@@ -5139,7 +5196,7 @@ function generateSmartWorkouts({
           delayedByTooHardCount:
             adjustedIdealRoutePlan?.appliedDelayCredits || 0,
           pendingTooHardDelayCount:
-            idealRouteAdjustments.pendingDelayCredits,
+            adjustedIdealRoutePlan?.appliedDelayCredits || 0,
           assumedSuccessfulFutureWorkouts: true,
         },
       };
@@ -5383,6 +5440,9 @@ function generateSmartWorkouts({
 
   return generatedWorkouts.map((workout, index) => {
     const isDecisionWorkout = index === visibleThroughIndex;
+    const futureIdealRouteWorkout = index > visibleThroughIndex
+      ? idealRoutePreviewPlan[index - visibleThroughIndex]
+      : null;
     const shouldBuildRecoveryDay =
       isDecisionWorkout &&
       (
@@ -5481,16 +5541,69 @@ function generateSmartWorkouts({
         )
         : generatedPrescriptionWorkout;
 
-    const finalSmartWorkout = (
-      isDecisionWorkout &&
-      hasActiveIdealRouteWorkout
+    const currentPostMeetRecoveryRoute = (
+      isDecisionWorkout && smartDecision.readiness?.inPostMeetRecovery
     )
+      ? idealRoutePreviewPlan[0] || null
+      : null;
+    const finalSmartWorkout = currentPostMeetRecoveryRoute
+      ? applySmartIdealRouteMetadata(
+        adjustedSmartWorkout,
+        currentPostMeetRecoveryRoute,
+        athleteLevel
+      )
+      : (
+        isDecisionWorkout &&
+        hasActiveIdealRouteWorkout
+      )
       ? applySmartIdealRouteMetadata(
         adjustedSmartWorkout,
         idealRouteWorkout,
         athleteLevel
       )
       : adjustedSmartWorkout;
+
+    const futureIdealPreviewWorkout = futureIdealRouteWorkout?.type === 'training'
+      ? buildSmartIdealTrainingWorkout({
+        sourceWorkout: workout,
+        routeWorkout: futureIdealRouteWorkout,
+        athleteLevel,
+        squat,
+        bench,
+        deadlift,
+        accessoryMode,
+        accessoryPRs,
+        preparationMode,
+        deadliftVariant,
+        benchPressVariant,
+        squatVariant,
+        history,
+        workoutSetup,
+      })
+      : futureIdealRouteWorkout?.type === 'meet'
+        ? applySmartIdealRouteMetadata(
+          buildSmartMeetWorkout(
+            workout,
+            smartMeetCandidate,
+            smartDecision.readiness
+          ),
+          futureIdealRouteWorkout,
+          athleteLevel
+        )
+        : futureIdealRouteWorkout?.type === 'rest'
+          ? applySmartIdealRouteMetadata(
+            buildSmartRecoveryWorkout(workout),
+            futureIdealRouteWorkout,
+            athleteLevel
+          )
+          : null;
+    const displayedSmartWorkout = futureIdealPreviewWorkout
+      ? {
+        ...futureIdealPreviewWorkout,
+        number: workout.number,
+        smartFuturePreview: true,
+      }
+      : finalSmartWorkout;
 
     const effectiveSmartDayType = (
       shouldBuildNoEffectiveTrainingRecovery || idealRouteTrainingRecovery
@@ -5606,7 +5719,7 @@ function generateSmartWorkouts({
       : null;
 
     return {
-      ...finalSmartWorkout,
+      ...displayedSmartWorkout,
       smartTrainingSelectionSummary:
         isDecisionWorkout &&
         smartDecision.dayType === SMART_DAY_TYPES.TRAINING
@@ -5621,13 +5734,21 @@ function generateSmartWorkouts({
               )
           )
           : null,
-      smartVisible: index <= visibleThroughIndex,
+      smartVisible: index <= visibleThroughIndex || Boolean(futureIdealPreviewWorkout),
       smartSelectable: index <= visibleThroughIndex,
       smartCurrentIndex: smartContext.currentIndex,
       smartCurrentCycle: smartContext.currentCycle,
       smartDecision: null,
       smartDecisionSummary,
-      smartDayType: isDecisionWorkout ? effectiveSmartDayType : null,
+      smartDayType: isDecisionWorkout
+        ? effectiveSmartDayType
+        : futureIdealRouteWorkout?.type === 'training'
+          ? SMART_DAY_TYPES.TRAINING
+          : futureIdealRouteWorkout?.type === 'meet'
+            ? SMART_DAY_TYPES.MEET
+            : futureIdealRouteWorkout?.type === 'rest'
+              ? SMART_DAY_TYPES.RECOVERY
+              : null,
       smartOverride: shouldBuildMeetDay
         ? SMART_OVERRIDES.MEETDAY
         : shouldBuildDeloadDay

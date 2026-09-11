@@ -1532,6 +1532,9 @@ const THEME = {
 
 };
 
+export const FAILED_SET_COLOR = THEME.meet;
+const FAILED_SET_BACKGROUND = 'rgba(198, 40, 40, 0.22)';
+
 export const BOTTOM_NAV_SPACE = 78;
 export const BOTTOM_NAV_ICON_SIZE = 39;
 export const SCREEN_OVERFLOW_TOLERANCE_PX = 2;
@@ -1638,7 +1641,8 @@ export function shouldAllowAppVerticalScroll({
 } = {}) {
   return Boolean(
     measuredOverflow ||
-    screen === 'current'
+    screen === 'current' ||
+    screen === 'all'
   );
 }
 
@@ -1788,8 +1792,20 @@ export function shouldUseCompactDashboardLayout({ workout, meetState, recentPrEv
 export function programScreenStyle() {
   return {
     ...responsiveContentScreenStyle(),
+    height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
     display: 'flex',
     flexDirection: 'column',
+    overflow: 'hidden',
+  };
+}
+
+export function programHeaderStyle() {
+  return {
+    position: 'relative',
+    flex: '0 0 auto',
+    zIndex: 1,
+    background: THEME.bg,
+    paddingBottom: 'clamp(6px, 0.8dvh, 10px)',
   };
 }
 
@@ -1804,11 +1820,51 @@ export function programWorkoutCardSpacingStyle({ compact = false } = {}) {
 export function programWorkoutListVerticalSpacing({ compact = false } = {}) {
   return {
     listMarginTop: compact
-      ? 'clamp(1px, 0.25dvh, 3px)'
+      ? 'clamp(6px, 0.8dvh, 10px)'
       : 'clamp(14px, 2dvh, 22px)',
-    topToggleMargin: compact ? '14px 0 2px' : '14px 0 10px',
-    bottomToggleMargin: compact ? '2px 0 0' : '6px 0 0',
+    topToggleMargin: compact
+      ? '0 0 clamp(8px, 1.2dvh, 12px)'
+      : '0 0 clamp(10px, 1.5dvh, 16px)',
+    bottomToggleMargin: compact
+      ? 'clamp(8px, 1.2dvh, 12px) 0 0'
+      : 'clamp(10px, 1.5dvh, 16px) 0 0',
   };
+}
+
+export function programWorkoutListContainerStyle({ showAll = false, marginTop = 0 } = {}) {
+  return {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: showAll ? 'flex-start' : 'center',
+    marginTop,
+    overflowX: 'hidden',
+    overflowY: showAll ? 'auto' : 'hidden',
+    overscrollBehaviorY: 'none',
+  };
+}
+
+export function getProgramWorkoutWindow({
+  entries = [],
+  currentIndex = 0,
+  showAll = false,
+  maximumVisible = 7,
+} = {}) {
+  if (showAll || entries.length <= maximumVisible) return entries;
+
+  const currentPosition = Math.max(
+    entries.findIndex(entry => entry.idx === currentIndex),
+    0
+  );
+  const preferredStart = Math.max(
+    0,
+    currentPosition - Math.floor(maximumVisible / 2)
+  );
+  const end = Math.min(entries.length, preferredStart + maximumVisible);
+  const start = Math.max(0, end - maximumVisible);
+
+  return entries.slice(start, end);
 }
 
 export function meetDayDashboardContentStyle() {
@@ -2371,9 +2427,9 @@ function WorkoutCircle({
   const hasReps = Number.isFinite(numericReps) && numericReps > 0;
   const circleValue = displayValue ?? (hasReps ? numericReps : null);
 
-  const borderColor = skipped ? '#e74c3c' : accentColor;
+  const borderColor = skipped ? FAILED_SET_COLOR : accentColor;
   const background = skipped
-    ? '#e74c3c'
+    ? FAILED_SET_COLOR
     : done
       ? accentColor
       : `${accentColor}14`;
@@ -3175,7 +3231,7 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
       {onMarkFailed && !set.done && !isReadOnly && (
         <SetActionButton
           title={t.markSetFailed}
-          borderColor="#e74c3c"
+          borderColor={FAILED_SET_COLOR}
           onClick={(e) => {
             e.stopPropagation();
             onMarkFailed();
@@ -5223,7 +5279,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
       <SetActionButton
         title={t.markSetFailed}
         disabled={isReadOnly}
-        borderColor="#e74c3c"
+        borderColor={FAILED_SET_COLOR}
         onClick={e => {
           e.stopPropagation();
           if (firstOpenEntry) onMarkFailed(firstOpenEntry.index);
@@ -5240,10 +5296,10 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
       padding: '7px 9px',
       gridColumn: compactGrid ? '1 / -1' : undefined,
       order: compactGrid ? 1 : undefined,
-      border: '1px solid #e74c3c',
+      border: `1px solid ${FAILED_SET_COLOR}`,
       borderRadius: 8,
       color: '#ffffff',
-      background: 'rgba(231, 76, 60, 0.16)',
+      background: FAILED_SET_BACKGROUND,
       fontSize: 12,
       fontWeight: 800,
       lineHeight: 1.3,
@@ -5386,7 +5442,7 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
       data-testid="workout-accessory-action-grid"
       style={workoutActionGridStyle(1)}
     >
-      <SetActionButton title={t.markSetFailed} disabled={firstOpenIndex === -1} borderColor="#e74c3c" onClick={e => { e.stopPropagation(); if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex); }}><WorkoutActionIcon type="failed" /></SetActionButton>
+      <SetActionButton title={t.markSetFailed} disabled={firstOpenIndex === -1} borderColor={FAILED_SET_COLOR} onClick={e => { e.stopPropagation(); if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex); }}><WorkoutActionIcon type="failed" /></SetActionButton>
     </div>
   ) : editing ? (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginTop: 8 }}>
@@ -5421,7 +5477,7 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
     >
       <SetActionButton title={t.edit} disabled={isReadOnly} borderColor={THEME.primary} onClick={handleEditClick}><WorkoutActionIcon type="edit" /></SetActionButton>
       <SetActionButton title={t.restoreOriginalWeight} disabled={isReadOnly} borderColor="#f39c12" onClick={e => { e.stopPropagation(); onRestoreAll(); }}><WorkoutActionIcon type="restore" /></SetActionButton>
-      <SetActionButton title={t.markSetFailed} disabled={isReadOnly || firstOpenIndex === -1} borderColor="#e74c3c" onClick={e => { e.stopPropagation(); if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex); }}><WorkoutActionIcon type="failed" /></SetActionButton>
+      <SetActionButton title={t.markSetFailed} disabled={isReadOnly || firstOpenIndex === -1} borderColor={FAILED_SET_COLOR} onClick={e => { e.stopPropagation(); if (firstOpenIndex !== -1) onMarkFailed(firstOpenIndex); }}><WorkoutActionIcon type="failed" /></SetActionButton>
     </div>
   );
 
@@ -7886,10 +7942,10 @@ export function CurrentWorkout({
                     <div style={{
                       margin: 0,
                       padding: `8px ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
-                      borderTop: '1px solid #e74c3c',
-                      borderBottom: '1px solid #e74c3c',
+                      borderTop: `1px solid ${FAILED_SET_COLOR}`,
+                      borderBottom: `1px solid ${FAILED_SET_COLOR}`,
                       color: '#ffffff',
-                      background: 'rgba(231, 76, 60, 0.16)',
+                      background: FAILED_SET_BACKGROUND,
                       fontSize: 12,
                       fontWeight: 800,
                       lineHeight: 1.3,
@@ -7901,7 +7957,7 @@ export function CurrentWorkout({
                         width: 20,
                         height: 20,
                         borderRadius: '50%',
-                        background: '#e74c3c',
+                        background: FAILED_SET_COLOR,
                         color: THEME.bg,
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -8215,10 +8271,10 @@ export function CurrentWorkout({
                 <div style={{
                   margin: 0,
                   padding: '10px 14px',
-                  borderTop: '1px solid #e74c3c',
-                  borderBottom: '1px solid #e74c3c',
+                  borderTop: `1px solid ${FAILED_SET_COLOR}`,
+                  borderBottom: `1px solid ${FAILED_SET_COLOR}`,
                   color: '#ffffff',
-                  background: 'rgba(231, 76, 60, 0.16)',
+                  background: FAILED_SET_BACKGROUND,
                   fontSize: 13,
                   fontWeight: 800,
                   lineHeight: 1.35,
@@ -8230,7 +8286,7 @@ export function CurrentWorkout({
                     width: 24,
                     height: 24,
                     borderRadius: '50%',
-                    background: '#e74c3c',
+                    background: FAILED_SET_COLOR,
                     color: THEME.bg,
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -9868,7 +9924,7 @@ function AppTopBar() {
   return null;
 }
 
-function AppHeader({ title, subtitle, meta, children, titleStyle = {}, subtitleStyle = {} }) {
+function AppHeader({ title, subtitle, meta, children, titleStyle = {}, subtitleStyle = {}, containerStyle = {} }) {
   const versionLabel = import.meta.env.VITE_APP_VERSION ? `v${import.meta.env.VITE_APP_VERSION}` : 'dev';
 
   return (
@@ -9878,7 +9934,8 @@ function AppHeader({ title, subtitle, meta, children, titleStyle = {}, subtitleS
         marginTop: 0,
         marginBottom: 0,
         paddingTop: 'var(--kelani-native-top-offset, 0px)',
-        background: '#000000'
+        background: '#000000',
+        ...containerStyle,
       }}
     >
       <AppTopBar />
@@ -10246,30 +10303,19 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
     ? workouts
       .map((workout, idx) => ({ workout, idx }))
       .filter(({ workout, idx }) => {
-        if (idx > smartAllowedCurrentIndex) return false;
-        if (!hasSmartVisibilityMetadata) return true;
+        if (!hasSmartVisibilityMetadata) return idx <= smartAllowedCurrentIndex;
 
         return workout.smartVisible !== false;
       })
     : workouts.map((workout, idx) => ({ workout, idx }));
-  const visibleCurrentIndex = Math.min(
-    Math.max(currentIndex, 0),
-    Math.max(allowedWorkoutEntries.length - 1, 0)
-  );
   const compactVisibleCount = 7;
-  const preferredVisibleStart = Math.max(
-    0,
-    visibleCurrentIndex - Math.floor(compactVisibleCount / 2)
-  );
-  const visibleEnd = Math.min(
-    allowedWorkoutEntries.length,
-    preferredVisibleStart + compactVisibleCount
-  );
-  const visibleStart = Math.max(0, visibleEnd - compactVisibleCount);
-  const visibleWorkoutEntries = showAllWorkouts
-    ? allowedWorkoutEntries
-    : allowedWorkoutEntries.slice(visibleStart, visibleEnd);
-  const hasHiddenWorkouts = allowedWorkoutEntries.length > (visibleEnd - visibleStart);
+  const visibleWorkoutEntries = getProgramWorkoutWindow({
+    entries: allowedWorkoutEntries,
+    currentIndex,
+    showAll: showAllWorkouts,
+    maximumVisible: compactVisibleCount,
+  });
+  const hasHiddenWorkouts = allowedWorkoutEntries.length > compactVisibleCount;
   const useCompactWorkoutCardSpacing = hasHiddenWorkouts && !showAllWorkouts;
   const workoutListVerticalSpacing = programWorkoutListVerticalSpacing({
     compact: useCompactWorkoutCardSpacing,
@@ -10337,6 +10383,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
     <div style={programScreenStyle()}>
       <AppHeader
         t={t}
+        containerStyle={programHeaderStyle()}
         title={
           smartModel
             ? (t.trainingModelSmart)
@@ -10500,22 +10547,18 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
         </SettingsModal>
       )}
 
+      <div data-kelani-program-list-spacer style={programWorkoutListContainerStyle({
+        showAll: showAllWorkouts,
+        marginTop: workoutListVerticalSpacing.listMarginTop,
+      })}>
       {renderWorkoutListToggleButton('top')}
 
-      <div data-kelani-program-list-spacer style={{
-        // Center within whatever room is left below the header, not only
-        // for a single visible workout - a short list (e.g. early in a
-        // cycle, or a few workouts left after the compact window) must not
-        // stay pinned to the top with empty space below it. A list long
-        // enough to fill the space centers itself out naturally.
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        marginTop: workoutListVerticalSpacing.listMarginTop,
-      }}>
 {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
+        const isFuture = smartModel && idx > currentIndex;
+        const isSelectable = !smartModel || (
+          idx <= currentIndex && workout.smartSelectable !== false
+        );
         const isDone = completedWorkoutNumberSet.has(Number(workout.number)) || Boolean(workout.completed);
         const completedAtLabel = isDone ? formatCompletedAt(workout.completedAt, workout.completedDate || workout.date) : null;
         const focusColor = workout.type === 'meet'
@@ -10535,6 +10578,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
             key={workout.number}
             ref={isCurrent ? currentWorkoutRef : null}
             onClick={() => {
+              if (!isSelectable) return;
               onSelect(idx);
               window.scrollTo({ top: 0, behavior: 'auto' });
             }}
@@ -10546,10 +10590,12 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
                 compact: useCompactWorkoutCardSpacing,
               }),
               borderRadius: 8,
-              border: isCurrent ? `2px solid ${focusColor}` : 'none',
+              border: isCurrent
+                ? `2px solid ${focusColor}`
+                : 'none',
               background: 'transparent',
-              cursor: 'pointer',
-              opacity: 1,
+              cursor: isSelectable ? 'pointer' : 'default',
+              opacity: isFuture ? 0.62 : 1,
               ...(isCurrent ? {
                 '--kelani-pulse-color': `${focusColor}52`,
                 animation: 'kelaniRowGlow 2s ease-in-out infinite',
@@ -10666,10 +10712,9 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
         );
       })}
 
-      </div>
-
-
       {renderWorkoutListToggleButton('bottom')}
+
+      </div>
 
       {!smartModel && (
         <>
@@ -16092,7 +16137,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                         padding: '5px 0 5px 8px',
                         opacity: group.isInvalidSet ? 0.75 : 1,
                         borderLeft: group.isInvalidSet && completedWorkoutIsMeet
-                          ? '3px solid #e74c3c'
+                          ? `3px solid ${FAILED_SET_COLOR}`
                           : group.isSuccessfulThirdAttempt
                             ? `3px solid ${THEME.green}`
                             : '3px solid transparent'
@@ -16121,7 +16166,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
 
                       <strong style={{
                         color: group.isInvalidSet
-                          ? '#e74c3c'
+                          ? FAILED_SET_COLOR
                           : group.isSuccessfulThirdAttempt
                             ? THEME.green
                             : '#ffffff',

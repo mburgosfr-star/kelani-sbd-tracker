@@ -103,9 +103,7 @@ export function changeOpenMeetAttemptWeights(sets = [], setIndex, requestedWeigh
   }
 
   const nextSets = [...sets];
-  let previousWeight = setIndex > 0
-    ? Number(sets[setIndex - 1]?.weight) || 0
-    : 0;
+  let previousWeight = 0;
 
   for (let index = setIndex; index < sets.length; index += 1) {
     const set = sets[index];
@@ -118,11 +116,13 @@ export function changeOpenMeetAttemptWeights(sets = [], setIndex, requestedWeigh
     }
 
     const currentWeight = roundMeetWeight(set.weight);
-    const requested = index === setIndex
+    // The weight the athlete explicitly confirms for the current attempt is
+    // authoritative. In particular, a failed earlier attempt must not force
+    // a retry or lowered third attempt 2.5kg upward again. Only later open
+    // attempts retain the convenient strictly-increasing plan adjustment.
+    const nextWeight = index === setIndex
       ? roundedRequestedWeight
-      : currentWeight;
-    const minimumWeight = index === 0 ? 2.5 : previousWeight + 2.5;
-    const nextWeight = Math.max(requested, minimumWeight);
+      : Math.max(currentWeight, previousWeight + 2.5);
 
     if (index === setIndex || nextWeight !== currentWeight) {
       nextSets[index] = changeOpenWorkoutSetWeight(set, nextWeight);
@@ -141,7 +141,14 @@ export function restoreOpenMeetAttemptWeights(sets = [], setIndex) {
   const originalWeight = Number(set.originalWeight ?? set.weight);
   if (!Number.isFinite(originalWeight) || originalWeight <= 0) return sets;
 
-  return changeOpenMeetAttemptWeights(sets, setIndex, originalWeight);
+  const previousWeight = setIndex > 0
+    ? Number(sets[setIndex - 1]?.weight) || 0
+    : 0;
+  const safeRestoredWeight = setIndex > 0
+    ? Math.max(originalWeight, previousWeight + 2.5)
+    : originalWeight;
+
+  return changeOpenMeetAttemptWeights(sets, setIndex, safeRestoredWeight);
 }
 
 function isAccessorySetFinalized(accessory = {}, setIndex) {

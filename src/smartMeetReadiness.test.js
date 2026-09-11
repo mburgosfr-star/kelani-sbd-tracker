@@ -238,7 +238,7 @@ test('a completed meet suppresses another same-cycle meet projection and ends af
     completedMeetInCurrentCycle: true,
     lastMeetWorkoutNumber: 10,
     inPostMeetRecovery: true,
-    postMeetRecoveryTarget: 2,
+    postMeetRecoveryTarget: 3,
     meetProjection: {
       available: false,
       reason: 'meet-completed',
@@ -250,6 +250,7 @@ test('a completed meet suppresses another same-cycle meet projection and ends af
     ...meetHistory,
     makePostMeetRecoveryEntry(11),
     makePostMeetRecoveryEntry(12),
+    makePostMeetRecoveryEntry(13),
   ];
   expect(isSmartCycleCompleteAfterHistory(recoveryHistory, 1)).toBe(true);
 });
@@ -296,37 +297,61 @@ test('a hard meet from the previous cycle cannot leak fatigue into the new cycle
   });
 });
 
-test('post-meet recovery is one day plus each missed attempt, capped at ten days', () => {
+test('post-meet recovery follows meet effort, while any failed attempt requires three days', () => {
   const context = {
     currentCycle: 1,
     prs: { Squat: 100, Bench: 80, Deadlift: 140 },
     oneRMs: { Squat: 100, Bench: 80, Deadlift: 140 },
   };
 
-  ['easy', 'good', 'hard', 'tooMuch', 'max'].forEach(workoutEffort => {
+  [
+    ['easy', 0],
+    ['good', 1],
+    ['hard', 2],
+    ['tooMuch', 2],
+    ['max', 2],
+  ].forEach(([workoutEffort, expectedTarget]) => {
     expect(buildSmartReadinessSignals({
       ...context,
       history: makeCompletedMeetEntries({
         workoutEffort,
         failedOrSkippedSetCount: 0,
       }),
-    }).postMeetRecoveryTarget).toBe(1);
+    }).postMeetRecoveryTarget).toBe(expectedTarget);
   });
 
-  [1, 2, 3].forEach(failedOrSkippedSetCount => {
+  [1, 2, 3, 9].forEach(failedOrSkippedSetCount => {
     expect(buildSmartReadinessSignals({
       ...context,
-      history: makeCompletedMeetEntries({ failedOrSkippedSetCount }),
-    }).postMeetRecoveryTarget).toBe(1 + failedOrSkippedSetCount);
+      history: makeCompletedMeetEntries({
+        workoutEffort: 'easy',
+        failedOrSkippedSetCount,
+        failAllAttempts: failedOrSkippedSetCount === 9,
+      }),
+    }).postMeetRecoveryTarget).toBe(3);
+  });
+});
+
+test('a successful TOO EASY meet completes its cycle without a recovery day', () => {
+  const history = makeCompletedMeetEntries({
+    workoutEffort: 'easy',
+    failedOrSkippedSetCount: 0,
+    smartIdealRoute: { stage: 'meet', postMeetRecoveryTarget: 1 },
   });
 
-  expect(buildSmartReadinessSignals({
-    ...context,
-    history: makeCompletedMeetEntries({
-      failedOrSkippedSetCount: 9,
-      failAllAttempts: true,
-    }),
-  }).postMeetRecoveryTarget).toBe(10);
+  const readiness = buildSmartReadinessSignals({
+    history,
+    currentCycle: 1,
+    prs: { Squat: 100, Bench: 80, Deadlift: 140 },
+    oneRMs: { Squat: 100, Bench: 80, Deadlift: 140 },
+  });
+
+  expect(readiness).toMatchObject({
+    postMeetRecoveryTarget: 0,
+    inPostMeetRecovery: false,
+    postMeetRecoveryTargetReached: true,
+  });
+  expect(isSmartCycleCompleteAfterHistory(history, 1)).toBe(true);
 });
 
 test('a failed ideal-route meet uses adaptive recovery and can still complete the cycle', () => {
@@ -337,6 +362,7 @@ test('a failed ideal-route meet uses adaptive recovery and can still complete th
     }),
     makePostMeetRecoveryEntry(11),
     makePostMeetRecoveryEntry(12),
+    makePostMeetRecoveryEntry(13),
   ];
 
   expect(isSmartCycleCompleteAfterHistory(history, 1)).toBe(true);

@@ -100,7 +100,34 @@ test('meet attempt adjustment keeps every open future attempt strictly higher', 
     attempts[2],
   ];
   expect(changeOpenMeetAttemptWeights(afterMissedOpener, 1, 85).map(set => set.weight))
-    .toEqual([90, 92.5, 102.5]);
+    .toEqual([90, 85, 102.5]);
+});
+
+test('a lowered third attempt stays exactly as confirmed after a failed second attempt', () => {
+  const attempts = [
+    { ...openSet(162.5, 0.9), labelKey: 'opener', reps: 1, done: true },
+    {
+      ...openSet(175, 0.975),
+      labelKey: 'secondAttempt',
+      reps: 1,
+      done: true,
+      failed: true,
+      skipped: true,
+    },
+    { ...openSet(185, 1.025), labelKey: 'thirdAttempt', reps: 1 },
+  ];
+
+  const adjusted = changeOpenMeetAttemptWeights(attempts, 2, 175);
+
+  expect(adjusted.map(set => set.weight)).toEqual([162.5, 175, 175]);
+  expect(adjusted[0]).toBe(attempts[0]);
+  expect(adjusted[1]).toBe(attempts[1]);
+  expect(adjusted[2]).toMatchObject({
+    weight: 175,
+    originalWeight: 185,
+    adjustedFromOriginal: true,
+    done: false,
+  });
 });
 
 test('restoring a meet attempt cannot make it lower than a completed earlier attempt', () => {

@@ -1,4 +1,7 @@
-import { SMART_INTENSITY_POINTS } from './smartTrainingConstants';
+import {
+  SMART_INTENSITY_POINTS,
+  SMART_THRESHOLDS,
+} from './smartTrainingConstants';
 
 export const SMART_IDEAL_LEVELS = Object.freeze([
   'beginner',
@@ -137,14 +140,14 @@ export const SMART_IDEAL_TAPER_ROUTE = Object.freeze({
   advanced: Object.freeze({
     22: route(lift('Squat', H), lift('Bench', L)),
     23: route(lift('Deadlift', H), lift('Bench', M)),
-    24: route(lift('Squat', M), lift('Bench', L)),
-    25: route(lift('Bench', H), lift('Deadlift', M), lift('Squat', L)),
+    24: route(lift('Bench', H), lift('Squat', M)),
+    25: route(),
   }),
   elite: Object.freeze({
     22: route(lift('Squat', H), lift('Bench', L)),
     23: route(lift('Deadlift', H), lift('Bench', M), lift('Squat', L)),
-    24: route(lift('Squat', M), lift('Bench', L)),
-    25: route(lift('Bench', H), lift('Deadlift', L)),
+    24: route(lift('Bench', H), lift('Squat', M)),
+    25: route(),
   }),
 });
 
@@ -581,10 +584,10 @@ function findOptionalRestIndex(plan) {
 
 /**
  * Spend one route-compression credit for every clean "too easy" workout.
- * Each applied action removes exactly one future calendar slot. The order is
- * deliberately conservative: duplicate recovery, a compatible combined day,
- * an optional non-final recovery day, the lightest remaining training day,
- * and only then the final rest day.
+ * Each applied action removes exactly one future calendar slot. Prefer an
+ * earlier non-final rest so the final recovery buffer remains intact. If no
+ * earlier safe compression exists, TOO EASY still removes a final rest as
+ * the last available way to bring the meet one day closer.
  */
 export function buildAcceleratedSmartIdealRoutePlan({
   athleteLevel = 'intermediate',
@@ -622,15 +625,12 @@ export function buildAcceleratedSmartIdealRoutePlan({
   let appliedCredits = 0;
 
   while (appliedCredits < requestedCredits && workouts.length > 1) {
-    const redundantRestIndex = findRedundantRestIndex(
-      workouts,
-      hasTrailingCompletedRest
-    );
-    if (redundantRestIndex >= 0) {
+    const optionalRestIndex = findOptionalRestIndex(workouts);
+    if (optionalRestIndex >= 0) {
       workouts = removeRoutePlanEntry(
         workouts,
-        redundantRestIndex,
-        ACCELERATION_ACTIONS.REMOVE_REDUNDANT_REST
+        optionalRestIndex,
+        ACCELERATION_ACTIONS.REMOVE_OPTIONAL_REST
       );
       appliedCredits += 1;
       continue;
@@ -650,23 +650,26 @@ export function buildAcceleratedSmartIdealRoutePlan({
       continue;
     }
 
-    const optionalRestIndex = findOptionalRestIndex(workouts);
-    if (optionalRestIndex >= 0) {
-      workouts = removeRoutePlanEntry(
-        workouts,
-        optionalRestIndex,
-        ACCELERATION_ACTIONS.REMOVE_OPTIONAL_REST
-      );
-      appliedCredits += 1;
-      continue;
-    }
-
     const trainingRemovalIndex = findSafestTrainingRemovalIndex(workouts);
     if (trainingRemovalIndex >= 0) {
       workouts = removeRoutePlanEntry(
         workouts,
         trainingRemovalIndex,
         ACCELERATION_ACTIONS.REMOVE_TRAINING
+      );
+      appliedCredits += 1;
+      continue;
+    }
+
+    const redundantRestIndex = findRedundantRestIndex(
+      workouts,
+      hasTrailingCompletedRest
+    );
+    if (redundantRestIndex >= 0) {
+      workouts = removeRoutePlanEntry(
+        workouts,
+        redundantRestIndex,
+        ACCELERATION_ACTIONS.REMOVE_REDUNDANT_REST
       );
       appliedCredits += 1;
       continue;
@@ -721,8 +724,22 @@ export function buildAdjustedSmartIdealRoutePlan({
     0
   );
   const nextRouteWorkout = acceleratedPlan.workouts[0] || null;
+  const scheduledLeadingRecoveryDays = acceleratedPlan.workouts.findIndex(
+    workout => workout.type !== 'rest'
+  );
+  const leadingRecoveryCount = scheduledLeadingRecoveryDays === -1
+    ? acceleratedPlan.workouts.length
+    : scheduledLeadingRecoveryDays;
+  const availableRecoverySlots = Math.max(
+    SMART_THRESHOLDS.MAX_CONSECUTIVE_RECOVERY_DAYS - leadingRecoveryCount,
+    0
+  );
+  const appliedDelayCredits = Math.min(
+    requestedDelayCredits,
+    availableRecoverySlots
+  );
   const insertedRecoveryDays = Array.from(
-    { length: requestedDelayCredits },
+    { length: appliedDelayCredits },
     () => ({
       workoutNumber: Number(nextRouteWorkout?.workoutNumber) ||
         Math.max(Number(startWorkoutNumber) || 1, 1),

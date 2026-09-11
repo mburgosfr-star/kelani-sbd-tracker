@@ -49,9 +49,9 @@ export const SMART_THRESHOLDS = {
   MEET_PROJECTION_MIN_GAIN_KG: 1.25,
   MEET_PROJECTION_RANGE_LOW_FACTOR: 0.85,
   MEET_PROJECTION_RANGE_HIGH_FACTOR: 1.25,
-  // One recovery day follows every meet, plus one per missed attempt.
-  // A full 3-lift meet has nine attempts, so the maximum is 10 days.
-  POST_MEET_RECOVERY_MAX_DAYS: 10,
+  // No route may schedule more than three consecutive recovery days.
+  MAX_CONSECUTIVE_RECOVERY_DAYS: 3,
+  POST_MEET_RECOVERY_MAX_DAYS: 3,
   POST_MEET_MIN_TRAINING_DAYS: 8,
   POST_FAILED_MEET_MIN_TRAINING_DAYS: 12,
 };

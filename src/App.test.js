@@ -1,6 +1,29 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SettingsListRow, SmartDayTypeInline, StatsScreen, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
+import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, StatsScreen, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, capRunningBestChart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getStatsHistoricalOneRM, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, replaceCurrentChartEndpoint, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, statsScreenStyle, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
+
+test('a failed Squat set uses the darker SBD status color instead of the Squat lift color', () => {
+  render(
+    <SetRow
+      set={{ weight: 100, pct: 70, reps: 5, done: true, failed: true, skipped: true }}
+      index={0}
+      label="Squat set 1"
+      onToggle={() => {}}
+      isActive={false}
+      isReadOnly={false}
+      t={translations.en}
+      lift="Squat"
+    />
+  );
+
+  const failedCircle = screen.getByRole('button', { name: 'Squat set 1' });
+  expect(FAILED_SET_COLOR).toBe('#c62828');
+  expect(failedCircle).toHaveStyle({
+    background: FAILED_SET_COLOR,
+    borderColor: FAILED_SET_COLOR,
+  });
+  expect(failedCircle).not.toHaveStyle({ background: '#ff5c45' });
+});
 
 test('manual and automatic hard-like outcomes resolve to the single TOO HARD value', () => {
   const accessoryFailures = {
@@ -549,8 +572,19 @@ test('program screen uses the same responsive header alignment as other content 
     margin: '0 auto',
     padding: 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px',
     boxSizing: 'border-box',
+    height: 'calc(100dvh - 78px)',
     display: 'flex',
     flexDirection: 'column',
+    overflow: 'hidden',
+  });
+});
+
+test('program header remains visible while the workout list scrolls', () => {
+  expect(programHeaderStyle()).toMatchObject({
+    position: 'relative',
+    flex: '0 0 auto',
+    zIndex: 1,
+    background: '#000000',
   });
 });
 
@@ -565,15 +599,45 @@ test('program workout cards tighten only when the compact list toggles are visib
 
 test('compact program lists pull both toggles closer to the workout cards', () => {
   expect(programWorkoutListVerticalSpacing({ compact: true })).toEqual({
-    listMarginTop: 'clamp(1px, 0.25dvh, 3px)',
-    topToggleMargin: '14px 0 2px',
-    bottomToggleMargin: '2px 0 0',
+    listMarginTop: 'clamp(6px, 0.8dvh, 10px)',
+    topToggleMargin: '0 0 clamp(8px, 1.2dvh, 12px)',
+    bottomToggleMargin: 'clamp(8px, 1.2dvh, 12px) 0 0',
   });
   expect(programWorkoutListVerticalSpacing()).toEqual({
     listMarginTop: 'clamp(14px, 2dvh, 22px)',
-    topToggleMargin: '14px 0 10px',
-    bottomToggleMargin: '6px 0 0',
+    topToggleMargin: '0 0 clamp(10px, 1.5dvh, 16px)',
+    bottomToggleMargin: 'clamp(10px, 1.5dvh, 16px) 0 0',
   });
+});
+
+test('program workout window keeps the current workout centered among at most seven cards', () => {
+  const entries = Array.from({ length: 15 }, (_, idx) => ({ idx }));
+
+  expect(getProgramWorkoutWindow({ entries, currentIndex: 8 }).map(entry => entry.idx))
+    .toEqual([5, 6, 7, 8, 9, 10, 11]);
+  expect(getProgramWorkoutWindow({ entries, currentIndex: 1 }).map(entry => entry.idx))
+    .toEqual([0, 1, 2, 3, 4, 5, 6]);
+  expect(getProgramWorkoutWindow({ entries, currentIndex: 14 }).map(entry => entry.idx))
+    .toEqual([8, 9, 10, 11, 12, 13, 14]);
+  expect(getProgramWorkoutWindow({ entries, currentIndex: 8, showAll: true }))
+    .toEqual(entries);
+});
+
+test('full program list starts at the top while the compact list remains centered', () => {
+  expect(programWorkoutListContainerStyle({ showAll: false, marginTop: 8 }))
+    .toMatchObject({
+      justifyContent: 'center',
+      marginTop: 8,
+      overflowY: 'hidden',
+      minHeight: 0,
+    });
+  expect(programWorkoutListContainerStyle({ showAll: true, marginTop: 8 }))
+    .toMatchObject({
+      justifyContent: 'flex-start',
+      marginTop: 8,
+      overflowY: 'auto',
+      minHeight: 0,
+    });
 });
 
 test('activeWorkoutLiftBlockStyle uses normal margins', () => {
@@ -632,6 +696,10 @@ test('all workout screens permit natural overflow scrolling before measurement',
   expect(shouldAllowAppVerticalScroll({
     screen: 'settings',
     measuredOverflow: true,
+  })).toBe(true);
+  expect(shouldAllowAppVerticalScroll({
+    screen: 'all',
+    measuredOverflow: false,
   })).toBe(true);
   expect(shouldReserveWorkoutBottomNavSpace({
     screen: 'current',
