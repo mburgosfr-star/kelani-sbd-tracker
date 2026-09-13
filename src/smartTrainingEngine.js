@@ -729,6 +729,10 @@ function isSuccessfulSmartIdealRouteSnapshot(snapshot = {}) {
   ].includes(effort) || hasAutomaticTooHardWorkoutOutcome(snapshot);
 }
 
+/**
+ * @deprecated Legacy adaptive-route compatibility helper. Active Smart
+ * generation follows the canonical ideal route unconditionally.
+ */
 export function shouldFollowSmartIdealRoute({
   history = [],
   currentCycle = 1,
@@ -2815,6 +2819,81 @@ function buildSmartMeetWorkout(sourceWorkout = {}, meetCandidate = null, readine
     warmups: lifts[0]?.warmups || [],
     sets: lifts[0]?.sets || [],
   };
+}
+
+function buildSmartIdealRouteScaffold({
+  squat = 0,
+  bench = 0,
+  deadlift = 0,
+  squatVariant = 'standard',
+  benchPressVariant = 'standard',
+  deadliftVariant = 'standard',
+} = {}) {
+  const realOneRMs = {
+    Squat: Number(squat) || 0,
+    Bench: Number(bench) || 0,
+    Deadlift: Number(deadlift) || 0,
+  };
+  const meetLifts = LIFT_ORDER.map((lift, index) => {
+    const oneRM = realOneRMs[lift];
+    const sets = buildSmartMeetAttemptSets(lift, {}, [
+      { labelKey: 'opener', weight: oneRM * 0.90 },
+      { labelKey: 'secondAttempt', weight: oneRM * 0.975 },
+      { labelKey: 'thirdAttempt', weight: oneRM * 1.025 },
+    ]);
+    const liftBlock = {
+      lift,
+      role: index === 0 ? 'primary' : index === 1 ? 'secondary' : 'tertiary',
+      warmups: buildSmartMeetWarmups(sets[0]?.weight, lift),
+      sets,
+      prepItems: [],
+    };
+
+    if (lift === 'Squat') {
+      liftBlock.squatVariant = normalizeSquatVariant(squatVariant);
+    } else if (lift === 'Bench') {
+      liftBlock.benchPressVariant = normalizeBenchPressVariant(
+        benchPressVariant
+      );
+    } else if (lift === 'Deadlift') {
+      liftBlock.deadliftVariant = normalizeDeadliftVariant(deadliftVariant);
+    }
+
+    return liftBlock;
+  });
+
+  return Array.from(
+    { length: SMART_IDEAL_MEET_WORKOUT_NUMBER + 1 },
+    (_, index) => {
+      const number = index + 1;
+      if (number === SMART_IDEAL_MEET_WORKOUT_NUMBER) {
+        return {
+          number,
+          type: 'meet',
+          lift: 'SBD',
+          labelKey: 'meetDay',
+          lifts: meetLifts,
+          warmups: meetLifts[0]?.warmups || [],
+          sets: meetLifts[0]?.sets || [],
+          prepItems: [],
+          accessories: [],
+          cooldownItems: [],
+        };
+      }
+
+      return {
+        number,
+        type: 'rest',
+        labelKey: 'restAndRecovery',
+        lifts: [],
+        warmups: [],
+        sets: [],
+        prepItems: [],
+        accessories: [],
+        cooldownItems: [],
+      };
+    }
+  );
 }
 
 
@@ -4974,7 +5053,7 @@ function generateSmartWorkouts({
   currentCycle = 1,
   meetPlannerAttempts = {},
   oneRMs = {},
-  idealRouteEnabled = false,
+  idealRouteEnabled = true,
   workoutSetup = null,
 }) {
   const smartContext = buildSmartTrainingContext({
@@ -4983,20 +5062,33 @@ function generateSmartWorkouts({
     currentCycle,
   });
 
-  const baseGeneratedWorkouts = generateProgramForProfile(
-    programProfile,
-    squat,
-    bench,
-    deadlift,
-    accessoryMode,
-    accessoryPRs,
-    preparationMode,
-    deadliftVariant,
-    benchPressVariant,
-    squatVariant,
-    cooldownMode
-    , workoutSetup
-  );
+  // Smart's authoritative route must not inherit its calendar or lift
+  // selection from the Classic templates. Keep the former adaptive engine
+  // available only behind the explicit legacy opt-out below; active Smart
+  // route generation starts from a neutral numbered scaffold.
+  const baseGeneratedWorkouts = idealRouteEnabled
+    ? buildSmartIdealRouteScaffold({
+      squat,
+      bench,
+      deadlift,
+      squatVariant,
+      benchPressVariant,
+      deadliftVariant,
+    })
+    : generateProgramForProfile(
+      programProfile,
+      squat,
+      bench,
+      deadlift,
+      accessoryMode,
+      accessoryPRs,
+      preparationMode,
+      deadliftVariant,
+      benchPressVariant,
+      squatVariant,
+      cooldownMode,
+      workoutSetup
+    );
 
   let generatedWorkouts = buildSmartWorkoutPool(
     baseGeneratedWorkouts,
@@ -5113,27 +5205,19 @@ function generateSmartWorkouts({
   const nextIdealRouteWorkout = smartDecision.readiness?.inPostMeetRecovery
     ? idealRoutePreviewPlan[0] || null
     : adjustedIdealRoutePlan?.workouts?.[0] || null;
-  const candidateIdealRouteWorkout = (
-    idealRouteEnabled &&
-    shouldFollowSmartIdealRoute({
-      history,
-      workoutSetup,
-      currentCycle,
-      readiness: smartDecision.readiness,
-      nextRouteWorkout: nextIdealRouteWorkout,
-    })
-  )
+  // Once Smart is on the ideal route, readiness remains diagnostic. It may
+  // explain the plan, but it may not replace a route row or postpone W28.
+  // Calendar changes are owned exclusively by the explicit TOO EASY,
+  // TOO HARD/failed-set and post-meet recovery rules in the route builder.
+  const candidateIdealRouteWorkout = idealRouteEnabled
     ? nextIdealRouteWorkout
     : null;
   const idealRouteWorkout = (
-    candidateIdealRouteWorkout?.type === 'meet' &&
-    !smartDecision.readiness?.meetPlanReady
+    candidateIdealRouteWorkout?.stage === 'post-meet' &&
+    !hasCompletedSmartMeetInCycle(history, currentCycle)
   )
     ? null
-    : candidateIdealRouteWorkout?.stage === 'post-meet' &&
-      !hasCompletedSmartMeetInCycle(history, currentCycle)
-      ? null
-      : candidateIdealRouteWorkout;
+    : candidateIdealRouteWorkout;
   const hasActiveIdealRouteWorkout = [
     'training',
     'rest',
@@ -5785,7 +5869,10 @@ export function generateWorkoutsForTrainingModelUnconstrained(model, args = {}) 
     currentCycle: args.currentCycle ?? 1,
     meetPlannerAttempts: args.meetPlannerAttempts || {},
     oneRMs: args.oneRMs || args.data?.oneRMs || {},
-    idealRouteEnabled: Boolean(args.idealRouteEnabled),
+    // The ideal route is the Smart default and sole active product path.
+    // `false` is retained only as an explicit legacy/testing escape hatch
+    // while the historical adaptive engine is retired safely.
+    idealRouteEnabled: args.idealRouteEnabled !== false,
     workoutSetup: args.workoutSetup || null,
   };
 
@@ -5946,6 +6033,14 @@ function generateWorkoutsForTrainingModelBase(trainingModel, options = {}) {
   }
 
   const workouts = normalizeSmartMeetWorkoutWeights(generatedWorkouts);
+
+  // The ideal route has already applied every permitted calendar change.
+  // Never run its selected workout through the historical frequency layer,
+  // whose Classic-derived substitutions can contradict the canonical row.
+  if (options.idealRouteEnabled !== false) {
+    return workouts;
+  }
+
   const currentIndex = getSmartFrequencyCurrentIndex(workouts, options);
   const candidateWorkout = workouts[currentIndex];
 

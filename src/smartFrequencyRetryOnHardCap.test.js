@@ -6,6 +6,7 @@ import beginnerHistory from './beginnerRetryHistory.json';
 import beginnerExhaustionHistory from './beginnerFrequencyExhaustionHistory.json';
 
 const beginnerArgs = {
+  idealRouteEnabled: false,
   programProfile: 'kelaniSbd',
   squat: 42.5,
   bench: 32.5,
@@ -85,6 +86,7 @@ test('a genuinely frequency-exhausted beginner (every lift at/over its weekly ca
   // at or over its beginner maxTotal cap, so there is no valid lift left to
   // prescribe this week and the day must become rest.
   const workouts = generateWorkoutsForTrainingModel('smart', {
+    idealRouteEnabled: false,
     programProfile: 'kelaniSbd',
     squat: 42.5,
     bench: 32.5,
@@ -126,6 +128,7 @@ test('after resting off a full exhaustion, the next day correctly offers the lif
   };
 
   const workouts = generateWorkoutsForTrainingModel('smart', {
+    idealRouteEnabled: false,
     programProfile: 'kelaniSbd',
     squat: 42.5,
     bench: 32.5,

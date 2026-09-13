@@ -166,6 +166,7 @@ test('generates a correctly non-heavy beginner C1W17 through the full Smart app 
   ];
 
   const workouts = generateWorkoutsForTrainingModel('smart', {
+    idealRouteEnabled: false,
     programProfile: 'kelaniSbd',
     squat: 50,
     bench: 32.5,

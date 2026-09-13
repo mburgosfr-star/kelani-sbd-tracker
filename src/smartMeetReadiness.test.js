@@ -554,6 +554,7 @@ test('a clean taper after enough work offers the meet with the restored attempt 
   };
 
   const workouts = generateWorkoutsForTrainingModel('smart', {
+    idealRouteEnabled: false,
     programProfile: 'kelaniSbdUltra',
     squat: 142.5,
     bench: 92.5,
@@ -641,6 +642,7 @@ test('a failed heavy Deadlift proof keeps its strength evidence but requires two
     recovery(9),
   ];
   const options = {
+    idealRouteEnabled: false,
     programProfile: 'kelaniSbdUltra',
     squat: 142.5,
     bench: 92.5,
@@ -1199,6 +1201,7 @@ test('schedules one clean taper day only after every lift has also shown third-a
   ];
 
   const args = {
+    idealRouteEnabled: false,
     programProfile: 'kelaniSbdUltra',
     squat: 100,
     bench: 80,
@@ -1261,6 +1264,7 @@ test('a light taper workout forces rest before the meet even when the active blo
   ];
 
   const workouts = generateWorkoutsForTrainingModel('smart', {
+    idealRouteEnabled: false,
     programProfile: 'kelaniSbdUltra',
     squat: 100,
     bench: 80,

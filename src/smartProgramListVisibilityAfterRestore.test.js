@@ -116,7 +116,7 @@ describe('Smart Training program list visibility on restore with no persisted in
     }
   );
 
-  test('loses visibility on already-completed workouts if the mount pass hardcodes currentIndex to 0', () => {
+  test('keeps completed route workouts visible even if the mount pass starts at currentIndex 0', () => {
     const completedCount = 5;
     const history = simulateCompletedHistory(completedCount);
     const completedNumbers = getCompletedWorkoutNumbers(history, 1);
@@ -127,6 +127,6 @@ describe('Smart Training program list visibility on restore with no persisted in
       .filter(w => completedNumbers.has(Number(w.number)))
       .every(w => w.smartVisible === true);
 
-    expect(completedEntriesAllVisible).toBe(false);
+    expect(completedEntriesAllVisible).toBe(true);
   });
 });

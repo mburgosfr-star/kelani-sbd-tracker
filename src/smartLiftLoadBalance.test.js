@@ -219,6 +219,7 @@ test.each(scenarios)(
   'balances primary load after repeated heavy days for a $label',
   ({ maxes, attempts }) => {
     const workouts = generateWorkoutsForTrainingModel('smart', {
+      idealRouteEnabled: false,
       programProfile: 'kelaniSbd',
       squat: maxes.Squat,
       bench: maxes.Bench,
@@ -289,6 +290,7 @@ test('replaces a stale pre-generated next workout immediately after completion',
   const finishedWorkout = nextHistory[nextHistory.length - 1].workoutSnapshot;
 
   const staleWorkouts = generateWorkoutsForTrainingModel('smart', {
+    idealRouteEnabled: false,
     programProfile: 'kelaniSbd',
     squat: maxes.Squat,
     bench: maxes.Bench,
@@ -333,6 +335,7 @@ test('replaces a stale pre-generated next workout immediately after completion',
     currentCycle: 1,
     nextWorkoutIndex: 10,
     generationOptions: {
+      idealRouteEnabled: false,
       programProfile: 'kelaniSbd',
       squat: maxes.Squat,
       bench: maxes.Bench,

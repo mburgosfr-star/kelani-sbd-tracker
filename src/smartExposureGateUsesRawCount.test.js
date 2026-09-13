@@ -2,6 +2,7 @@ import { generateWorkoutsForTrainingModel } from './smartTrainingEngine';
 import intermediateHistory from './intermediateDeloadFrequencyHistory.json';
 
 const baseOptions = {
+  idealRouteEnabled: false,
   programProfile: 'kelaniSbdUltra',
   squat: 145,
   bench: 101.33333333333333,

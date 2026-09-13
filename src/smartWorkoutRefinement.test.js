@@ -524,6 +524,7 @@ test('generation turns the workout after a heavy day into medium/light work or r
     }],
   };
   const workouts = generateWorkoutsForTrainingModel('smart', {
+    idealRouteEnabled: false,
     programProfile: 'kelaniSbdUltra',
     squat: 100,
     bench: 80,
@@ -787,6 +788,7 @@ test('avoids the C3W15 maximal Squat choice after two heavy Deadlift days', () =
   ];
 
   const workouts = generateWorkoutsForTrainingModel('smart', {
+    idealRouteEnabled: false,
     programProfile: 'kelaniSbdUltra',
     squat: 145,
     bench: 100,
@@ -1419,6 +1421,7 @@ test('generates progressive C3W18 training without template prescriptions', () =
   ];
 
   const workouts = generateWorkoutsForTrainingModel('smart', {
+    idealRouteEnabled: false,
     programProfile: 'kelaniSbdUltra',
     squat: 145,
     bench: 100,
@@ -1535,6 +1538,7 @@ test('generates progressive C3W18 training without template prescriptions', () =
   const c3w19Workouts = generateWorkoutsForTrainingModel(
     'smart',
     {
+      idealRouteEnabled: false,
       programProfile: 'kelaniSbdUltra',
       squat: 145,
       bench: 100,

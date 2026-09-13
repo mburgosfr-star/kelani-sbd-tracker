@@ -8,6 +8,7 @@ import {
 const trainingMaxes = { Squat: 145, Bench: 97.5, Deadlift: 180 };
 
 const baseArgs = {
+  idealRouteEnabled: false,
   programProfile: 'kelaniSbdUltra',
   squat: trainingMaxes.Squat,
   bench: trainingMaxes.Bench,

@@ -107,6 +107,7 @@ function buildC3W44Boundary({ includeFinalBench = true } = {}) {
 
 function generateC3W44(history) {
   return generateWorkoutsForTrainingModel('smart', {
+    idealRouteEnabled: false,
     programProfile: 'kelaniSbdUltra',
     athleteLevel: 'intermediate',
     squat: maxes.Squat,

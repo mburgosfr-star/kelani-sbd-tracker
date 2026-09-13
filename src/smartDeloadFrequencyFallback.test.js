@@ -12,6 +12,7 @@ import intermediateHistory from './intermediateDeloadFrequencyHistory.json';
 // rest instead of an unrelated full-intensity substitute.
 test.each(['off', 'standard'])('falls back to rest when a deload target is frequency-blocked, even with accessories %s', accessoryMode => {
   const workouts = generateWorkoutsForTrainingModel('smart', {
+    idealRouteEnabled: false,
     programProfile: 'kelaniSbdUltra',
     squat: 145,
     bench: 101.33333333333333,

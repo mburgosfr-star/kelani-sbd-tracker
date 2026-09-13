@@ -45,6 +45,65 @@ function generateCurrent({
   })[currentIndex];
 }
 
+test.each(SMART_IDEAL_LEVELS)(
+  'Smart defaults to the complete canonical %s route without Classic substitutions',
+  athleteLevel => {
+    const { idealRouteEnabled: _legacyFlag, ...options } = baseOptions;
+    const workouts = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
+      ...options,
+      athleteLevel,
+      history: [],
+      currentIndex: 0,
+    });
+
+    for (let workoutNumber = 1; workoutNumber <= 28; workoutNumber += 1) {
+      const expected = getSmartIdealRouteWorkout({
+        athleteLevel,
+        workoutNumber,
+      });
+      const actual = workouts[workoutNumber - 1];
+
+      expect(actual).toMatchObject({
+        number: workoutNumber,
+        type: expected.type,
+        smartIdealRoute: {
+          workoutNumber,
+          stage: expected.stage,
+        },
+      });
+      expect((actual.lifts || []).map(({ lift, intensityRole }) => ({
+        lift,
+        intensityRole: intensityRole || (expected.type === 'meet' ? 'meet' : null),
+      }))).toEqual(expected.lifts.map(({ lift, intensityRole }) => ({
+        lift,
+        intensityRole,
+      })));
+
+      if (actual.type === 'training') {
+        expect(actual.smartSourceWorkoutNumber).toBeNull();
+        expect(actual.smartFrequencyValidated).toBe(true);
+        if (workoutNumber === 1) {
+          expect(actual.smartTrainingSelectionSummary).toMatchObject({
+            templateIndependent: true,
+            reasonFlags: expect.arrayContaining(['ideal-route']),
+          });
+        }
+      }
+    }
+  }
+);
+
+test('Classic generation remains separate and never receives Smart route metadata', () => {
+  const classic = generateWorkoutsForTrainingModel(TRAINING_MODELS.CLASSIC, {
+    ...baseOptions,
+    idealRouteEnabled: true,
+  });
+
+  expect(classic).toHaveLength(28);
+  expect(classic.every(workout => !workout.smartIdealRoute)).toBe(true);
+  expect(classic[27]).toMatchObject({ number: 28, type: 'meet' });
+});
+
 test('Smart exposes the full provisional ideal route through meet and one recovery day', () => {
   const workouts = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
     ...baseOptions,
@@ -1617,8 +1676,8 @@ test('elite ideal route reaches W28 meet and requires one post-meet recovery wor
   }
 });
 
-test('W28 stays pending and is eventually delivered when readiness was lost to deviations', () => {
-  let history = Array.from({ length: 27 }, (_, index) => ({
+test('W28 remains the meet when readiness diagnostics are incomplete', () => {
+  const history = Array.from({ length: 27 }, (_, index) => ({
     cycle: 1,
     workoutNumber: index + 1,
     workoutEffort: 'good',
@@ -1643,33 +1702,9 @@ test('W28 stays pending and is eventually delivered when readiness was lost to d
   });
 
   expect(w28.smartDecisionSummary?.readiness?.meetPlanReady).toBe(false);
-  expect(w28.type).not.toBe('meet');
-  expect(w28.smartIdealRoute).toBeFalsy();
-
-  let meet = null;
-  for (let currentIndex = 27; currentIndex < 120; currentIndex += 1) {
-    const workout = generateCurrent({
-      history,
-      currentIndex,
-      options: { skipMeetProjectionSimulation: true },
-    });
-
-    expect(getNextSmartIdealRouteWorkoutNumber({
-      history,
-      currentCycle: 1,
-    })).toBe(28);
-
-    if (workout.type === 'meet') {
-      meet = workout;
-      break;
-    }
-
-    history = completeWorkout(history, workout, 'good');
-  }
-
-  expect(meet).toBeTruthy();
-  expect(meet.number).toBeGreaterThan(28);
-  expect(meet.smartIdealRoute).toMatchObject({
+  expect(w28.type).toBe('meet');
+  expect(w28.number).toBe(28);
+  expect(w28.smartIdealRoute).toMatchObject({
     workoutNumber: 28,
     stage: 'meet',
   });
