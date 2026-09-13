@@ -6,7 +6,7 @@
 
 Kelani is an offline-first Squat, Bench Press and Deadlift tracker for lifters who train independently but do not want to train blindly. It requires no account, subscription or cloud service.
 
-Smart Training plans one workout at a time from your completed training, current strength, recent lift exposure, workout feedback and progress toward meet readiness. New results can therefore change the next session immediately instead of waiting for a fixed calendar to end.
+Smart Training follows a level-specific 28-workout ideal route from the start of a cycle through SBD Meet Day. The Program screen shows the route ahead, while your confirmed strength determines the prescribed weights. **Too easy**, **Too hard**, failed work and post-meet recovery can adjust the calendar; readiness information explains your progress without silently replacing planned workouts or postponing the meet.
 
 ## What Kelani does
 
@@ -14,7 +14,7 @@ Smart Training plans one workout at a time from your completed training, current
 - Uses real 1RM values for meet planning and tracks estimated 1RM progress from successful sets.
 - Responds predictably to workout feedback: **Too easy** shortens the route to the meet, while **Too hard** or failed work adds recovery.
 - Builds toward meet attempts, tapers and schedules an SBD Meet Day.
-- Explains the next workout, current blockers and projected meet timing.
+- Shows past, current and provisional future workouts, and explains readiness and projected meet timing.
 - Tracks 1RM, e1RM, SBD totals, Strength, eStrength and body statistics.
 
 During training you can complete or fail sets, adjust and restore weights, use a rest timer and open the plate calculator. Failed sets automatically make the workout **Too hard**; optional work left unchecked is not treated as failure.

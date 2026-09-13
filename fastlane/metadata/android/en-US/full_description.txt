@@ -4,13 +4,13 @@ It helps you plan, track and complete SBD workouts without accounts, ads, subscr
 
 Smart Training:
 
-Smart Training builds each next workout from your actual training history instead of a fixed template.
+Smart Training follows a level-specific 28-workout ideal route through SBD Meet Day. The route remains visible in advance, while confirmed strength determines the prescribed weights.
 
-- Selects primary and secondary lifts from recent training frequency and meet readiness
+- Plans heavy, medium and light Squat, Bench Press and Deadlift work for your current level
 - Prescribes warm-ups, top work, back-off work and accessories
-- Adapts to successful work, perceived effort, fatigue, failed sets and skipped sets
-- Tracks whether your planned meet openers have been demonstrated in training
-- Balances Squat, Bench Press and Deadlift frequency instead of repeating the same lift
+- Moves the meet closer after Too easy and adds recovery after Too hard or failed work
+- Tracks meet readiness without silently replacing route workouts or postponing Meet Day
+- Shows past, current and provisional future workouts through the meet and recovery
 - All Smart calculations run locally on your device
 
 Features:

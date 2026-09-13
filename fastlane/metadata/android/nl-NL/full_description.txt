@@ -4,13 +4,13 @@ De app helpt je SBD-workouts plannen, bijhouden en voltooien zonder accounts, ad
 
 Smart Training:
 
-Smart Training stelt elke volgende workout samen op basis van je werkelijke trainingsgeschiedenis, in plaats van een vast programma.
+Smart Training volgt een niveaugebonden ideale route van 28 workouts tot en met SBD Meet Day. De route blijft vooraf zichtbaar, terwijl je bevestigde kracht de voorgeschreven gewichten bepaalt.
 
-- Kiest primaire en secundaire lifts op basis van recente trainingsfrequentie en meetgereedheid
+- Plant zware, middelzware en lichte Squat-, Bench Press- en Deadlift-training voor je huidige niveau
 - Stelt warming-ups, topwerk, backoffs en accessoires samen
-- Past zich aan op basis van succesvolle sets, ervaren inspanning, vermoeidheid, gemiste sets en overgeslagen sets
-- Houdt bij of je geplande meetopeners al zijn aangetoond in training
-- Balanceert de frequentie van Squat, Bench Press en Deadlift, in plaats van steeds dezelfde lift te herhalen
+- Brengt de meet dichterbij na Te makkelijk en voegt herstel toe na Te zwaar of mislukte sets
+- Houdt meetgereedheid bij zonder routeworkouts stilzwijgend te vervangen of Meet Day uit te stellen
+- Toont eerdere, huidige en voorlopige toekomstige workouts tot en met de meet en het herstel
 - Alle Smart-berekeningen gebeuren lokaal op je toestel
 
 Functies:

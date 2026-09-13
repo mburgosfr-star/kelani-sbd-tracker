@@ -4,13 +4,13 @@ T'ajuda a planificar, registrar i completar entrenaments SBD sense comptes, anun
 
 Smart Training:
 
-Smart Training construeix cada pròxim entrenament a partir del teu historial d'entrenament real, en lloc d'una plantilla fixa.
+Smart Training segueix una ruta ideal de 28 entrenaments adaptada al nivell fins al SBD Meet Day. La ruta es manté visible per endavant, mentre que la teva força confirmada determina els pesos prescrits.
 
-- Tria els aixecaments primaris i secundaris segons la freqüència d'entrenament recent i la preparació per a la competició
+- Planifica treball pesant, mitjà i lleuger de Squat, Bench Press i Deadlift per al teu nivell actual
 - Prescriu escalfaments, treball principal, sèries de descens i accessoris
-- S'adapta a les sèries reeixides, l'esforç percebut, la fatiga, les sèries fallides i les sèries saltades
-- Fa un seguiment de si les obertures de competició planificades ja s'han demostrat a l'entrenament
-- Equilibra la freqüència de Squat, Bench Press i Deadlift, en lloc de repetir sempre el mateix aixecament
+- Apropa la competició després de Massa fàcil i afegeix recuperació després de Massa dur o de sèries fallides
+- Fa un seguiment de la preparació per a la competició sense substituir silenciosament els entrenaments de la ruta ni ajornar el Meet Day
+- Mostra els entrenaments anteriors, l'actual i els futurs provisionals fins a la competició i la recuperació
 - Tots els càlculs de Smart es fan localment al teu dispositiu
 
 Funcions:
