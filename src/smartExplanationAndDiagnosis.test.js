@@ -231,6 +231,42 @@ test('names the current blocker once, not duplicated as a separate primary-block
   expect(rows.filter(row => row.label === 'Primary blocker')).toHaveLength(0);
 });
 
+test.each(['nl', 'en', 'ca'])(
+  'the authoritative ideal route shows readiness without presenting unfinished lifts as blockers in %s',
+  language => {
+    const t = translations[language];
+    const workout = workoutWith([smartLift({ lift: 'Deadlift' })]);
+    workout.smartIdealRoute = { stage: 'normal', workoutNumber: 24 };
+
+    const rows = getSmartModalDetailRows(workout, t);
+
+    expect(rows.some(row =>
+      row.label === t.smartCurrentBlocker ||
+      row.label === t.smartCurrentBlockers ||
+      row.label === t.smartPrimaryBlocker
+    )).toBe(false);
+    expect(rows).toContainEqual({
+      label: 'Deadlift',
+      value: expect.stringContaining(t.smartCycleEstimateShort),
+      kind: 'lift-readiness',
+    });
+    expect(rows).toContainEqual({
+      label: t.expectedMeetWindow,
+      value: 'C3W32–C3W35',
+    });
+    expect(rows).toContainEqual({
+      label: t.smartReadinessBasis,
+      value: t.smartIdealRouteReadinessBasisText,
+      kind: 'note',
+    });
+
+    const diagnosis = buildSmartDiagnosticText(workout, t);
+    expect(diagnosis).not.toContain('Meet blockers:');
+    expect(diagnosis).not.toContain(`${t.smartCurrentBlocker}:`);
+    expect(diagnosis).toContain(`${t.expectedMeetWindow}: C3W32–C3W35`);
+  }
+);
+
 test('shows the full readiness/blocker/fatigue detail on a deload or rest day too, not just on training-fallback days', () => {
   // C3W35 was correctly converted to a rest day (via the
   // deload frequency fallback), but the modal collapsed to showing only

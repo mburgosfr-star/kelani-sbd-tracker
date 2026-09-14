@@ -6412,7 +6412,11 @@ export function buildSmartDiagnosticText(workout = {}, t = translations.en, curr
     );
   }
 
-  if (Array.isArray(readiness.meetdayBlockers) && readiness.meetdayBlockers.length) {
+  if (
+    !workout?.smartIdealRoute &&
+    Array.isArray(readiness.meetdayBlockers) &&
+    readiness.meetdayBlockers.length
+  ) {
     lines.push(`Meet blockers: ${readiness.meetdayBlockers.join(', ')}`);
   }
 
@@ -6483,6 +6487,7 @@ export function getSmartModalDetailRows(workout = {}, t = translations.en, curre
     summary.dayType === SMART_DAY_TYPES.RECOVERY &&
     workout?.smartIdealRoute?.adjustmentReason === 'too-hard-recovery'
   );
+  const followsIdealRoute = Boolean(workout?.smartIdealRoute);
 
   if (isMeetDay) {
     return [
@@ -6543,13 +6548,9 @@ export function getSmartModalDetailRows(workout = {}, t = translations.en, curre
     Object.keys(readiness.meetPlanReadiness || {}).length > 0
   );
 
-  // The modal must show as much diagnostic detail
-  // as is available regardless of day type (deload/rest/recovery days were
-  // previously silently reduced to just "Projected meet" because this block
-  // was gated on isTrainingFallback). Gate on data availability instead -
-  // the meet plan is still ongoing on every non-meet day, so the blocker/
-  // readiness detail is just as meaningful on a deload or rest day as on a
-  // normal training-fallback day.
+  // The modal must show readiness detail wherever it is available. Rest and
+  // recovery days are still part of the route, so their per-lift progress is
+  // as useful as it is on a training day.
   const showMeetReadinessDetail =
     summary.dayType !== SMART_DAY_TYPES.MEET &&
     (hasMeetReadinessDetail || isTrainingFallback);
@@ -6585,14 +6586,20 @@ export function getSmartModalDetailRows(workout = {}, t = translations.en, curre
         ? `${blockingLifts.join(', ')} (${oneRMBlockerText})`
         : (t.smartMeetPlanNotReady);
 
-    rows.push({
-      label: meetReady
-        ? (t.smartMeetStatus)
-        : blockingLifts.length > 1
-          ? (t.smartCurrentBlockers)
-          : (t.smartCurrentBlocker),
-      value: statusText,
-    });
+    // Readiness is informative on the authoritative ideal route. It no
+    // longer blocks or reschedules Meet Day, so an unfinished lift must not
+    // be presented as a "current blocker". Keep the positive all-ready
+    // status and the useful per-lift readiness rows.
+    if (meetReady || !followsIdealRoute) {
+      rows.push({
+        label: meetReady
+          ? (t.smartMeetStatus)
+          : blockingLifts.length > 1
+            ? (t.smartCurrentBlockers)
+            : (t.smartCurrentBlocker),
+        value: statusText,
+      });
+    }
 
     // One compact row per lift instead of three metric cells each (best e1RM
     // this cycle / target / gap). The blockers row above can name more than one
@@ -6667,7 +6674,7 @@ export function getSmartModalDetailRows(workout = {}, t = translations.en, curre
     summary.dayType !== SMART_DAY_TYPES.MEET
   ) {
     rows.push({
-      label: t.smartProjectedMeet,
+      label: followsIdealRoute ? t.expectedMeetWindow : t.smartProjectedMeet,
       value: meetProjection.available
         ? meetProjection.label
         : (t.smartProjectionUnavailable),
@@ -6676,9 +6683,11 @@ export function getSmartModalDetailRows(workout = {}, t = translations.en, curre
   }
 
   if (showMeetReadinessDetail && hasMeetReadinessDetail) {
-    const readinessBasisText = readiness.meetProjection?.available
-      ? (t.smartReadinessBasisTextWithProjection)
-      : (t.smartReadinessBasisText);
+    const readinessBasisText = followsIdealRoute
+      ? t.smartIdealRouteReadinessBasisText
+      : readiness.meetProjection?.available
+        ? (t.smartReadinessBasisTextWithProjection)
+        : (t.smartReadinessBasisText);
 
     rows.push({
       label: t.smartReadinessBasis,
@@ -6830,14 +6839,13 @@ export function SmartDayTypeInline({
   const prescriptionRows = otherRows.filter(
     row => row.kind === 'prescription'
   );
-  const projectedMeetLabel =
-    t.smartProjectedMeet;
+  const projectedMeetLabels = [t.smartProjectedMeet, t.expectedMeetWindow];
   const projectionRows = otherRows.filter(row =>
-    row.label === projectedMeetLabel
+    projectedMeetLabels.includes(row.label)
   );
   const generalRows = otherRows.filter(row =>
     row.kind !== 'prescription' &&
-    row.label !== projectedMeetLabel
+    !projectedMeetLabels.includes(row.label)
   );
   const meetDayRows = generalRows.filter(row => row.kind === 'meet-day');
   const ordinaryGeneralRows = generalRows.filter(row => row.kind !== 'meet-day');
@@ -15361,27 +15369,6 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       workouts[currentIndex] && (() => {
       const meetReadiness = workouts[currentIndex].smartDecisionSummary?.readiness;
       const dashboardMeetProjection = meetReadiness?.meetProjection || null;
-      const primaryBlockerLift = getDashboardPrimaryBlockerLift(meetReadiness);
-      const primaryBlockerReadiness = primaryBlockerLift
-        ? meetReadiness?.meetPlanReadiness?.[primaryBlockerLift]
-        : null;
-      const currentCycleBestE1RM = roundBarbellWeight(
-        Number(primaryBlockerReadiness?.currentCycleBestE1RM) || 0,
-        'nearest',
-        2.5
-      );
-      const readinessTarget = roundBarbellWeight(
-        Number(
-          primaryBlockerReadiness?.oneRMTargetE1RM ||
-          primaryBlockerReadiness?.currentCycleTarget
-        ) || 0,
-        'nearest',
-        2.5
-      );
-      const readinessGap = Math.max(readinessTarget - currentCycleBestE1RM, 0);
-      const blockerRouteText = primaryBlockerLift && currentCycleBestE1RM > 0 && readinessTarget > 0
-        ? `${t.smartPrimaryBlocker}: ${primaryBlockerLift} (${t.smartOpenerGapShort} ${formatWeightFromKg(readinessGap, weightUnit)})`
-        : null;
       const { meetPlan: dashboardMeetPlan, meetTotals: dashboardMeetTotals } = dashboardSuggestedMeetPlan;
 
       return (
@@ -15404,16 +15391,11 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
               <span>{t.dashboardMeetRouteTitle}</span>
               <TapInfoIcon color={THEME.meet} />
             </div>
-            <div style={{ color: THEME.text, fontSize: dashboardUsesExpandedLayout ? 'clamp(16px, 3.8vw, 19px)' : 'clamp(14px, 3.3vw, 16px)', fontWeight: 800, marginBottom: dashboardMeetProjection?.available && dashboardMeetProjection.limitingLift ? 2 : 6, lineHeight: 1.35 }}>
+            <div style={{ color: THEME.text, fontSize: dashboardUsesExpandedLayout ? 'clamp(16px, 3.8vw, 19px)' : 'clamp(14px, 3.3vw, 16px)', fontWeight: 800, marginBottom: 6, lineHeight: 1.35 }}>
               {dashboardMeetProjection?.available
                 ? `${t.expectedMeetWindow}: ${dashboardMeetProjection.label}`
                 : (t.smartProjectionUnavailable)}
             </div>
-            {blockerRouteText && (
-              <div style={{ color: THEME.meet, fontSize: dashboardUsesExpandedLayout ? 'clamp(14px, 3.3vw, 16px)' : 'clamp(12px, 2.9vw, 14px)', fontWeight: 900, lineHeight: 1.3 }}>
-                {blockerRouteText}
-              </div>
-            )}
           </div>
 
           {showMeetPlanModal && (

@@ -14,7 +14,7 @@ Smart Training follows a level-specific 28-workout ideal route from the start of
 - Uses real 1RM values for meet planning and tracks estimated 1RM progress from successful sets.
 - Responds predictably to workout feedback: **Too easy** shortens the route to the meet, while **Too hard** or failed work adds recovery.
 - Builds toward meet attempts, tapers and schedules an SBD Meet Day.
-- Shows past, current and provisional future workouts, and explains readiness and projected meet timing.
+- Shows past, current and provisional future workouts, and explains readiness and expected meet timing.
 - Tracks 1RM, e1RM, SBD totals, Strength, eStrength and body statistics.
 
 During training you can complete or fail sets, adjust and restore weights, use a rest timer and open the plate calculator. Failed sets automatically make the workout **Too hard**; optional work left unchecked is not treated as failure.

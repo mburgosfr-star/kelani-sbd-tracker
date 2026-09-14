@@ -1616,7 +1616,7 @@ test.each(['nl', 'en', 'ca'])('TOO HARD route recovery explains the one-day adju
     workout
   )).toBe(t.smartReasonIdealRouteTooHardRecovery);
   expect(getSmartModalDetailRows(workout, t)).toEqual([
-    { label: t.smartProjectedMeet, value: 'C4W29' },
+    { label: t.expectedMeetWindow, value: 'C4W29' },
   ]);
 });
 
