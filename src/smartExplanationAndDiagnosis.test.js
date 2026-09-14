@@ -6,6 +6,9 @@ import {
   getHistoricalSmartIntensityRole,
 } from './App';
 import { translations } from './translations';
+import { generateWorkoutsForTrainingModel } from './smartTrainingEngine';
+import { SMART_IDEAL_LEVELS } from './smartIdealRoute';
+import { TRAINING_MODELS } from './smartTrainingConstants';
 
 test('completed workout labels keep their stored historical meaning', () => {
   expect(getHistoricalSmartIntensityRole({
@@ -163,6 +166,50 @@ function workoutWith(lifts) {
   };
 }
 
+function completeIdealRouteWorkout(history, workout) {
+  const completed = {
+    ...workout,
+    completed: true,
+    workoutEffort: workout.type === 'rest' ? 'easy' : 'good',
+    lifts: (workout.lifts || []).map(liftBlock => ({
+      ...liftBlock,
+      warmups: (liftBlock.warmups || []).map(item => ({ ...item, done: true })),
+      sets: (liftBlock.sets || []).map(set => ({
+        ...set,
+        done: true,
+        failed: false,
+        skipped: false,
+      })),
+    })),
+  };
+  completed.warmups = completed.lifts[0]?.warmups || [];
+  completed.sets = completed.lifts[0]?.sets || [];
+
+  if (completed.type === 'rest') {
+    return [...history, {
+      cycle: 1,
+      workoutNumber: completed.number,
+      restDay: true,
+      completionOnly: true,
+      workoutEffort: 'easy',
+      smartDayType: 'recovery',
+      workoutSnapshot: completed,
+    }];
+  }
+
+  return [
+    ...history,
+    ...completed.lifts.map(liftBlock => ({
+      cycle: 1,
+      workoutNumber: completed.number,
+      lift: liftBlock.lift,
+      workoutEffort: completed.workoutEffort,
+      smartDayType: completed.type === 'meet' ? 'meet' : 'training',
+      workoutSnapshot: completed,
+    })),
+  ];
+}
+
 test('fully demonstrated meet readiness does not claim taper before taper starts', () => {
   const workout = workoutWith([smartLift({ lift: 'Squat', role: 'secondary' })]);
   workout.smartDecisionSummary.readiness.meetPlanFullyDemonstrated = true;
@@ -200,6 +247,63 @@ test.each(['nl', 'en', 'ca'])(
       value: t.smartMeetFullyReadyTaper,
     });
     expect(t.smartMeetFullyReadyTaper).not.toBe(t.smartMeetFullyReady);
+  }
+);
+
+test.each(SMART_IDEAL_LEVELS)(
+  'every active %s W1-W28 route screen keeps readiness informational and blocker-free',
+  athleteLevel => {
+    let history = [];
+    const workouts = [];
+
+    for (let currentIndex = 0; currentIndex < 28; currentIndex += 1) {
+      const workout = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
+        programProfile: 'kelaniSbd',
+        squat: 150,
+        bench: 100,
+        deadlift: 200,
+        accessoryMode: 'off',
+        preparationMode: 'off',
+        currentCycle: 1,
+        currentIndex,
+        history,
+        athleteLevel,
+      })[currentIndex];
+      workouts.push(workout);
+      history = completeIdealRouteWorkout(history, workout);
+    }
+
+    expect(workouts).toHaveLength(28);
+
+    workouts.forEach((workout, index) => {
+      expect(workout.smartIdealRoute).toMatchObject({
+        workoutNumber: index + 1,
+      });
+
+      const rows = getSmartModalDetailRows(workout, translations.en);
+      const labels = rows.map(row => row.label);
+      const diagnosis = buildSmartDiagnosticText(workout, translations.en);
+
+      expect(labels).not.toContain(translations.en.smartCurrentBlocker);
+      expect(labels).not.toContain(translations.en.smartCurrentBlockers);
+      expect(labels).not.toContain(translations.en.smartPrimaryBlocker);
+      expect(diagnosis).not.toContain('Meet blockers:');
+
+      if (workout.type === 'meet') {
+        expect(labels).toContain(translations.en.smartMeetDayReadyLabel);
+        expect(labels).not.toContain(translations.en.expectedMeetWindow);
+        return;
+      }
+
+      expect(labels).toContain(translations.en.expectedMeetWindow);
+      expect(labels).not.toContain(translations.en.smartProjectedMeet);
+
+      if (Object.keys(
+        workout.smartDecisionSummary?.readiness?.meetPlanReadiness || {}
+      ).length > 0) {
+        expect(rows.some(row => row.kind === 'lift-readiness')).toBe(true);
+      }
+    });
   }
 );
 
