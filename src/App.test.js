@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, replaceCurrentChartEndpoint, statsScreenStyle } from './StatsScreen';
-import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
+import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
 test('a failed Squat set uses the darker SBD status color instead of the Squat lift color', () => {
@@ -1915,6 +1915,64 @@ test('finishing the compact setup creates a Smart user with body weight and star
     });
     expect(saved.bodyWeights[0].bodyWeight).toBe(80);
   });
+});
+
+test('every Smart set has a phase label without breaking the four-column grid', async () => {
+  localStorage.clear();
+  render(<App />);
+
+  await screen.findByText('Start with Smart Training', {}, { timeout: 3000 });
+  fireEvent.change(screen.getByLabelText('Body weight'), { target: { value: '60' } });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Squat Weight' }), { target: { value: '50' } });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Bench Weight' }), { target: { value: '30' } });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Deadlift Weight' }), { target: { value: '65' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Workout' }));
+
+  const squatGrid = await screen.findByTestId('workout-lift-grid-0');
+  expect(squatGrid).toHaveStyle({ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' });
+  expect(squatGrid.querySelectorAll('[data-workout-circle-item="true"]')).toHaveLength(8);
+  expect(squatGrid.children[0]).toHaveStyle({ display: 'contents' });
+  expect(squatGrid.children[1]).toHaveAttribute('data-testid', 'workout-set-group');
+  expect(Array.from(squatGrid.querySelectorAll('[data-testid="workout-phase-tag"]')).map(tag => tag.textContent))
+    .toEqual(['WU', 'TOP', 'BO', 'BO', 'BO', 'BO', 'BO', 'BO']);
+  const benchGrid = screen.getByTestId('workout-lift-grid-1');
+  expect(Array.from(benchGrid.querySelectorAll('[data-testid="workout-phase-tag"]')).map(tag => tag.textContent))
+    .toEqual(['WORK', 'WORK', 'WORK', 'WORK']);
+  expect(screen.queryByTestId('workout-warmup-label-0')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('workout-work-sets-label-0')).not.toBeInTheDocument();
+});
+
+test('opening Stats after Smart setup renders the screen and all tabs', async () => {
+  localStorage.clear();
+  render(<App />);
+
+  await screen.findByText('Start with Smart Training', {}, { timeout: 3000 });
+  fireEvent.change(screen.getByLabelText('Body weight'), { target: { value: '60' } });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Squat Weight' }), { target: { value: '50' } });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Bench Weight' }), { target: { value: '30' } });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Deadlift Weight' }), { target: { value: '65' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Statistics' }));
+
+  expect(await screen.findByTestId('stats-screen')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Lifts' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Total' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Body' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Health' })).toBeInTheDocument();
+  for (const tab of ['Total', 'Body', 'Health', 'Lifts']) {
+    fireEvent.click(screen.getByRole('button', { name: tab }));
+    expect(screen.getByTestId('stats-screen')).toBeInTheDocument();
+  }
+});
+
+test('set phase labels distinguish top sets, back-offs, work and meet attempts', () => {
+  expect(['topTriple', 'topDouble', 'topSingle', 'heavySingle', 'backoff', 'workSets', 'opener', 'secondAttempt', 'thirdAttempt']
+    .map(labelKey => getWorkoutSetPhaseTag({ labelKey }, translations.en)))
+    .toEqual(['TOP', 'TOP', 'TOP', 'TOP', 'BO', 'WORK', '1st', '2nd', '3rd']);
+  expect(['opener', 'secondAttempt', 'thirdAttempt']
+    .map(labelKey => getWorkoutSetPhaseTag({ labelKey }, translations.nl)))
+    .toEqual(['1e', '2e', '3e']);
 });
 
 test('a legacy Smart save ignores and removes its frozen cycle e1RM load basis', async () => {

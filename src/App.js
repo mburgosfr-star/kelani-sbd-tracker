@@ -154,9 +154,9 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import StatsScreen from './StatsScreen';
 
 const PlateCalculator = React.lazy(() => import('./PlateCalculator'));
-const StatsScreen = React.lazy(() => import('./StatsScreen'));
 
 const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
 const WORKOUT_EFFORT_OPTIONS = ['easy', 'good', 'hard'];
@@ -2454,11 +2454,13 @@ function WorkoutWeightPercentLabel({
   percentText = null,
   color = THEME.muted,
   showPlateCalculatorIcon = false,
+  phaseTag = null,
 }) {
   return (
     <span
       style={{
         display: 'inline-flex',
+        position: 'relative',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
@@ -2467,6 +2469,24 @@ function WorkoutWeightPercentLabel({
         whiteSpace: 'nowrap',
       }}
     >
+      {phaseTag ? (
+        <span
+          data-testid="workout-phase-tag"
+          style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            color: THEME.muted,
+            fontSize: '0.66em',
+            fontWeight: 800,
+            lineHeight: 1,
+            letterSpacing: '0.02em',
+          }}
+        >
+          {phaseTag}
+        </span>
+      ) : null}
       <span>{weightText}</span>
       {(percentText || showPlateCalculatorIcon) ? (
         <span
@@ -2506,6 +2526,15 @@ function WorkoutWeightPercentLabel({
       ) : null}
     </span>
   );
+}
+
+export function getWorkoutSetPhaseTag(set, t) {
+  if (isTopSetLabel(set?.labelKey)) return t.topSetShort;
+  if (set?.labelKey === 'backoff') return t.backoffShort;
+  if (set?.labelKey === 'opener') return t.openerShort;
+  if (set?.labelKey === 'secondAttempt') return t.secondAttemptShort;
+  if (set?.labelKey === 'thirdAttempt') return t.thirdAttemptShort;
+  return t.workSetsShort;
 }
 
 function WorkoutWeightCalculatorTrigger({
@@ -2730,7 +2759,7 @@ export function WorkoutLiftGrid({
         rowGap: compactVertical
           ? 'clamp(3px, 0.4dvh, 4px)'
           : RESPONSIVE_WORKOUT_UI.circleGap,
-        padding: `0 ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
+        padding: `12px ${RESPONSIVE_WORKOUT_UI.rowPaddingX} 0`,
         marginBottom: compactVertical
           ? 2
           : RESPONSIVE_WORKOUT_UI.sectionGap,
@@ -2746,7 +2775,7 @@ export function WorkoutLiftGrid({
   );
 }
 
-export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, compactGrid = false, gridSpan = null, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard', onShowPlateCalculator }) {
+export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, compactGrid = false, showPhaseTags = false, gridSpan = null, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard', onShowPlateCalculator }) {
   if (!warmups.length) return null;
 
   return (
@@ -2783,6 +2812,7 @@ export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activ
               weightText={warmupWeight}
               percentText={warmupPct}
               showPlateCalculatorIcon={Boolean(onShowPlateCalculator)}
+              phaseTag={showPhaseTags ? t.warmupShort : null}
             />
           </WorkoutWeightCalculatorTrigger>
         );
@@ -3000,7 +3030,7 @@ export function formatWorkoutSetPercentDisplay(set = {}) {
     : formatSetPercentDisplay(displayPct);
 }
 
-export function SetRow({ set, index, label, isWarmup = false, compactGrid = false, gridSpan = null, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator }) {
+export function SetRow({ set, index, label, isWarmup = false, compactGrid = false, gridSpan = null, phaseTag = null, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator }) {
   const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
   const displayPct = formatWorkoutSetPercentDisplay(set);
   const effortLabel = getSetEffortLabel(set.effort, t);
@@ -3057,6 +3087,7 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
         percentText={displayPct}
         color={isAdjusted ? '#f39c12' : THEME.muted}
         showPlateCalculatorIcon={canShowPlateCalculator}
+        phaseTag={phaseTag}
       />
     </WorkoutWeightCalculatorTrigger>
   );
@@ -5069,7 +5100,7 @@ function getSkippedSetMessage(set, t, isLastSet = false) {
   return t.topSetSkipped;
 }
 
-export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = false, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator, isLastGroupOfWorkout = false, workoutCompleted = false }) {
+export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = false, showPhaseTags = false, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator, isLastGroupOfWorkout = false, workoutCompleted = false }) {
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
   const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
@@ -5268,6 +5299,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
                 percentText={setDisplayPct}
                 color={setIsAdjusted ? '#f39c12' : THEME.muted}
                 showPlateCalculatorIcon={canShowPlateCalculator}
+                phaseTag={showPhaseTags ? getWorkoutSetPhaseTag(set, t) : null}
               />
             </WorkoutWeightCalculatorTrigger>
           );
@@ -7722,6 +7754,7 @@ export function CurrentWorkout({
               >
                 <WarmupGrid
                   compactGrid
+                  showPhaseTags
                   warmups={liftBlock.warmups || []}
                   gridSpan={isMeetDay
                     ? meetWorkoutGridSpan((liftBlock.warmups || []).length)
@@ -7769,6 +7802,7 @@ export function CurrentWorkout({
                     <React.Fragment key={`secondary-set-group-${li}`}>
                       <BackoffGroup
                         compactGrid
+                        showPhaseTags
                         entries={secondarySetEntries}
                         onShowPlateCalculator={onShowPlateCalculator}
                         activeIndex={
@@ -7807,6 +7841,7 @@ export function CurrentWorkout({
                     <React.Fragment key={`set-group-${li}-${si}`}>
                       <BackoffGroup
                         compactGrid
+                        showPhaseTags
                         entries={groupedSetEntries}
                         onShowPlateCalculator={onShowPlateCalculator}
                         activeIndex={
@@ -7896,6 +7931,7 @@ export function CurrentWorkout({
 
                   <SetRow
                     compactGrid
+                    phaseTag={getWorkoutSetPhaseTag(set, t)}
                     gridSpan={isMeetDay
                       ? meetWorkoutGridSpan((liftBlock.sets || []).length)
                       : null}
@@ -15073,7 +15109,6 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       )}
 
       {screen === 'stats' && (
-        <React.Suspense fallback={null}>
         <StatsScreen
           history={history}
           bodyWeights={bodyWeights}
@@ -15096,8 +15131,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           HeaderComponent={AppHeader}
           LevelBadgeComponent={AthleteLevelBadge}
         />
-        </React.Suspense>
-)}
+      )}
 
       {screen === 'settings' && (
        <div style={{ ...responsiveContentScreenStyle(), display: 'flex', flexDirection: 'column' }}>

@@ -5563,6 +5563,10 @@ function generateSmartWorkouts({
 
     const shouldBuildNoEffectiveTrainingRecovery =
       isDecisionWorkout &&
+      // The ideal route has already produced the displayed workout. The
+      // legacy stimulus gate can reject a valid light lift after barbell
+      // rounding, but must not label that training day as recovery.
+      !hasActiveIdealRouteWorkout &&
       smartDecision.dayType === SMART_DAY_TYPES.TRAINING &&
       !hasEffectiveTrainingCandidate &&
       (

@@ -157,6 +157,29 @@ function renderCurrentWorkout(workout, { t = translations.en, isReadOnly = false
   return handlers;
 }
 
+test('meet day labels every warm-up and each attempt in the workout grid', () => {
+  renderCurrentWorkout({
+    type: 'meet',
+    number: 28,
+    lifts: [{
+      lift: 'Squat',
+      warmups: [
+        { weight: 20, reps: 5, done: false },
+        { weight: 60, reps: 3, done: false },
+      ],
+      sets: [
+        { labelKey: 'opener', weight: 90, reps: 1, pct: 0.9, done: false },
+        { labelKey: 'secondAttempt', weight: 97.5, reps: 1, pct: 0.975, done: false },
+        { labelKey: 'thirdAttempt', weight: 102.5, reps: 1, pct: 1.025, done: false },
+      ],
+    }],
+  });
+
+  const grid = screen.getByTestId('workout-lift-grid-0');
+  expect(Array.from(grid.querySelectorAll('[data-testid="workout-phase-tag"]')).map(tag => tag.textContent))
+    .toEqual(['WU', 'WU', '1st', '2nd', '3rd']);
+});
+
 test.each(preparationContexts)('one translated preparation section appears before all main lifts in $language ($type)', ({ language, type }) => {
   const t = translations[language];
   const lifts = ['Squat', 'Bench', 'Deadlift'];
