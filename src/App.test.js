@@ -1,7 +1,40 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, replaceCurrentChartEndpoint, statsScreenStyle } from './StatsScreen';
-import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
+import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
+
+test.each(['nl', 'en', 'ca'])(
+  'cycle feedback email is localized and contains only the three prompts plus app metadata in %s',
+  language => {
+    const t = translations[language];
+    const url = buildCycleFeedbackEmailUrl({
+      t,
+      language,
+      appVersion: '2.0.35',
+    });
+    const decodedUrl = decodeURIComponent(url);
+
+    expect(url).toMatch(/^mailto:mburgosfr@gmail\.com\?subject=/);
+    expect(decodedUrl).toContain(t.cycleFeedbackEmailSubject);
+    expect(decodedUrl).toContain(`1. ${t.cycleFeedbackWorkedWell}`);
+    expect(decodedUrl).toContain(`2. ${t.cycleFeedbackDidNotWork}`);
+    expect(decodedUrl).toContain(`3. ${t.cycleFeedbackImprove}`);
+    expect(decodedUrl).toContain(`${t.usageAppVersion}: 2.0.35`);
+    expect(decodedUrl).toContain(`${t.usageLanguage}: ${t[`language${language === 'nl' ? 'Dutch' : language === 'ca' ? 'Catalan' : 'English'}`]}`);
+    expect(decodedUrl).not.toContain('completed_sessions');
+    expect(decodedUrl).not.toContain('failed_sets');
+  }
+);
+
+test('cycle feedback is offered only after a completed meet or cycle boundary', () => {
+  expect(shouldShowCycleFeedbackAction()).toBe(false);
+  expect(shouldShowCycleFeedbackAction({ completedWorkoutIsMeet: true })).toBe(true);
+  expect(shouldShowCycleFeedbackAction({ completedWorkoutCanStartNewCycle: true })).toBe(true);
+  expect(shouldShowCycleFeedbackAction({
+    completedWorkoutIsMeet: false,
+    completedWorkoutCanStartNewCycle: false,
+  })).toBe(false);
+});
 
 test('a failed Squat set uses the darker SBD status color instead of the Squat lift color', () => {
   render(
@@ -2093,7 +2126,7 @@ test('settings combines support, feedback, source, identity and release verifica
   expect(screen.getByRole('button', { name: 'Support' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Share usage data' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Feedback' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Contact' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Share your experience' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Report issue' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'GitHub repo' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'IzzyOnDroid (NeoStore)' })).toBeInTheDocument();
@@ -2110,7 +2143,7 @@ test('settings combines support, feedback, source, identity and release verifica
     'Support',
     'Share usage data',
     'Feedback',
-    'Contact',
+    'Share your experience',
     'Report issue',
     'GitHub repo',
     'IzzyOnDroid (NeoStore)',
@@ -2129,9 +2162,13 @@ test('settings combines support, feedback, source, identity and release verifica
     '_blank',
     'noopener,noreferrer'
   );
-  fireEvent.click(screen.getByRole('button', { name: 'Contact' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Share your experience' }));
   expect(openSpy).toHaveBeenCalledWith(
-    'mailto:mburgosfr@gmail.com?subject=Kelani%20contact',
+    buildCycleFeedbackEmailUrl({
+      t: translations.en,
+      language: 'en',
+      appVersion: 'dev',
+    }),
     '_blank',
     'noopener,noreferrer'
   );

@@ -3903,6 +3903,40 @@ function SupportActionButton({ children, onClick }) {
   );
 }
 
+export function buildCycleFeedbackEmailUrl({
+  t,
+  language = 'en',
+  appVersion = 'dev',
+}) {
+  const languageLabel = {
+    nl: t.languageDutch,
+    en: t.languageEnglish,
+    ca: t.languageCatalan,
+  }[language] || language;
+  const subject = encodeURIComponent(t.cycleFeedbackEmailSubject);
+  const body = encodeURIComponent([
+    t.cycleFeedbackEmailIntro,
+    '',
+    `1. ${t.cycleFeedbackWorkedWell}`,
+    '',
+    `2. ${t.cycleFeedbackDidNotWork}`,
+    '',
+    `3. ${t.cycleFeedbackImprove}`,
+    '',
+    `${t.usageAppVersion}: ${appVersion || 'dev'}`,
+    `${t.usageLanguage}: ${languageLabel}`,
+  ].join('\n'));
+
+  return `mailto:mburgosfr@gmail.com?subject=${subject}&body=${body}`;
+}
+
+export function shouldShowCycleFeedbackAction({
+  completedWorkoutIsMeet = false,
+  completedWorkoutCanStartNewCycle = false,
+} = {}) {
+  return Boolean(completedWorkoutIsMeet || completedWorkoutCanStartNewCycle);
+}
+
 function usageModeLabel(mode, kind, t) {
   if (!mode || mode === 'off') return t.programOptionOff;
   if (kind === 'preparation') {
@@ -4216,7 +4250,7 @@ export function MilestoneCelebrationModal({
   );
 }
 
-function AboutSupportSection({ t, usageMetrics }) {
+function AboutSupportSection({ t, language, usageMetrics }) {
   const [showAbout, setShowAbout] = useState(false);
   const [showUsageSummary, setShowUsageSummary] = useState(false);
 
@@ -4242,8 +4276,12 @@ function AboutSupportSection({ t, usageMetrics }) {
       onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=feedback.md'),
     },
     {
-      label: t.contactKelani,
-      onClick: () => openLink('mailto:mburgosfr@gmail.com?subject=Kelani%20contact'),
+      label: t.shareCycleExperience,
+      onClick: () => openLink(buildCycleFeedbackEmailUrl({
+        t,
+        language,
+        appVersion: import.meta.env.VITE_APP_VERSION || 'dev',
+      })),
     },
     {
       label: t.reportIssueShort || t.reportBug,
@@ -15186,7 +15224,11 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         t={t}
       />
 
-      <AboutSupportSection t={t} usageMetrics={anonymousUsageMetrics} />
+      <AboutSupportSection
+        t={t}
+        language={language}
+        usageMetrics={anonymousUsageMetrics}
+      />
     </div>
 
     <div data-testid="start-over-settings-row">
@@ -15556,6 +15598,27 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           </div>
         )}
         {/* FORCE_MULTI_LIFT_COMPLETED_SETS_END */}
+
+        {shouldShowCycleFeedbackAction({
+          completedWorkoutIsMeet,
+          completedWorkoutCanStartNewCycle,
+        }) && (
+          <div style={{ width: 'min(260px, 100%)', margin: '8px auto 0' }}>
+            <SupportActionButton
+              onClick={() => window.open(
+                buildCycleFeedbackEmailUrl({
+                  t,
+                  language,
+                  appVersion: import.meta.env.VITE_APP_VERSION || 'dev',
+                }),
+                '_blank',
+                'noopener,noreferrer'
+              )}
+            >
+              {t.shareCycleExperience}
+            </SupportActionButton>
+          </div>
+        )}
         </div>
 
       </div>
