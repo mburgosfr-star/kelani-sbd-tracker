@@ -99,3 +99,12 @@ export function formatWeightFromKg(weightKg, unit = WEIGHT_UNITS.KG, options = {
 
   return `${formatWeightDisplayValue(displayWeight, unit, options)} ${normalizeWeightUnit(unit)}`;
 }
+
+// Estimates keep their full precision in state. Two visible decimal places
+// communicate useful precision without exposing floating-point noise.
+export function formatEstimatedWeightFromKg(weightKg, unit = WEIGHT_UNITS.KG) {
+  const displayWeight = kgToDisplayWeight(weightKg, unit);
+  if (displayWeight === '') return '-';
+
+  return `${formatDecimalDisplay(displayWeight, { maximumFractionDigits: 2 })} ${normalizeWeightUnit(unit)}`;
+}

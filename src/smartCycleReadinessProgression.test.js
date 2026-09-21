@@ -216,7 +216,7 @@ test('names the cycle estimate and real 1RM target separately in the Smart modal
       label: 'Current blocker',
       value: 'Squat (100% of the real 1RM not yet reached)',
     },
-    { label: 'Squat', value: 'Best e1RM this cycle 115 kg → 145 kg (Gap 30 kg)', kind: 'lift-readiness' },
+    { label: 'Squat', value: 'Best e1RM this cycle 116.17 kg → 145 kg (Gap 28.83 kg)', kind: 'lift-readiness' },
     { label: 'Projected meet', value: 'C3W27–C3W29' },
     {
       label: 'Readiness basis',

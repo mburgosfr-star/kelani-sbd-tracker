@@ -492,6 +492,17 @@ export function applyAccessoryPlanToWorkouts(
     if (completedWorkoutNumbers.has(Number(generated?.number || workout.number))) return workout;
     if (!generated) return workout;
 
+    // A focus change may replace a lift in the active day. Never transfer
+    // checked sets by array position onto a different lift mid-workout.
+    const activeLiftNames = (workout.lifts || []).map(block => block.lift);
+    const generatedLiftNames = (generated.lifts || []).map(block => block.lift);
+    if (Number(generated.number || workout.number) === Number(activeWorkoutNumber) &&
+      workoutHasUserProgress(workout) &&
+      (activeLiftNames.length !== generatedLiftNames.length ||
+        activeLiftNames.some((lift, liftIndex) => lift !== generatedLiftNames[liftIndex]))) {
+      return workout;
+    }
+
     if (workout.type === 'meet') {
       // An untouched cached "meet" slot is stale plan data, not a real in-progress
       // meet day — adopt the freshly generated day type/content for it. Only a

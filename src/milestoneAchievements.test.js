@@ -51,8 +51,8 @@ test('combines a lift e1RM, Total e1RM and eStrength Max in one celebration', ()
 
   expect(celebration.completionId).toBe('1:1:test');
   expect(celebration.achievements).toEqual(expect.arrayContaining([
-    expect.objectContaining({ type: 'e1RM', lift: 'Squat', value: 107.5, gain: 7.5 }),
-    expect.objectContaining({ type: 'e1RM', lift: 'Total', value: 307.5, gain: 7.5 }),
+    expect.objectContaining({ type: 'e1RM', lift: 'Squat', value: 106.66666666666667, gain: 6.666666666666671 }),
+    expect.objectContaining({ type: 'e1RM', lift: 'Total', value: 306.6666666666667, gain: 6.666666666666686 }),
     expect.objectContaining({ type: 'eStrengthMax' }),
   ]));
   expect(celebration.achievements.some(item => item.type === 'oneRM')).toBe(false);
@@ -185,8 +185,8 @@ test('an e1RM PR is not an eStrength Max PR while a lighter historical ratio rem
 
   const celebration = buildMilestoneCelebration({ before, after });
   expect(celebration.achievements).toEqual(expect.arrayContaining([
-    expect.objectContaining({ type: 'e1RM', lift: 'Squat', gain: 2.5 }),
-    expect.objectContaining({ type: 'e1RM', lift: 'Total', gain: 2.5 }),
+    expect.objectContaining({ type: 'e1RM', lift: 'Squat', gain: 2 }),
+    expect.objectContaining({ type: 'e1RM', lift: 'Total', gain: 2 }),
   ]));
   expect(celebration.achievements.some(item => item.type === 'strengthMax')).toBe(false);
   expect(celebration.achievements.some(item => item.type === 'eStrengthMax')).toBe(false);

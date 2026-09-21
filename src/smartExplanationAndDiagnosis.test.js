@@ -395,7 +395,7 @@ test('shows the full readiness/blocker/fatigue detail on a deload or rest day to
     },
     {
       label: 'Deadlift',
-      value: 'Best e1RM this cycle 157.5 kg → 180 kg (Gap 22.5 kg)',
+      value: 'Best e1RM this cycle 157.3 kg → 180 kg (Gap 22.7 kg)',
       kind: 'lift-readiness',
     },
     {
@@ -432,7 +432,7 @@ test('the Gap is always exactly (displayed target) - (displayed current) - simpl
   const rows = getSmartModalDetailRows(workout);
   const liftRow = rows.find(row => row.label === 'Deadlift');
 
-  expect(liftRow.value).toBe('Best e1RM this cycle 170 kg → 185 kg (Gap 15 kg)');
+  expect(liftRow.value).toBe('Best e1RM this cycle 170.67 kg → 185 kg (Gap 14.33 kg)');
 });
 
 function secondaryLiftBlock(lift, { volumePct = 0.75, volumeReps = 6, volumeCount = 6 } = {}) {
@@ -570,9 +570,9 @@ test('lists every lift still short of its real 1RM as a blocker, not just the si
   // own row, including Bench even though it's already fully ready (not
   // omitted), just compacted to one line each instead of three cells.
   expect(rows).toEqual(expect.arrayContaining([
-    { label: 'Deadlift', value: 'Best e1RM this cycle 170 kg → 185 kg (Gap 15 kg)', kind: 'lift-readiness' },
-    { label: 'Squat', value: 'Best e1RM this cycle 137.5 kg → 147.5 kg (Gap 10 kg)', kind: 'lift-readiness' },
-    { label: 'Bench', value: 'Ready (Best e1RM this cycle 102.5 kg)', kind: 'lift-readiness' },
+    { label: 'Deadlift', value: 'Best e1RM this cycle 170.67 kg → 185 kg (Gap 14.33 kg)', kind: 'lift-readiness' },
+    { label: 'Squat', value: 'Best e1RM this cycle 138.67 kg → 147.5 kg (Gap 8.83 kg)', kind: 'lift-readiness' },
+    { label: 'Bench', value: 'Ready (Best e1RM this cycle 101.33 kg)', kind: 'lift-readiness' },
   ]));
 });
 

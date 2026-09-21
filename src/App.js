@@ -15,6 +15,7 @@ import {
   formatWeightValue,
   formatDecimalDisplay,
   formatWeightFromKg,
+  formatEstimatedWeightFromKg,
   roundToStep,
 } from './workoutUnits';
 import {
@@ -130,6 +131,8 @@ import { buildAutomaticNextSmartCycle } from './smartCycleTransition';
 import {
   isSmartIdealRouteEnabled,
   resolveSmartIdealRouteStartCycle,
+  SMART_TRAINING_FOCUSES,
+  normalizeSmartTrainingFocus,
 } from './smartIdealRoute';
 import {
   calculateActualOneRMsFromHistory,
@@ -359,7 +362,7 @@ export function buildDashboardE1RMMetrics(oneRMs = {}, e1RMs = {}) {
     const oneRM = roundDashboardWeightKg(oneRMs[lift]);
     const e1RM = Math.max(
       oneRM,
-      roundDashboardWeightKg(e1RMs[lift])
+      Number(e1RMs[lift]) || 0
     );
 
     return [lift, {
@@ -377,8 +380,8 @@ export function buildDashboardE1RMMetrics(oneRMs = {}, e1RMs = {}) {
 
 // Dashboard e1RM is factual performance: a real 1RM baseline or a higher
 // estimate actually achieved in training. Do not use inherited `bestE1RM`
-// summary fields here; those can contain Smart's rounded planning max even
-// when no set ever achieved it.
+// summary fields here; those can contain inherited planning values even
+// when no set ever achieved them.
 export function getDashboardE1RMValue(oneRM, achievedE1RM) {
   return Math.max(Number(oneRM) || 0, Number(achievedE1RM) || 0);
 }
@@ -614,14 +617,14 @@ export function buildDashboardRecentPrEvents(
   const lifts = Object.fromEntries(LIFT_ORDER.map(lift => {
     const previousOneRM = roundDashboardWeightKg(previousOneRMs[lift]);
     const currentOneRM = roundDashboardWeightKg(currentOneRMs[lift]);
-    const previousE1RM = roundDashboardWeightKg(Math.max(
+    const previousE1RM = Math.max(
       previousOneRM,
       Number(previousAchievedMaxes?.[lift]?.e1rm) || 0
-    ));
-    const currentE1RM = roundDashboardWeightKg(Math.max(
+    );
+    const currentE1RM = Math.max(
       currentOneRM,
       Number(currentAchievedMaxes?.[lift]?.e1rm) || 0
-    ));
+    );
 
     return [lift, {
       oneRMGain: Math.max(0, currentOneRM - previousOneRM),
@@ -1226,6 +1229,8 @@ export function validateImportedBackup(backup) {
     const startCycle = Number(data.smartIdealRouteStartCycle);
     if (!Number.isInteger(startCycle) || startCycle < 1) return false;
   }
+  if (data.trainingFocus !== undefined &&
+    !Object.values(SMART_TRAINING_FOCUSES).includes(data.trainingFocus)) return false;
 
   return true;
 }
@@ -5085,7 +5090,7 @@ function NewCycleModal({ prs, onStart, t, weightUnit = WEIGHT_UNITS.KG }) {
               <span style={{ color: THEME.text, fontWeight: 700 }}>
                 {liftLabel(lift, t)} {t.e1RM}
               </span>
-              <span style={{ fontWeight: 700 }}>{prs[lift] ? formatWeightFromKg(prs[lift], weightUnit) : '-'}</span>
+              <span style={{ fontWeight: 700 }}>{prs[lift] ? formatEstimatedWeightFromKg(prs[lift], weightUnit) : '-'}</span>
             </div>
           ))}
         </div>
@@ -6540,7 +6545,7 @@ export function getSmartModalDetailRows(workout = {}, t = translations.en, curre
     const formatEstimate = value =>
       `${formatDecimalDisplay(value, {
         minimumFractionDigits: 0,
-        maximumFractionDigits: 1,
+        maximumFractionDigits: 2,
       })} kg`;
     const oneRMBlockerText =
       t.smartOneRMNotReached;
@@ -6623,13 +6628,10 @@ export function getSmartModalDetailRows(workout = {}, t = translations.en, curre
         return;
       }
 
-      const liftDisplayCycleEstimate = roundDashboardWeightKg(liftCycleEstimate);
-      const liftDisplayReadinessTarget = roundDashboardWeightKg(liftReadinessTarget);
-      // The gap must be simple, visible arithmetic on the two numbers shown
-      // right above it, never a more "precise" number that doesn't add up
-      // against what's on screen. Whether a lift reads as "ready" here
-      // follows the same displayed numbers, so the row never contradicts
-      // itself (a 0 kg gap must never be paired with a "not ready" badge).
+      const liftDisplayCycleEstimate = liftCycleEstimate;
+      const liftDisplayReadinessTarget = liftReadinessTarget;
+      // Compare the unrounded estimates. Formatting only limits the number
+      // of digits shown; it must not change meet readiness or the saved gap.
       const liftReadinessGap = Math.max(
         liftDisplayReadinessTarget - liftDisplayCycleEstimate,
         0
@@ -8744,6 +8746,39 @@ function WorkoutSetupSection({ workoutSetup, onSave, t }) {
   </>;
 }
 
+function TrainingFocusSection({ trainingFocus, onChange, athleteLevel, t }) {
+  const [open, setOpen] = useState(false);
+  const focused = trainingFocus === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT;
+
+  return <>
+    <SettingsListRow
+      label={t.trainingFocus}
+      description={athleteLevel !== 'beginner' && focused
+        ? t.trainingFocusBeginnerOnly
+        : undefined}
+      actionLabel={focused ? t.trainingFocusSquat : t.trainingFocusBalanced}
+      onAction={() => setOpen(true)}
+    />
+    {open && <SettingsModal title={t.trainingFocus} onClose={() => setOpen(false)}>
+      <p style={{ fontSize: 13, lineHeight: 1.45, color: THEME.muted }}>
+        {t.trainingFocusExplanation}
+      </p>
+      {athleteLevel !== 'beginner' && <p style={{ fontSize: 13, color: THEME.muted }}>
+        {t.trainingFocusBeginnerOnly}
+      </p>}
+      {[
+        [SMART_TRAINING_FOCUSES.STANDARD, t.trainingFocusBalanced],
+        [SMART_TRAINING_FOCUSES.BEGINNER_SQUAT, t.trainingFocusSquat],
+      ].map(([value, label]) => <button
+        type="button"
+        key={value}
+        onClick={() => { onChange(value); setOpen(false); }}
+        style={selectionModalButtonStyle(trainingFocus === value)}
+      >{label}</button>)}
+    </SettingsModal>}
+  </>;
+}
+
 function ProgramProfileSection({
   programProfile,
   preparationMode = 'off',
@@ -10207,7 +10242,7 @@ function Onboarding({ onStart, t }) {
 
     return reps === 1
       ? weightKg
-      : roundE1RM(weightKg * (1 + reps / 30));
+      : weightKg * (1 + reps / 30);
   }
 
   function handleStart() {
@@ -10733,6 +10768,7 @@ function App() {
   const [accessoryMode, setAccessoryMode] = useState('off');
   const [preparationMode, setPreparationMode] = useState('basicFirst');
   const [workoutSetup, setWorkoutSetup] = useState(() => createWorkoutSetup());
+  const [trainingFocus, setTrainingFocus] = useState(SMART_TRAINING_FOCUSES.STANDARD);
   const [cooldownMode, setCooldownMode] = useState(() =>
     normalizeCooldownMode(localStorage.getItem('cooldownMode'))
   );
@@ -11251,6 +11287,7 @@ function App() {
         preparationMode: savedPreparationMode,
         accessoryMode: savedAccessoryMode,
       });
+      const savedTrainingFocus = normalizeSmartTrainingFocus(data.trainingFocus);
       const savedAthleteLevel = getAthleteLevel({
         prs: restoredPrs,
         history: savedHistory,
@@ -11279,6 +11316,7 @@ function App() {
         accessoryPRs: data.accessoryPRs || {},
         preparationMode: savedPreparationMode,
         workoutSetup: savedWorkoutSetup,
+        trainingFocus: savedTrainingFocus,
         athleteLevel: savedAthleteLevel,
         deadliftVariant: savedDeadliftVariant,
         benchPressVariant: savedBenchPressVariant,
@@ -11332,6 +11370,7 @@ function App() {
       setAccessoryMode(savedAccessoryMode);
       setPreparationMode(savedPreparationMode);
       setWorkoutSetup(savedWorkoutSetup);
+      setTrainingFocus(savedTrainingFocus);
       setCooldownMode(savedCooldownMode);
       setSquatVariant(savedSquatVariant);
       setDeadliftVariant(savedDeadliftVariant);
@@ -11414,6 +11453,7 @@ function App() {
       accessoryMode,
       preparationMode,
       workoutSetup,
+      trainingFocus,
       cooldownMode,
       squatVariant,
       deadliftVariant,
@@ -11486,7 +11526,7 @@ function App() {
         });
       }
     }
-  }, [hasLoadedData, history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, workoutSetup, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
+  }, [hasLoadedData, history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, workoutSetup, trainingFocus, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
 
   useEffect(() => {
     if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
@@ -11516,6 +11556,7 @@ function App() {
       accessoryPRs,
       preparationMode,
       workoutSetup,
+      trainingFocus,
       athleteLevel,
       deadliftVariant,
       benchPressVariant,
@@ -11544,7 +11585,7 @@ function App() {
         Number(currentIndex) + 1
       ));
     });
-  }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, workoutSetup, athleteLevel, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, oneRMs.Squat, oneRMs.Bench, oneRMs.Deadlift, smartIdealRouteStartCycle, history, bodyWeights, currentIndex, currentCycle, meetPlannerAttempts]);
+  }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, workoutSetup, trainingFocus, athleteLevel, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, oneRMs.Squat, oneRMs.Bench, oneRMs.Deadlift, smartIdealRouteStartCycle, history, bodyWeights, currentIndex, currentCycle, meetPlannerAttempts]);
 
   useEffect(() => {
     if (!hasLoadedData || !isSmartTrainingModel(trainingModel)) return;
@@ -11569,6 +11610,7 @@ function App() {
       accessoryPRs,
       preparationMode,
       workoutSetup,
+      trainingFocus,
       deadliftVariant,
       benchPressVariant,
       squatVariant,
@@ -11614,6 +11656,8 @@ function App() {
     accessoryMode,
     accessoryPRs,
     preparationMode,
+    workoutSetup,
+    trainingFocus,
     deadliftVariant,
     benchPressVariant,
     squatVariant,
@@ -11667,15 +11711,16 @@ function App() {
       accessoryMode: defaultAccessoryMode,
     });
     setWorkoutSetup(defaultWorkoutSetup);
+    setTrainingFocus(SMART_TRAINING_FOCUSES.STANDARD);
     setSquatVariant(defaultSquatVariant);
     setBenchPressVariant(defaultBenchPressVariant);
     setDeadliftVariant(defaultDeadliftVariant);
     setCooldownMode(defaultCooldownMode);
 
     const initialOneRMs = normalizeOneRMs({
-      Squat: s,
-      Bench: b,
-      Deadlift: d,
+      Squat: roundToStep(s, 2.5),
+      Bench: roundToStep(b, 2.5),
+      Deadlift: roundToStep(d, 2.5),
     });
     setWorkouts(generateWorkoutsForTrainingModel(defaultTrainingModel, {
       programProfile: defaultProgramProfile,
@@ -11686,6 +11731,7 @@ function App() {
       accessoryPRs: {},
       preparationMode: defaultPreparationMode,
       workoutSetup: defaultWorkoutSetup,
+      trainingFocus: SMART_TRAINING_FOCUSES.STANDARD,
       athleteLevel: getAthleteLevel({
         prs: { Squat: s, Bench: b, Deadlift: d },
         history: [],
@@ -11711,7 +11757,7 @@ function App() {
         cycle: 0,
         seedMax: true,
         lift: 'Squat',
-        topWeight: s,
+        topWeight: initialOneRMs.Squat,
         topReps: 1,
         e1rm: s,
         date: today,
@@ -11721,7 +11767,7 @@ function App() {
         cycle: 0,
         seedMax: true,
         lift: 'Bench',
-        topWeight: b,
+        topWeight: initialOneRMs.Bench,
         topReps: 1,
         e1rm: b,
         date: today,
@@ -11731,7 +11777,7 @@ function App() {
         cycle: 0,
         seedMax: true,
         lift: 'Deadlift',
-        topWeight: d,
+        topWeight: initialOneRMs.Deadlift,
         topReps: 1,
         e1rm: d,
         date: today,
@@ -11830,6 +11876,8 @@ function handleStartNewCycle() {
     accessoryMode,
     accessoryPRs,
     preparationMode,
+    workoutSetup,
+    trainingFocus,
     athleteLevel,
     deadliftVariant,
     benchPressVariant,
@@ -12500,6 +12548,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         accessoryPRs: nextAccessoryPRs,
         preparationMode,
         workoutSetup,
+        trainingFocus,
         // Computed fresh from nextPrs/nextHistory (not the render-time
         // athleteLevel const) since this runs right after a workout
         // completion, before React has re-rendered with the new state.
@@ -13502,6 +13551,7 @@ const __kelaniSmartPreviewNextDay = (options = {}) => {
       accessoryMode: data.accessoryMode,
       accessoryPRs: data.accessoryPRs,
       preparationMode: data.preparationMode,
+      trainingFocus: data.trainingFocus,
       athleteLevel: getAthleteLevel({
         prs: data.prs,
         history: nextHistory,
@@ -13649,6 +13699,7 @@ const __kelaniSmartPreviewRegression = () => {
         accessoryMode: data.accessoryMode,
         accessoryPRs: data.accessoryPRs,
         preparationMode: data.preparationMode,
+        trainingFocus: data.trainingFocus,
         athleteLevel: getAthleteLevel({
           prs,
           history: previewHistory,
@@ -13945,6 +13996,7 @@ const __kelaniSmartResetToW1 = () => {
         accessoryMode: data.accessoryMode || accessoryMode,
         accessoryPRs: data.accessoryPRs || accessoryPRs || {},
         preparationMode: data.preparationMode || preparationMode,
+        trainingFocus: data.trainingFocus || trainingFocus,
         athleteLevel: getAthleteLevel({
           prs: resolvedPrs,
           history: resetHistory,
@@ -14377,10 +14429,8 @@ const bestE1RMs = {
 const total1RM = best1RMs.Squat + best1RMs.Bench + best1RMs.Deadlift;
 const totalE1RM = bestE1RMs.Squat + bestE1RMs.Bench + bestE1RMs.Deadlift;
 
-// Dashboard cards display weights in 2.5kg barbell steps. Round every lift
-// exactly once before deriving both its PR gain and the total; rounding each
-// raw gain separately while rounding the raw total again can make +5kg and
-// +2.5kg lift gains appear beside only +5kg total progress.
+// Keep calculated e1RMs and their gains precise. Real 1RMs remain loadable
+// weights, while display formatting limits only the visible decimal places.
 const dashboardE1RMMetrics = buildDashboardE1RMMetrics(
   best1RMs,
   bestE1RMs
@@ -14392,9 +14442,9 @@ const dashboardE1RMMetrics = buildDashboardE1RMMetrics(
 // This must stay computed the same way buildSmartMeetPlanReadiness scopes
 // its own currentCycleBestE1RM, or the two disagree.
 const currentCycleBestE1RMs = {
-  Squat: roundDashboardWeightKg(currentCycleBestMaxes.Squat.e1rm),
-  Bench: roundDashboardWeightKg(currentCycleBestMaxes.Bench.e1rm),
-  Deadlift: roundDashboardWeightKg(currentCycleBestMaxes.Deadlift.e1rm),
+  Squat: currentCycleBestMaxes.Squat.e1rm,
+  Bench: currentCycleBestMaxes.Bench.e1rm,
+  Deadlift: currentCycleBestMaxes.Deadlift.e1rm,
 };
 
 const latestBodyWeight = latestBodyWeightEntry?.bodyWeight || null;
@@ -14881,6 +14931,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         ];
 
         const value = weight => weight ? formatWeightFromKg(weight, weightUnit) : '-';
+        const estimatedValue = weight => weight ? formatEstimatedWeightFromKg(weight, weightUnit) : '-';
         const openStatsTab = tab => {
           setStatsTab(tab);
           changeScreen('stats');
@@ -14990,7 +15041,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                         fontWeight: 900,
                         whiteSpace: 'nowrap'
                       }}>
-                        {value(card.e1RM)}
+                        {estimatedValue(card.e1RM)}
                       </strong>
                       {card.recentPr?.e1RMGain > 0 && (
                         <div style={{
@@ -15000,7 +15051,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                           marginTop: 2,
                           whiteSpace: 'nowrap'
                         }}>
-                          {t.newE1RMPR} +{formatWeightFromKg(card.recentPr.e1RMGain, weightUnit)}
+                          {t.newE1RMPR} +{formatEstimatedWeightFromKg(card.recentPr.e1RMGain, weightUnit)}
                         </div>
                       )}
                     </div>
@@ -15206,6 +15257,13 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         onSave={setWorkoutSetup}
         t={t}
       />
+
+      {isSmartTrainingModel(trainingModel) && <TrainingFocusSection
+        trainingFocus={trainingFocus}
+        onChange={setTrainingFocus}
+        athleteLevel={athleteLevel}
+        t={t}
+      />}
 
       <ModelSection
         trainingModel={trainingModel}
@@ -15427,11 +15485,11 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           textAlign: 'left'
         }}>
           {(() => {
-            const row = (label, value, isPR) => (
+            const row = (label, value, isPR, estimated = false) => (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
                 <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
                 <strong style={{ color: '#ffffff' }}>
-                  {formatWeightFromKg(value, weightUnit)} {isPR ? '🚀' : ''}
+                  {(estimated ? formatEstimatedWeightFromKg : formatWeightFromKg)(value, weightUnit)} {isPR ? '🚀' : ''}
                 </strong>
               </div>
             );
@@ -15461,9 +15519,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
                 </div>
 
                 {row(t.oneRMToday, summary.oneRMToday, summary.is1RMPR)}
-                {row(t.e1RMToday, summary.e1RMToday, summary.isE1RMPR)}
+                {row(t.e1RMToday, summary.e1RMToday, summary.isE1RMPR, true)}
                 {row(t.best1RM, summary.best1RM, summary.is1RMPR)}
-                {row(t.bestE1RM, summary.bestE1RM, summary.isE1RMPR)}
+                {row(t.bestE1RM, summary.bestE1RM, summary.isE1RMPR, true)}
               </div>
             ));
           })()}

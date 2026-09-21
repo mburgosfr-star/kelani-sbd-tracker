@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, replaceCurrentChartEndpoint, statsScreenStyle } from './StatsScreen';
+import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle } from './StatsScreen';
 import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
@@ -98,12 +98,12 @@ test('dashboard metrics contain values without treating the e1RM and 1RM differe
 
   expect(metrics.lifts).toEqual({
     Squat: { oneRM: 145, e1RM: 145 },
-    Bench: { oneRM: 97.5, e1RM: 102.5 },
-    Deadlift: { oneRM: 180, e1RM: 182.5 },
+    Bench: { oneRM: 97.5, e1RM: 101.3333333333 },
+    Deadlift: { oneRM: 180, e1RM: 181.3333333333 },
   });
   expect(metrics.total).toEqual({
     oneRM: 422.5,
-    e1RM: 430,
+    e1RM: 427.6666666666,
   });
 });
 
@@ -204,11 +204,11 @@ test('dashboard reports a total e1RM PR when one lift raises the e1RM total', ()
 
   expect(buildDashboardRecentPrEvents(history)).toMatchObject({
     lifts: {
-      Squat: { oneRMGain: 0, e1RMGain: 2.5 },
+      Squat: { oneRMGain: 0, e1RMGain: 1.6666666666666572 },
       Bench: { oneRMGain: 0, e1RMGain: 0 },
       Deadlift: { oneRMGain: 0, e1RMGain: 0 },
     },
-    total: { oneRMGain: 0, e1RMGain: 2.5 },
+    total: { oneRMGain: 0, e1RMGain: 1.6666666666666572 },
   });
 });
 
@@ -1134,6 +1134,38 @@ test('stats labels the live endpoint with the current position after a long smar
     .not.toBeInTheDocument();
 });
 
+test('stats never plots a lift e1RM below its established 1RM', () => {
+  const history = [
+    { cycle: 1, workoutNumber: 1, lift: 'Squat', seedMax: true, topWeight: 145, e1rm: 142.5 },
+    { cycle: 1, workoutNumber: 1, lift: 'Bench', seedMax: true, topWeight: 97.5, e1rm: 97.5 },
+    { cycle: 1, workoutNumber: 1, lift: 'Deadlift', seedMax: true, topWeight: 180, e1rm: 175 },
+  ];
+  const props = {
+    history,
+    bodyWeights: [],
+    currentCycle: 1,
+    currentIndex: 2,
+    totalWorkouts: 28,
+    t: translations.en,
+    best1RMs: { Squat: 145, Bench: 97.5, Deadlift: 180 },
+    bestE1RMs: { Squat: 142.5, Bench: 104, Deadlift: 175 },
+  };
+
+  expect(mergeStatsHistoricalMaxes(
+    { oneRM: 142.5, e1rm: 142.5 }, history[0], { oneRM: 145, e1rm: 142.5 }
+  )).toEqual({ oneRM: 145, e1rm: 145 });
+  expect(mergeStatsHistoricalMaxes(
+    { oneRM: 175, e1rm: 175 }, history[2], { oneRM: 180, e1rm: 175 }
+  )).toEqual({ oneRM: 180, e1rm: 180 });
+
+  const view = render(<StatsScreen {...props} activescreen="lifts" />);
+  expect(screen.getByRole('button', { name: 'C1W2: e1RM (kg) 145' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'C1W2: e1RM (kg) 180' })).toBeInTheDocument();
+
+  view.rerender(<StatsScreen {...props} activescreen="totaal" />);
+  expect(screen.getByRole('button', { name: 'C1W2: e1RM (kg) 429' })).toBeInTheDocument();
+});
+
 test('stats labels body data updated today with the current training position', () => {
   const now = new Date();
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -1933,7 +1965,7 @@ test('finishing the compact setup creates a Smart user with body weight and star
     expect(saved.trainingModel).toBe('smart');
     expect(saved.weightUnit).toBe('kg');
     expect(saved.userProfile).toBeUndefined();
-    expect(saved.prs.Squat).toBe(117.5);
+    expect(saved.prs.Squat).toBeCloseTo(116.6666666667);
     expect(saved.cycleE1RMs).toBeUndefined();
     expect(saved.oneRMs).toEqual({
       Squat: 117.5,
@@ -2092,6 +2124,29 @@ test('an existing Classic user keeps Classic and can make the one-way switch to 
     expect(screen.queryByText('Model')).not.toBeInTheDocument();
     const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
     expect(saved.trainingModel).toBe('smart');
+  });
+});
+
+test('Smart squat priority is opt-in, persists, and changes the planned beginner row', async () => {
+  localStorage.clear();
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1,
+    trainingModel: 'smart',
+    currentCycle: 1,
+    prs: { Squat: 45, Bench: 35, Deadlift: 62.5 },
+    history: [],
+  }));
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 }));
+  fireEvent.click(screen.getByRole('button', { name: 'Balanced SBD route' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Squat priority' }));
+
+  await waitFor(() => {
+    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    expect(saved.trainingFocus).toBe('beginnerSquat');
+    expect(saved.inProgress.workouts[2].lifts.map(block => block.lift))
+      .toEqual(['Deadlift', 'Squat']);
   });
 });
 

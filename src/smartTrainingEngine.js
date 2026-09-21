@@ -55,6 +55,7 @@ import { buildMeetAttemptsFromOneRM } from './meetAttemptPlanning';
 import {
   SMART_IDEAL_MEET_WORKOUT_NUMBER,
   SMART_IDEAL_ROUTE_VERSION,
+  normalizeSmartTrainingFocus,
   buildAdjustedSmartIdealRoutePlan,
   getSmartIdealRouteEntryWorkoutNumber,
   getSmartIdealRouteWorkout,
@@ -1767,13 +1768,11 @@ export function buildSmartMeetPlanReadiness({
   const currentCycleBestMaxes = getCurrentCycleBestMaxes(history, currentCycle);
 
   const byLift = LIFT_ORDER.reduce((acc, lift) => {
-    const bestE1RM = roundE1RM(Math.max(
+    const bestE1RM = Math.max(
       Number(prs?.[lift]) || 0,
       Number(bestMaxes?.[lift]?.e1rm) || 0
-    ));
-    const currentCycleBestE1RM = roundE1RM(
-      Number(currentCycleBestMaxes?.[lift]?.e1rm) || 0
     );
+    const currentCycleBestE1RM = Number(currentCycleBestMaxes?.[lift]?.e1rm) || 0;
     // Meet attempts (opener/2nd/3rd) are meant to be percentages of a real,
     // achieved 1RM - not the estimated e1RM, which shifts every time a
     // sub-maximal training set (e.g. a top double) sets a new e1RM. Real
@@ -5055,6 +5054,7 @@ function generateSmartWorkouts({
   oneRMs = {},
   idealRouteEnabled = true,
   workoutSetup = null,
+  trainingFocus = 'standard',
 }) {
   const smartContext = buildSmartTrainingContext({
     history,
@@ -5141,6 +5141,7 @@ function generateSmartWorkouts({
   const adjustedIdealRoutePlan = idealRouteEnabled
     ? buildAdjustedSmartIdealRoutePlan({
       athleteLevel,
+      trainingFocus,
       startWorkoutNumber: idealRouteWorkoutNumber,
       accelerationCredits:
         idealRouteAdjustments.pendingAccelerationCredits,
@@ -5185,6 +5186,7 @@ function generateSmartWorkouts({
       const postMeetRecovery = includesMeet
         ? getSmartIdealRouteWorkout({
           athleteLevel,
+          trainingFocus,
           workoutNumber: SMART_IDEAL_MEET_WORKOUT_NUMBER + 1,
         })
         : null;
@@ -5878,6 +5880,7 @@ export function generateWorkoutsForTrainingModelUnconstrained(model, args = {}) 
     // while the historical adaptive engine is retired safely.
     idealRouteEnabled: args.idealRouteEnabled !== false,
     workoutSetup: args.workoutSetup || null,
+    trainingFocus: normalizeSmartTrainingFocus(args.trainingFocus),
   };
 
   if (isSmartTrainingModel(model)) {

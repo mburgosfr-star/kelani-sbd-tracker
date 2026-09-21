@@ -1,6 +1,6 @@
 import { ATHLETE_LEVEL_THRESHOLDS, calculateBestMaxesFromHistory, calculateEStrengthRatio, calculateStrengthRatioMaxes, classifyAthleteLevel, getAthleteLevel, getCelebratedStrengthRatioMaxes, mergeStrengthRatioMaxes, roundE1RM } from './workoutHistoryStats';
 
-test('preserves raw historical graph values while current e1RM can be rounded separately', () => {
+test('preserves calculated e1RM precision instead of rounding to barbell steps', () => {
   const seedHistory = [
     { cycle: 0, workoutNumber: 0, seedMax: true, lift: 'Squat', topWeight: 142.5, e1rm: 142.5 },
     { cycle: 0, workoutNumber: 0, seedMax: true, lift: 'Bench', topWeight: 97.5, e1rm: 97.5 },
@@ -19,9 +19,9 @@ test('preserves raw historical graph values while current e1RM can be rounded se
   expect(current.Squat.e1rm).toBe(148);
   expect(current.Bench.e1rm).toBe(99);
   expect(current.Deadlift.e1rm).toBe(182.49);
-  expect(roundE1RM(current.Squat.e1rm)).toBe(147.5);
-  expect(roundE1RM(current.Bench.e1rm)).toBe(100);
-  expect(roundE1RM(current.Deadlift.e1rm)).toBe(182.5);
+  expect(roundE1RM(current.Squat.e1rm)).toBe(148);
+  expect(roundE1RM(current.Bench.e1rm)).toBe(99);
+  expect(roundE1RM(current.Deadlift.e1rm)).toBe(182.49);
 });
 
 describe('classifyAthleteLevel', () => {

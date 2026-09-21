@@ -16,6 +16,17 @@ export const SMART_IDEAL_INTENSITY_ROLES = Object.freeze({
   LIGHT: 'light',
 });
 
+export const SMART_TRAINING_FOCUSES = Object.freeze({
+  STANDARD: 'standard',
+  BEGINNER_SQUAT: 'beginnerSquat',
+});
+
+export function normalizeSmartTrainingFocus(value) {
+  return value === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT
+    ? value
+    : SMART_TRAINING_FOCUSES.STANDARD;
+}
+
 export const SMART_IDEAL_LOAD_POLICY = Object.freeze({
   basis: 'real-1rm',
   workWeightIncrementKg: 2.5,
@@ -149,6 +160,18 @@ export const SMART_IDEAL_TAPER_ROUTE = Object.freeze({
     24: route(lift('Bench', H), lift('Squat', M)),
     25: route(),
   }),
+});
+
+// Opt-in beginner route: exchange one medium Bench exposure for a light
+// Squat exposure. The total number of lifts and training days is unchanged.
+const BEGINNER_SQUAT_FOCUS_NORMAL_ROUTE = Object.freeze({
+  ...SMART_IDEAL_NORMAL_ROUTE.beginner,
+  3: route(lift('Deadlift', H), lift('Squat', L)),
+});
+
+const BEGINNER_SQUAT_FOCUS_TAPER_ROUTE = Object.freeze({
+  ...SMART_IDEAL_TAPER_ROUTE.beginner,
+  24: route(lift('Deadlift', H), lift('Squat', L)),
 });
 
 export const SMART_IDEAL_POST_MEET = Object.freeze({
@@ -301,16 +324,21 @@ function buildRestWorkout(workoutNumber, stage) {
 export function getSmartIdealRouteWorkout({
   workoutNumber,
   athleteLevel = 'intermediate',
+  trainingFocus = SMART_TRAINING_FOCUSES.STANDARD,
 } = {}) {
   const number = Number(workoutNumber);
   if (!Number.isInteger(number) || number < 1) return null;
 
   const level = normalizeLevel(athleteLevel);
+  const squatFocus = level === 'beginner' &&
+    normalizeSmartTrainingFocus(trainingFocus) === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT;
 
   if (number <= 21) {
     const phase = getSmartIdealNormalPhase(number);
     const rowNumber = ((number - 1) % 7) + 1;
-    const lifts = SMART_IDEAL_NORMAL_ROUTE[level][rowNumber];
+    const lifts = (squatFocus
+      ? BEGINNER_SQUAT_FOCUS_NORMAL_ROUTE
+      : SMART_IDEAL_NORMAL_ROUTE[level])[rowNumber];
 
     return lifts.length > 0
       ? buildTrainingWorkout({
@@ -323,7 +351,9 @@ export function getSmartIdealRouteWorkout({
   }
 
   if (number <= 25) {
-    const lifts = SMART_IDEAL_TAPER_ROUTE[level][number];
+    const lifts = (squatFocus
+      ? BEGINNER_SQUAT_FOCUS_TAPER_ROUTE
+      : SMART_IDEAL_TAPER_ROUTE[level])[number];
 
     return lifts.length > 0
       ? buildTrainingWorkout({
@@ -591,6 +621,7 @@ function findOptionalRestIndex(plan) {
  */
 export function buildAcceleratedSmartIdealRoutePlan({
   athleteLevel = 'intermediate',
+  trainingFocus = SMART_TRAINING_FOCUSES.STANDARD,
   startWorkoutNumber = 1,
   accelerationCredits = 0,
   hasTrailingCompletedRest = false,
@@ -605,6 +636,7 @@ export function buildAcceleratedSmartIdealRoutePlan({
   if (start > SMART_IDEAL_MEET_WORKOUT_NUMBER) {
     const postMeetWorkout = getSmartIdealRouteWorkout({
       athleteLevel,
+      trainingFocus,
       workoutNumber: start,
     });
     if (postMeetWorkout) workouts.push(postMeetWorkout);
@@ -617,6 +649,7 @@ export function buildAcceleratedSmartIdealRoutePlan({
   ) {
     const workout = getSmartIdealRouteWorkout({
       athleteLevel,
+      trainingFocus,
       workoutNumber,
     });
     if (workout) workouts.push(workout);
@@ -708,6 +741,7 @@ export function buildAcceleratedSmartIdealRoutePlan({
  */
 export function buildAdjustedSmartIdealRoutePlan({
   athleteLevel = 'intermediate',
+  trainingFocus = SMART_TRAINING_FOCUSES.STANDARD,
   startWorkoutNumber = 1,
   accelerationCredits = 0,
   delayCredits = 0,
@@ -715,6 +749,7 @@ export function buildAdjustedSmartIdealRoutePlan({
 } = {}) {
   const acceleratedPlan = buildAcceleratedSmartIdealRoutePlan({
     athleteLevel,
+    trainingFocus,
     startWorkoutNumber,
     accelerationCredits,
     hasTrailingCompletedRest,

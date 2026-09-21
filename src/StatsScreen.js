@@ -97,6 +97,19 @@ export function getStatsHistoricalOneRM(entry, candidateOneRM = null) {
   return Math.max(setCandidate, getEstablishedOneRMFromHistoryEntry(entry, entry?.lift));
 }
 
+export function mergeStatsHistoricalMaxes(previous, entry, candidates) {
+  const historicalOneRM = getStatsHistoricalOneRM(entry, candidates.oneRM);
+  const oneRM = entry?.manualMax
+    ? historicalOneRM
+    : Math.max(previous.oneRM, historicalOneRM);
+  const estimated = entry?.manualMax
+    ? candidates.e1rm
+    : Math.max(previous.e1rm, candidates.e1rm);
+
+  // A demonstrated real 1RM is also e1RM evidence.
+  return { oneRM, e1rm: Math.max(oneRM, estimated) };
+}
+
 export function replaceCurrentChartEndpoint(data = [], updates = {}) {
   if (!Array.isArray(data) || data.length === 0) return data;
   const earlierPoints = data.slice(0, -1);
@@ -159,6 +172,7 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
       const displayWeight = kgToDisplayWeight(weightKg, statsWeightUnit);
       if (displayWeight === '') return null;
 
+      if (options.estimated) return displayWeight;
       const formatted = formatWeightValue(displayWeight, statsWeightUnit, options);
       const value = Number(formatted);
       return Number.isFinite(value) ? value : null;
@@ -184,12 +198,11 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
       const historicalOneRM = getStatsHistoricalOneRM(entry, candidates.oneRM);
       if (historicalOneRM <= 0 && candidates.e1rm <= 0) return;
 
-      runningBestPerLift[entry.lift] = entry.manualMax
-        ? { oneRM: historicalOneRM, e1rm: candidates.e1rm }
-        : {
-            oneRM: Math.max(runningBestPerLift[entry.lift].oneRM, historicalOneRM),
-            e1rm: Math.max(runningBestPerLift[entry.lift].e1rm, candidates.e1rm),
-          };
+      runningBestPerLift[entry.lift] = mergeStatsHistoricalMaxes(
+        runningBestPerLift[entry.lift],
+        entry,
+        candidates
+      );
       bestStats[entry.lift] = { ...runningBestPerLift[entry.lift] };
 
       if (!liftData[entry.lift]) liftData[entry.lift] = [];
@@ -200,7 +213,7 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
           label: getWorkoutLabel(entry),
           absoluteWorkoutIndex: getAbsoluteWorkoutIndex(entry),
           oneRM: chartWeightFromKg(runningBestPerLift[entry.lift].oneRM),
-          e1rm: chartWeightFromKg(runningBestPerLift[entry.lift].e1rm),
+          e1rm: chartWeightFromKg(runningBestPerLift[entry.lift].e1rm, { estimated: true }),
         });
       }
 
@@ -229,8 +242,11 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
 
     LIFT_ORDER.forEach(lift => {
       const currentOneRM = Number(best1RMs?.[lift]) || bestStats[lift].oneRM || 0;
-      const currentE1RM = Number(bestE1RMs?.[lift]) || bestStats[lift].e1rm || 0;
-      const currentE1RMChartValue = chartWeightFromKg(currentE1RM);
+      const currentE1RM = Math.max(
+        currentOneRM,
+        Number(bestE1RMs?.[lift]) || bestStats[lift].e1rm || 0
+      );
+      const currentE1RMChartValue = chartWeightFromKg(currentE1RM, { estimated: true });
 
       liftData[lift] = capRunningBestChart(
         liftData[lift],
@@ -250,7 +266,10 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
         0
       );
       const currentTotalE1RM = LIFT_ORDER.reduce(
-        (sum, lift) => sum + (Number(bestE1RMs?.[lift]) || 0),
+        (sum, lift) => sum + Math.max(
+          Number(best1RMs?.[lift]) || 0,
+          Number(bestE1RMs?.[lift]) || 0
+        ),
         0
       );
       const cappedTotalData = capRunningBestChart(
@@ -374,7 +393,7 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
       totalChartData: totalData.map(entry => ({
         ...entry,
         oneRM: chartWeightFromKg(entry.oneRM),
-        e1rm: chartWeightFromKg(entry.e1rm),
+        e1rm: chartWeightFromKg(entry.e1rm, { estimated: true }),
       })),
       bodyData,
       bodyMetricData,
@@ -453,7 +472,7 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
       if (!Number.isFinite(numericValue)) return value;
 
       return formatDecimalDisplay(numericValue, {
-        maximumFractionDigits: isStrengthChart ? 2 : 1,
+        maximumFractionDigits: isStrengthChart || dataKeys.includes('e1rm') ? 2 : 1,
       });
     }
 

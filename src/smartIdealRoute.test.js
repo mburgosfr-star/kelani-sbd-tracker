@@ -1,4 +1,5 @@
 import {
+  SMART_TRAINING_FOCUSES,
   SMART_IDEAL_LOAD_POLICY,
   SMART_IDEAL_LEVELS,
   SMART_IDEAL_MEET_POLICY,
@@ -19,6 +20,35 @@ const signature = workout => workout.type === 'rest'
   : workout.lifts.map(item =>
     `${item.lift} ${item.intensityRole[0].toUpperCase()}`
   ).join(' → ');
+
+test('opt-in beginner squat priority exchanges Bench medium for Squat light without changing the calendar', () => {
+  for (const workoutNumber of [3, 10, 17, 24]) {
+    const standard = getSmartIdealRouteWorkout({ athleteLevel: 'beginner', workoutNumber });
+    const focused = getSmartIdealRouteWorkout({
+      athleteLevel: 'beginner',
+      workoutNumber,
+      trainingFocus: SMART_TRAINING_FOCUSES.BEGINNER_SQUAT,
+    });
+    expect(standard.lifts.map(item => [item.lift, item.intensityRole])).toEqual([
+      ['Deadlift', 'heavy'], ['Bench', 'medium'],
+    ]);
+    expect(focused.lifts.map(item => [item.lift, item.intensityRole])).toEqual([
+      ['Deadlift', 'heavy'], ['Squat', 'light'],
+    ]);
+    expect(focused.type).toBe(standard.type);
+  }
+
+  for (const workoutNumber of [22, 23, 25, 26, 27, 28]) {
+    expect(getSmartIdealRouteWorkout({
+      athleteLevel: 'beginner', workoutNumber,
+      trainingFocus: SMART_TRAINING_FOCUSES.BEGINNER_SQUAT,
+    })).toEqual(getSmartIdealRouteWorkout({ athleteLevel: 'beginner', workoutNumber }));
+  }
+  expect(getSmartIdealRouteWorkout({
+    athleteLevel: 'intermediate', workoutNumber: 24,
+    trainingFocus: SMART_TRAINING_FOCUSES.BEGINNER_SQUAT,
+  })).toEqual(getSmartIdealRouteWorkout({ athleteLevel: 'intermediate', workoutNumber: 24 }));
+});
 
 const expectedNormalWeek = {
   beginner: [

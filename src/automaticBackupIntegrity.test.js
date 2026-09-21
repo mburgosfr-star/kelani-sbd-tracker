@@ -273,6 +273,10 @@ test('accepts a well-formed legacy-compatible manual backup', () => {
     storageKey: 'kel-powerlifting-user-data-v1',
     data,
   })).toBe(true);
+  expect(validateImportedBackup({
+    storageKey: 'kel-powerlifting-user-data-v1',
+    data: { ...data, trainingFocus: 'beginnerSquat' },
+  })).toBe(true);
 });
 
 test('rejects malformed manual backup data before it can replace saved data', () => {
@@ -296,6 +300,10 @@ test('rejects malformed manual backup data before it can replace saved data', ()
   expect(validateImportedBackup({
     ...validEnvelope,
     data: { ...validEnvelope.data, currentCycle: 0 },
+  })).toBe(false);
+  expect(validateImportedBackup({
+    ...validEnvelope,
+    data: { ...validEnvelope.data, trainingFocus: 'unknown' },
   })).toBe(false);
   expect(validateImportedBackup({
     ...validEnvelope,

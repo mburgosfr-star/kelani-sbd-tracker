@@ -8,6 +8,9 @@ import {
 import {
   calculateAchievedMaxesFromHistory,
   formatSetPercentDisplay,
+  getAchievedHistoryMaxCandidates,
+  getCurrentCycleBestMaxes,
+  getHistoryMaxCandidates,
   roundE1RM,
 } from './workoutHistoryStats';
 import {
@@ -218,11 +221,38 @@ function makePostMeetRecoveryEntry(workoutNumber) {
   };
 }
 
-test('rounds every e1RM to the nearest 2.5kg barbell value', () => {
+test('retains calculated e1RM precision at barbell-rounding boundaries', () => {
   expect(roundE1RM(180)).toBe(180);
-  expect(roundE1RM(182.49)).toBe(182.5);
+  expect(roundE1RM(182.49)).toBe(182.49);
   expect(roundE1RM(182.5)).toBe(182.5);
-  expect(roundE1RM(184.9)).toBe(185);
+  expect(roundE1RM(184.9)).toBe(184.9);
+});
+
+test('recovers exact lift and cycle e1RM from sets in a legacy rounded summary', () => {
+  const entry = makeSmartLiftEntry({
+    workoutNumber: 3,
+    lift: 'Squat',
+    sets: [
+      { weight: 100, reps: 5, done: true },
+      { weight: 110, reps: 3, done: true, failed: true },
+    ],
+  });
+  entry.e1rm = 117.5;
+  entry.workoutSnapshot.completedSummary = {
+    results: [{ lift: 'Squat', e1RMToday: 117.5 }],
+  };
+
+  expect(getHistoryMaxCandidates(entry).e1rm).toBeCloseTo(100 * (1 + 5 / 30), 10);
+  expect(getCurrentCycleBestMaxes([entry], 1).Squat.e1rm)
+    .toBeCloseTo(100 * (1 + 5 / 30), 10);
+
+  const failedOnly = makeSmartLiftEntry({
+    workoutNumber: 4,
+    lift: 'Squat',
+    sets: [{ weight: 120, reps: 2, done: true, failed: true }],
+  });
+  failedOnly.e1rm = 128;
+  expect(getAchievedHistoryMaxCandidates(failedOnly).e1rm).toBe(0);
 });
 
 test('a completed meet suppresses another same-cycle meet projection and ends after its recovery days', () => {
@@ -389,13 +419,13 @@ test('uses only achieved current-cycle performance for a lighter lifter', () => 
     },
   });
 
-  expect(result.byLift.Squat.currentCycleBestE1RM).toBe(35);
-  expect(result.byLift.Bench.currentCycleBestE1RM).toBe(27.5);
-  expect(result.byLift.Deadlift.currentCycleBestE1RM).toBe(50);
+  expect(result.byLift.Squat.currentCycleBestE1RM).toBe(35.75);
+  expect(result.byLift.Bench.currentCycleBestE1RM).toBe(26.25);
+  expect(result.byLift.Deadlift.currentCycleBestE1RM).toBeCloseTo(50.6666666667);
   expect(result.byLift.Bench.currentCycleTarget).toBe(32.5);
   expect(result.byLift.Bench.plannedTopAttempt).toBe(32.5);
   expect(result.byLift.Bench.ready).toBe(false);
-  expect(result.weakestLift).toBe('Deadlift');
+  expect(result.weakestLift).toBe('Bench');
 });
 
 test('uses the same strictly increasing beginner attempts as the visible meet plan', () => {
@@ -453,7 +483,7 @@ test('uses the confirmed real 1RM target and identifies the actual limiter', () 
     },
   });
 
-  expect(result.byLift.Squat.currentCycleBestE1RM).toBe(115);
+  expect(result.byLift.Squat.currentCycleBestE1RM).toBeCloseTo(116.1666666667);
   expect(result.byLift.Squat.currentCycleTarget).toBe(145);
   expect(result.byLift.Squat.plannedTopAttempt).toBe(147.5);
   expect(result.byLift.Bench.currentCycleTarget).toBe(97.5);
@@ -473,9 +503,9 @@ test('established 1RMs restore consistent attempts and confirm meet readiness', 
       cycle: 3,
       workoutNumber: 38,
       lift: 'Squat',
-      weight: 135,
+      weight: 137.5,
       reps: 2,
-      e1rm: 145,
+      e1rm: 146.6666666667,
     }),
     makeTrainingEntry({
       cycle: 3,
@@ -519,16 +549,16 @@ test('established 1RMs restore consistent attempts and confirm meet readiness', 
     thirdAttempt: 185,
   });
   expect(result.byLift).toMatchObject({
-    Squat: { currentCycleBestE1RM: 145, secondAttemptReady: true },
-    Bench: { currentCycleBestE1RM: 102.5, secondAttemptReady: true },
-    Deadlift: { currentCycleBestE1RM: 182.5, secondAttemptReady: true },
+    Squat: { currentCycleBestE1RM: 146.66666666666666, secondAttemptReady: true },
+    Bench: { currentCycleBestE1RM: 101.33333333333333, secondAttemptReady: true },
+    Deadlift: { currentCycleBestE1RM: 181.33333333333334, secondAttemptReady: true },
   });
   expect(result.ready).toBe(true);
 });
 
 test('a clean taper after enough work offers the meet with the restored attempt plan', () => {
   const readinessEntries = [
-    makeTrainingEntry({ cycle: 3, workoutNumber: 1, lift: 'Squat', weight: 135, reps: 2, e1rm: 145 }),
+    makeTrainingEntry({ cycle: 3, workoutNumber: 1, lift: 'Squat', weight: 137.5, reps: 2, e1rm: 146.6666666667 }),
     makeTrainingEntry({ cycle: 3, workoutNumber: 2, lift: 'Bench', weight: 95, reps: 2, e1rm: 101.33 }),
     makeTrainingEntry({ cycle: 3, workoutNumber: 3, lift: 'Deadlift', weight: 170, reps: 2, e1rm: 180 }),
     makeTrainingEntry({ cycle: 3, workoutNumber: 4, lift: 'Squat', weight: 100, reps: 5, e1rm: 116.67 }),
@@ -631,7 +661,7 @@ test('a failed heavy Deadlift proof keeps its strength evidence but requires two
     },
   });
   const history = [
-    makeTrainingEntry({ cycle: 3, workoutNumber: 1, lift: 'Squat', weight: 135, reps: 2, e1rm: 145 }),
+    makeTrainingEntry({ cycle: 3, workoutNumber: 1, lift: 'Squat', weight: 137.5, reps: 2, e1rm: 146.6666666667 }),
     makeTrainingEntry({ cycle: 3, workoutNumber: 2, lift: 'Bench', weight: 95, reps: 2, e1rm: 101.33 }),
     failedHeavyDeadlift,
     recovery(4),
@@ -784,7 +814,7 @@ test('ignores failed top work and keeps successful multi-rep work as real-1RM an
   expect(achieved.Squat.e1rm).toBeLessThan(135);
 });
 
-test('uses the same 2.5kg e1RM rounding policy across strength levels', () => {
+test('uses exact e1RM evidence across strength levels', () => {
   const lighter = buildSmartMeetPlanReadiness({
     history: [
       makeTrainingEntry({ workoutNumber: 1, lift: 'Squat', weight: 36, reps: 1, e1rm: 36 }),
@@ -817,11 +847,11 @@ test('uses the same 2.5kg e1RM rounding policy across strength levels', () => {
     },
   });
 
-  expect(lighter.byLift.Squat.currentCycleReadinessRatio).toBeCloseTo(35 / 45);
+  expect(lighter.byLift.Squat.currentCycleReadinessRatio).toBeCloseTo(36 / 45);
   expect(stronger.byLift.Squat.currentCycleReadinessRatio).toBeCloseTo(180 / 225);
-  expect(lighter.byLift.Bench.currentCycleReadinessRatio).toBeCloseTo(27.5 / 35);
+  expect(lighter.byLift.Bench.currentCycleReadinessRatio).toBeCloseTo(27 / 35);
   expect(stronger.byLift.Bench.currentCycleReadinessRatio).toBeCloseTo(135 / 175);
-  expect(lighter.byLift.Deadlift.currentCycleReadinessRatio).toBeCloseTo(55 / 65);
+  expect(lighter.byLift.Deadlift.currentCycleReadinessRatio).toBeCloseTo(54 / 65);
   expect(stronger.byLift.Deadlift.currentCycleReadinessRatio).toBeCloseTo(270 / 325);
   expect(lighter.ready).toBe(false);
   expect(stronger.ready).toBe(false);

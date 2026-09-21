@@ -1472,14 +1472,13 @@ test('generates progressive C3W18 training without template prescriptions', () =
   expect(
     decisionWorkout.lifts.map(liftBlock => liftBlock.lift)
   ).toEqual(['Squat', 'Bench']);
-  // Meet attempts remain based on real 1RM, while readiness compares the
-  // newly canonical 2.5kg-rounded e1RMs. At this boundary Deadlift is the
-  // remaining readiness limiter; this does not change the frequency-gated
-  // Squat + Bench selection asserted above.
+  // Meet attempts remain based on real 1RM, while readiness compares exact
+  // calculated e1RMs. This changes the limiting lift at this boundary but
+  // not the frequency-gated Squat + Bench selection asserted above.
   expect(
     decisionWorkout.smartDecisionSummary.readiness
       .meetPlanWeakestLift
-  ).toBe('Deadlift');
+  ).toBe('Squat');
 
   decisionWorkout.lifts.forEach(liftBlock => {
     const volumeSets = liftBlock.sets.filter(set =>

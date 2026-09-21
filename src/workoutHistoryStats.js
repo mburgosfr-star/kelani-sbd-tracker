@@ -45,14 +45,12 @@ export function epley(weight, reps) {
   return w * (1 + r / 30);
 }
 
-// e1RM is an actionable barbell estimate, not a lab measurement. Keep one
-// canonical 2.5kg barbell value everywhere it is stored, displayed or
-// compared by Smart Training. Actual lifted 1RM values remain untouched.
+// e1RM is a calculation, not a load to put on the bar. Preserve the full
+// finite result for storage and comparisons; only prescriptions are rounded
+// to loadable weights. Keep this helper for existing call sites/backups.
 export function roundE1RM(value) {
-  const numeric = Number(value) || 0;
-  if (numeric <= 0) return 0;
-
-  return Math.round(numeric / 2.5) * 2.5;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
 }
 
 // Set-label classification. Small and dependency-free, but needed both here
@@ -260,8 +258,8 @@ export function getHistoryMaxCandidates(entry) {
     const manualE1RM = Number(entry.e1rm) || Number(entry.e1RMToday) || manualOneRM;
 
     // A seed/manual max is a real lifted baseline, not a formula estimate.
-    // Preserve its valid 2.5kg precision so a later rounded training e1RM
-    // can show the real PR delta (97.5 -> 100 = +2.5, not +0).
+    // Preserve the actual baseline so estimated PR gains are measured against
+    // the weight demonstrated, not a rounded planning value.
     return { oneRM: manualOneRM, e1rm: manualE1RM };
   }
 
@@ -285,15 +283,19 @@ export function getHistoryMaxCandidates(entry) {
     legacyTopWeight,
   ];
 
-  const e1RMCandidates = [
-    Number(entry.e1rm) || 0,
-    Number(entry.e1RMToday) || 0,
-    Number(entry.bestE1RM) || 0,
-    Number(entry.previousBestE1RM) || 0,
-    ...successfulSnapshotSets.map(set =>
-      epley(Number(set.weight) || 0, Number(set.reps) || 0)
-    ),
-  ];
+  // Older exports stored an estimate rounded to a barbell increment. When a
+  // completed snapshot has the original successful sets, recover its exact
+  // calculated value rather than perpetuating the rounded summary field.
+  const e1RMCandidates = hasStructuredSetEvidence
+    ? successfulSnapshotSets.map(set =>
+        epley(Number(set.weight) || 0, Number(set.reps) || 0)
+      )
+    : [
+        Number(entry.e1rm) || 0,
+        Number(entry.e1RMToday) || 0,
+        Number(entry.bestE1RM) || 0,
+        Number(entry.previousBestE1RM) || 0,
+      ];
 
   const summary = snapshot?.completedSummary;
   const summaryResults = Array.isArray(summary?.results)
@@ -308,18 +310,19 @@ export function getHistoryMaxCandidates(entry) {
       oneRMCandidates.push(
         Number(result.oneRMToday) || 0
       );
-      e1RMCandidates.push(
-        Number(result.e1RMToday) || 0,
-        Number(result.bestE1RM) || 0,
-        Number(result.previousBestE1RM) || 0
-      );
+      if (!hasStructuredSetEvidence) {
+        e1RMCandidates.push(
+          Number(result.e1RMToday) || 0,
+          Number(result.bestE1RM) || 0,
+          Number(result.previousBestE1RM) || 0
+        );
+      }
     });
 
   return {
     oneRM: Math.max(0, ...oneRMCandidates),
-    // Historical charts must retain the value that was actually stored at
-    // the time. Barbell rounding belongs at the current/readiness boundary,
-    // never retroactively in the history reader.
+    // Preserve calculated precision when set evidence is available. Legacy
+    // entries without sets retain their stored estimate unchanged.
     e1rm: Math.max(0, ...e1RMCandidates),
   };
 }
@@ -370,10 +373,8 @@ export function getAchievedHistoryMaxCandidates(entry = {}) {
     return { oneRM: 0, e1rm: 0 };
   }
 
-  const successfulSets = getSmartLiftSetsFromSnapshot(
-    snapshot,
-    entry.lift
-  ).filter(set =>
+  const snapshotSets = getSmartLiftSetsFromSnapshot(snapshot, entry.lift);
+  const successfulSets = snapshotSets.filter(set =>
     set?.done === true &&
     !set?.failed &&
     !set?.skipped &&
@@ -398,16 +399,17 @@ export function getAchievedHistoryMaxCandidates(entry = {}) {
     ...matchingSummaryResults.map(result => Number(result.oneRMToday) || 0),
   ];
 
-  const e1RMCandidates = [
-    Number(entry.e1rm) || 0,
-    Number(entry.e1RMToday) || 0,
-    ...matchingSummaryResults.map(
-      result => Number(result.e1RMToday) || 0
-    ),
-    ...successfulSets.map(set =>
-      epley(Number(set.weight) || 0, Number(set.reps) || 0)
-    ),
-  ];
+  const e1RMCandidates = snapshotSets.length > 0
+    ? successfulSets.map(set =>
+        epley(Number(set.weight) || 0, Number(set.reps) || 0)
+      )
+    : [
+        Number(entry.e1rm) || 0,
+        Number(entry.e1RMToday) || 0,
+        ...matchingSummaryResults.map(
+          result => Number(result.e1RMToday) || 0
+        ),
+      ];
 
   return {
     oneRM: Math.max(0, ...oneRMCandidates),

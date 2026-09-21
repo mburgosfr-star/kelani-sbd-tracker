@@ -93,6 +93,30 @@ test.each(SMART_IDEAL_LEVELS)(
   }
 );
 
+test('beginner squat priority reaches generated training and taper workouts without changing the default', () => {
+  const focused = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
+    ...baseOptions,
+    athleteLevel: 'beginner',
+    trainingFocus: 'beginnerSquat',
+  });
+  const standard = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
+    ...baseOptions,
+    athleteLevel: 'beginner',
+  });
+
+  for (const number of [3, 10, 17, 24]) {
+    expect(focused[number - 1].lifts.map(block => block.lift)).toEqual(['Deadlift', 'Squat']);
+    expect(standard[number - 1].lifts.map(block => block.lift)).toEqual(['Deadlift', 'Bench']);
+    expect(focused[number - 1].lifts[1].sets.length).toBeGreaterThanOrEqual(3);
+    expect(focused[number - 1].lifts[1].sets.every(set =>
+      set.reps >= 4 && set.pct >= 0.6
+    )).toBe(true);
+  }
+  expect(focused.slice(0, 28).map(workout => workout.type)).toEqual(
+    standard.slice(0, 28).map(workout => workout.type)
+  );
+});
+
 test('Classic generation remains separate and never receives Smart route metadata', () => {
   const classic = generateWorkoutsForTrainingModel(TRAINING_MODELS.CLASSIC, {
     ...baseOptions,
@@ -947,7 +971,7 @@ test('a beginner with only Squat evidence starts at the first unresolved Deadlif
   });
 });
 
-test('an almost meet-ready legacy beginner inserts one rest after HARD and then resumes W18', () => {
+test('a legacy beginner inserts one rest after HARD and then resumes the ideal route', () => {
   let history = [
     ...legacyWorkoutEntries({
       workoutNumber: 17,
@@ -1010,14 +1034,14 @@ test('an almost meet-ready legacy beginner inserts one rest after HARD and then 
     if (currentIndex === 34) {
       expect(workout.number).toBe(35);
       expect(workout.smartIdealRoute).toMatchObject({
-        workoutNumber: 17,
+        workoutNumber: 15,
         stage: 'normal',
         phase: 'single',
       });
       expect(workout.lifts.map(block => [block.lift, block.intensityRole]))
         .toEqual([
-          ['Deadlift', 'heavy'],
-          ['Bench', 'medium'],
+          ['Squat', 'heavy'],
+          ['Bench', 'light'],
         ]);
       expect(workout.smartIdealRoute.transitionPending).toBeUndefined();
       expect(workout.smartTrainingSelectionSummary?.reasonFlags).not.toContain(
@@ -1026,7 +1050,7 @@ test('an almost meet-ready legacy beginner inserts one rest after HARD and then 
       expect(workout.smartDecisionSummary?.readiness).toMatchObject({
         meetPlanWeakestLift: 'Deadlift',
         meetPlanWeakestPhase: 'second-attempt',
-        meetProjection: { label: 'C1W46' },
+        meetProjection: { label: 'C1W48' },
       });
     }
 
@@ -1043,14 +1067,14 @@ test('an almost meet-ready legacy beginner inserts one rest after HARD and then 
   }
 
   expect(deliveredRouteNumbers).toEqual([
-    17, 18, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+    15, 16, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
   ]);
   expect(deliveredWorkoutTypes).toEqual([
-    'training', 'rest', 'rest', 'training', 'rest', 'rest',
-    'training', 'rest', 'training', 'training', 'rest', 'rest', 'meet',
+    'training', 'rest', 'rest', 'training', 'rest', 'training',
+    'rest', 'rest', 'training', 'rest', 'training', 'training', 'rest', 'rest', 'meet',
   ]);
   expect(meet).toBeTruthy();
-  expect(meet.number).toBe(47);
+  expect(meet.number).toBe(49);
   expect(meet.smartIdealRoute).toMatchObject({
     workoutNumber: 28,
     stage: 'meet',
