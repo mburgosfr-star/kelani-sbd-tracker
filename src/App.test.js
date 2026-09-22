@@ -2309,7 +2309,7 @@ test('settings combines support, feedback, source, identity and release verifica
     buildCycleFeedbackEmailUrl({
       t: translations.en,
       language: 'en',
-      appVersion: 'dev',
+      appVersion: import.meta.env.VITE_APP_VERSION || 'dev',
     }),
     '_blank',
     'noopener,noreferrer'
