@@ -96,6 +96,53 @@ test('dynamic focus scrolls each active warm-up and grouped work set into the ce
   expectLastAutoScrollTarget(screen.getByTestId('workout-set-group-item-3'));
 });
 
+test('multi-lift focus scrolls from each lift preparation to its own warm-up and then the next lift preparation', () => {
+  HTMLElement.prototype.scrollIntoView.mockClear();
+  const setup = {
+    preparation: { enabled: true, byLift: {
+      Squat: [{ key: 'prepHipOpeners', sets: 2, reps: 10 }],
+      Bench: [{ key: 'prepBandPullApart', sets: 2, reps: 20 }],
+      Deadlift: [],
+    } },
+    accessories: { enabled: false, byLift: {} },
+  };
+  const props = {
+    trainingModel: 'smart',
+    currentCycle: 1,
+    totalWorkouts: 1,
+    workoutSetup: setup,
+    isReadOnly: false,
+    t: translations.en,
+    onComplete: jest.fn(),
+  };
+  const makeWorkout = ({ squatPrep = false, benchPrep = false, squatWarmup = false, squatSet = false } = {}) => ({
+    number: 1,
+    type: 'training',
+    prepItems: [
+      { labelKey: 'prepHipOpeners', prescription: '2×10', done: squatPrep },
+      { labelKey: 'prepBandPullApart', prescription: '2×20', done: benchPrep },
+    ],
+    lifts: [
+      { lift: 'Squat', warmups: [{ weight: 20, reps: 5, done: squatWarmup }], sets: [{ weight: 40, reps: 5, done: squatSet }] },
+      { lift: 'Bench', warmups: [{ weight: 20, reps: 5, done: false }], sets: [{ weight: 30, reps: 5, done: false }] },
+    ],
+  });
+  const view = render(<CurrentWorkout {...props} workout={makeWorkout()} />);
+  expectLastAutoScrollTarget(screen.getByRole('button', { name: translations.en.prepHipOpeners }).closest('[data-workout-circle-item]'));
+
+  view.rerender(<CurrentWorkout {...props} workout={makeWorkout({ squatPrep: true })} />);
+  expectLastAutoScrollTarget(within(screen.getByTestId('workout-lift-Squat')).getByTestId('warmup-row-0'));
+
+  view.rerender(<CurrentWorkout {...props} workout={makeWorkout({ squatPrep: true, squatWarmup: true })} />);
+  expectLastAutoScrollTarget(within(screen.getByTestId('workout-lift-Squat')).getByTestId('workout-set-circle-item'));
+
+  view.rerender(<CurrentWorkout {...props} workout={makeWorkout({ squatPrep: true, squatWarmup: true, squatSet: true })} />);
+  expectLastAutoScrollTarget(screen.getByRole('button', { name: translations.en.prepBandPullApart }).closest('[data-workout-circle-item]'));
+
+  view.rerender(<CurrentWorkout {...props} workout={makeWorkout({ squatPrep: true, benchPrep: true, squatWarmup: true, squatSet: true })} />);
+  expectLastAutoScrollTarget(within(screen.getByTestId('workout-lift-Bench')).getByTestId('warmup-row-0'));
+});
+
 test('the completion action scrolls into the centre when it receives dynamic focus', () => {
   const scrollMock = HTMLElement.prototype.scrollIntoView;
   scrollMock.mockClear();
@@ -211,8 +258,10 @@ test.each(preparationContexts)('one translated preparation section appears befor
     fireEvent.click(button);
     expect(handlers.onTogglePrepItem).toHaveBeenLastCalledWith(itemIndex);
   });
-  expect(screen.getByRole('button', { name: t.prepBandPullApart, exact: true }).style.animation)
+  expect(screen.getByRole('button', { name: t.prepBodyweightSquats, exact: true }).style.animation)
     .toContain('kelaniActiveWorkoutCirclePulse');
+  expect(screen.getByRole('button', { name: t.prepBandPullApart, exact: true }).style.animation)
+    .not.toContain('kelaniActiveWorkoutCirclePulse');
   expect(screen.getByRole('button', { name: t.prepHipHinges, exact: true }).style.animation)
     .not.toContain('kelaniActiveWorkoutCirclePulse');
 });

@@ -8,6 +8,13 @@ import {
   getCurrentCycleBestMaxes,
 } from './workoutHistoryStats';
 import { buildSmartMeetPlanReadiness } from './smartTrainingEngine';
+import { formatEstimatedWeightFromKg, formatWeightFromKg } from './workoutUnits';
+
+test('estimated weights display decimal precision without barbell rounding', () => {
+  expect(formatEstimatedWeightFromKg(125.4166666667, 'kg')).toBe('125.42 kg');
+  expect(formatEstimatedWeightFromKg(152.5, 'kg')).toBe('152.5 kg');
+  expect(formatWeightFromKg(125.4166666667, 'kg')).toBe('125 kg');
+});
 
 function trainingEntry(sets) {
   const successfulSets = sets.filter(set => set.done && !set.failed && !set.skipped);
@@ -87,8 +94,27 @@ test('workout-complete summary includes every trackable lift of the day, not onl
 
   expect(summaries).toHaveLength(2);
   expect(summaries.map(s => s.lift)).toEqual(['Squat', 'Bench']);
-  expect(summaries[0]).toMatchObject({ lift: 'Squat', oneRMToday: 100, e1RMToday: 116.7 });
+  expect(summaries[0]).toMatchObject({ lift: 'Squat', oneRMToday: 100 });
+  expect(summaries[0].e1RMToday).toBeCloseTo(116.6666666667);
   expect(summaries[1]).toMatchObject({ lift: 'Bench', oneRMToday: 60, e1RMToday: 76 });
+});
+
+test('workout-complete recovers exact e1RM from sets instead of a rounded saved summary', () => {
+  const sets = [{ weight: 107.5, reps: 5, done: true }];
+  const [summary] = buildCompletedWorkoutLiftSummaries({
+    completedWorkout: { lifts: [{ lift: 'Squat', sets }] },
+    completedSummary: { results: [{
+      lift: 'Squat',
+      trackStrength: true,
+      e1RMToday: 125,
+      previousBestE1RM: 120,
+    }] },
+    bestE1RMs: { Squat: 125.4166666667 },
+  });
+
+  expect(summary.e1RMToday).toBeCloseTo(125.4166666667);
+  expect(summary.bestE1RM).toBeCloseTo(125.4166666667);
+  expect(summary.isE1RMPR).toBe(true);
 });
 
 test('workout-complete summary skips lifts that are not strength-tracked', () => {

@@ -1320,7 +1320,7 @@ test('milestone celebration overlays the already-rendered completed screen and c
           primaryType: 'level',
           achievements: [
             { type: 'level', previous: 'beginner', value: 'intermediate' },
-            { type: 'e1RM', lift: 'Squat', previous: 100, value: 105, gain: 5 },
+            { type: 'e1RM', lift: 'Squat', previous: 100, value: 105.4166666667, gain: 5.4166666667 },
             { type: 'e1RM', lift: 'Total', previous: 300, value: 305, gain: 5 },
             { type: 'eStrengthMax', previous: 3.75, value: 3.81, gain: 0.06 },
           ],
@@ -1338,7 +1338,7 @@ test('milestone celebration overlays the already-rendered completed screen and c
   expect(screen.getByText('Squat e1RM')).toBeInTheDocument();
   expect(screen.getByText('Total e1RM')).toBeInTheDocument();
   expect(screen.getByText('eStrength Max')).toBeInTheDocument();
-  expect(screen.getByText('105 kg (+5 kg)')).toBeInTheDocument();
+  expect(screen.getByText('105.42 kg (+5.42 kg)')).toBeInTheDocument();
   expect(screen.getByText('3.81x (+0.06)')).toBeInTheDocument();
 
   const eStrengthRow = screen.getByText('eStrength Max').parentElement;
@@ -1919,6 +1919,61 @@ test('new setup offers Smart directly without a Classic model choice', async () 
   expect(screen.queryByText('Body data')).not.toBeInTheDocument();
 });
 
+test('three-step onboarding persists beginner squat focus and previews calculated training days', async () => {
+  localStorage.clear();
+  render(<App />);
+
+  await screen.findByText('Start with Smart Training', {}, { timeout: 3000 });
+  fireEvent.change(screen.getByLabelText('Body weight'), { target: { value: '55' } });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Squat Weight' }), { target: { value: '45' } });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Bench Weight' }), { target: { value: '35' } });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Deadlift Weight' }), { target: { value: '62.5' } });
+  const onboardingContent = screen.getByTestId('onboarding-content');
+  expect(onboardingContent).toHaveStyle({ display: 'grid', gridTemplateRows: 'auto auto minmax(auto, 1fr) auto' });
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+  expect(screen.getByText('Step 2 of 3')).toBeInTheDocument();
+  expect(onboardingContent).toHaveStyle({ display: 'grid', gridTemplateRows: 'auto auto minmax(auto, 1fr) auto' });
+  expect(screen.getByTestId('onboarding-step-content')).toHaveStyle({ gridTemplateRows: 'minmax(auto, 1fr)' });
+  expect(screen.getByText('Calculated starting level')).toBeInTheDocument();
+  expect(screen.getByText('Beginner')).toBeInTheDocument();
+  expect(screen.getByText('3 / 7')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Squat and legs focus/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+  expect(screen.getByText('Step 3 of 3')).toBeInTheDocument();
+  expect(onboardingContent).toHaveStyle({ display: 'grid', gridTemplateRows: 'auto auto minmax(auto, 1fr) auto' });
+  expect(screen.getByTestId('onboarding-step-content')).toHaveStyle({ gridTemplateRows: 'minmax(auto, 1fr)' });
+  expect(screen.getByText('Log your sets')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  expect(screen.getByRole('button', { name: /Squat and legs focus/ })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+  await waitFor(() => {
+    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    expect(saved.trainingFocus).toBe('beginnerSquat');
+    expect(saved.inProgress.workouts[2].lifts.map(block => block.lift))
+      .toEqual(['Deadlift', 'Squat']);
+  });
+});
+
+test('onboarding does not promise beginner-only squat focus at a higher starting level', async () => {
+  localStorage.clear();
+  render(<App />);
+
+  await screen.findByText('Start with Smart Training', {}, { timeout: 3000 });
+  fireEvent.change(screen.getByLabelText('Body weight'), { target: { value: '80' } });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Squat Weight' }), { target: { value: '150' } });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Bench Weight' }), { target: { value: '100' } });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Deadlift Weight' }), { target: { value: '180' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+  expect(screen.getByText('Intermediate')).toBeInTheDocument();
+  expect(screen.getByText('4 / 7')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Squat and legs focus/ })).toBeDisabled();
+});
+
 test('Classic can switch only before the current workout has user progress', () => {
   expect(canSwitchClassicToSmart('classic', {
     sets: [{ reps: 5, weight: 100, originalWeight: 100, done: false }],
@@ -1958,6 +2013,8 @@ test('finishing the compact setup creates a Smart user with body weight and star
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Deadlift Weight' }), {
     target: { value: '125' },
   });
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
   await waitFor(() => {
@@ -1991,6 +2048,8 @@ test('every Smart set has a phase label without breaking the four-column grid', 
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Squat Weight' }), { target: { value: '50' } });
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Bench Weight' }), { target: { value: '30' } });
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Deadlift Weight' }), { target: { value: '65' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Workout' }));
 
@@ -2017,6 +2076,8 @@ test('opening Stats after Smart setup renders the screen and all tabs', async ()
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Squat Weight' }), { target: { value: '50' } });
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Bench Weight' }), { target: { value: '30' } });
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Deadlift Weight' }), { target: { value: '65' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Statistics' }));
 
@@ -2140,6 +2201,7 @@ test('Smart squat priority is opt-in, persists, and changes the planned beginner
 
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 }));
   fireEvent.click(screen.getByRole('button', { name: 'Balanced SBD route' }));
+  expect(screen.getByText('The standard route trains Squat, Bench and Deadlift in balance toward Meet Day.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Squat priority' }));
 
   await waitFor(() => {
@@ -2147,6 +2209,31 @@ test('Smart squat priority is opt-in, persists, and changes the planned beginner
     expect(saved.trainingFocus).toBe('beginnerSquat');
     expect(saved.inProgress.workouts[2].lifts.map(block => block.lift))
       .toEqual(['Deadlift', 'Squat']);
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Squat priority' }));
+  expect(screen.getByText(/replaces medium Bench with light Squat/)).toBeInTheDocument();
+});
+
+test('Smart squat priority is unavailable above beginner and stale focus is cleared', async () => {
+  localStorage.clear();
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1,
+    trainingModel: 'smart',
+    trainingFocus: 'beginnerSquat',
+    currentCycle: 1,
+    prs: { Squat: 150, Bench: 100, Deadlift: 180 },
+    bodyWeights: [{ bodyWeight: 80 }],
+    history: [],
+  }));
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 }));
+  fireEvent.click(screen.getByRole('button', { name: 'Balanced SBD route' }));
+  expect(screen.getByText('The standard route trains Squat, Bench and Deadlift in balance toward Meet Day.')).toBeInTheDocument();
+  expect(screen.queryByText('Squat priority currently applies only at beginner level. Higher levels keep the balanced route.')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Squat priority (beginners only)' })).toBeDisabled();
+  await waitFor(() => {
+    expect(JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1')).trainingFocus).toBe('standard');
   });
 });
 

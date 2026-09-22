@@ -205,10 +205,15 @@ export function buildCompletedWorkoutLiftSummaries({
       : 0;
 
     const oneRMToday = result?.oneRMToday ?? calculatedOneRMToday;
-    const e1RMToday = result?.e1RMToday ?? calculatedE1RMToday;
+    // Completed snapshots retain the successful sets. Recalculate from those
+    // whenever possible: older completedSummary fields may be barbell-rounded.
+    const e1RMToday = sets.length ? calculatedE1RMToday : (result?.e1RMToday ?? 0);
 
     const previousBest1RM = Number(best1RMs?.[result.lift]) || 0;
     const previousBestE1RM = Number(bestE1RMs?.[result.lift]) || Number(prs?.[result.lift]) || 0;
+    const prBaselineE1RM = result?.previousBestE1RM != null
+      ? Number(result.previousBestE1RM)
+      : previousBestE1RM;
 
     const best1RM = Math.max(previousBest1RM, oneRMToday || 0);
     const bestE1RM = Math.max(previousBestE1RM, e1RMToday || 0);
@@ -220,7 +225,7 @@ export function buildCompletedWorkoutLiftSummaries({
       best1RM,
       bestE1RM,
       is1RMPR: oneRMToday > previousBest1RM && oneRMToday > 0,
-      isE1RMPR: e1RMToday > previousBestE1RM && e1RMToday > 0,
+      isE1RMPR: e1RMToday > prBaselineE1RM && e1RMToday > 0,
     };
   });
 }

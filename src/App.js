@@ -106,6 +106,7 @@ import {
   restoreOpenWorkoutSetWeight,
 } from './workoutSetActions';
 import { applyAccessoryPlanToWorkouts } from './accessoryGeneration';
+import { getActiveMultiLiftStep } from './workoutFocusSequence';
 import {
   ACCESSORY_CATALOG,
   BIG_LIFTS,
@@ -131,6 +132,7 @@ import { buildAutomaticNextSmartCycle } from './smartCycleTransition';
 import {
   isSmartIdealRouteEnabled,
   resolveSmartIdealRouteStartCycle,
+  SMART_IDEAL_NORMAL_ROUTE,
   SMART_TRAINING_FOCUSES,
   normalizeSmartTrainingFocus,
 } from './smartIdealRoute';
@@ -4141,7 +4143,10 @@ export function MilestoneCelebrationModal({
       return `${formatDecimalDisplay(achievement.value, ratioFormat)}x (+${formatDecimalDisplay(achievement.gain, ratioFormat)})`;
     }
 
-    return `${formatWeightFromKg(achievement.value, weightUnit)} (+${formatWeightFromKg(achievement.gain, weightUnit)})`;
+    const formatAchievementWeight = achievement.type === 'e1RM'
+      ? formatEstimatedWeightFromKg
+      : formatWeightFromKg;
+    return `${formatAchievementWeight(achievement.value, weightUnit)} (+${formatAchievementWeight(achievement.gain, weightUnit)})`;
   }
 
   function openLink(url) {
@@ -6059,8 +6064,8 @@ export function getSmartDecisionReasonDisplayText(summary, t = translations.en, 
           t.smartWeakestE1RMTarget,
           {
             lift: liftLabel(weakestLift, t),
-            current: formatWeightValue(weakestBest, WEIGHT_UNITS.KG),
-            target: formatWeightValue(weakestTarget, WEIGHT_UNITS.KG),
+            current: formatDecimalDisplay(weakestBest, { maximumFractionDigits: 2 }),
+            target: formatDecimalDisplay(weakestTarget, { maximumFractionDigits: 2 }),
           }
         )
         : null;
@@ -7326,7 +7331,7 @@ export function SmartDayTypeInline({
 }
 
 export function CurrentWorkout({
-  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetWarmup, onToggleMeetSet, onMarkLiftBlockSetFailed, onRestoreLiftBlockSetWeight, onLiftBlockWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight, currentE1RMs = {} }) {
+  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetWarmup, onToggleMeetSet, onMarkLiftBlockSetFailed, onRestoreLiftBlockSetWeight, onLiftBlockWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', preparationMode = 'basicFirst', workoutSetup = null, timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight, currentE1RMs = {} }) {
   const smartModel = isSmartTrainingModel(trainingModel);
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
@@ -7594,7 +7599,7 @@ export function CurrentWorkout({
       (acc.done || []).every(Boolean)
     );
     const workoutPrepItems = workout.prepItems || [];
-    const firstIncompletePrepItem = workoutPrepItems.findIndex(item => !item.done);
+    const activeStep = getActiveMultiLiftStep(workout, workoutSetup, preparationMode);
     const allPrepDone = workoutPrepItems.every(item => item.done);
     const allWarmupsDone = (workout.lifts || []).every(liftBlock =>
       (liftBlock.warmups || []).every(warmup => warmup.done)
@@ -7608,13 +7613,6 @@ export function CurrentWorkout({
       accessoriesDone: allAccessoriesDone,
       cooldownDone: allCooldownDone,
     });
-
-    const firstIncompleteLiftIndex = allPrepDone
-      ? (workout.lifts || []).findIndex(liftBlock =>
-          (liftBlock.warmups || []).some(w => !w.done) ||
-          (liftBlock.sets || []).some(s => !s.done)
-        )
-      : -1;
 
     return (
       <div style={isMeetDay ? meetWorkoutScreenStyle() : activeWorkoutScreenStyle()}>
@@ -7696,7 +7694,7 @@ export function CurrentWorkout({
                   key={item.labelKey || prepIndex}
                   item={item}
                   isActive={
-                    !isReadOnly && prepIndex === firstIncompletePrepItem
+                    !isReadOnly && activeStep?.type === 'prep' && prepIndex === activeStep.index
                   }
                   isReadOnly={isReadOnly}
                   onToggle={() => handleToggle(() => onTogglePrepItem(prepIndex))}
@@ -7804,8 +7802,8 @@ export function CurrentWorkout({
                 isReadOnly={isReadOnly}
                 activeIndex={
                   !isReadOnly &&
-                  li === firstIncompleteLiftIndex &&
-                  allPrepDone
+                  activeStep?.type === 'warmup' &&
+                  li === activeStep.liftIndex
                     ? firstIncompleteWarmup
                     : -1
                 }
@@ -7847,9 +7845,8 @@ export function CurrentWorkout({
                         onShowPlateCalculator={onShowPlateCalculator}
                         activeIndex={
                           !isReadOnly &&
-                          li === firstIncompleteLiftIndex &&
-                          allPrepDone &&
-                          allWarmupsDone
+                          activeStep?.type === 'set' &&
+                          li === activeStep.liftIndex
                             ? firstIncompleteSecondarySet
                             : -1
                         }
@@ -7886,9 +7883,8 @@ export function CurrentWorkout({
                         onShowPlateCalculator={onShowPlateCalculator}
                         activeIndex={
                           !isReadOnly &&
-                          li === firstIncompleteLiftIndex &&
-                          allPrepDone &&
-                          allWarmupsDone &&
+                          activeStep?.type === 'set' &&
+                          li === activeStep.liftIndex &&
                           groupContainsNextSet
                             ? firstIncompleteBackoff
                             : -1
@@ -7981,9 +7977,8 @@ export function CurrentWorkout({
                     isWarmup={false}
                     isActive={
                       !isReadOnly &&
-                      li === firstIncompleteLiftIndex &&
-                      allPrepDone &&
-                      allWarmupsDone &&
+                      activeStep?.type === 'set' &&
+                      li === activeStep.liftIndex &&
                       si === firstIncompleteSet
                     }
                     isReadOnly={isReadOnly}
@@ -8748,32 +8743,31 @@ function WorkoutSetupSection({ workoutSetup, onSave, t }) {
 
 function TrainingFocusSection({ trainingFocus, onChange, athleteLevel, t }) {
   const [open, setOpen] = useState(false);
-  const focused = trainingFocus === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT;
+  const beginner = athleteLevel === 'beginner';
+  const focused = beginner && trainingFocus === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT;
 
   return <>
     <SettingsListRow
       label={t.trainingFocus}
-      description={athleteLevel !== 'beginner' && focused
-        ? t.trainingFocusBeginnerOnly
-        : undefined}
       actionLabel={focused ? t.trainingFocusSquat : t.trainingFocusBalanced}
       onAction={() => setOpen(true)}
     />
     {open && <SettingsModal title={t.trainingFocus} onClose={() => setOpen(false)}>
       <p style={{ fontSize: 13, lineHeight: 1.45, color: THEME.muted }}>
-        {t.trainingFocusExplanation}
+        {focused ? t.trainingFocusExplanation : t.trainingFocusBalancedExplanation}
       </p>
-      {athleteLevel !== 'beginner' && <p style={{ fontSize: 13, color: THEME.muted }}>
-        {t.trainingFocusBeginnerOnly}
-      </p>}
       {[
         [SMART_TRAINING_FOCUSES.STANDARD, t.trainingFocusBalanced],
-        [SMART_TRAINING_FOCUSES.BEGINNER_SQUAT, t.trainingFocusSquat],
+        [SMART_TRAINING_FOCUSES.BEGINNER_SQUAT, beginner ? t.trainingFocusSquat : `${t.trainingFocusSquat} (${t.trainingFocusBeginnerOnlyShort})`],
       ].map(([value, label]) => <button
         type="button"
         key={value}
+        disabled={!beginner && value === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT}
         onClick={() => { onChange(value); setOpen(false); }}
-        style={selectionModalButtonStyle(trainingFocus === value)}
+        style={{
+          ...selectionModalButtonStyle((focused ? SMART_TRAINING_FOCUSES.BEGINNER_SQUAT : SMART_TRAINING_FOCUSES.STANDARD) === value),
+          opacity: !beginner && value === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT ? 0.5 : 1,
+        }}
       >{label}</button>)}
     </SettingsModal>}
   </>;
@@ -10213,7 +10207,9 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
 }
 
 function Onboarding({ onStart, t }) {
+  const [step, setStep] = useState(1);
   const [onboardingError, setOnboardingError] = useState('');
+  const [selectedTrainingFocus, setSelectedTrainingFocus] = useState(SMART_TRAINING_FOCUSES.STANDARD);
   const [onboardingWeightUnit, setOnboardingWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
   const [bodyWeight, setBodyWeight] = useState('');
   const [liftInputs, setLiftInputs] = useState({
@@ -10245,24 +10241,59 @@ function Onboarding({ onStart, t }) {
       : weightKg * (1 + reps / 30);
   }
 
-  function handleStart() {
+  function getStartingProfile() {
     const selectedWeightUnit = normalizeWeightUnit(onboardingWeightUnit);
     const startingBodyWeight = displayWeightToKg(parseFloat(bodyWeight), selectedWeightUnit);
     const s = calculateStartingMax('Squat');
     const b = calculateStartingMax('Bench');
     const d = calculateStartingMax('Deadlift');
 
-    if (!startingBodyWeight || !s || !b || !d) {
+    if (!startingBodyWeight || !s || !b || !d) return null;
+
+    const athleteLevel = getAthleteLevel({
+      prs: { Squat: s, Bench: b, Deadlift: d },
+      history: [],
+      bodyWeights: [{ bodyWeight: startingBodyWeight }],
+    });
+    const trainingDays = Object.values(SMART_IDEAL_NORMAL_ROUTE[athleteLevel])
+      .filter(lifts => lifts.length > 0).length;
+
+    return { selectedWeightUnit, startingBodyWeight, s, b, d, athleteLevel, trainingDays };
+  }
+
+  function handleNext() {
+    const profile = getStartingProfile();
+    if (step === 1 && !profile) {
+      setOnboardingError(t.fillRequiredFields);
+      return;
+    }
+    if (step === 1 && profile.athleteLevel !== 'beginner') {
+      setSelectedTrainingFocus(SMART_TRAINING_FOCUSES.STANDARD);
+    }
+    setOnboardingError('');
+    setStep(current => Math.min(current + 1, 3));
+  }
+
+  function handleStart() {
+    const startingProfile = getStartingProfile();
+
+    if (!startingProfile) {
+      setStep(1);
       setOnboardingError(t.fillRequiredFields);
       return;
     }
 
     setOnboardingError('');
-    onStart(s, b, d, {
-      weightUnit: selectedWeightUnit,
+    onStart(startingProfile.s, startingProfile.b, startingProfile.d, {
+      weightUnit: startingProfile.selectedWeightUnit,
       trainingModel: getNewUserTrainingModel(),
-    }, { bodyWeight: startingBodyWeight });
+      trainingFocus: startingProfile.athleteLevel === 'beginner'
+        ? selectedTrainingFocus
+        : SMART_TRAINING_FOCUSES.STANDARD,
+    }, { bodyWeight: startingProfile.startingBodyWeight });
   }
+
+  const startingProfile = getStartingProfile();
 
   return (
     <div style={{
@@ -10281,6 +10312,8 @@ function Onboarding({ onStart, t }) {
         // Onboarding has no visible navigation, but using its content area
         // keeps the setup controls from sitting unnaturally low.
         ...balancedVerticalScreenStyle(BOTTOM_NAV_SPACE),
+        gridTemplateRows: 'auto auto minmax(auto, 1fr) auto',
+        alignContent: 'stretch',
         maxWidth: 500,
         margin: '0 auto',
         padding: '14px 20px',
@@ -10289,7 +10322,7 @@ function Onboarding({ onStart, t }) {
         background: '#000000',
         color: THEME.text,
         overflowX: 'hidden',
-        rowGap: 'clamp(5px, 0.8dvh, 8px)',
+        rowGap: 'clamp(10px, 2dvh, 20px)',
       }}>
       <div style={{ textAlign: 'center' }}>
         <img
@@ -10313,8 +10346,25 @@ function Onboarding({ onStart, t }) {
         </div>
       </div>
 
-      <div style={{
-        display: 'contents',
+      <div style={{ width: '100%', maxWidth: 400, margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+          <strong style={{ color: THEME.primary, fontSize: 13 }}>
+            {t.onboardingStepOf.replace('{step}', step).replace('{total}', 3)}
+          </strong>
+          <span style={{ color: THEME.muted, fontSize: 13, fontWeight: 700 }}>
+            {step === 1 ? t.onboardingStepStrength : step === 2 ? t.onboardingStepGoal : t.onboardingStepGuide}
+          </span>
+        </div>
+        <div aria-hidden="true" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+          {[1, 2, 3].map(part => <span key={part} style={{ height: 4, borderRadius: 4, background: part <= step ? THEME.primary : THEME.card }} />)}
+        </div>
+      </div>
+
+      <div data-testid="onboarding-step-content" style={{
+        display: 'grid',
+        alignContent: 'space-between',
+        gridTemplateRows: step === 1 ? undefined : 'minmax(auto, 1fr)',
+        rowGap: 'clamp(5px, 0.8dvh, 8px)',
       }}>
         {onboardingError && (
           <div style={{
@@ -10333,7 +10383,7 @@ function Onboarding({ onStart, t }) {
           </div>
         )}
 
-          <div style={{ display: 'contents' }}>
+          {step === 1 && <div style={{ display: 'contents' }}>
             <h3 style={{
               margin: 0,
               color: THEME.red,
@@ -10357,9 +10407,9 @@ function Onboarding({ onStart, t }) {
             }}>
               {t.onboardingHeroText}
             </p>
-          </div>
+          </div>}
 
-        <div style={{ display: 'contents' }}>
+        {step === 1 && <div style={{ display: 'contents' }}>
           <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 110px', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
             <label style={{ fontWeight: 800, color: THEME.text }}>
               {t.weightUnit}
@@ -10501,7 +10551,76 @@ function Onboarding({ onStart, t }) {
           </div>
           );
         })}
-        </div>
+        </div>}
+
+        {step === 2 && startingProfile && <section style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', alignContent: 'space-between', minHeight: '100%' }}>
+          <h2 style={{ color: THEME.red, fontSize: 'clamp(21px, 5.5vw, 27px)', margin: '0 0 8px' }}>
+            {t.onboardingGoalTitle}
+          </h2>
+          <p style={{ fontSize: 15, lineHeight: 1.4, margin: '0 0 18px' }}>
+            {t.onboardingGoalIntro}
+          </p>
+          <div role="group" aria-label={t.onboardingGoalLabel} style={{ display: 'grid', gap: 10 }}>
+            {[
+              [SMART_TRAINING_FOCUSES.STANDARD, t.onboardingGeneralStrength, t.onboardingGeneralStrengthDescription],
+              [SMART_TRAINING_FOCUSES.BEGINNER_SQUAT, t.onboardingSquatGoal, t.onboardingSquatGoalDescription],
+            ].map(([focus, label, description]) => {
+              const available = focus === SMART_TRAINING_FOCUSES.STANDARD || startingProfile.athleteLevel === 'beginner';
+              const selected = available && selectedTrainingFocus === focus;
+              return <button
+                type="button"
+                key={focus}
+                disabled={!available}
+                aria-pressed={selected}
+                onClick={() => setSelectedTrainingFocus(focus)}
+                style={{ minHeight: 58, padding: '10px 12px', textAlign: 'left', borderRadius: 8, border: `1px solid ${selected ? THEME.primary : THEME.muted}`, background: selected ? THEME.primary : THEME.bg, color: THEME.text, opacity: available ? 1 : 0.55, cursor: available ? 'pointer' : 'not-allowed' }}
+              >
+                <strong style={{ display: 'block', fontSize: 15 }}>{label}</strong>
+                <span style={{ display: 'block', fontSize: 12, lineHeight: 1.3, marginTop: 2 }}>{description}</span>
+              </button>;
+            })}
+          </div>
+          {startingProfile.athleteLevel !== 'beginner' && <p style={{ color: THEME.muted, fontSize: 12, lineHeight: 1.35 }}>
+            {t.trainingFocusBeginnerOnly}
+          </p>}
+          <dl style={{ display: 'grid', gap: 12, margin: '22px 0 0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <dt style={{ color: THEME.muted, fontWeight: 700 }}>{t.onboardingCalculatedLevel}</dt>
+              <dd style={{ margin: 0, color: THEME.primary, fontWeight: 900 }}>
+                {t[`athleteLevel${startingProfile.athleteLevel[0].toUpperCase()}${startingProfile.athleteLevel.slice(1)}`]}
+              </dd>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <dt style={{ color: THEME.muted, fontWeight: 700 }}>{t.onboardingPlannedDays}</dt>
+              <dd style={{ margin: 0, color: THEME.primary, fontWeight: 900 }}>
+                {startingProfile.trainingDays} / 7
+              </dd>
+            </div>
+          </dl>
+          <p style={{ color: THEME.muted, fontSize: 12, lineHeight: 1.35, margin: '12px 0 0' }}>
+            {t.onboardingDaysExplanation}
+          </p>
+        </section>}
+
+        {step === 3 && <section style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateRows: 'auto auto 1fr', minHeight: '100%' }}>
+          <h2 style={{ color: THEME.red, fontSize: 'clamp(21px, 5.5vw, 27px)', margin: '0 0 8px' }}>
+            {t.onboardingGuideTitle}
+          </h2>
+          <p style={{ fontSize: 15, lineHeight: 1.4, margin: '0 0 16px' }}>{t.onboardingGuideIntro}</p>
+          <ol style={{ paddingLeft: 25, margin: 0, display: 'grid', alignContent: 'space-around', gap: 14 }}>
+            {[
+              [t.onboardingGuidePlanTitle, t.onboardingGuidePlanText],
+              [t.onboardingGuideLogTitle, t.onboardingGuideLogText],
+              [t.onboardingGuideFeedbackTitle, t.onboardingGuideFeedbackText],
+              [t.onboardingGuideProgressTitle, t.onboardingGuideProgressText],
+            ].map(([title, description]) => <li key={title} style={{ paddingLeft: 3, lineHeight: 1.35 }}>
+              <strong style={{ color: THEME.primary, display: 'block', fontSize: 15 }}>{title}</strong>
+              <span style={{ fontSize: 13 }}>{description}</span>
+            </li>)}
+          </ol>
+        </section>}
+
+      </div>
 
         <div style={{
           display: 'flex',
@@ -10509,13 +10628,16 @@ function Onboarding({ onStart, t }) {
           gap: 8,
           margin: 0,
         }}>
-          <DataSection t={t} importOnly={true} triggerOnly={true} />
+          {step === 1
+            ? <DataSection t={t} importOnly={true} triggerOnly={true} />
+            : <button type="button" onClick={() => setStep(current => Math.max(current - 1, 1))} style={{ width: 'min(150px, calc(50vw - 28px))', minHeight: 44, background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.primary}`, borderRadius: 4, fontWeight: 700, cursor: 'pointer' }}>{t.onboardingBack}</button>}
           <button
             type="button"
-            onClick={handleStart}
+            onClick={step === 3 ? handleStart : handleNext}
             style={{
               width: 'min(150px, calc(50vw - 28px))',
-              padding: '11px 20px',
+              minHeight: 44,
+              padding: '9px 16px',
               fontSize: 16,
               background: THEME.primary,
               color: '#ffffff',
@@ -10525,10 +10647,9 @@ function Onboarding({ onStart, t }) {
               fontWeight: 700
             }}
           >
-            {t.onboardingStartSetup}
+            {step === 3 ? t.onboardingStartSetup : t.onboardingNext}
           </button>
         </div>
-      </div>
       </div>
     </div>
   );
@@ -10910,6 +11031,12 @@ function App() {
     }),
     [prs, history, bodyWeights, strengthRatioMaxes]
   );
+  useEffect(() => {
+    if (hasLoadedData && athleteLevel !== 'beginner' &&
+      trainingFocus === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT) {
+      setTrainingFocus(SMART_TRAINING_FOCUSES.STANDARD);
+    }
+  }, [hasLoadedData, athleteLevel, trainingFocus]);
   const anonymousUsageMetrics = useMemo(
     () => buildAnonymousUsageMetrics({
       history,
@@ -11692,6 +11819,14 @@ function App() {
     const defaultBenchPressVariant = defaultSettings.benchPressVariant;
     const defaultDeadliftVariant = defaultSettings.deadliftVariant;
     const defaultCooldownMode = normalizeCooldownMode(defaultSettings.cooldownMode ?? defaultSettings.includeCooldown);
+    const startingAthleteLevel = getAthleteLevel({
+      prs: { Squat: s, Bench: b, Deadlift: d },
+      history: [],
+      bodyWeights: initialBodyData ? [{ ...initialBodyData }] : [],
+    });
+    const startingTrainingFocus = startingAthleteLevel === 'beginner'
+      ? normalizeSmartTrainingFocus(profile.trainingFocus)
+      : SMART_TRAINING_FOCUSES.STANDARD;
 
     setWeightUnit(selectedWeightUnit);
     localStorage.setItem('weightUnit', selectedWeightUnit);
@@ -11711,7 +11846,7 @@ function App() {
       accessoryMode: defaultAccessoryMode,
     });
     setWorkoutSetup(defaultWorkoutSetup);
-    setTrainingFocus(SMART_TRAINING_FOCUSES.STANDARD);
+    setTrainingFocus(startingTrainingFocus);
     setSquatVariant(defaultSquatVariant);
     setBenchPressVariant(defaultBenchPressVariant);
     setDeadliftVariant(defaultDeadliftVariant);
@@ -11731,12 +11866,8 @@ function App() {
       accessoryPRs: {},
       preparationMode: defaultPreparationMode,
       workoutSetup: defaultWorkoutSetup,
-      trainingFocus: SMART_TRAINING_FOCUSES.STANDARD,
-      athleteLevel: getAthleteLevel({
-        prs: { Squat: s, Bench: b, Deadlift: d },
-        history: [],
-        bodyWeights: initialBodyData ? [{ ...initialBodyData }] : [],
-      }),
+      trainingFocus: startingTrainingFocus,
+      athleteLevel: startingAthleteLevel,
       deadliftVariant: defaultDeadliftVariant,
       benchPressVariant: defaultBenchPressVariant,
       squatVariant: defaultSquatVariant,
@@ -14682,6 +14813,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           newCyclePRs={prs}
           onStartNewCycle={handleStartNewCycle}
           programProfile={programProfile}
+          preparationMode={preparationMode}
+          workoutSetup={workoutSetup}
           benchPressVariant={benchPressVariant}
           onChangeProgramProfile={changeProgramProfile}
           trainingModel={trainingModel}
