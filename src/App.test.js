@@ -2250,6 +2250,7 @@ test('settings combines support, feedback, source, identity and release verifica
       { workoutNumber: 0, cycle: 0, seedMax: true, lift: 'Deadlift', topWeight: 125, topReps: 1, e1rm: 125 },
     ],
   }));
+  localStorage.setItem('kelani-whats-new-last-seen-version', import.meta.env.VITE_APP_VERSION || 'dev');
   render(<App />);
 
   fireEvent.click(await screen.findByRole(

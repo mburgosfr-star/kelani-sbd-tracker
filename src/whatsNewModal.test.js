@@ -12,7 +12,7 @@ describe('WhatsNewModal', () => {
     render(
       <WhatsNewModal
         t={translations.en}
-        version="2.0.38"
+        version="2.0.39"
         showAfterUpdates={true}
         onShowAfterUpdatesChange={onShowAfterUpdatesChange}
         onClose={onClose}
@@ -20,7 +20,7 @@ describe('WhatsNewModal', () => {
     );
 
     expect(screen.getByText("What's new?")).toBeInTheDocument();
-    expect(screen.getByText('v2.0.38')).toBeInTheDocument();
+    expect(screen.getByText('v2.0.39')).toBeInTheDocument();
     expect(screen.getByText(translations.en.whatsNewE1RMItem)).toBeInTheDocument();
 
     const checkbox = screen.getByLabelText(
