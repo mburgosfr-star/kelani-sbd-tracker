@@ -140,10 +140,14 @@ for (const signal of [
 for (const signal of [
   'schedule:',
   'workflow_dispatch:',
+  'release:',
+  'types: [published]',
   'contents: read',
   'timeout-minutes: 15',
   'actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09',
   'actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444',
+  'releases/latest',
+  '--version "${{ steps.latest-release.outputs.version }}"',
   'npm run distribution:check',
 ]) {
   if (!distributionWorkflow.includes(signal)) {
