@@ -152,6 +152,11 @@ import {
   buildAnonymousUsageMetrics,
   buildAnonymousUsageReport,
 } from './anonymousUsageSummary';
+import {
+  LATEST_WHATS_NEW_VERSION,
+  WHATS_NEW_LAST_SEEN_KEY,
+  shouldAutoShowWhatsNew,
+} from './whatsNew';
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { translations } from './translations';
 import { App as CapacitorApp } from '@capacitor/app';
@@ -1233,6 +1238,8 @@ export function validateImportedBackup(backup) {
   }
   if (data.trainingFocus !== undefined &&
     !Object.values(SMART_TRAINING_FOCUSES).includes(data.trainingFocus)) return false;
+  if (data.showWhatsNewAfterUpdates !== undefined &&
+    typeof data.showWhatsNewAfterUpdates !== 'boolean') return false;
 
   return true;
 }
@@ -3397,6 +3404,110 @@ function SettingsModal({ title, onClose, children }) {
         {children}
       </div>
     </div>
+  );
+}
+
+export function WhatsNewModal({
+  t,
+  version,
+  showAfterUpdates,
+  onShowAfterUpdatesChange,
+  onClose,
+}) {
+  const items = [
+    t.whatsNewOnboardingItem,
+    t.whatsNewSquatPriorityItem,
+    t.whatsNewPreparationOrderItem,
+    t.whatsNewE1RMItem,
+  ];
+
+  return (
+    <SettingsModal title={t.whatsNewTitle} onClose={onClose}>
+      <div style={{
+        color: THEME.primary,
+        fontSize: 13,
+        fontWeight: 900,
+        textAlign: 'center',
+        margin: '-6px 0 12px',
+      }}>
+        v{version}
+      </div>
+
+      <p style={{
+        color: THEME.text,
+        fontSize: 14,
+        fontWeight: 700,
+        lineHeight: 1.4,
+        margin: '0 0 12px',
+        textAlign: 'center',
+      }}>
+        {t.whatsNewIntro}
+      </p>
+
+      <ul style={{
+        color: THEME.text,
+        fontSize: 14,
+        fontWeight: 700,
+        lineHeight: 1.4,
+        margin: '0 0 16px',
+        paddingLeft: 22,
+      }}>
+        {items.map(item => (
+          <li key={item} style={{ marginBottom: 8 }}>{item}</li>
+        ))}
+      </ul>
+
+      <label style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        color: THEME.text,
+        fontSize: 13,
+        fontWeight: 800,
+        lineHeight: 1.3,
+        marginBottom: 14,
+        cursor: 'pointer',
+      }}>
+        <input
+          type="checkbox"
+          checked={showAfterUpdates}
+          onChange={event => onShowAfterUpdatesChange(event.target.checked)}
+          style={{ width: 20, height: 20, flex: '0 0 auto', accentColor: THEME.primary }}
+        />
+        <span>{t.whatsNewShowAutomatically}</span>
+      </label>
+
+      <button
+        type="button"
+        onClick={onClose}
+        style={{
+          width: '100%',
+          minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
+          padding: 10,
+          fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
+          fontWeight: 800,
+          background: THEME.primary,
+          color: '#ffffff',
+          border: '1px solid ' + THEME.primary,
+          borderRadius: 8,
+          cursor: 'pointer',
+        }}
+      >
+        {t.close}
+      </button>
+    </SettingsModal>
+  );
+}
+
+function WhatsNewSettingsSection({ t, onOpen }) {
+  return (
+    <>
+      <SettingsListRow
+        label={t.whatsNewTitle}
+        actionLabel={t.whatsNewView}
+        onAction={onOpen}
+      />
+    </>
   );
 }
 
@@ -10904,6 +11015,9 @@ function App() {
   );
   const [weightUnit, setWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
   const [hasLoadedData, setHasLoadedData] = useState(false);
+  const [hasExistingProfile, setHasExistingProfile] = useState(false);
+  const [showWhatsNewAfterUpdates, setShowWhatsNewAfterUpdates] = useState(true);
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
 
   function startTimer(seconds, placement = null) {
     const effectiveSeconds = getRecommendedRestTimeSeconds({
@@ -11281,6 +11395,11 @@ function App() {
   useEffect(() => {
     const setupBackButton = async () => {
       const listener = await CapacitorApp.addListener('backButton', () => {
+        if (showWhatsNew) {
+          closeWhatsNew();
+          return;
+        }
+
         if (activeMilestoneCelebration) {
           setActiveMilestoneCelebration(null);
           return;
@@ -11329,12 +11448,13 @@ function App() {
     return () => {
       if (listener) listener.remove();
     };
-  }, [screen, completedWorkoutIndex, activeMilestoneCelebration]);
+  }, [screen, completedWorkoutIndex, activeMilestoneCelebration, showWhatsNew]);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
 
     if (!saved) {
+      setHasExistingProfile(false);
       setScreen('onboarding');
       setHasLoadedData(true);
       return;
@@ -11349,6 +11469,7 @@ function App() {
       const deadlift = savedPrs.Deadlift || 0;
 
       if (!squat || !bench || !deadlift) {
+        setHasExistingProfile(false);
         setScreen('onboarding');
         setHasLoadedData(true);
         return;
@@ -11502,6 +11623,8 @@ function App() {
       setSquatVariant(savedSquatVariant);
       setDeadliftVariant(savedDeadliftVariant);
       setBenchPressVariant(savedBenchPressVariant);
+      setShowWhatsNewAfterUpdates(data.showWhatsNewAfterUpdates !== false);
+      setHasExistingProfile(true);
 
       const restorableSelectedIndex = getRestorableSelectedIndex(
         savedInProgress,
@@ -11552,6 +11675,7 @@ function App() {
       setHasLoadedData(true);
     } catch (e) {
       console.error('Kon opgeslagen user data niet laden', e);
+      setHasExistingProfile(false);
       setScreen('onboarding');
       setHasLoadedData(true);
     }
@@ -11585,6 +11709,7 @@ function App() {
       squatVariant,
       deadliftVariant,
       benchPressVariant,
+      showWhatsNewAfterUpdates,
       inProgress: {
         programVersion: PROGRAM_VERSION,
         currentCycle,
@@ -11653,7 +11778,37 @@ function App() {
         });
       }
     }
-  }, [hasLoadedData, history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, workoutSetup, trainingFocus, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
+  }, [hasLoadedData, history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, workoutSetup, trainingFocus, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, showWhatsNewAfterUpdates, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
+
+  useEffect(() => {
+    if (!hasLoadedData || showLaunchSplash || showWhatsNew) return;
+
+    const currentVersion = import.meta.env.VITE_APP_VERSION || 'dev';
+    const lastSeenVersion = localStorage.getItem(WHATS_NEW_LAST_SEEN_KEY);
+
+    if (shouldAutoShowWhatsNew({
+      currentVersion,
+      enabled: showWhatsNewAfterUpdates,
+      hasExistingProfile,
+      lastSeenVersion,
+    })) {
+      setShowWhatsNew(true);
+    }
+  }, [
+    hasLoadedData,
+    hasExistingProfile,
+    showLaunchSplash,
+    showWhatsNew,
+    showWhatsNewAfterUpdates,
+  ]);
+
+  function closeWhatsNew() {
+    const currentVersion = import.meta.env.VITE_APP_VERSION || 'dev';
+    if (currentVersion !== 'dev') {
+      localStorage.setItem(WHATS_NEW_LAST_SEEN_KEY, currentVersion);
+    }
+    setShowWhatsNew(false);
+  }
 
   useEffect(() => {
     if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
@@ -11809,6 +11964,11 @@ function App() {
     localStorage.removeItem('kel-powerlifting');
     localStorage.removeItem('app_version');
 
+    const currentVersion = import.meta.env.VITE_APP_VERSION || 'dev';
+    if (currentVersion !== 'dev') {
+      localStorage.setItem(WHATS_NEW_LAST_SEEN_KEY, currentVersion);
+    }
+
     const selectedWeightUnit = normalizeWeightUnit(profile.weightUnit || weightUnit);
     const defaultTrainingModel = getNewUserTrainingModel();
     const defaultProgramProfile = 'kelaniSbd';
@@ -11956,6 +12116,7 @@ function handleResetApp() {
   localStorage.removeItem('app_version');
   localStorage.removeItem('bodyweight_prompt_date');
   localStorage.removeItem('trainingModel');
+  localStorage.removeItem(WHATS_NEW_LAST_SEEN_KEY);
 
   localStorage.setItem('squatVariant', 'standard');
   localStorage.setItem('benchPressVariant', 'standard');
@@ -11978,6 +12139,9 @@ function handleResetApp() {
   setCompletedWorkoutIndex(null);
   setCompletedSummary(null);
   setActiveMilestoneCelebration(null);
+  setShowWhatsNew(false);
+  setShowWhatsNewAfterUpdates(true);
+  setHasExistingProfile(false);
   setCurrentCycle(1);
   setBodyWeights([]);
   setTrainingModel(TRAINING_MODELS.SMART);
@@ -15420,6 +15584,11 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         language={language}
         usageMetrics={anonymousUsageMetrics}
       />
+
+      <WhatsNewSettingsSection
+        t={t}
+        onOpen={() => setShowWhatsNew(true)}
+      />
     </div>
 
     <div data-testid="start-over-settings-row">
@@ -15823,6 +15992,16 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
     weightUnit={weightUnit}
     usageMetrics={anonymousUsageMetrics}
     onClose={() => setActiveMilestoneCelebration(null)}
+  />
+)}
+
+{showWhatsNew && (
+  <WhatsNewModal
+    t={t}
+    version={LATEST_WHATS_NEW_VERSION}
+    showAfterUpdates={showWhatsNewAfterUpdates}
+    onShowAfterUpdatesChange={setShowWhatsNewAfterUpdates}
+    onClose={closeWhatsNew}
   />
 )}
 
