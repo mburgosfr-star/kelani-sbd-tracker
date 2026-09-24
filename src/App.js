@@ -3423,10 +3423,10 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewOnboardingItem,
-    t.whatsNewSquatPriorityItem,
-    t.whatsNewPreparationOrderItem,
-    t.whatsNewE1RMItem,
+    t.whatsNewDataBackupsItem,
+    t.whatsNewProgramTitleItem,
+    t.whatsNewNavigationItem,
+    t.whatsNewScreenLayoutItem,
   ];
 
   return (

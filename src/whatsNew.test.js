@@ -25,6 +25,6 @@ describe('shouldAutoShowWhatsNew', () => {
 
   test('does not auto-open in development or without matching content', () => {
     expect(shouldAutoShowWhatsNew({ ...eligible, currentVersion: 'dev' })).toBe(false);
-    expect(shouldAutoShowWhatsNew({ ...eligible, currentVersion: '2.0.40' })).toBe(false);
+    expect(shouldAutoShowWhatsNew({ ...eligible, currentVersion: '2.0.39' })).toBe(false);
   });
 });
