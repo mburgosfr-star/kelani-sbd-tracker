@@ -1491,6 +1491,11 @@ const THEME = {
 
 };
 
+const SUBTLE_DIVIDER = '1px solid rgba(255, 244, 230, 0.34)';
+const HEADER_CONTENT_GAP = 'clamp(9px, 1.2dvh, 12px)';
+const BOTTOM_NAV_DIVIDER_OFFSET = 'clamp(4px, 0.7dvh, 6px)';
+const PROGRAM_SHOW_ALL_TOP_BALANCE = 'clamp(14px, 2dvh, 18px)';
+
 export const FAILED_SET_COLOR = THEME.meet;
 const FAILED_SET_BACKGROUND = 'rgba(198, 40, 40, 0.22)';
 
@@ -1637,7 +1642,7 @@ const RESPONSIVE_CONTENT_UI = Object.freeze({
 
 const RESPONSIVE_SETTINGS_UI = Object.freeze({
   rowGap: 'clamp(8px, 2vw, 12px)',
-  rowPadding: 'clamp(5px, 0.8dvh, 8px) 0',
+  rowPadding: 'clamp(3px, 0.55dvh, 6px) 0',
   labelFontSize: 'clamp(16px, 4vw, 20px)',
   descriptionFontSize: 'clamp(13px, 3.2vw, 16px)',
   valueFontSize: 'clamp(15px, 3.7vw, 18px)',
@@ -1665,7 +1670,7 @@ export function meetDayDashboardScreenStyle() {
     ...responsiveContentScreenStyle(),
     gridTemplateRows: 'auto minmax(min-content, 1fr)',
     alignContent: 'stretch',
-    rowGap: 'clamp(4px, 0.8dvh, 10px)',
+    rowGap: HEADER_CONTENT_GAP,
   };
 }
 
@@ -1674,9 +1679,7 @@ export function regularDashboardScreenStyle({ compact = false } = {}) {
     ...responsiveContentScreenStyle(),
     gridTemplateRows: 'auto minmax(0, 1fr)',
     alignContent: 'stretch',
-    rowGap: compact
-      ? 'clamp(9px, 1.3dvh, 13px)'
-      : 'clamp(14px, 2.2dvh, 24px)',
+    rowGap: HEADER_CONTENT_GAP,
   };
 }
 
@@ -1744,7 +1747,7 @@ export function programHeaderStyle() {
     flex: '0 0 auto',
     zIndex: 1,
     background: THEME.bg,
-    paddingBottom: 'clamp(6px, 0.8dvh, 10px)',
+    paddingBottom: 0,
   };
 }
 
@@ -1758,9 +1761,7 @@ export function programWorkoutCardSpacingStyle({ compact = false } = {}) {
 
 export function programWorkoutListVerticalSpacing({ compact = false } = {}) {
   return {
-    listMarginTop: compact
-      ? 'clamp(6px, 0.8dvh, 10px)'
-      : 'clamp(14px, 2dvh, 22px)',
+    listMarginTop: HEADER_CONTENT_GAP,
     topToggleMargin: compact
       ? '0 0 clamp(8px, 1.2dvh, 12px)'
       : '0 0 clamp(10px, 1.5dvh, 16px)',
@@ -1771,13 +1772,20 @@ export function programWorkoutListVerticalSpacing({ compact = false } = {}) {
 }
 
 export function programWorkoutListContainerStyle({ showAll = false, marginTop = 0 } = {}) {
+  const scrollViewportInset = typeof marginTop === 'number' ? `${marginTop}px` : marginTop;
+  const topInsetToVisibleDivider = `calc(${scrollViewportInset} + ${BOTTOM_NAV_DIVIDER_OFFSET} + ${PROGRAM_SHOW_ALL_TOP_BALANCE})`;
+
   return {
     flex: 1,
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
     justifyContent: showAll ? 'flex-start' : 'center',
-    marginTop,
+    marginTop: 0,
+    paddingTop: showAll ? 0 : marginTop,
+    borderTop: showAll ? `${topInsetToVisibleDivider} solid transparent` : 'none',
+    borderBottom: showAll ? `${scrollViewportInset} solid transparent` : 'none',
+    boxSizing: 'border-box',
     overflowX: 'hidden',
     overflowY: showAll ? 'auto' : 'hidden',
     overscrollBehaviorY: 'none',
@@ -3359,7 +3367,7 @@ export function settingsModalPanelStyle() {
 export function regularSettingsClusterStyle() {
   return {
     display: 'grid',
-    gap: 'clamp(3px, 0.6dvh, 7px)',
+    gap: 'clamp(1px, 0.3dvh, 4px)',
     alignContent: 'space-evenly',
     minHeight: 0,
   };
@@ -3371,13 +3379,13 @@ export function settingsContentLayoutStyle() {
     border: 'none',
     borderRadius: 8,
     padding: '0 clamp(2px, 1.5vw, 8px)',
-    marginTop: 'clamp(10px, 1.5dvh, 16px)',
+    marginTop: HEADER_CONTENT_GAP,
     marginBottom: 0,
     flex: 1,
     minHeight: 0,
     display: 'grid',
     gridTemplateRows: 'minmax(0, 1fr) auto',
-    rowGap: 'clamp(8px, 1.2dvh, 14px)',
+    rowGap: 'clamp(5px, 0.8dvh, 10px)',
     alignContent: 'stretch',
   };
 }
@@ -3577,9 +3585,10 @@ function Toast({ message }) {
 }
 
 
-function DataSection({ t, importOnly = false, triggerOnly = false }) {
+export function DataSection({ t, importOnly = false, triggerOnly = false }) {
   const [notice, setNotice] = useState('');
   const [pendingImport, setPendingImport] = useState(null);
+  const [showDataManager, setShowDataManager] = useState(false);
   const importInputRef = useRef(null);
 
   const downloadJson = (filename, json) => {
@@ -3792,50 +3801,20 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
         >
           {t.importBackupAction}
         </button>
-      ) : (
+      ) : importOnly ? (
         <SettingsListRow
-        label={importOnly ? t.migrationImportBackup : t.dataManagement}
-        compact={true}
-        compactAction={importOnly}
-        labelNowrap={importOnly}
-        actionContent={(
-          <div style={{
-            display: 'grid',
-            gap: 6,
-            justifyItems: 'stretch',
-            width: importOnly ? 'auto' : '100%'
-          }}>
-            {!importOnly && (
-              <button
-                type="button"
-                onClick={exportData}
-                style={{
-                  width: '100%',
-                  minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
-                  padding: '8px 9px',
-                  fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
-                  fontWeight: 800,
-                  background: THEME.card,
-                  color: THEME.text,
-                  border: `1px solid ${THEME.primary}`,
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  whiteSpace: 'normal',
-                  overflowWrap: 'anywhere',
-                  lineHeight: 1.15,
-                }}
-              >
-                {t.exportDataShort || t.exportData}
-              </button>
-            )}
-
+          label={t.migrationImportBackup}
+          compact={true}
+          compactAction={true}
+          labelNowrap={true}
+          actionContent={(
             <button
               type="button"
               onClick={() => importInputRef.current?.click()}
               style={{
-                width: importOnly ? 86 : '100%',
+                width: 86,
                 minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
-                padding: importOnly ? '8px 12px' : '8px 9px',
+                padding: '8px 12px',
                 fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
                 fontWeight: 800,
                 background: THEME.card,
@@ -3850,30 +3829,17 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
             >
               {t.importDataShort || t.importData}
             </button>
-          </div>
-        )}
+          )}
         />
-      )}
-
-      {!importOnly && shouldShowAutomaticBackupStatus(Capacitor.isNativePlatform()) && (
-        <>
-          <SettingsListRow
-            label={t.lastManualExport}
-            value={manualBackupValue}
-            valueColor={manualBackupDisplayVerified ? THEME.primary : THEME.muted}
-            compact={true}
-            valueNowrap={true}
-            valueFontSize={RESPONSIVE_SETTINGS_UI.descriptionFontSize}
-          />
-          <SettingsListRow
-            label={t.lastAutomaticBackup}
-            value={autoBackupValue}
-            valueColor={autoBackupDisplayVerified ? THEME.primary : autoBackupFailed ? THEME.red : THEME.muted}
-            compact={true}
-            valueNowrap={true}
-            valueFontSize={RESPONSIVE_SETTINGS_UI.descriptionFontSize}
-          />
-        </>
+      ) : (
+        <SettingsListRow
+          label={t.dataManagement}
+          actionLabel={t.dataManagementAction}
+          onAction={() => {
+            setNotice('');
+            setShowDataManager(true);
+          }}
+        />
       )}
 
       <input
@@ -3884,7 +3850,7 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
         style={{ display: 'none' }}
       />
 
-      {notice && (
+      {notice && (importOnly || triggerOnly) && (
         <div style={{
           padding: '7px 0',
           color: THEME.primary,
@@ -3894,6 +3860,121 @@ function DataSection({ t, importOnly = false, triggerOnly = false }) {
         }}>
           {notice}
         </div>
+      )}
+
+      {showDataManager && !importOnly && !triggerOnly && (
+        <SettingsModal
+          title={t.dataManagement}
+          onClose={() => setShowDataManager(false)}
+        >
+          <div data-testid="data-backup-manager" style={{ display: 'grid', gap: 14 }}>
+            <p style={{
+              margin: 0,
+              color: THEME.muted,
+              fontSize: RESPONSIVE_SETTINGS_UI.modalBodyFontSize,
+              lineHeight: 1.4,
+              textAlign: 'center',
+            }}>
+              {t.dataManagementDescription}
+            </p>
+
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  alignItems: 'baseline',
+                }}>
+                  <strong>{t.lastManualExport}</strong>
+                  <span style={{
+                    color: manualBackupDisplayVerified ? THEME.primary : THEME.muted,
+                    fontWeight: 800,
+                    textAlign: 'right',
+                  }}>
+                    {manualBackupValue}
+                  </span>
+                </div>
+                <div style={{
+                  marginTop: 4,
+                  color: THEME.muted,
+                  fontSize: RESPONSIVE_SETTINGS_UI.descriptionFontSize,
+                  lineHeight: 1.35,
+                }}>
+                  {t.manualBackupDescription}
+                </div>
+              </div>
+
+              {shouldShowAutomaticBackupStatus(Capacitor.isNativePlatform()) && (
+                <div>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    alignItems: 'baseline',
+                  }}>
+                    <strong>{t.lastAutomaticBackup}</strong>
+                    <span style={{
+                      color: autoBackupDisplayVerified
+                        ? THEME.primary
+                        : autoBackupFailed
+                          ? THEME.red
+                          : THEME.muted,
+                      fontWeight: 800,
+                      textAlign: 'right',
+                    }}>
+                      {autoBackupValue}
+                    </span>
+                  </div>
+                  <div style={{
+                    marginTop: 4,
+                    color: THEME.muted,
+                    fontSize: RESPONSIVE_SETTINGS_UI.descriptionFontSize,
+                    lineHeight: 1.35,
+                  }}>
+                    {t.automaticBackupDescription}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={modalActionRowStyle()}>
+              <button
+                type="button"
+                onClick={exportData}
+                style={modalActionButtonStyle('primary')}
+              >
+                {t.exportDataShort || t.exportData}
+              </button>
+              <button
+                type="button"
+                onClick={() => importInputRef.current?.click()}
+                style={modalActionButtonStyle()}
+              >
+                {t.importDataShort || t.importData}
+              </button>
+            </div>
+
+            {notice && (
+              <div style={{
+                color: THEME.primary,
+                fontSize: RESPONSIVE_SETTINGS_UI.descriptionFontSize,
+                fontWeight: 700,
+                textAlign: 'center',
+              }}>
+                {notice}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowDataManager(false)}
+              style={modalActionButtonStyle()}
+            >
+              {t.close}
+            </button>
+          </div>
+        </SettingsModal>
       )}
 
       {pendingImport && (
@@ -7601,34 +7682,32 @@ export function CurrentWorkout({
           title={t.restAndRecovery || t.deload}
           subtitle={(
             <>
-              <div>
-                {formatCycleWorkoutSubtitle({
-                  t,
-                  currentCycle,
-                  workoutNumber: Math.min(Number(workout.number) || 1, totalWorkouts),
-                  totalWorkouts,
-                  smartModel,
-                })}
-                {smartModel && (
-                  <AthleteLevelBadge
-                    athleteLevel={athleteLevel}
-                    eStrengthRatio={eStrengthRatio}
-                    eStrengthMax={eStrengthMax}
-                    latestBodyWeight={latestBodyWeight}
-                    t={t}
-                  />
-                )}
-              </div>
+              {formatCycleWorkoutSubtitle({
+                t,
+                currentCycle,
+                workoutNumber: Math.min(Number(workout.number) || 1, totalWorkouts),
+                totalWorkouts,
+                smartModel,
+              })}
               {smartModel && (
-                <SmartDayTypeInline
-                  workout={workout}
+                <AthleteLevelBadge
+                  athleteLevel={athleteLevel}
+                  eStrengthRatio={eStrengthRatio}
+                  eStrengthMax={eStrengthMax}
+                  latestBodyWeight={latestBodyWeight}
                   t={t}
-                  weightUnit={weightUnit}
-                  currentE1RMs={currentE1RMs}
                 />
               )}
             </>
           )}
+          secondary={smartModel ? (
+            <SmartDayTypeInline
+              workout={workout}
+              t={t}
+              weightUnit={weightUnit}
+              currentE1RMs={currentE1RMs}
+            />
+          ) : null}
           titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
           subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
         />
@@ -7740,34 +7819,32 @@ export function CurrentWorkout({
           title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
           subtitle={(
             <>
-              <div>
-                {formatCycleWorkoutSubtitle({
-                  t,
-                  currentCycle,
-                  workoutNumber: workout.number,
-                  totalWorkouts,
-                  smartModel,
-                })}
-                {smartModel && (
-                  <AthleteLevelBadge
-                    athleteLevel={athleteLevel}
-                    eStrengthRatio={eStrengthRatio}
-                    eStrengthMax={eStrengthMax}
-                    latestBodyWeight={latestBodyWeight}
-                    t={t}
-                  />
-                )}
-              </div>
+              {formatCycleWorkoutSubtitle({
+                t,
+                currentCycle,
+                workoutNumber: workout.number,
+                totalWorkouts,
+                smartModel,
+              })}
               {smartModel && (
-                <SmartDayTypeInline
-                  workout={workout}
+                <AthleteLevelBadge
+                  athleteLevel={athleteLevel}
+                  eStrengthRatio={eStrengthRatio}
+                  eStrengthMax={eStrengthMax}
+                  latestBodyWeight={latestBodyWeight}
                   t={t}
-                  weightUnit={weightUnit}
-                  currentE1RMs={currentE1RMs}
                 />
               )}
             </>
           )}
+          secondary={smartModel ? (
+            <SmartDayTypeInline
+              workout={workout}
+              t={t}
+              weightUnit={weightUnit}
+              currentE1RMs={currentE1RMs}
+            />
+          ) : null}
           titleStyle={{
             textShadow: 'none',
             fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize,
@@ -8242,13 +8319,16 @@ export function CurrentWorkout({
 
       <div style={{ textAlign: 'center', color: THEME.muted, fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize, marginBottom: smartModel ? 0 : 12 }}>
         {formatCycleWorkoutSubtitle({ t, currentCycle, workoutNumber: workout.number, totalWorkouts, smartModel })}
+        <div data-testid="app-header-divider" style={appHeaderDividerStyle()} />
         {smartModel && (
-          <SmartDayTypeInline
-            workout={workout}
-            t={t}
-            weightUnit={weightUnit}
-            currentE1RMs={currentE1RMs}
-          />
+          <div style={appHeaderSecondaryStyle()}>
+            <SmartDayTypeInline
+              workout={workout}
+              t={t}
+              weightUnit={weightUnit}
+              currentE1RMs={currentE1RMs}
+            />
+          </div>
         )}
       </div>
 
@@ -9500,7 +9580,23 @@ function AppTopBar() {
   return null;
 }
 
-function AppHeader({ title, subtitle, meta, children, titleStyle = {}, subtitleStyle = {}, containerStyle = {} }) {
+export function appHeaderDividerStyle() {
+  return {
+    width: '100%',
+    height: 0,
+    flex: '0 0 auto',
+    borderTop: SUBTLE_DIVIDER,
+    marginTop: HEADER_CONTENT_GAP,
+  };
+}
+
+export function appHeaderSecondaryStyle() {
+  return {
+    marginTop: HEADER_CONTENT_GAP,
+  };
+}
+
+export function AppHeader({ title, subtitle, secondary, meta, children, titleStyle = {}, subtitleStyle = {}, containerStyle = {} }) {
   const versionLabel = import.meta.env.VITE_APP_VERSION ? `v${import.meta.env.VITE_APP_VERSION}` : 'dev';
 
   return (
@@ -9544,19 +9640,24 @@ function AppHeader({ title, subtitle, meta, children, titleStyle = {}, subtitleS
       </div>
 
       {subtitle && (
-        <div
-          style={{
-            color: THEME.text,
-            fontSize: 15,
-            fontWeight: 700,
-            lineHeight: 1.35,
-            marginTop: 16,
-            ...subtitleStyle,
-          }}
-        >
-          {subtitle}
-        </div>
+        <>
+          <div
+            style={{
+              color: THEME.text,
+              fontSize: 15,
+              fontWeight: 700,
+              lineHeight: 1.35,
+              marginTop: 16,
+              ...subtitleStyle,
+            }}
+          >
+            {subtitle}
+          </div>
+          <div data-testid="app-header-divider" style={appHeaderDividerStyle()} />
+        </>
       )}
+
+      {secondary && <div style={appHeaderSecondaryStyle()}>{secondary}</div>}
 
       {meta && (
         <div
@@ -9862,7 +9963,13 @@ function applyCompletedHistorySnapshotsToWorkouts(workouts = [], history = [], c
   return changed ? nextWorkouts : workouts;
 }
 
-function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], currentCycle, onSelect, onStartNewCycle, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
+export function getSmartProgramTitle(trainingFocus, t) {
+  return normalizeSmartTrainingFocus(trainingFocus) === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT
+    ? t.trainingFocusSquat
+    : t.trainingFocusBalanced;
+}
+
+function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], currentCycle, onSelect, onStartNewCycle, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, trainingFocus = SMART_TRAINING_FOCUSES.STANDARD, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
   const currentWorkoutRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
   const [showProgramInfo, setShowProgramInfo] = useState(false);
@@ -9962,7 +10069,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
         containerStyle={programHeaderStyle()}
         title={
           smartModel
-            ? (t.trainingModelSmart)
+            ? getSmartProgramTitle(trainingFocus, t)
             : (
               <span style={{
                 display: 'inline-flex',
@@ -10858,7 +10965,20 @@ export function bottomNavStyle() {
     display: 'flex',
     zIndex: 100,
     background: THEME.bg,
+    paddingTop: BOTTOM_NAV_DIVIDER_OFFSET,
     boxSizing: 'border-box',
+  };
+}
+
+export function bottomNavDividerStyle() {
+  return {
+    position: 'absolute',
+    top: BOTTOM_NAV_DIVIDER_OFFSET,
+    left: 0,
+    right: 0,
+    height: 0,
+    borderTop: SUBTLE_DIVIDER,
+    pointerEvents: 'none',
   };
 }
 
@@ -10867,18 +10987,33 @@ export function bottomNavButtonStyle(active = false) {
     flex: 1,
     height: '100%',
     minWidth: 0,
-    padding: 0,
+    padding: '4px 2px',
     background: 'none',
     border: 'none',
     color: active ? THEME.primary : '#ffffff',
     cursor: 'pointer',
     display: 'flex',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 1,
   };
 }
 
-function BottomNav({ screen, onChange, t }) {
+export function bottomNavLabelStyle(active = false) {
+  return {
+    maxWidth: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    fontSize: 10,
+    fontWeight: active ? 800 : 600,
+    lineHeight: 1,
+    color: 'inherit',
+  };
+}
+
+export function BottomNav({ screen, onChange, t }) {
   const items = [
     { key: 'dashboard', label: t.dashboard, icon: 'dashboard' },
     { key: 'all', label: t.program, icon: 'program' },
@@ -10889,6 +11024,7 @@ function BottomNav({ screen, onChange, t }) {
 
   return (
     <div style={bottomNavStyle()}>
+      <div data-testid="bottom-nav-divider" style={bottomNavDividerStyle()} />
       {items.map(item => (
         <button
           key={item.key}
@@ -10901,6 +11037,7 @@ function BottomNav({ screen, onChange, t }) {
           style={bottomNavButtonStyle(screen === item.key)}
         >
           <NavIcon type={item.icon} />
+          <span style={bottomNavLabelStyle(screen === item.key)}>{item.label}</span>
         </button>
       ))}
     </div>
@@ -15477,6 +15614,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           onStartNewCycle={handleStartNewCycle}
           programProfile={programProfile}
           trainingModel={trainingModel}
+          trainingFocus={trainingFocus}
           preparationMode={preparationMode}
           accessoryMode={accessoryMode}
           cooldownMode={cooldownMode}
@@ -15524,7 +15662,21 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
   <AppHeader
     t={t}
     title={t.settings}
+    subtitle={(
+      <DashboardCycleWorkoutLabel
+        t={t}
+        currentCycle={currentCycle}
+        workoutNumber={Math.min(currentIndex + 1, workouts.length)}
+        totalWorkouts={workouts.length}
+        smartModel={isSmartTrainingModel(trainingModel)}
+        athleteLevel={athleteLevel}
+        eStrengthRatio={eStrengthRatio}
+        eStrengthMax={eStrengthMax}
+        latestBodyWeight={latestBodyWeight}
+      />
+    )}
     titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
+    subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
   />
 
   <div style={settingsContentLayoutStyle()}>

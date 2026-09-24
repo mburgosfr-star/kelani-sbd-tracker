@@ -80,6 +80,16 @@ export function statsScreenStyle() {
   };
 }
 
+export function statsTabListStyle(tabCount = 4) {
+  return {
+    display: 'grid',
+    gridTemplateColumns: `repeat(${Math.max(1, Number(tabCount) || 1)}, minmax(0, 1fr))`,
+    gap: RESPONSIVE_STATS_UI.tabGap,
+    marginTop: 'clamp(9px, 1.2dvh, 12px)',
+    marginBottom: RESPONSIVE_STATS_UI.cardGap,
+  };
+}
+
 export function capRunningBestChart(data = [], key, maximum) {
   const numericMaximum = Number(maximum);
   if (!Array.isArray(data) || !Number.isFinite(numericMaximum)) return data;
@@ -575,13 +585,7 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
         subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
       />
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(${statsTabs.length}, minmax(0, 1fr))`,
-        gap: RESPONSIVE_STATS_UI.tabGap,
-        marginTop: 'clamp(8px, 1.2dvh, 12px)',
-        marginBottom: RESPONSIVE_STATS_UI.cardGap,
-      }}>
+      <div style={statsTabListStyle(statsTabs.length)}>
         {statsTabs.map(tab => (
           <button
             key={tab.key}

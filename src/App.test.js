@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle } from './StatsScreen';
-import App, { BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, DashboardCycleWorkoutLabel, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appViewportStyle, bottomNavButtonStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
+import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsTabListStyle } from './StatsScreen';
+import App, { AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
 test.each(['nl', 'en', 'ca'])(
@@ -613,13 +613,55 @@ test('program screen uses the same responsive header alignment as other content 
   });
 });
 
+test('smart program title reflects the selected training focus', () => {
+  const t = {
+    trainingFocusBalanced: 'Balanced SBD Route',
+    trainingFocusSquat: 'Squat Priority',
+  };
+
+  expect(getSmartProgramTitle('standard', t)).toBe('Balanced SBD Route');
+  expect(getSmartProgramTitle('beginnerSquat', t)).toBe('Squat Priority');
+  expect(getSmartProgramTitle('unknown', t)).toBe('Balanced SBD Route');
+});
+
 test('program header remains visible while the workout list scrolls', () => {
   expect(programHeaderStyle()).toMatchObject({
     position: 'relative',
     flex: '0 0 auto',
     zIndex: 1,
     background: '#000000',
+    paddingBottom: 0,
   });
+});
+
+test('main headers divide cycle metadata from the screen content and Smart status', () => {
+  expect(appHeaderDividerStyle()).toMatchObject({
+    width: '100%',
+    height: 0,
+    flex: '0 0 auto',
+    borderTop: '1px solid rgba(255, 244, 230, 0.34)',
+    marginTop: 'clamp(9px, 1.2dvh, 12px)',
+  });
+  expect(appHeaderSecondaryStyle()).toMatchObject({
+    marginTop: 'clamp(9px, 1.2dvh, 12px)',
+  });
+  expect(regularDashboardScreenStyle().rowGap).toBe(appHeaderDividerStyle().marginTop);
+  expect(programWorkoutListVerticalSpacing().listMarginTop).toBe(appHeaderDividerStyle().marginTop);
+  expect(appHeaderSecondaryStyle().marginTop).toBe(appHeaderDividerStyle().marginTop);
+  expect(settingsContentLayoutStyle().marginTop).toBe(appHeaderDividerStyle().marginTop);
+  expect(statsTabListStyle(4).marginTop).toBe(appHeaderDividerStyle().marginTop);
+
+  render(
+    <AppHeader
+      title="Workout"
+      subtitle="Cycle 1 · Workout 1 · Beginner"
+      secondary="Smart: Ideal Route"
+    />
+  );
+
+  const divider = screen.getByTestId('app-header-divider');
+  expect(divider.previousSibling).toHaveTextContent('Cycle 1 · Workout 1 · Beginner');
+  expect(divider.nextSibling).toHaveTextContent('Smart: Ideal Route');
 });
 
 test('program workout cards tighten only when the compact list toggles are visible', () => {
@@ -633,12 +675,12 @@ test('program workout cards tighten only when the compact list toggles are visib
 
 test('compact program lists pull both toggles closer to the workout cards', () => {
   expect(programWorkoutListVerticalSpacing({ compact: true })).toEqual({
-    listMarginTop: 'clamp(6px, 0.8dvh, 10px)',
+    listMarginTop: 'clamp(9px, 1.2dvh, 12px)',
     topToggleMargin: '0 0 clamp(8px, 1.2dvh, 12px)',
     bottomToggleMargin: 'clamp(8px, 1.2dvh, 12px) 0 0',
   });
   expect(programWorkoutListVerticalSpacing()).toEqual({
-    listMarginTop: 'clamp(14px, 2dvh, 22px)',
+    listMarginTop: 'clamp(9px, 1.2dvh, 12px)',
     topToggleMargin: '0 0 clamp(10px, 1.5dvh, 16px)',
     bottomToggleMargin: 'clamp(10px, 1.5dvh, 16px) 0 0',
   });
@@ -661,14 +703,20 @@ test('full program list starts at the top while the compact list remains centere
   expect(programWorkoutListContainerStyle({ showAll: false, marginTop: 8 }))
     .toMatchObject({
       justifyContent: 'center',
-      marginTop: 8,
+      marginTop: 0,
+      paddingTop: 8,
+      borderTop: 'none',
+      borderBottom: 'none',
       overflowY: 'hidden',
       minHeight: 0,
     });
   expect(programWorkoutListContainerStyle({ showAll: true, marginTop: 8 }))
     .toMatchObject({
       justifyContent: 'flex-start',
-      marginTop: 8,
+      marginTop: 0,
+      paddingTop: 0,
+      borderTop: 'calc(8px + clamp(4px, 0.7dvh, 6px) + clamp(14px, 2dvh, 18px)) solid transparent',
+      borderBottom: '8px solid transparent',
       overflowY: 'auto',
       minHeight: 0,
     });
@@ -882,38 +930,66 @@ test('stats charts reserve extra clearance above the bottom navigation', () => {
   });
 });
 
-test('bottom navigation uses one-and-a-half times its original height and icon size', () => {
+test('bottom navigation combines large icons, visible labels and a subtle divider', () => {
   expect(BOTTOM_NAV_SPACE).toBe(78);
   expect(BOTTOM_NAV_ICON_SIZE).toBe(39);
   expect(bottomNavStyle()).toMatchObject({
     height: 78,
     display: 'flex',
+    paddingTop: 'clamp(4px, 0.7dvh, 6px)',
     boxSizing: 'border-box',
   });
-  expect(bottomNavStyle().borderTop).toBeUndefined();
+  expect(bottomNavDividerStyle()).toMatchObject({
+    position: 'absolute',
+    top: 'clamp(4px, 0.7dvh, 6px)',
+    borderTop: '1px solid rgba(255, 244, 230, 0.34)',
+  });
   expect(bottomNavButtonStyle(true)).toMatchObject({
     height: '100%',
-    padding: 0,
+    padding: '4px 2px',
     color: '#ff8a3d',
     background: 'none',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 1,
+  });
+  expect(bottomNavLabelStyle(true)).toMatchObject({
+    fontSize: 10,
+    fontWeight: 800,
+    lineHeight: 1,
+    whiteSpace: 'nowrap',
+  });
+});
+
+test('bottom navigation visibly names every screen', () => {
+  render(<BottomNav screen="dashboard" onChange={() => {}} t={translations.en} />);
+
+  ['Dashboard', 'Program', 'Workout', 'Statistics', 'Settings'].forEach(label => {
+    expect(screen.getByRole('button', { name: label })).toHaveTextContent(label);
   });
 });
 
 test('settings distribute regular actions and keep Start over at the bottom', () => {
   expect(regularSettingsClusterStyle()).toMatchObject({
     display: 'grid',
-    gap: 'clamp(3px, 0.6dvh, 7px)',
+    gap: 'clamp(1px, 0.3dvh, 4px)',
     alignContent: 'space-evenly',
     minHeight: 0,
   });
   expect(regularSettingsClusterStyle().transform).toBeUndefined();
   expect(settingsContentLayoutStyle()).toMatchObject({
     gridTemplateRows: 'minmax(0, 1fr) auto',
-    marginTop: 'clamp(10px, 1.5dvh, 16px)',
-    rowGap: 'clamp(8px, 1.2dvh, 14px)',
+    marginTop: 'clamp(9px, 1.2dvh, 12px)',
+    rowGap: 'clamp(5px, 0.8dvh, 10px)',
     alignContent: 'stretch',
+  });
+});
+
+test('stats tabs keep a small gap below the shared header divider', () => {
+  expect(statsTabListStyle(4)).toMatchObject({
+    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+    marginTop: 'clamp(9px, 1.2dvh, 12px)',
   });
 });
 
@@ -1244,6 +1320,28 @@ test('settings rows use responsive text and phone-sized action targets', () => {
   expect(action.style.whiteSpace).toBe('normal');
 });
 
+test('settings groups export, import and backup information behind one data row', () => {
+  localStorage.clear();
+  render(<DataSection t={translations.en} />);
+
+  expect(screen.getByText('Data & backups')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Manage' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Manual export')).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Manage' }));
+
+  expect(screen.getByTestId('data-backup-manager')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Data & backups' })).toBeInTheDocument();
+  expect(screen.getByText('Manual export')).toBeInTheDocument();
+  expect(screen.getByText('No manual export yet')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Export' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Import' })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  expect(screen.queryByTestId('data-backup-manager')).not.toBeInTheDocument();
+});
+
 test('weight unit is a direct Settings choice without a demographic profile', () => {
   const setWeightUnit = jest.fn();
   render(
@@ -1534,7 +1632,7 @@ test('meet-day dashboard spreads the plan across the available vertical space', 
   expect(meetDayDashboardScreenStyle()).toMatchObject({
     gridTemplateRows: 'auto minmax(min-content, 1fr)',
     alignContent: 'stretch',
-    rowGap: 'clamp(4px, 0.8dvh, 10px)',
+    rowGap: 'clamp(9px, 1.2dvh, 12px)',
   });
   expect(meetDayDashboardContentStyle()).toMatchObject({
     minHeight: 0,
@@ -1561,7 +1659,7 @@ test('post-meet dashboard distributes space between and around its cards', () =>
     display: 'grid',
     gridTemplateRows: 'auto minmax(0, 1fr)',
     alignContent: 'stretch',
-    rowGap: 'clamp(14px, 2.2dvh, 24px)',
+    rowGap: 'clamp(9px, 1.2dvh, 12px)',
   });
   expect(regularDashboardContentStyle({ spreadContent: true })).toMatchObject({
     display: 'grid',
@@ -1593,7 +1691,7 @@ test('PR-rich training dashboards use tighter spacing without changing sparse da
     recentPrEvents,
   })).toBe(true);
   expect(regularDashboardScreenStyle({ compact: true }).rowGap)
-    .toBe('clamp(9px, 1.3dvh, 13px)');
+    .toBe('clamp(9px, 1.2dvh, 12px)');
   expect(regularDashboardContentStyle({ compact: true }).rowGap)
     .toBe('clamp(8px, 1.1dvh, 12px)');
 
@@ -2200,9 +2298,12 @@ test('Smart squat priority is opt-in, persists, and changes the planned beginner
   render(<App />);
 
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 }));
-  fireEvent.click(screen.getByRole('button', { name: 'Balanced SBD route' }));
+  expect(screen.getByText(/Cycle 1 · Workout 1/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Experience level: Beginner' })).toBeInTheDocument();
+  expect(screen.getByTestId('app-header-divider')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Balanced SBD Route' }));
   expect(screen.getByText('The standard route trains Squat, Bench and Deadlift in balance toward Meet Day.')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Squat priority' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Squat Priority' }));
 
   await waitFor(() => {
     const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
@@ -2210,7 +2311,7 @@ test('Smart squat priority is opt-in, persists, and changes the planned beginner
     expect(saved.inProgress.workouts[2].lifts.map(block => block.lift))
       .toEqual(['Deadlift', 'Squat']);
   });
-  fireEvent.click(screen.getByRole('button', { name: 'Squat priority' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Squat Priority' }));
   expect(screen.getByText(/replaces medium Bench with light Squat/)).toBeInTheDocument();
 });
 
@@ -2228,10 +2329,10 @@ test('Smart squat priority is unavailable above beginner and stale focus is clea
   render(<App />);
 
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 }));
-  fireEvent.click(screen.getByRole('button', { name: 'Balanced SBD route' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Balanced SBD Route' }));
   expect(screen.getByText('The standard route trains Squat, Bench and Deadlift in balance toward Meet Day.')).toBeInTheDocument();
   expect(screen.queryByText('Squat priority currently applies only at beginner level. Higher levels keep the balanced route.')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Squat priority (beginners only)' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Squat Priority (beginners only)' })).toBeDisabled();
   await waitFor(() => {
     expect(JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1')).trainingFocus).toBe('standard');
   });
