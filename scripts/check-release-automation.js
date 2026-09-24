@@ -111,6 +111,16 @@ const androidFilePaths = read(
   'android/app/src/main/res/xml/file_paths.xml'
 );
 
+for (const signal of [
+  'LATEST_WHATS_NEW_VERSION',
+  'readWhatsNewVersion',
+  'What’s New is prepared for',
+]) {
+  if (!prepareRelease.includes(signal)) {
+    fail(`Release preparation is missing What’s New guard: ${signal}`);
+  }
+}
+
 if (!androidManifest.includes('android:allowBackup="false"')) {
   fail('Android system backup must remain disabled for local training data.');
 }

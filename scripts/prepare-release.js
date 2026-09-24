@@ -46,6 +46,22 @@ function localTagExists(tag) {
   ).status === 0;
 }
 
+function readWhatsNewVersion() {
+  const source = fs.readFileSync(
+    path.join(root, 'src', 'whatsNew.js'),
+    'utf8'
+  );
+  const match = source.match(
+    /LATEST_WHATS_NEW_VERSION\s*=\s*['"]([^'"]+)['"]/
+  );
+
+  if (!match) {
+    fail('Could not read LATEST_WHATS_NEW_VERSION.');
+  }
+
+  return match[1];
+}
+
 function main() {
   if (!process.argv.includes('--confirmed')) {
     fail(
@@ -95,6 +111,15 @@ function main() {
     fail(
       `versionCode ${targetVersionCode} must be higher than ` +
       `${current.versionCode}.`
+    );
+  }
+
+  const whatsNewVersion = readWhatsNewVersion();
+  if (whatsNewVersion !== targetVersion) {
+    fail(
+      `What’s New is prepared for ${whatsNewVersion}, not ` +
+      `${targetVersion}. Update and web-test What’s New before ` +
+      'release preparation.'
     );
   }
 
