@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-08-28
+Last updated: 2026-09-25
 
 Kelani SBD Tracker is an offline-first powerlifting tracker for Squat, Bench Press and Deadlift training.
 
@@ -52,9 +52,17 @@ Kelani SBD Tracker does not use accounts. You do not need to sign in, register o
 
 Kelani SBD Tracker contains no ads, analytics SDK, telemetry or tracking. The optional locally generated usage summary described above is a manual, user-controlled sharing feature.
 
+## Update checks
+
+Kelani can check GitHub for a newer public release. Automatic update checks are disabled by default and only begin after you enable them in Settings. Once enabled, they happen no more than once every 24 hours. You can also start a check manually.
+
+An update check requests only the latest public release metadata. Kelani does not include training data, body data, app settings or a device identifier in that request. As with any internet request, GitHub may receive technical connection information such as your IP address and user agent under its own privacy terms.
+
+The latest result and check time are stored locally on your device. Kelani never downloads or installs an update automatically.
+
 ## Data sharing
 
-Kelani SBD Tracker does not automatically share your data with the developer or third parties.
+Kelani SBD Tracker does not automatically share your training or body data with the developer or third parties. The limited GitHub request used for enabled update checks is described above.
 
 If you use the export, contact or sharing features, you choose what to send and where it goes. That action is controlled by you and may involve other apps and service providers on your device.
 

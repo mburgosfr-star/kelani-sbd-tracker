@@ -21,7 +21,7 @@ describe('WhatsNewModal', () => {
 
     expect(screen.getByText("What's new?")).toBeInTheDocument();
     expect(screen.getByText('v2.0.41')).toBeInTheDocument();
-    expect(screen.getByText(translations.en.whatsNewScreenLayoutItem)).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewUpdateLinksItem)).toBeInTheDocument();
 
     const checkbox = screen.getByLabelText(
       translations.en.whatsNewShowAutomatically

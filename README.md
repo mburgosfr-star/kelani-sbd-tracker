@@ -16,6 +16,7 @@ Smart Training follows a level-specific 28-workout ideal route from the start of
 - Builds toward meet attempts, tapers and schedules an SBD Meet Day.
 - Shows past, current and provisional future workouts, and explains readiness and expected meet timing.
 - Tracks 1RM, e1RM, SBD totals, Strength, eStrength and body statistics.
+- Can check GitHub for newer releases and link directly to GitHub or IzzyOnDroid without downloading or installing anything automatically.
 
 During training you can complete or fail sets, adjust and restore weights, use a rest timer and open the plate calculator. Failed sets automatically make the workout **Too hard**; optional work left unchecked is not treated as failure.
 
@@ -31,7 +32,7 @@ Kelani places your selected exercises into relevant workouts and chooses their t
 
 ## Private by default
 
-Kelani has no accounts, ads, telemetry, automatic analytics or cloud synchronization. Training calculations and saved data stay on your device unless you explicitly export or share them.
+Kelani has no accounts, ads, telemetry, automatic analytics or cloud synchronization. Training calculations and saved data stay on your device unless you explicitly export or share them. Optional release checks request only public version metadata and can be enabled in Settings.
 
 The optional anonymous usage summary is generated locally and shown in full before you choose to copy or email it. See the [privacy policy](docs/privacy-policy.md) for details.
 

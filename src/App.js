@@ -157,6 +157,17 @@ import {
   WHATS_NEW_LAST_SEEN_KEY,
   shouldAutoShowWhatsNew,
 } from './whatsNew';
+import {
+  GITHUB_RELEASES_URL,
+  IZZY_ON_DROID_URL,
+  UPDATE_CHECK_CACHE_KEY,
+  UPDATE_DISMISSED_VERSION_KEY,
+  fetchLatestReleaseVersion,
+  isFreshUpdateCheck,
+  isNewerReleaseVersion,
+  readUpdateCheckCache,
+  shouldShowUpdateNotice,
+} from './appUpdates';
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { translations } from './translations';
 import { App as CapacitorApp } from '@capacitor/app';
@@ -1240,6 +1251,8 @@ export function validateImportedBackup(backup) {
     !Object.values(SMART_TRAINING_FOCUSES).includes(data.trainingFocus)) return false;
   if (data.showWhatsNewAfterUpdates !== undefined &&
     typeof data.showWhatsNewAfterUpdates !== 'boolean') return false;
+  if (data.checkForUpdatesAutomatically !== undefined &&
+    typeof data.checkForUpdatesAutomatically !== 'boolean') return false;
 
   return true;
 }
@@ -3423,10 +3436,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewDataBackupsItem,
-    t.whatsNewProgramTitleItem,
-    t.whatsNewNavigationItem,
-    t.whatsNewScreenLayoutItem,
+    t.whatsNewUpdateChecksItem,
+    t.whatsNewUpdateNoticeItem,
+    t.whatsNewUpdateLinksItem,
   ];
 
   return (
@@ -3485,34 +3497,199 @@ export function WhatsNewModal({
         <span>{t.whatsNewShowAutomatically}</span>
       </label>
 
-      <button
-        type="button"
-        onClick={onClose}
-        style={{
-          width: '100%',
-          minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
-          padding: 10,
-          fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
-          fontWeight: 800,
-          background: THEME.primary,
-          color: '#ffffff',
-          border: '1px solid ' + THEME.primary,
-          borderRadius: 8,
-          cursor: 'pointer',
-        }}
-      >
-        {t.close}
-      </button>
+      <div style={{ width: 'calc(50% - 4px)', margin: '0 auto' }}>
+        <button type="button" onClick={onClose} style={modalActionButtonStyle('primary')}>
+          {t.close}
+        </button>
+      </div>
     </SettingsModal>
   );
 }
 
-function WhatsNewSettingsSection({ t, onOpen }) {
+export function UpdatesSettingsModal({
+  t,
+  currentVersion,
+  latestVersion,
+  checkStatus,
+  checkAutomatically,
+  onCheckAutomaticallyChange,
+  onCheck,
+  onOpenWhatsNew,
+  onOpenLink,
+  onClose,
+}) {
+  const statusText = checkStatus === 'checking'
+    ? t.updateChecking
+    : checkStatus === 'available'
+      ? t.updateAvailableStatus.replace('{version}', latestVersion || '')
+      : checkStatus === 'upToDate'
+        ? t.updateUpToDate
+        : checkStatus === 'error'
+          ? t.updateCheckFailed
+          : t.updateNotChecked;
+
+  return (
+    <SettingsModal title={t.updatesTitle} onClose={onClose}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) auto',
+        gap: 10,
+        alignItems: 'center',
+        marginBottom: 14,
+        color: THEME.text,
+        fontSize: 13,
+      }}>
+        <span style={{ fontWeight: 700 }}>{t.installedVersion}</span>
+        <strong>{currentVersion}</strong>
+      </div>
+
+      <div style={{ width: 'calc(50% - 4px)', margin: '0 auto 14px' }}>
+        <button type="button" onClick={onOpenWhatsNew} style={modalActionButtonStyle()}>
+          {t.whatsNewView}
+        </button>
+      </div>
+
+      <label style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        color: THEME.text,
+        fontSize: 13,
+        fontWeight: 800,
+        lineHeight: 1.3,
+        marginBottom: 12,
+        cursor: 'pointer',
+      }}>
+        <input
+          type="checkbox"
+          checked={checkAutomatically}
+          onChange={event => onCheckAutomaticallyChange(event.target.checked)}
+          style={{ width: 20, height: 20, flex: '0 0 auto', accentColor: THEME.primary }}
+        />
+        <span>{t.updateCheckAutomatically}</span>
+      </label>
+
+      <p style={{
+        minHeight: '2.6em',
+        margin: '0 0 12px',
+        color: checkStatus === 'available' ? THEME.green : THEME.text,
+        fontSize: 13,
+        fontWeight: 700,
+        lineHeight: 1.3,
+        textAlign: 'center',
+      }}>
+        {statusText}
+      </p>
+
+      {checkStatus === 'available' && (
+        <div style={modalActionRowStyle()}>
+          <button type="button" onClick={() => onOpenLink(GITHUB_RELEASES_URL)} style={modalActionButtonStyle()}>
+            {t.updateDownloadGitHub}
+          </button>
+          <button type="button" onClick={() => onOpenLink(IZZY_ON_DROID_URL)} style={modalActionButtonStyle()}>
+            {t.updateDownloadIzzy}
+          </button>
+        </div>
+      )}
+
+      <div style={modalActionRowStyle()}>
+        <button
+          type="button"
+          onClick={onCheck}
+          disabled={checkStatus === 'checking'}
+          style={{
+            ...modalActionButtonStyle('primary'),
+            opacity: checkStatus === 'checking' ? 0.65 : 1,
+          }}
+        >
+          {checkStatus === 'checking' ? t.updateChecking : t.updateCheckNow}
+        </button>
+        <button type="button" onClick={onClose} style={modalActionButtonStyle()}>
+          {t.close}
+        </button>
+      </div>
+    </SettingsModal>
+  );
+}
+
+export function UpdateAvailableModal({
+  t,
+  currentVersion,
+  latestVersion,
+  checkAutomatically,
+  onCheckAutomaticallyChange,
+  onOpenLink,
+  onClose,
+}) {
+  return (
+    <SettingsModal title={t.updateAvailableTitle} onClose={onClose}>
+      <p style={{
+        margin: '0 0 14px',
+        color: THEME.text,
+        fontSize: 14,
+        fontWeight: 700,
+        lineHeight: 1.4,
+        textAlign: 'center',
+      }}>
+        {t.updateAvailableIntro}
+      </p>
+
+      <div style={{ display: 'grid', gap: 6, marginBottom: 14, fontSize: 13 }}>
+        {[
+          [t.installedVersion, currentVersion],
+          [t.availableVersion, latestVersion],
+        ].map(([label, value]) => (
+          <div key={label} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10 }}>
+            <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
+            <strong style={{ color: THEME.green }}>{value}</strong>
+          </div>
+        ))}
+      </div>
+
+      <label style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        color: THEME.text,
+        fontSize: 13,
+        fontWeight: 800,
+        lineHeight: 1.3,
+        marginBottom: 14,
+        cursor: 'pointer',
+      }}>
+        <input
+          type="checkbox"
+          checked={checkAutomatically}
+          onChange={event => onCheckAutomaticallyChange(event.target.checked)}
+          style={{ width: 20, height: 20, flex: '0 0 auto', accentColor: THEME.primary }}
+        />
+        <span>{t.updateCheckAutomatically}</span>
+      </label>
+
+      <div style={modalActionRowStyle()}>
+        <button type="button" onClick={() => onOpenLink(GITHUB_RELEASES_URL)} style={modalActionButtonStyle('primary')}>
+          {t.updateDownloadGitHub}
+        </button>
+        <button type="button" onClick={() => onOpenLink(IZZY_ON_DROID_URL)} style={modalActionButtonStyle()}>
+          {t.updateDownloadIzzy}
+        </button>
+      </div>
+
+      <div style={{ width: 'calc(50% - 4px)', margin: '8px auto 0' }}>
+        <button type="button" onClick={onClose} style={modalActionButtonStyle()}>
+          {t.later}
+        </button>
+      </div>
+    </SettingsModal>
+  );
+}
+
+function UpdatesSettingsSection({ t, onOpen }) {
   return (
     <>
       <SettingsListRow
-        label={t.whatsNewTitle}
-        actionLabel={t.whatsNewView}
+        label={t.updatesTitle}
+        actionLabel={t.updatesAction}
         onAction={onOpen}
       />
     </>
@@ -11155,6 +11332,12 @@ function App() {
   const [hasExistingProfile, setHasExistingProfile] = useState(false);
   const [showWhatsNewAfterUpdates, setShowWhatsNewAfterUpdates] = useState(true);
   const [showWhatsNew, setShowWhatsNew] = useState(false);
+  const [returnToUpdatesAfterWhatsNew, setReturnToUpdatesAfterWhatsNew] = useState(false);
+  const [checkForUpdatesAutomatically, setCheckForUpdatesAutomatically] = useState(false);
+  const [showUpdatesSettings, setShowUpdatesSettings] = useState(false);
+  const [showUpdateAvailable, setShowUpdateAvailable] = useState(false);
+  const [latestAvailableVersion, setLatestAvailableVersion] = useState(null);
+  const [updateCheckStatus, setUpdateCheckStatus] = useState('idle');
 
   function startTimer(seconds, placement = null) {
     const effectiveSeconds = getRecommendedRestTimeSeconds({
@@ -11341,6 +11524,7 @@ function App() {
   const [plateCalcWeightKg, setPlateCalcWeightKg] = useState(null);
   const automaticBackupKeyRef = useRef(null);
   const automaticBackupStartupAttemptedRef = useRef(false);
+  const automaticUpdateCheckAttemptedRef = useRef(false);
   const pendingBodyDataBackupRef = useRef(null);
   const completedSmartGenerationRef = useRef(null);
 
@@ -11532,6 +11716,16 @@ function App() {
   useEffect(() => {
     const setupBackButton = async () => {
       const listener = await CapacitorApp.addListener('backButton', () => {
+        if (showUpdateAvailable) {
+          closeUpdateAvailable();
+          return;
+        }
+
+        if (showUpdatesSettings) {
+          setShowUpdatesSettings(false);
+          return;
+        }
+
         if (showWhatsNew) {
           closeWhatsNew();
           return;
@@ -11585,7 +11779,7 @@ function App() {
     return () => {
       if (listener) listener.remove();
     };
-  }, [screen, completedWorkoutIndex, activeMilestoneCelebration, showWhatsNew]);
+  }, [screen, completedWorkoutIndex, activeMilestoneCelebration, showWhatsNew, showUpdatesSettings, showUpdateAvailable, returnToUpdatesAfterWhatsNew]);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -11761,6 +11955,7 @@ function App() {
       setDeadliftVariant(savedDeadliftVariant);
       setBenchPressVariant(savedBenchPressVariant);
       setShowWhatsNewAfterUpdates(data.showWhatsNewAfterUpdates !== false);
+      setCheckForUpdatesAutomatically(data.checkForUpdatesAutomatically === true);
       setHasExistingProfile(true);
 
       const restorableSelectedIndex = getRestorableSelectedIndex(
@@ -11847,6 +12042,7 @@ function App() {
       deadliftVariant,
       benchPressVariant,
       showWhatsNewAfterUpdates,
+      checkForUpdatesAutomatically,
       inProgress: {
         programVersion: PROGRAM_VERSION,
         currentCycle,
@@ -11915,7 +12111,7 @@ function App() {
         });
       }
     }
-  }, [hasLoadedData, history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, workoutSetup, trainingFocus, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, showWhatsNewAfterUpdates, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
+  }, [hasLoadedData, history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, workoutSetup, trainingFocus, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, showWhatsNewAfterUpdates, checkForUpdatesAutomatically, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
 
   useEffect(() => {
     if (!hasLoadedData || showLaunchSplash || showWhatsNew) return;
@@ -11945,6 +12141,107 @@ function App() {
       localStorage.setItem(WHATS_NEW_LAST_SEEN_KEY, currentVersion);
     }
     setShowWhatsNew(false);
+    if (returnToUpdatesAfterWhatsNew) {
+      setReturnToUpdatesAfterWhatsNew(false);
+      setShowUpdatesSettings(true);
+    }
+  }
+
+  const installedUpdateVersion = (import.meta.env.VITE_APP_VERSION || 'dev') === 'dev'
+    ? LATEST_WHATS_NEW_VERSION
+    : import.meta.env.VITE_APP_VERSION;
+
+  const applyLatestReleaseVersion = useCallback((latestVersion, { automatic = false } = {}) => {
+    const updateAvailable = isNewerReleaseVersion(latestVersion, installedUpdateVersion);
+    setLatestAvailableVersion(latestVersion);
+    setUpdateCheckStatus(updateAvailable ? 'available' : 'upToDate');
+
+    if (automatic && shouldShowUpdateNotice({
+      latestVersion,
+      currentVersion: installedUpdateVersion,
+      dismissedVersion: localStorage.getItem(UPDATE_DISMISSED_VERSION_KEY),
+    })) {
+      setShowUpdateAvailable(true);
+    }
+
+    return updateAvailable;
+  }, [installedUpdateVersion]);
+
+  const performUpdateCheck = useCallback(async ({ automatic = false } = {}) => {
+    if (!automatic) setUpdateCheckStatus('checking');
+
+    try {
+      const latestVersion = await fetchLatestReleaseVersion();
+      localStorage.setItem(UPDATE_CHECK_CACHE_KEY, JSON.stringify({
+        latestVersion,
+        checkedAt: Date.now(),
+      }));
+      applyLatestReleaseVersion(latestVersion, { automatic });
+    } catch (error) {
+      console.warn('Could not check for app updates', error);
+      if (!automatic) setUpdateCheckStatus('error');
+    }
+  }, [applyLatestReleaseVersion]);
+
+  useEffect(() => {
+    const rawVersion = import.meta.env.VITE_APP_VERSION || 'dev';
+    const whatsNewPending = shouldAutoShowWhatsNew({
+      currentVersion: rawVersion,
+      enabled: showWhatsNewAfterUpdates,
+      hasExistingProfile,
+      lastSeenVersion: localStorage.getItem(WHATS_NEW_LAST_SEEN_KEY),
+    });
+    if (
+      !hasLoadedData ||
+      !hasExistingProfile ||
+      showLaunchSplash ||
+      showWhatsNew ||
+      whatsNewPending ||
+      rawVersion === 'dev' ||
+      !checkForUpdatesAutomatically ||
+      automaticUpdateCheckAttemptedRef.current
+    ) return;
+
+    automaticUpdateCheckAttemptedRef.current = true;
+    const cachedCheck = readUpdateCheckCache(localStorage);
+
+    if (isFreshUpdateCheck(cachedCheck)) {
+      applyLatestReleaseVersion(cachedCheck.latestVersion, { automatic: true });
+      return;
+    }
+
+    performUpdateCheck({ automatic: true });
+  }, [
+    hasLoadedData,
+    hasExistingProfile,
+    showLaunchSplash,
+    showWhatsNew,
+    showWhatsNewAfterUpdates,
+    checkForUpdatesAutomatically,
+    applyLatestReleaseVersion,
+    performUpdateCheck,
+  ]);
+
+  function openUpdatesSettings() {
+    const cachedCheck = readUpdateCheckCache(localStorage);
+    if (cachedCheck) {
+      applyLatestReleaseVersion(cachedCheck.latestVersion);
+    } else {
+      setUpdateCheckStatus('idle');
+    }
+    setShowUpdatesSettings(true);
+  }
+
+  function closeUpdateAvailable() {
+    if (latestAvailableVersion) {
+      localStorage.setItem(UPDATE_DISMISSED_VERSION_KEY, latestAvailableVersion);
+    }
+    setShowUpdateAvailable(false);
+  }
+
+  function openUpdateDownload(url) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    if (showUpdateAvailable) closeUpdateAvailable();
   }
 
   useEffect(() => {
@@ -12254,6 +12551,8 @@ function handleResetApp() {
   localStorage.removeItem('bodyweight_prompt_date');
   localStorage.removeItem('trainingModel');
   localStorage.removeItem(WHATS_NEW_LAST_SEEN_KEY);
+  localStorage.removeItem(UPDATE_CHECK_CACHE_KEY);
+  localStorage.removeItem(UPDATE_DISMISSED_VERSION_KEY);
 
   localStorage.setItem('squatVariant', 'standard');
   localStorage.setItem('benchPressVariant', 'standard');
@@ -12278,6 +12577,12 @@ function handleResetApp() {
   setActiveMilestoneCelebration(null);
   setShowWhatsNew(false);
   setShowWhatsNewAfterUpdates(true);
+  setReturnToUpdatesAfterWhatsNew(false);
+  setCheckForUpdatesAutomatically(false);
+  setShowUpdatesSettings(false);
+  setShowUpdateAvailable(false);
+  setLatestAvailableVersion(null);
+  setUpdateCheckStatus('idle');
   setHasExistingProfile(false);
   setCurrentCycle(1);
   setBodyWeights([]);
@@ -15737,9 +16042,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         usageMetrics={anonymousUsageMetrics}
       />
 
-      <WhatsNewSettingsSection
+      <UpdatesSettingsSection
         t={t}
-        onOpen={() => setShowWhatsNew(true)}
+        onOpen={openUpdatesSettings}
       />
     </div>
 
@@ -16154,6 +16459,37 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
     showAfterUpdates={showWhatsNewAfterUpdates}
     onShowAfterUpdatesChange={setShowWhatsNewAfterUpdates}
     onClose={closeWhatsNew}
+  />
+)}
+
+{showUpdatesSettings && (
+  <UpdatesSettingsModal
+    t={t}
+    currentVersion={installedUpdateVersion}
+    latestVersion={latestAvailableVersion}
+    checkStatus={updateCheckStatus}
+    checkAutomatically={checkForUpdatesAutomatically}
+    onCheckAutomaticallyChange={setCheckForUpdatesAutomatically}
+    onCheck={() => performUpdateCheck({ automatic: false })}
+    onOpenWhatsNew={() => {
+      setReturnToUpdatesAfterWhatsNew(true);
+      setShowUpdatesSettings(false);
+      setShowWhatsNew(true);
+    }}
+    onOpenLink={openUpdateDownload}
+    onClose={() => setShowUpdatesSettings(false)}
+  />
+)}
+
+{showUpdateAvailable && latestAvailableVersion && (
+  <UpdateAvailableModal
+    t={t}
+    currentVersion={installedUpdateVersion}
+    latestVersion={latestAvailableVersion}
+    checkAutomatically={checkForUpdatesAutomatically}
+    onCheckAutomaticallyChange={setCheckForUpdatesAutomatically}
+    onOpenLink={openUpdateDownload}
+    onClose={closeUpdateAvailable}
   />
 )}
 

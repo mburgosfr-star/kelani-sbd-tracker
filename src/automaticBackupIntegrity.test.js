@@ -326,6 +326,13 @@ test('rejects malformed manual backup data before it can replace saved data', ()
       strengthRatioMaxes: { eStrengthMax: -1 },
     },
   })).toBe(false);
+  expect(validateImportedBackup({
+    ...validEnvelope,
+    data: {
+      ...validEnvelope.data,
+      checkForUpdatesAutomatically: 'yes',
+    },
+  })).toBe(false);
 });
 
 test('does not treat failures, manual exports or unverified records as automatic backups', () => {
