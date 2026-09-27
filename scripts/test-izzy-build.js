@@ -9,6 +9,7 @@ const {
   fallbackJavaHome,
   fail,
   run,
+  runLogged,
   output,
   sha256File,
   readVersionInfo,
@@ -80,28 +81,32 @@ function main() {
     VITE_APP_VERSION: expected.versionName,
   });
 
-  run('npm', ['ci'], {
+  runLogged('Clean-clone dependency install', 'npm', ['ci'], {
     cwd: cloneDir,
     env,
+    logName: 'izzy-npm-ci.log',
   });
 
-  run('npm', ['test', '--', '--runInBand'], {
+  runLogged('Clean-clone tests', 'npm', ['test', '--', '--runInBand'], {
     cwd: cloneDir,
     env,
+    logName: 'izzy-tests.log',
   });
 
-  run('npm', ['run', 'build'], {
+  runLogged('Clean-clone production build', 'npm', ['run', 'build'], {
     cwd: cloneDir,
     env,
+    logName: 'izzy-web-build.log',
   });
 
-  run('npx', ['cap', 'sync', 'android'], {
+  runLogged('Clean-clone Capacitor sync', 'npx', ['cap', 'sync', 'android'], {
     cwd: cloneDir,
     env,
+    logName: 'izzy-capacitor.log',
   });
   assertCapacitorConfigSynced(cloneDir);
 
-  run('./gradlew', [
+  runLogged('Clean unsigned Android release build', './gradlew', [
     'clean',
     ':app:assembleRelease',
     '--no-build-cache',
@@ -110,6 +115,7 @@ function main() {
   ], {
     cwd: path.join(cloneDir, 'android'),
     env,
+    logName: 'izzy-gradle.log',
   });
 
   const outputDir = path.join(

@@ -31,6 +31,8 @@ const expectedScripts = {
     'node scripts/mark-web-tested.js',
   'release:prepare':
     'node scripts/prepare-release.js',
+  'release:stage':
+    'node scripts/stage-release.js',
   'release:phone-tested':
     'node scripts/mark-phone-tested.js',
   'release:preflight':
@@ -73,6 +75,7 @@ const requiredFiles = [
   'scripts/build-release-apk.js',
   'scripts/mark-web-tested.js',
   'scripts/prepare-release.js',
+  'scripts/stage-release.js',
   'scripts/test-izzy-build.js',
   'scripts/mark-phone-tested.js',
   'scripts/release-preflight.js',
@@ -90,6 +93,8 @@ if (fs.existsSync(path.join(root, 'scripts/create-github-release.js'))) {
 
 const webTestMarker = read('scripts/mark-web-tested.js');
 const prepareRelease = read('scripts/prepare-release.js');
+const stageRelease = read('scripts/stage-release.js');
+const buildRelease = read('scripts/build-release-apk.js');
 const preflight = read('scripts/release-preflight.js');
 const guarded = read('scripts/guarded-release.js');
 const izzy = read('scripts/test-izzy-build.js');
@@ -179,7 +184,8 @@ for (const signal of [
 for (const releaseEntryPoint of [
   webTestMarker,
   prepareRelease,
-  read('scripts/build-release-apk.js'),
+  stageRelease,
+  buildRelease,
   preflight,
   guarded,
 ]) {
@@ -200,6 +206,77 @@ for (const signal of [
   if (!preflight.includes(signal)) {
     fail(`Preflight is missing required check: ${signal}`);
   }
+}
+
+if (!prepareRelease.includes('readReleaseNotes(targetVersion, root)')) {
+  fail('Release notes must be committed before release preparation.');
+}
+
+for (const [source, label] of [
+  [buildRelease, 'signed release build'],
+  [izzy, 'isolated unsigned build'],
+]) {
+  for (const signal of ['runLogged', 'logName']) {
+    if (!source.includes(signal)) {
+      fail(`${label} is missing compact logging: ${signal}`);
+    }
+  }
+}
+
+for (const signal of [
+  '--confirmed',
+  'assertReleasePreparationProof',
+  'assertVerifiedReleaseCommits',
+  'readReleaseNotes',
+  "entry.headSha === commit",
+  "entry.event === 'push'",
+  'refusing ambiguous CI evidence',
+  'fetchCiPublicAssetsSha256',
+  "run('git', ['push', 'origin', 'main'])",
+  'No tag or GitHub Release was created',
+  'release-staging-proof.json',
+]) {
+  if (!stageRelease.includes(signal)) {
+    fail(`Release staging is missing required control: ${signal}`);
+  }
+}
+
+if (guarded.includes("run('git', ['push', 'origin', 'main'])")) {
+  fail('Publication must not push main; release staging owns that step.');
+}
+
+for (const signal of [
+  'HEAD has not been staged on origin/main',
+  'main is staged at exact HEAD',
+]) {
+  if (!guarded.includes(signal)) {
+    fail(`Publication is missing staged-main control: ${signal}`);
+  }
+}
+
+for (const releaseEntryPoint of [
+  buildRelease,
+  preflight,
+  guarded,
+]) {
+  if (!releaseEntryPoint.includes('assertReleaseStagingProof')) {
+    fail('A post-staging release step is missing the staging-proof guard.');
+  }
+}
+
+for (const signal of [
+  'releaseStagingProof',
+  'releaseStaging',
+  'publicAssetsSha256',
+  'Verified CI evidence does not match the release-staging proof.',
+]) {
+  if (!preflight.includes(signal)) {
+    fail(`Preflight is missing staging evidence: ${signal}`);
+  }
+}
+
+if (!guarded.includes('Release staging proof changed after preflight.')) {
+  fail('Publication does not bind the staging proof to preflight.');
 }
 
 for (const signal of [
@@ -309,10 +386,11 @@ for (const requiredPath of [
   "scripts/check-public-repository-boundary.js",
   "scripts/mark-web-tested.js",
   "scripts/prepare-release.js",
+  "scripts/stage-release.js",
   "scripts/install-apk.js",
   "scripts/check-release-automation.js",
-    ".github/workflows/android-release-sanity.yml",
-    ".github/workflows/distribution-integrity.yml",
+  ".github/workflows/android-release-sanity.yml",
+  ".github/workflows/distribution-integrity.yml",
 ]) {
   if (!releaseCommon.includes(requiredPath)) {
     fail(

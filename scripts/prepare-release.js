@@ -14,6 +14,7 @@ const {
   getHeadCommit,
   assertCleanSourceTreeExceptRelease,
   assertVerifiedReleaseCommits,
+  readReleaseNotes,
 } = require('./release-common');
 
 function argumentValue(name) {
@@ -162,11 +163,7 @@ function main() {
     );
   }
 
-  if (fs.existsSync(notesPath)) {
-    fail(
-      `Release notes already exist: ${path.basename(notesPath)}`
-    );
-  }
+  readReleaseNotes(targetVersion, root);
 
   const tag = `v${targetVersion}`;
 

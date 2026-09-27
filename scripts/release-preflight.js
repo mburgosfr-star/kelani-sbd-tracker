@@ -23,6 +23,7 @@ const {
   readReleaseNotes,
   releaseScriptHashes,
   assertReleasePreparationProof,
+  assertReleaseStagingProof,
   assertVerifiedReleaseCommits,
 } = require('./release-common');
 
@@ -38,6 +39,7 @@ function main() {
   const commit = getHeadCommit(root);
   const releasePreparation =
     assertReleasePreparationProof(root);
+  const releaseStaging = assertReleaseStagingProof(root);
   const notes = readReleaseNotes(
     expected.versionName,
     root
@@ -128,6 +130,16 @@ function main() {
   let cleanBuild;
 
   if (ciRun && ciAssetsSha256) {
+    if (
+      ciRun.databaseId !== releaseStaging.proof.ci.runId ||
+      ciAssetsSha256 !==
+        releaseStaging.proof.ci.publicAssetsSha256
+    ) {
+      fail(
+        'Verified CI evidence does not match the release-staging proof.'
+      );
+    }
+
     if (ciAssetsSha256 !== localAssets.sha256) {
       fail(
         'Public assets differ from the verified CI build for this ' +
@@ -221,6 +233,12 @@ function main() {
       webTestProofSha256:
         sha256File(releasePreparation.webProofPath),
     },
+    releaseStaging: {
+      proofSha256: sha256File(releaseStaging.proofPath),
+      ciRunId: releaseStaging.proof.ci.runId,
+      publicAssetsSha256:
+        releaseStaging.proof.ci.publicAssetsSha256,
+    },
     releaseNotes: {
       path: notes.relativePath,
       sha256: notes.sha256,
@@ -244,6 +262,7 @@ function main() {
       sourceClean: true,
       webTestProof: true,
       releasePreparationProof: true,
+      releaseStagingProof: true,
       buildManifest: true,
       phoneTestProof: true,
       apkHashesMatch: true,

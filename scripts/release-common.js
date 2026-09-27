@@ -39,6 +39,53 @@ function run(command, args = [], options = {}) {
   return capture ? String(result.stdout || '').trim() : '';
 }
 
+function runLogged(label, command, args = [], options = {}) {
+  const logDir = options.logDir || path.join(root, 'release', 'logs');
+  const logName = options.logName ||
+    `${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.log`;
+  const logPath = path.join(logDir, logName);
+
+  fs.mkdirSync(logDir, { recursive: true });
+  console.log(`\n> ${label}`);
+
+  const result = spawnSync(command, args, {
+    cwd: options.cwd || root,
+    env: options.env || process.env,
+    encoding: 'utf8',
+    stdio: 'pipe',
+    shell: false,
+    maxBuffer: options.maxBuffer || 64 * 1024 * 1024,
+  });
+  const combined = [result.stdout, result.stderr]
+    .filter(Boolean)
+    .join(result.stdout && result.stderr ? '\n' : '');
+
+  fs.writeFileSync(logPath, combined);
+
+  if (result.error || result.signal || result.status !== 0) {
+    const tail = combined
+      .trim()
+      .split(/\r?\n/)
+      .slice(-80)
+      .join('\n');
+
+    fail([
+      `${label} failed.`,
+      result.error?.message,
+      result.signal ? `Signal: ${result.signal}` : '',
+      Number.isInteger(result.status) ? `Exit code: ${result.status}` : '',
+      tail,
+      `Full log: ${path.relative(root, logPath)}`,
+    ].filter(Boolean).join('\n'));
+  }
+
+  console.log(
+    `✅ ${label} passed (log: ${path.relative(root, logPath)})`
+  );
+
+  return combined;
+}
+
 function output(command, args = [], options = {}) {
   return run(command, args, {
     ...options,
@@ -473,7 +520,7 @@ function findMatchingCiRun(commit, {
     '--branch', branch,
     '--commit', commit,
     '--status', 'success',
-    '--json', 'databaseId,headSha,status,conclusion,createdAt,updatedAt,url',
+    '--json', 'databaseId,headSha,status,conclusion,createdAt,updatedAt,url,event',
     '--limit', '20',
   ], {
     cwd: root,
@@ -499,6 +546,7 @@ function findMatchingCiRun(commit, {
   const matches = runs.filter(entry =>
     entry &&
     entry.headSha === commit &&
+    entry.event === 'push' &&
     entry.status === 'completed' &&
     entry.conclusion === 'success'
   );
@@ -595,6 +643,7 @@ function releaseScriptHashes(base = root) {
     "scripts/build-release-apk.js",
     "scripts/mark-web-tested.js",
     "scripts/prepare-release.js",
+    "scripts/stage-release.js",
     "scripts/install-apk.js",
     "scripts/test-izzy-build.js",
     "scripts/mark-phone-tested.js",
@@ -708,7 +757,6 @@ function assertReleasePreparationProof(base = root) {
     'android/app/build.gradle',
     'package-lock.json',
     'package.json',
-    `docs/releases/release-notes-v${current.versionName}.md`,
   ].sort();
 
   const changedPaths = output(
@@ -744,6 +792,45 @@ function assertReleasePreparationProof(base = root) {
   };
 }
 
+function assertReleaseStagingProof(base = root, options = {}) {
+  const current = readVersionInfo(base);
+  const commit = options.expectedCommit || getHeadCommit(base);
+  const proofPath = path.join(
+    base,
+    'release',
+    'release-staging-proof.json'
+  );
+
+  if (!fs.existsSync(proofPath)) {
+    fail(
+      'Missing release-staging proof. Run:\n' +
+      'npm run release:stage -- --confirmed'
+    );
+  }
+
+  const proof = readJson(proofPath);
+
+  if (
+    proof.schema !== 1 ||
+    proof.generatedBy !== 'scripts/stage-release.js' ||
+    proof.confirmedByUser !== true ||
+    proof.commit !== commit ||
+    proof.versionName !== current.versionName ||
+    proof.versionCode !== current.versionCode ||
+    proof.ci?.workflow !== 'android-release-sanity.yml' ||
+    proof.ci?.event !== 'push' ||
+    proof.ci?.status !== 'completed' ||
+    proof.ci?.conclusion !== 'success' ||
+    !Number.isInteger(proof.ci?.runId) ||
+    !/^https:\/\//.test(proof.ci?.url || '') ||
+    !/^[0-9a-f]{64}$/.test(proof.ci?.publicAssetsSha256 || '')
+  ) {
+    fail('Release-staging proof is invalid or does not match HEAD.');
+  }
+
+  return { proof, proofPath };
+}
+
 function sanitizedBuildEnv(extra = {}) {
   const env = { ...process.env };
 
@@ -769,6 +856,7 @@ module.exports = {
   fallbackJavaHome,
   fail,
   run,
+  runLogged,
   output,
   sha256File,
   readJson,
@@ -792,5 +880,6 @@ module.exports = {
   readReleaseNotes,
   releaseScriptHashes,
   assertReleasePreparationProof,
+  assertReleaseStagingProof,
   sanitizedBuildEnv,
 };

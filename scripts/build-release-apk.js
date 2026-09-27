@@ -7,11 +7,13 @@ const { execFileSync } = require('child_process');
 
 const {
   assertReleasePreparationProof,
+  assertReleaseStagingProof,
   assertVerifiedReleaseCommits,
   assertSignedV2,
   assertCapacitorConfigSynced,
   findAndroidSdk,
   packageName,
+  runLogged: runLoggedCommand,
 } = require('./release-common');
 
 const root = path.resolve(__dirname, '..');
@@ -58,6 +60,14 @@ function run(command, args, options = {}) {
     });
   } catch {
     fail(`Command failed: ${command} ${args.join(' ')}`);
+  }
+}
+
+function runQuiet(label, command, args, options = {}) {
+  try {
+    return runLoggedCommand(label, command, args, options);
+  } catch (error) {
+    fail(error.message);
   }
 }
 
@@ -127,6 +137,7 @@ const commit = output('git', ['rev-parse', 'HEAD']);
 try {
   assertVerifiedReleaseCommits(root);
   assertReleasePreparationProof(root);
+  assertReleaseStagingProof(root);
 } catch (error) {
   console.error(`ERROR: ${error.message}`);
   process.exit(1);
@@ -135,20 +146,33 @@ try {
 assertCleanSourceTreeExceptRelease();
 removeOldReleaseInputs();
 
-run('npm', ['test', '--', '--runInBand'], {
+runQuiet('Release tests', 'npm', ['test', '--', '--runInBand'], {
+  logName: 'release-build-tests.log',
   env: {
     ...env,
     CI: 'true',
   },
 });
-run('npm', ['run', 'build']);
-run('npx', ['cap', 'sync', 'android']);
+runQuiet('Production web build', 'npm', ['run', 'build'], {
+  logName: 'release-build-web.log',
+  env,
+});
+runQuiet('Capacitor Android sync', 'npx', ['cap', 'sync', 'android'], {
+  logName: 'release-build-capacitor.log',
+  env,
+});
 assertCapacitorConfigSynced();
 
 assertCleanSourceTreeExceptRelease();
 
-run('./gradlew', ['clean', ':app:assembleRelease', '--no-daemon'], {
+runQuiet('Signed Android release build', './gradlew', [
+  'clean',
+  ':app:assembleRelease',
+  '--no-daemon',
+], {
   cwd: path.join(root, 'android'),
+  env,
+  logName: 'release-build-gradle.log',
 });
 
 const builtApk = path.join(root, 'android/app/build/outputs/apk/release/app-release.apk');

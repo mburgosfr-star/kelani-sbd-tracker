@@ -17,6 +17,7 @@ const {
   readReleaseNotes,
   releaseScriptHashes,
   assertReleasePreparationProof,
+  assertReleaseStagingProof,
   assertVerifiedReleaseCommits,
   releaseCertificateSha256,
 } = require('./release-common');
@@ -83,6 +84,7 @@ function main() {
   const commit = getHeadCommit(root);
   const releasePreparation =
     assertReleasePreparationProof(root);
+  const releaseStaging = assertReleaseStagingProof(root);
   const tag = `v${expected.versionName}`;
 
   const branch = output('git', [
@@ -141,6 +143,17 @@ function main() {
     );
   }
 
+  if (
+    proof.releaseStaging?.proofSha256 !==
+      sha256File(releaseStaging.proofPath) ||
+    proof.releaseStaging?.ciRunId !==
+      releaseStaging.proof.ci.runId ||
+    proof.releaseStaging?.publicAssetsSha256 !==
+      releaseStaging.proof.ci.publicAssetsSha256
+  ) {
+    fail('Release staging proof changed after preflight.');
+  }
+
   const publicHash = sha256File(publicApk);
   const phoneHash = sha256File(phoneApk);
 
@@ -192,6 +205,7 @@ function main() {
     !proof.checks?.sourceClean ||
     !proof.checks?.webTestProof ||
     !proof.checks?.releasePreparationProof ||
+    !proof.checks?.releaseStagingProof ||
     !proof.checks?.phoneTestProof ||
     !proof.checks?.localV2Signing ||
     !proof.checks?.cleanUnsignedBuild ||
@@ -219,6 +233,13 @@ function main() {
     fail(
       'HEAD has diverged from origin/main. ' +
       'Resolve it before release.'
+    );
+  }
+
+  if (originMain !== commit) {
+    fail(
+      'HEAD has not been staged on origin/main. Run:\n' +
+      'npm run release:stage -- --confirmed'
     );
   }
 
@@ -262,21 +283,13 @@ function main() {
 
   if (checkOnly) {
     console.log('\n✅ Release gate passed');
-    console.log(
-      originMain === commit
-        ? '✅ main is already pushed'
-        : '✅ main can be fast-forward pushed'
-    );
+    console.log('✅ main is staged at exact HEAD');
     console.log(
       remoteCommit
         ? `✅ ${tag} already points to HEAD`
         : `✅ ${tag} can be created`
     );
     return;
-  }
-
-  if (originMain !== commit) {
-    run('git', ['push', 'origin', 'main']);
   }
 
   if (!localTagExists) {
