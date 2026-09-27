@@ -3440,9 +3440,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewUpdateChecksItem,
-    t.whatsNewUpdateNoticeItem,
-    t.whatsNewUpdateLinksItem,
+    t.whatsNewPracticalRouteItem,
+    t.whatsNewSmartPlanningItem,
+    t.whatsNewRouteTimingItem,
   ];
 
   return (
