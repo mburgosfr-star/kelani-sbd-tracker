@@ -268,7 +268,7 @@ test('a completed meet suppresses another same-cycle meet projection and ends af
     completedMeetInCurrentCycle: true,
     lastMeetWorkoutNumber: 10,
     inPostMeetRecovery: true,
-    postMeetRecoveryTarget: 3,
+    postMeetRecoveryTarget: 2,
     meetProjection: {
       available: false,
       reason: 'meet-completed',
@@ -280,7 +280,6 @@ test('a completed meet suppresses another same-cycle meet projection and ends af
     ...meetHistory,
     makePostMeetRecoveryEntry(11),
     makePostMeetRecoveryEntry(12),
-    makePostMeetRecoveryEntry(13),
   ];
   expect(isSmartCycleCompleteAfterHistory(recoveryHistory, 1)).toBe(true);
 });
@@ -327,7 +326,7 @@ test('a hard meet from the previous cycle cannot leak fatigue into the new cycle
   });
 });
 
-test('post-meet recovery follows meet effort, while any failed attempt requires three days', () => {
+test('post-meet recovery follows meet effort, while any failed attempt requires two days', () => {
   const context = {
     currentCycle: 1,
     prs: { Squat: 100, Bench: 80, Deadlift: 140 },
@@ -358,7 +357,7 @@ test('post-meet recovery follows meet effort, while any failed attempt requires 
         failedOrSkippedSetCount,
         failAllAttempts: failedOrSkippedSetCount === 9,
       }),
-    }).postMeetRecoveryTarget).toBe(3);
+    }).postMeetRecoveryTarget).toBe(2);
   });
 });
 
@@ -1108,7 +1107,7 @@ test('uses a wider frequency window for the meet projection than for candidate s
     .toEqual(after.projectionLiftExposureCounts);
 });
 
-test('uses the ideal W28 destination until every lift has active-cycle evidence', () => {
+test('uses the ideal W27 destination until every lift has active-cycle evidence', () => {
   const projection = buildSmartMeetWorkoutProjection({
     meetPlanReadiness: {
       weakestLift: 'Bench',
@@ -1129,11 +1128,11 @@ test('uses the ideal W28 destination until every lift has active-cycle evidence'
     provisional: true,
     cycle: 2,
     currentWorkoutNumber: 2,
-    minimumWorkoutNumber: 28,
-    maximumWorkoutNumber: 28,
-    minimumWorkoutsBeforeMeet: 26,
-    maximumWorkoutsBeforeMeet: 26,
-    label: 'C2W28',
+    minimumWorkoutNumber: 27,
+    maximumWorkoutNumber: 27,
+    minimumWorkoutsBeforeMeet: 25,
+    maximumWorkoutsBeforeMeet: 25,
+    label: 'C2W27',
     projectedByIdealRoute: true,
     missingEvidenceLifts: ['Bench'],
     limitingLift: 'Bench',

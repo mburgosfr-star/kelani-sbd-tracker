@@ -492,14 +492,23 @@ export function applyAccessoryPlanToWorkouts(
     if (completedWorkoutNumbers.has(Number(generated?.number || workout.number))) return workout;
     if (!generated) return workout;
 
-    // A focus change may replace a lift in the active day. Never transfer
-    // checked sets by array position onto a different lift mid-workout.
-    const activeLiftNames = (workout.lifts || []).map(block => block.lift);
-    const generatedLiftNames = (generated.lifts || []).map(block => block.lift);
+    // A route change may replace a lift or its intensity in the active day.
+    // Never transfer checked sets into a different plan mid-workout.
+    const activeLiftPlan = (workout.lifts || []).map(block => [
+      block.lift,
+      block.intensityRole || null,
+    ]);
+    const generatedLiftPlan = (generated.lifts || []).map(block => [
+      block.lift,
+      block.intensityRole || null,
+    ]);
     if (Number(generated.number || workout.number) === Number(activeWorkoutNumber) &&
       workoutHasUserProgress(workout) &&
-      (activeLiftNames.length !== generatedLiftNames.length ||
-        activeLiftNames.some((lift, liftIndex) => lift !== generatedLiftNames[liftIndex]))) {
+      (activeLiftPlan.length !== generatedLiftPlan.length ||
+        activeLiftPlan.some(([lift, intensityRole], liftIndex) => (
+          lift !== generatedLiftPlan[liftIndex]?.[0] ||
+          intensityRole !== generatedLiftPlan[liftIndex]?.[1]
+        )))) {
       return workout;
     }
 

@@ -2085,10 +2085,10 @@ export function buildSmartMeetWorkoutProjection({
 
     // Before every lift has produced its first successful result in the new
     // cycle, there is not enough evidence to adjust the calendar estimate.
-    // The ideal route itself still has a valid default destination: W28.
+    // The ideal route itself still has a valid default destination: W27.
     // Expose that provisional destination instead of hiding the projection;
     // otherwise a recovery day says "not enough data" while the following
-    // planned workout suddenly says W28 although no new set was completed.
+    // planned workout suddenly says W27 although no new set was completed.
     return {
       available: true,
       reason: 'default-ideal-route',
@@ -3795,6 +3795,7 @@ export function completeSmartLiftGrid({
   warmups = [],
   preferMoreVolume = false,
   minimumVolumeSets = 2,
+  maximumVolumeSets = 6,
 } = {}) {
   const completedSets = (sets || []).map(set => ({ ...set }));
   const warmupCount = Array.isArray(warmups) ? warmups.length : 0;
@@ -3818,7 +3819,6 @@ export function completeSmartLiftGrid({
 
   const addCount = (SMART_LIFT_GRID_COLUMNS - remainder) % SMART_LIFT_GRID_COLUMNS;
   const removeCount = remainder;
-  const maximumVolumeSets = 6;
   const canAdd =
     addCount > 0 &&
     volumeIndexes.length + addCount <= maximumVolumeSets;
@@ -3970,86 +3970,6 @@ function getSmartIdealHeavyTopWeight({
   return Math.min(Math.max(target, minimum), realOneRMCap);
 }
 
-function getSmartIdealTaperVolumeWeight({
-  realOneRM = 0,
-  pct = 0.60,
-} = {}) {
-  const numericRealOneRM = Number(realOneRM) || 0;
-  const prescribedPct = Number(pct) || 0.60;
-
-  return Math.max(
-    roundBarbellWeight(numericRealOneRM * prescribedPct),
-    roundBarbellWeight(numericRealOneRM * 0.60, 'up')
-  );
-}
-
-function taperWarmupSubsetIsSafe(warmups = [], targetWeight = 0) {
-  const weights = warmups.map(item => Number(item?.weight) || 0);
-  const target = Number(targetWeight) || 0;
-
-  if (target < 30) return weights.length === 0;
-  if (!weights.length || weights[0] !== 20) return false;
-  if (weights.some(weight => weight <= 0 || weight >= target || weight % 10 !== 0)) {
-    return false;
-  }
-
-  const firstJump = weights.length > 1
-    ? weights[1] - weights[0]
-    : target - weights[0];
-
-  return (
-    firstJump <= 50 &&
-    warmupLoadJumpsNeverIncrease(weights, target)
-  );
-}
-
-function trimTaperWarmupsForFixedWorkSets({
-  warmups = [],
-  workSetCount = 0,
-  targetWeight = 0,
-} = {}) {
-  const removeCount = (
-    warmups.length + Number(workSetCount || 0)
-  ) % SMART_LIFT_GRID_COLUMNS;
-
-  if (removeCount === 0 || removeCount >= warmups.length) return warmups;
-
-  // Keep the universal 20kg starting set. Try later warm-ups first, so a
-  // redundant final rung is removed before an earlier load bridge. At most
-  // three removals are ever needed for the four-column grid.
-  const removableIndexes = Array.from(
-    { length: Math.max(warmups.length - 1, 0) },
-    (_, index) => warmups.length - 1 - index
-  );
-  let safeSubset = null;
-
-  function search(startIndex, selectedIndexes) {
-    if (safeSubset) return;
-    if (selectedIndexes.length === removeCount) {
-      const removed = new Set(selectedIndexes);
-      const candidate = warmups.filter((_, index) => !removed.has(index));
-      if (taperWarmupSubsetIsSafe(candidate, targetWeight)) {
-        safeSubset = candidate;
-      }
-      return;
-    }
-
-    for (
-      let index = startIndex;
-      index < removableIndexes.length;
-      index += 1
-    ) {
-      search(index + 1, [
-        ...selectedIndexes,
-        removableIndexes[index],
-      ]);
-    }
-  }
-
-  search(0, []);
-  return safeSubset || warmups;
-}
-
 function getSmartIdealTopSetLabel(reps) {
   if (Number(reps) === 1) return 'topSingle';
   if (Number(reps) === 2) return 'topDouble';
@@ -4168,53 +4088,47 @@ export function buildSmartIdealTrainingWorkout({
   const liftBlocks = routeWorkout.lifts.map((routeLift, liftIndex) => {
     const realOneRM = realOneRMs[routeLift.lift];
     const prescription = routeLift.prescription || {};
-    const isHeavy = routeLift.intensityRole === 'heavy';
-    let sets;
+    const hasTopSet = Boolean(prescription.topSet);
+    const volume = hasTopSet ? prescription.backoff : prescription;
+    const minimumVolumeSets = Math.max(
+      Number(volume.minimumSetCount) || (isTaper ? 1 : 3),
+      1
+    );
+    const maximumVolumeSets = Math.max(
+      Number(volume.maximumSetCount) || (isTaper ? 4 : 6),
+      minimumVolumeSets
+    );
+    let sets = [];
 
-    if (isHeavy) {
-      const topSet = prescription.topSet || {};
-      sets = [buildSmartIdealSet({
+    if (hasTopSet) {
+      const topSet = prescription.topSet;
+      sets.push(buildSmartIdealSet({
         lift: routeLift.lift,
         labelKey: getSmartIdealTopSetLabel(topSet.reps),
         reps: topSet.reps,
         pct: topSet.pct,
         realOneRM,
         groupKey: `${routeLift.lift}-top`,
-        weightOverride: getSmartIdealHeavyTopWeight({
-          realOneRM,
-          routeWorkout,
-          pct: topSet.pct,
-        }),
-        prescribedPct: isTaper ? topSet.pct : null,
-      })];
-
-      if (prescription.backoff && !isTaper) {
-        sets.push(...Array.from({ length: 3 }, () => buildSmartIdealSet({
-          lift: routeLift.lift,
-          labelKey: 'backoff',
-          reps: prescription.backoff.reps,
-          pct: prescription.backoff.pct,
-          realOneRM,
-          groupKey: `${routeLift.lift}-backoff`,
-        })));
-      }
-    } else {
-      sets = Array.from({ length: 3 }, () => buildSmartIdealSet({
-        lift: routeLift.lift,
-        labelKey: 'workSets',
-        reps: Number(prescription.reps) || 4,
-        pct: prescription.pct,
-        realOneRM,
-        groupKey: `${routeLift.lift}-worksets`,
-        weightOverride: isTaper
-          ? getSmartIdealTaperVolumeWeight({
+        weightOverride: routeLift.intensityRole === 'heavy'
+          ? getSmartIdealHeavyTopWeight({
             realOneRM,
-            pct: prescription.pct,
+            routeWorkout,
+            pct: topSet.pct,
           })
           : null,
-        prescribedPct: isTaper ? prescription.pct : null,
+        prescribedPct: isTaper ? topSet.pct : null,
       }));
     }
+
+    sets.push(...Array.from({ length: minimumVolumeSets }, () => buildSmartIdealSet({
+        lift: routeLift.lift,
+        labelKey: hasTopSet ? 'backoff' : 'workSets',
+        reps: Number(volume.reps) || 4,
+        pct: volume.pct,
+        realOneRM,
+        groupKey: `${routeLift.lift}-${hasTopSet ? 'backoff' : 'worksets'}`,
+        prescribedPct: isTaper ? volume.pct : null,
+      })));
 
     let warmups = generateWarmups(
       sets,
@@ -4222,48 +4136,12 @@ export function buildSmartIdealTrainingWorkout({
       routeWorkout.lifts.length === 1
     );
 
-    // A taper opener is followed by enough light 4-rep back-offs to finish
-    // its current visual row. If the opener already finishes a row, add one
-    // complete row of four back-offs instead of treating the single as the
-    // whole lift session.
-    if (isTaper && isHeavy) {
-      const taperBackoff = prescription.backoff || {
-        reps: 4,
-        pct: 0.60,
-      };
-      const addCount = ((
-        SMART_LIFT_GRID_COLUMNS -
-        ((warmups.length + sets.length) % SMART_LIFT_GRID_COLUMNS)
-      ) % SMART_LIFT_GRID_COLUMNS) || SMART_LIFT_GRID_COLUMNS;
-
-      sets.push(...Array.from({ length: addCount }, () => buildSmartIdealSet({
-        lift: routeLift.lift,
-        labelKey: 'backoff',
-        reps: Number(taperBackoff.reps) || 4,
-        pct: Number(taperBackoff.pct) || 0.60,
-        realOneRM,
-        groupKey: `${routeLift.lift}-taper-backoff`,
-        weightOverride: getSmartIdealTaperVolumeWeight({
-          realOneRM,
-          pct: taperBackoff.pct,
-        }),
-        prescribedPct: Number(taperBackoff.pct) || 0.60,
-      })));
-    }
-
-    if (isTaper && !isHeavy) {
-      warmups = trimTaperWarmupsForFixedWorkSets({
-        warmups,
-        workSetCount: sets.length,
-        targetWeight: sets[0]?.weight,
-      });
-    }
-
     if (sets.some(set => ['backoff', 'workSets'].includes(set.labelKey))) {
       sets = completeSmartLiftGrid({
         sets,
         warmups,
-        minimumVolumeSets: 3,
+        minimumVolumeSets,
+        maximumVolumeSets,
       });
 
       sets = ensureMinimumSmartLiftGridRows({
@@ -4272,13 +4150,11 @@ export function buildSmartIdealTrainingWorkout({
         minimumRows: routeWorkout.minimumLiftGridRows,
       });
 
-      if (!isTaper) {
-        warmups = generateWarmups(
-          sets,
-          routeLift.lift,
-          routeWorkout.lifts.length === 1
-        );
-      }
+      warmups = generateWarmups(
+        sets,
+        routeLift.lift,
+        routeWorkout.lifts.length === 1
+      );
     }
 
     const role = liftIndex === 0
@@ -5126,6 +5002,7 @@ function generateSmartWorkouts({
   ) || visibleThroughIndex + 1;
   const idealRouteEntryWorkoutNumber = getSmartIdealRouteEntryWorkoutNumber({
     athleteLevel,
+    trainingFocus,
     readiness: smartDecision.readiness,
   });
   const idealRouteWorkoutNumber = getNextSmartIdealRouteWorkoutNumber({
@@ -5208,7 +5085,7 @@ function generateSmartWorkouts({
     ? idealRoutePreviewPlan[0] || null
     : adjustedIdealRoutePlan?.workouts?.[0] || null;
   // Once Smart is on the ideal route, readiness remains diagnostic. It may
-  // explain the plan, but it may not replace a route row or postpone W28.
+  // explain the plan, but it may not replace a route row or postpone W27.
   // Calendar changes are owned exclusively by the explicit TOO EASY,
   // TOO HARD/failed-set and post-meet recovery rules in the route builder.
   const candidateIdealRouteWorkout = idealRouteEnabled

@@ -18,11 +18,15 @@ export const SMART_IDEAL_INTENSITY_ROLES = Object.freeze({
 
 export const SMART_TRAINING_FOCUSES = Object.freeze({
   STANDARD: 'standard',
+  PRACTICAL: 'practical',
   BEGINNER_SQUAT: 'beginnerSquat',
 });
 
 export function normalizeSmartTrainingFocus(value) {
-  return value === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT
+  return [
+    SMART_TRAINING_FOCUSES.PRACTICAL,
+    SMART_TRAINING_FOCUSES.BEGINNER_SQUAT,
+  ].includes(value)
     ? value
     : SMART_TRAINING_FOCUSES.STANDARD;
 }
@@ -70,8 +74,7 @@ const lift = (name, intensityRole) => Object.freeze({
 
 const route = (...lifts) => Object.freeze(lifts);
 
-// The seven-workout ideal composition. It repeats for the triple, double
-// and single phases; only the heavy prescription changes between phases.
+// The seven-workout ideal composition repeats across all three phases.
 export const SMART_IDEAL_NORMAL_ROUTE = Object.freeze({
   beginner: Object.freeze({
     1: route(lift('Squat', H), lift('Bench', L)),
@@ -111,29 +114,122 @@ export const SMART_IDEAL_NORMAL_ROUTE = Object.freeze({
   }),
 });
 
+// Preserve each level's normal lift frequency and heavy/medium/light mix,
+// while grouping lifts with the same intensity into the same workout. Taper
+// deliberately remains shared with the balanced route below.
+export const SMART_PRACTICAL_NORMAL_ROUTE = Object.freeze({
+  beginner: Object.freeze({
+    1: route(lift('Squat', H), lift('Bench', H), lift('Deadlift', H)),
+    2: route(),
+    3: route(lift('Squat', M), lift('Bench', M)),
+    4: route(),
+    5: route(lift('Bench', L)),
+    6: route(),
+    7: route(),
+  }),
+  intermediate: Object.freeze({
+    1: route(lift('Squat', H), lift('Bench', H), lift('Deadlift', H)),
+    2: route(lift('Bench', L)),
+    3: route(),
+    4: route(lift('Squat', M), lift('Bench', M), lift('Deadlift', M)),
+    5: route(),
+    6: route(lift('Squat', L), lift('Bench', L)),
+    7: route(),
+  }),
+  advanced: Object.freeze({
+    1: route(lift('Squat', H), lift('Bench', H), lift('Deadlift', H)),
+    2: route(lift('Squat', L), lift('Bench', L)),
+    3: route(),
+    4: route(lift('Squat', M), lift('Bench', M), lift('Deadlift', M)),
+    5: route(lift('Bench', M)),
+    6: route(lift('Squat', L), lift('Bench', L), lift('Deadlift', L)),
+    7: route(),
+  }),
+  elite: Object.freeze({
+    1: route(lift('Squat', H), lift('Bench', H), lift('Deadlift', H)),
+    2: route(lift('Squat', M), lift('Bench', M)),
+    3: route(lift('Squat', M), lift('Bench', M), lift('Deadlift', M)),
+    4: route(lift('Bench', L)),
+    5: route(lift('Squat', L), lift('Bench', L), lift('Deadlift', L)),
+    6: route(lift('Squat', L), lift('Bench', L), lift('Deadlift', L)),
+    7: route(),
+  }),
+});
+
 export const SMART_IDEAL_NORMAL_PHASES = Object.freeze([
   Object.freeze({
     key: 'triple',
     firstWorkout: 1,
     lastWorkout: 7,
-    topSet: Object.freeze({ reps: 3, pct: 0.90 }),
-    backoff: Object.freeze({ reps: 6, pct: 0.60 }),
+    prescriptions: Object.freeze({
+      [H]: Object.freeze({
+        topSet: Object.freeze({ reps: 1, pct: 0.90 }),
+        volume: Object.freeze({ reps: 4, pct: 0.85 }),
+      }),
+      [M]: Object.freeze({
+        topSet: Object.freeze({ reps: 2, pct: 0.85 }),
+        volume: Object.freeze({ reps: 5, pct: 0.80 }),
+      }),
+      [L]: Object.freeze({
+        topSet: Object.freeze({ reps: 3, pct: 0.80 }),
+        volume: Object.freeze({ reps: 6, pct: 0.75 }),
+      }),
+    }),
   }),
   Object.freeze({
     key: 'double',
     firstWorkout: 8,
     lastWorkout: 14,
-    topSet: Object.freeze({ reps: 2, pct: 0.95 }),
-    backoff: Object.freeze({ reps: 5, pct: 0.65 }),
+    prescriptions: Object.freeze({
+      [H]: Object.freeze({
+        topSet: Object.freeze({ reps: 1, pct: 0.95 }),
+        volume: Object.freeze({ reps: 4, pct: 0.80 }),
+      }),
+      [M]: Object.freeze({
+        topSet: Object.freeze({ reps: 2, pct: 0.90 }),
+        volume: Object.freeze({ reps: 5, pct: 0.75 }),
+      }),
+      [L]: Object.freeze({
+        topSet: Object.freeze({ reps: 3, pct: 0.85 }),
+        volume: Object.freeze({ reps: 6, pct: 0.70 }),
+      }),
+    }),
   }),
   Object.freeze({
     key: 'single',
     firstWorkout: 15,
     lastWorkout: 21,
-    topSet: Object.freeze({ reps: 1, pct: 1.00 }),
-    backoff: Object.freeze({ reps: 4, pct: 0.70 }),
+    prescriptions: Object.freeze({
+      [H]: Object.freeze({
+        topSet: Object.freeze({ reps: 1, pct: 1.00 }),
+        volume: Object.freeze({ reps: 4, pct: 0.75 }),
+      }),
+      [M]: Object.freeze({
+        topSet: Object.freeze({ reps: 2, pct: 0.95 }),
+        volume: Object.freeze({ reps: 5, pct: 0.70 }),
+      }),
+      [L]: Object.freeze({
+        topSet: Object.freeze({ reps: 3, pct: 0.90 }),
+        volume: Object.freeze({ reps: 6, pct: 0.65 }),
+      }),
+    }),
   }),
 ]);
+
+const SMART_IDEAL_TAPER_PRESCRIPTIONS = Object.freeze({
+  [H]: Object.freeze({
+    topSet: Object.freeze({ reps: 1, pct: 0.90 }),
+    volume: Object.freeze({ reps: 4, pct: 0.75 }),
+  }),
+  [M]: Object.freeze({
+    topSet: Object.freeze({ reps: 2, pct: 0.85 }),
+    volume: Object.freeze({ reps: 5, pct: 0.70 }),
+  }),
+  [L]: Object.freeze({
+    topSet: Object.freeze({ reps: 3, pct: 0.80 }),
+    volume: Object.freeze({ reps: 6, pct: 0.65 }),
+  }),
+});
 
 export const SMART_IDEAL_TAPER_ROUTE = Object.freeze({
   beginner: Object.freeze({
@@ -146,19 +242,19 @@ export const SMART_IDEAL_TAPER_ROUTE = Object.freeze({
     22: route(lift('Squat', H), lift('Bench', L)),
     23: route(lift('Deadlift', H), lift('Bench', M)),
     24: route(),
-    25: route(lift('Bench', H), lift('Squat', M)),
+    25: route(lift('Bench', H)),
   }),
   advanced: Object.freeze({
     22: route(lift('Squat', H), lift('Bench', L)),
     23: route(lift('Deadlift', H), lift('Bench', M)),
-    24: route(lift('Bench', H), lift('Squat', M)),
-    25: route(),
+    24: route(),
+    25: route(lift('Bench', H)),
   }),
   elite: Object.freeze({
     22: route(lift('Squat', H), lift('Bench', L)),
     23: route(lift('Deadlift', H), lift('Bench', M), lift('Squat', L)),
-    24: route(lift('Bench', H), lift('Squat', M)),
-    25: route(),
+    24: route(),
+    25: route(lift('Bench', H)),
   }),
 });
 
@@ -175,14 +271,14 @@ const BEGINNER_SQUAT_FOCUS_TAPER_ROUTE = Object.freeze({
 });
 
 export const SMART_IDEAL_POST_MEET = Object.freeze({
-  beginner: Object.freeze({ recoveryWorkouts: 1, nextCycleWorkout: 30 }),
-  intermediate: Object.freeze({ recoveryWorkouts: 1, nextCycleWorkout: 30 }),
-  advanced: Object.freeze({ recoveryWorkouts: 1, nextCycleWorkout: 30 }),
-  elite: Object.freeze({ recoveryWorkouts: 1, nextCycleWorkout: 30 }),
+  beginner: Object.freeze({ recoveryWorkouts: 1, nextCycleWorkout: 29 }),
+  intermediate: Object.freeze({ recoveryWorkouts: 1, nextCycleWorkout: 29 }),
+  advanced: Object.freeze({ recoveryWorkouts: 1, nextCycleWorkout: 29 }),
+  elite: Object.freeze({ recoveryWorkouts: 1, nextCycleWorkout: 29 }),
 });
 
-export const SMART_IDEAL_ROUTE_VERSION = 1;
-export const SMART_IDEAL_MEET_WORKOUT_NUMBER = 28;
+export const SMART_IDEAL_ROUTE_VERSION = 3;
+export const SMART_IDEAL_MEET_WORKOUT_NUMBER = 27;
 
 export function resolveSmartIdealRouteStartCycle({
   savedStartCycle,
@@ -234,65 +330,78 @@ export function getSmartIdealNormalPhase(workoutNumber) {
   ) || null;
 }
 
-function buildNormalPrescription(intensityRole, phase) {
-  if (intensityRole === H) {
+function buildGridPrescription({ definition, includeTopSet, taper = false }) {
+  const volume = {
+    ...definition.volume,
+    setCount: 'grid-dependent',
+    minimumSetCount: taper ? 1 : 3,
+    maximumSetCount: taper ? 4 : 6,
+  };
+
+  if (includeTopSet) {
     return {
       kind: 'top-set-with-backoffs',
       basis: SMART_IDEAL_LOAD_POLICY.basis,
-      topSet: { ...phase.topSet },
-      backoff: {
-        ...phase.backoff,
-        setCount: 'grid-dependent',
-      },
+      topSet: { ...definition.topSet },
+      backoff: volume,
       fullGridRequired: true,
     };
   }
 
   return {
-    kind: 'work-sets',
+    kind: taper ? 'taper-work-sets' : 'work-sets',
     basis: SMART_IDEAL_LOAD_POLICY.basis,
-    pct: intensityRole === M ? 0.70 : 0.60,
-    repRange: { min: 4, max: 6 },
-    maxTotalWorkReps: 24,
-    setCount: 'grid-dependent',
+    pct: volume.pct,
+    reps: volume.reps,
+    setCount: volume.setCount,
+    minimumSetCount: volume.minimumSetCount,
+    maximumSetCount: volume.maximumSetCount,
     fullGridRequired: true,
   };
 }
 
-function buildTaperPrescription(intensityRole) {
-  if (intensityRole === H) {
-    return {
-      kind: 'opener-single',
-      basis: SMART_IDEAL_LOAD_POLICY.basis,
-      topSet: { reps: 1, pct: 0.90 },
-      backoff: {
-        reps: 4,
-        pct: 0.60,
-        setCount: 'grid-dependent',
-        minimumSetCount: 1,
-        fullRowWhenAligned: true,
-      },
-      normalBackoffs: false,
-      fullGridRequired: true,
-    };
+function buildNormalPrescription(intensityRole, phase, includeTopSet) {
+  return buildGridPrescription({
+    definition: phase.prescriptions[intensityRole],
+    includeTopSet,
+  });
+}
+
+function buildTaperPrescription(intensityRole, includeTopSet) {
+  return buildGridPrescription({
+    definition: SMART_IDEAL_TAPER_PRESCRIPTIONS[intensityRole],
+    includeTopSet,
+    taper: true,
+  });
+}
+
+function hasEarlierMatchingExposure({
+  routeTable,
+  firstWorkout,
+  workoutNumber,
+  liftName,
+  intensityRole,
+}) {
+  for (let number = firstWorkout; number < workoutNumber; number += 1) {
+    const rowNumber = number <= 21 ? ((number - 1) % 7) + 1 : number;
+    if ((routeTable[rowNumber] || []).some(item => (
+      item.lift === liftName && item.intensityRole === intensityRole
+    ))) {
+      return true;
+    }
   }
 
-  return {
-    kind: 'taper-work-sets',
-    basis: SMART_IDEAL_LOAD_POLICY.basis,
-    pct: intensityRole === M ? 0.70 : 0.60,
-    reps: 4,
-    minimumSetCount: 3,
-    minimumRepsPerSet: 4,
-    setCount: 'grid-dependent',
-    fullGridRequired: true,
-  };
+  return false;
 }
 
-function buildTrainingWorkout({ workoutNumber, stage, phase = null, lifts }) {
-  const prescriptionFor = stage === 'taper'
-    ? buildTaperPrescription
-    : intensityRole => buildNormalPrescription(intensityRole, phase);
+function buildTrainingWorkout({
+  workoutNumber,
+  stage,
+  phase = null,
+  lifts,
+  routeTable,
+}) {
+  const firstWorkout = stage === 'taper' ? 22 : phase.firstWorkout;
 
   return {
     workoutNumber,
@@ -302,11 +411,21 @@ function buildTrainingWorkout({ workoutNumber, stage, phase = null, lifts }) {
     // Regular accessories stop during taper; the workout accessory policy
     // retains only a light Row on days containing Bench.
     accessoriesAllowed: stage !== 'taper',
-    minimumLiftGridRows: lifts.length === 1 ? 3 : 1,
-    lifts: lifts.map(item => ({
-      ...item,
-      prescription: prescriptionFor(item.intensityRole),
-    })),
+    minimumLiftGridRows: stage === 'taper' ? 1 : (lifts.length === 1 ? 3 : 1),
+    lifts: lifts.map(item => {
+      const includeTopSet = !hasEarlierMatchingExposure({
+        routeTable,
+        firstWorkout,
+        workoutNumber,
+        liftName: item.lift,
+        intensityRole: item.intensityRole,
+      });
+      const prescription = stage === 'taper'
+        ? buildTaperPrescription(item.intensityRole, includeTopSet)
+        : buildNormalPrescription(item.intensityRole, phase, includeTopSet);
+
+      return { ...item, prescription };
+    }),
   };
 }
 
@@ -330,15 +449,21 @@ export function getSmartIdealRouteWorkout({
   if (!Number.isInteger(number) || number < 1) return null;
 
   const level = normalizeLevel(athleteLevel);
+  const normalizedTrainingFocus = normalizeSmartTrainingFocus(trainingFocus);
   const squatFocus = level === 'beginner' &&
-    normalizeSmartTrainingFocus(trainingFocus) === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT;
+    normalizedTrainingFocus === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT;
+  const practicalRoute =
+    normalizedTrainingFocus === SMART_TRAINING_FOCUSES.PRACTICAL;
 
   if (number <= 21) {
     const phase = getSmartIdealNormalPhase(number);
     const rowNumber = ((number - 1) % 7) + 1;
-    const lifts = (squatFocus
-      ? BEGINNER_SQUAT_FOCUS_NORMAL_ROUTE
-      : SMART_IDEAL_NORMAL_ROUTE[level])[rowNumber];
+    const routeTable = practicalRoute
+      ? SMART_PRACTICAL_NORMAL_ROUTE[level]
+      : squatFocus
+        ? BEGINNER_SQUAT_FOCUS_NORMAL_ROUTE
+        : SMART_IDEAL_NORMAL_ROUTE[level];
+    const lifts = routeTable[rowNumber];
 
     return lifts.length > 0
       ? buildTrainingWorkout({
@@ -346,25 +471,30 @@ export function getSmartIdealRouteWorkout({
         stage: 'normal',
         phase,
         lifts,
+        routeTable,
       })
       : buildRestWorkout(number, 'normal');
   }
 
   if (number <= 25) {
-    const lifts = (squatFocus
+    const routeTable = squatFocus
       ? BEGINNER_SQUAT_FOCUS_TAPER_ROUTE
-      : SMART_IDEAL_TAPER_ROUTE[level])[number];
+      : SMART_IDEAL_TAPER_ROUTE[level];
+    const lifts = routeTable[number];
 
     return lifts.length > 0
       ? buildTrainingWorkout({
         workoutNumber: number,
         stage: 'taper',
         lifts,
+        routeTable,
       })
       : buildRestWorkout(number, 'taper');
   }
 
-  if (number <= 27) return buildRestWorkout(number, 'taper');
+  if (number < SMART_IDEAL_MEET_WORKOUT_NUMBER) {
+    return buildRestWorkout(number, 'taper');
+  }
 
   if (number === SMART_IDEAL_MEET_WORKOUT_NUMBER) {
     const postMeet = SMART_IDEAL_POST_MEET[level];
@@ -422,12 +552,22 @@ export function getSmartIdealRouteWorkout({
   };
 }
 
+export function getSmartIdealNormalTrainingDays({
+  athleteLevel = 'intermediate',
+  trainingFocus = SMART_TRAINING_FOCUSES.STANDARD,
+} = {}) {
+  return Array.from({ length: 7 }, (_, index) => getSmartIdealRouteWorkout({
+    athleteLevel,
+    trainingFocus,
+    workoutNumber: index + 1,
+  })).filter(workout => workout?.type === 'training').length;
+}
+
 const ACCELERATION_ACTIONS = Object.freeze({
   REMOVE_REDUNDANT_REST: 'remove-redundant-rest',
   COMBINE_TRAINING: 'combine-training',
   REMOVE_OPTIONAL_REST: 'remove-optional-rest',
   REMOVE_TRAINING: 'remove-training',
-  REMOVE_FINAL_REST: 'remove-final-rest',
 });
 
 function getRouteWorkoutNumbers(workout = {}) {
@@ -615,9 +755,9 @@ function findOptionalRestIndex(plan) {
 /**
  * Spend one route-compression credit for every clean "too easy" workout.
  * Each applied action removes exactly one future calendar slot. Prefer an
- * earlier non-final rest so the final recovery buffer remains intact. If no
- * earlier safe compression exists, TOO EASY still removes a final rest as
- * the last available way to bring the meet one day closer.
+ * earlier non-final rest so the final recovery buffer remains intact. The
+ * final rest immediately before Meet Day is never removed: when Meet Day is
+ * already next, the route cannot be accelerated safely.
  */
 export function buildAcceleratedSmartIdealRoutePlan({
   athleteLevel = 'intermediate',
@@ -708,19 +848,6 @@ export function buildAcceleratedSmartIdealRoutePlan({
       continue;
     }
 
-    const finalRestIndex = workouts.findLastIndex(
-      (workout, index) => workout.type === 'rest' && index < workouts.length - 1
-    );
-    if (finalRestIndex >= 0) {
-      workouts = removeRoutePlanEntry(
-        workouts,
-        finalRestIndex,
-        ACCELERATION_ACTIONS.REMOVE_FINAL_REST
-      );
-      appliedCredits += 1;
-      continue;
-    }
-
     break;
   }
 
@@ -806,9 +933,17 @@ export function buildAdjustedSmartIdealRoutePlan({
 
 export function getSmartIdealRouteEntryWorkoutNumber({
   athleteLevel = 'intermediate',
+  trainingFocus = SMART_TRAINING_FOCUSES.STANDARD,
   readiness = {},
 } = {}) {
   const level = normalizeLevel(athleteLevel);
+  const normalizedTrainingFocus = normalizeSmartTrainingFocus(trainingFocus);
+  const routeTable = normalizedTrainingFocus === SMART_TRAINING_FOCUSES.PRACTICAL
+    ? SMART_PRACTICAL_NORMAL_ROUTE[level]
+    : level === 'beginner' &&
+      normalizedTrainingFocus === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT
+      ? BEGINNER_SQUAT_FOCUS_NORMAL_ROUTE
+      : SMART_IDEAL_NORMAL_ROUTE[level];
   const byLift = readiness.meetPlanReadiness || readiness.byLift || {};
   const hasCurrentCycleEvidence = Boolean(
     readiness.meetPlanHasCurrentCycleEvidence ??
@@ -847,7 +982,7 @@ export function getSmartIdealRouteEntryWorkoutNumber({
     liftName => !byLift[liftName]?.[readinessProperty]
   );
   const firstNeededHeavyRow = Object.entries(
-    SMART_IDEAL_NORMAL_ROUTE[level]
+    routeTable
   )
     .filter(([, lifts]) => lifts.some(item => (
       item.intensityRole === H && unresolvedLifts.includes(item.lift)
@@ -858,8 +993,18 @@ export function getSmartIdealRouteEntryWorkoutNumber({
   return phase.firstWorkout + firstNeededHeavyRow - 1;
 }
 
-export function summarizeSmartIdealFrequency(athleteLevel = 'intermediate') {
+export function summarizeSmartIdealFrequency(
+  athleteLevel = 'intermediate',
+  trainingFocus = SMART_TRAINING_FOCUSES.STANDARD,
+) {
   const level = normalizeLevel(athleteLevel);
+  const normalizedTrainingFocus = normalizeSmartTrainingFocus(trainingFocus);
+  const routeTable = normalizedTrainingFocus === SMART_TRAINING_FOCUSES.PRACTICAL
+    ? SMART_PRACTICAL_NORMAL_ROUTE[level]
+    : level === 'beginner' &&
+      normalizedTrainingFocus === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT
+      ? BEGINNER_SQUAT_FOCUS_NORMAL_ROUTE
+      : SMART_IDEAL_NORMAL_ROUTE[level];
   const summary = ['Squat', 'Bench', 'Deadlift'].reduce((result, name) => ({
     ...result,
     [name]: {
@@ -869,7 +1014,7 @@ export function summarizeSmartIdealFrequency(athleteLevel = 'intermediate') {
     },
   }), {});
 
-  Object.values(SMART_IDEAL_NORMAL_ROUTE[level]).forEach(lifts => {
+  Object.values(routeTable).forEach(lifts => {
     lifts.forEach(item => {
       summary[item.lift].days += 1;
       summary[item.lift].score += SMART_INTENSITY_POINTS[item.intensityRole];

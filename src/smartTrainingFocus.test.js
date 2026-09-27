@@ -25,6 +25,32 @@ test('switching focus never maps in-progress Bench sets onto Squat', () => {
     .lifts.map(block => block.lift)).toEqual(['Deadlift', 'Squat']);
 });
 
+test('switching route never changes intensities inside a workout in progress', () => {
+  const balanced = {
+    ...workout('Bench', true),
+    lifts: [
+      { lift: 'Squat', intensityRole: 'heavy', warmups: [], sets: [] },
+      { lift: 'Bench', intensityRole: 'light', warmups: [], sets: [{ done: true }] },
+      { lift: 'Deadlift', intensityRole: 'light', warmups: [], sets: [] },
+    ],
+  };
+  const practical = {
+    ...balanced,
+    lifts: balanced.lifts.map(block => ({
+      ...block,
+      intensityRole: 'heavy',
+      sets: block.sets.map(set => ({ ...set, done: false })),
+    })),
+  };
+
+  expect(applyAccessoryPlanToWorkouts(
+    [balanced],
+    [practical],
+    new Set(),
+    3,
+  )[0]).toBe(balanced);
+});
+
 test('completed workouts retain their recorded lift even after focus changes', () => {
   const completed = workout('Bench', true);
   expect(applyAccessoryPlanToWorkouts([completed], [workout('Squat')], new Set([3]), 4)[0])

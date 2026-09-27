@@ -6,7 +6,7 @@
 
 Kelani is an offline-first Squat, Bench Press and Deadlift tracker for lifters who train independently but do not want to train blindly. It requires no account, subscription or cloud service.
 
-Smart Training follows a level-specific 28-workout ideal route from the start of a cycle through SBD Meet Day. The Program screen shows the route ahead, while your confirmed strength determines the prescribed weights. **Too easy**, **Too hard**, failed work and post-meet recovery can adjust the calendar; readiness information explains your progress without silently replacing planned workouts or postponing the meet.
+Smart Training follows a level-specific 28-workout ideal route: W1-W21 build strength, W22-W26 taper, W27 is SBD Meet Day and W28 is the planned post-meet recovery day. The Program screen shows the route ahead, while your confirmed strength determines the prescribed weights. **Too easy** shortens the route unless Meet Day is already next, while **Too hard** or failed work can add recovery without ever scheduling more than two consecutive rest days. Readiness information explains your progress without silently replacing planned workouts or postponing the meet.
 
 ## What Kelani does
 

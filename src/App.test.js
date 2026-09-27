@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsTabListStyle } from './StatsScreen';
-import App, { AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
+import App, { AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
 test.each(['nl', 'en', 'ca'])(
@@ -84,6 +84,32 @@ test('manual and automatic hard-like outcomes resolve to the single TOO HARD val
     }],
   }, 'good')).toBe('hard');
   expect(resolveWorkoutEffortForCompletion({}, 'good')).toBe('good');
+});
+
+test('ideal-route intensity labels follow the prescribed rep role instead of upgrading every top set to heavy', () => {
+  const workout = { smartIdealRoute: { version: 3, workoutNumber: 1 } };
+
+  expect(getDisplayedSmartIntensityRole({
+    workout,
+    liftBlock: {
+      intensityRole: 'medium',
+      sets: [{ labelKey: 'topDouble', reps: 2, pct: 0.95 }],
+    },
+  })).toBe('medium');
+  expect(getDisplayedSmartIntensityRole({
+    workout,
+    liftBlock: {
+      intensityRole: 'light',
+      sets: [{ labelKey: 'topTriple', reps: 3, pct: 0.90 }],
+    },
+  })).toBe('light');
+  expect(getDisplayedSmartIntensityRole({
+    workout,
+    liftBlock: {
+      intensityRole: 'heavy',
+      sets: [{ labelKey: 'topSingle', reps: 1, pct: 0.90 }],
+    },
+  })).toBe('heavy');
 });
 
 test('dashboard metrics contain values without treating the e1RM and 1RM difference as a new PR', () => {
@@ -605,6 +631,7 @@ test('program screen uses the same responsive header alignment as other content 
     maxWidth: 500,
     margin: '0 auto',
     padding: 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px',
+    paddingBottom: 0,
     boxSizing: 'border-box',
     height: 'calc(100dvh - 78px)',
     display: 'flex',
@@ -616,10 +643,12 @@ test('program screen uses the same responsive header alignment as other content 
 test('smart program title reflects the selected training focus', () => {
   const t = {
     trainingFocusBalanced: 'Balanced SBD Route',
+    trainingFocusPractical: 'Practical SBD Route',
     trainingFocusSquat: 'Squat Priority',
   };
 
   expect(getSmartProgramTitle('standard', t)).toBe('Balanced SBD Route');
+  expect(getSmartProgramTitle('practical', t)).toBe('Practical SBD Route');
   expect(getSmartProgramTitle('beginnerSquat', t)).toBe('Squat Priority');
   expect(getSmartProgramTitle('unknown', t)).toBe('Balanced SBD Route');
 });
@@ -677,7 +706,7 @@ test('compact program lists pull both toggles closer to the workout cards', () =
   expect(programWorkoutListVerticalSpacing({ compact: true })).toEqual({
     listMarginTop: 'clamp(9px, 1.2dvh, 12px)',
     topToggleMargin: '0 0 clamp(8px, 1.2dvh, 12px)',
-    bottomToggleMargin: 'clamp(8px, 1.2dvh, 12px) 0 0',
+    bottomToggleMargin: 'calc(clamp(8px, 1.2dvh, 12px) - 2px) 0 2px',
   });
   expect(programWorkoutListVerticalSpacing()).toEqual({
     listMarginTop: 'clamp(9px, 1.2dvh, 12px)',
@@ -2070,6 +2099,16 @@ test('onboarding does not promise beginner-only squat focus at a higher starting
   expect(screen.getByText('Intermediate')).toBeInTheDocument();
   expect(screen.getByText('4 / 7')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Squat and legs focus/ })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: /Practical SBD Route/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+  await waitFor(() => {
+    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    expect(saved.trainingFocus).toBe('practical');
+    expect(saved.inProgress.workouts[0].lifts.map(block => block.lift))
+      .toEqual(['Squat', 'Bench', 'Deadlift']);
+  });
 });
 
 test('Classic can switch only before the current workout has user progress', () => {
@@ -2160,7 +2199,7 @@ test('every Smart set has a phase label without breaking the four-column grid', 
     .toEqual(['WU', 'TOP', 'BO', 'BO', 'BO', 'BO', 'BO', 'BO']);
   const benchGrid = screen.getByTestId('workout-lift-grid-1');
   expect(Array.from(benchGrid.querySelectorAll('[data-testid="workout-phase-tag"]')).map(tag => tag.textContent))
-    .toEqual(['WORK', 'WORK', 'WORK', 'WORK']);
+    .toEqual(['TOP', 'BO', 'BO', 'BO']);
   expect(screen.queryByTestId('workout-warmup-label-0')).not.toBeInTheDocument();
   expect(screen.queryByTestId('workout-work-sets-label-0')).not.toBeInTheDocument();
 });
@@ -2250,7 +2289,7 @@ test('a legacy Smart save ignores and removes its frozen cycle e1RM load basis',
       },
     });
     expect(saved.inProgress.workouts[1].lifts.find(block => block.lift === 'Deadlift').sets[0])
-      .toMatchObject({ weight: 112.5, reps: 3, pct: 0.9 });
+      .toMatchObject({ weight: 112.5, reps: 1, pct: 0.9 });
   });
 });
 
@@ -2313,6 +2352,39 @@ test('Smart squat priority is opt-in, persists, and changes the planned beginner
   });
   fireEvent.click(screen.getByRole('button', { name: 'Squat Priority' }));
   expect(screen.getByText(/replaces medium Bench with light Squat/)).toBeInTheDocument();
+});
+
+test('Smart practical route is available above beginner and immediately replaces an untouched workout', async () => {
+  localStorage.clear();
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1,
+    trainingModel: 'smart',
+    currentCycle: 1,
+    prs: { Squat: 150, Bench: 100, Deadlift: 180 },
+    bodyWeights: [{ bodyWeight: 80 }],
+    history: [],
+  }));
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 }));
+  fireEvent.click(screen.getByRole('button', { name: 'Balanced SBD Route' }));
+  expect(screen.getByText(/standard route trains Squat, Bench and Deadlift in balance/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Practical SBD Route' }));
+
+  await waitFor(() => {
+    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    expect(saved.trainingFocus).toBe('practical');
+    expect(saved.inProgress.workouts[0].lifts.map(block => [
+      block.lift,
+      block.intensityRole,
+    ])).toEqual([
+      ['Squat', 'heavy'],
+      ['Bench', 'heavy'],
+      ['Deadlift', 'heavy'],
+    ]);
+  });
+
+  expect(screen.getByRole('button', { name: 'Practical SBD Route' })).toBeInTheDocument();
 });
 
 test('Smart squat priority is unavailable above beginner and stale focus is cleared', async () => {

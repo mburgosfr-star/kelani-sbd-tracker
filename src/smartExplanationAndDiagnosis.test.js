@@ -251,12 +251,12 @@ test.each(['nl', 'en', 'ca'])(
 );
 
 test.each(SMART_IDEAL_LEVELS)(
-  'every active %s W1-W28 route screen keeps readiness informational and blocker-free',
+  'every active %s W1-W27 route screen keeps readiness informational and blocker-free',
   athleteLevel => {
     let history = [];
     const workouts = [];
 
-    for (let currentIndex = 0; currentIndex < 28; currentIndex += 1) {
+    for (let currentIndex = 0; currentIndex < 27; currentIndex += 1) {
       const workout = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
         programProfile: 'kelaniSbd',
         squat: 150,
@@ -273,7 +273,7 @@ test.each(SMART_IDEAL_LEVELS)(
       history = completeIdealRouteWorkout(history, workout);
     }
 
-    expect(workouts).toHaveLength(28);
+    expect(workouts).toHaveLength(27);
 
     workouts.forEach((workout, index) => {
       expect(workout.smartIdealRoute).toMatchObject({
@@ -463,7 +463,7 @@ test('explains genuinely light secondary lifts from their dose', () => {
 
   expect(rows).toHaveLength(2);
   rows.forEach(row => {
-    expect(row.value).toContain('Light work.');
+    expect(row.value).toContain('Light intensity.');
     expect(row.value).not.toContain('Lower volume for the secondary lift');
   });
 });
@@ -523,6 +523,75 @@ test('C4W9 primary and secondary medium lifts use the same intensity explanation
       kind: 'prescription',
     },
   ]);
+});
+
+test('ideal-route modal keeps planned intensities and presents every lift consistently', () => {
+  const deadlift = smartLift({
+    lift: 'Deadlift',
+    labelKey: 'topSingle',
+    reps: 1,
+    previousPct: 0.90,
+    currentPct: 0.90,
+  });
+  deadlift.intensityRole = 'heavy';
+  deadlift.smartPrescription.intensityRole = 'heavy';
+
+  const bench = smartLift({
+    lift: 'Bench',
+    role: 'secondary',
+    labelKey: 'topDouble',
+    reps: 2,
+  });
+  bench.intensityRole = 'light';
+  bench.smartPrescription.intensityRole = 'light';
+
+  const squat = smartLift({
+    lift: 'Squat',
+    role: 'tertiary',
+    labelKey: 'topTriple',
+    reps: 3,
+  });
+  squat.intensityRole = 'light';
+  squat.smartPrescription.intensityRole = 'light';
+
+  [deadlift, bench, squat].forEach(liftBlock => {
+    liftBlock.smartPrescription.topSetAnchorPct = 0;
+    liftBlock.smartPrescription.volumeAnchorPct = 0;
+    liftBlock.smartPrescription.plannedVolumePct = 0;
+  });
+
+  const workout = workoutWith([deadlift, bench, squat]);
+  workout.smartIdealRoute = { stage: 'normal', workoutNumber: 24 };
+
+  const rows = getSmartPrescriptionDetailRows(workout);
+
+  expect(rows).toHaveLength(3);
+  expect(rows[0].value).toBe(
+    'Top single: 90% · 5×4×72.5% · Heavy intensity.'
+  );
+  expect(rows[1].value).toContain('Light intensity.');
+  expect(rows[2].value).toContain('Light intensity.');
+  rows.forEach(row => {
+    expect(row.value).not.toContain('Primary work was selected');
+    expect(row.value).not.toContain(' kg');
+    expect(row.value.split(' · ').at(-1)).toMatch(/^(Heavy|Light) intensity\./);
+  });
+
+  const diagnosis = buildSmartDiagnosticText(workout);
+  expect(diagnosis).toContain(
+    'Selection: primary=Deadlift, secondary=Bench, tertiary=Squat'
+  );
+  expect(diagnosis).toContain(
+    'Deadlift technical: role=primary, intensity=heavy, repeatVariation=true'
+  );
+  expect(diagnosis).toContain(
+    'Bench technical: role=secondary, intensity=light, repeatVariation=true'
+  );
+  expect(diagnosis).toContain(
+    'Squat technical: role=tertiary, intensity=light, repeatVariation=true'
+  );
+  expect(diagnosis).not.toContain('measuredDoseIntensity');
+  expect(diagnosis).not.toMatch(/(?:topAnchor|volumeAnchor|plannedVolume)=0%/);
 });
 
 test('lists every lift still short of its real 1RM as a blocker, not just the single weakest one', () => {
@@ -751,7 +820,7 @@ test('explains W41-style secondary squat from its measured light intensity, not 
 
   const [row] = getSmartPrescriptionDetailRows(workoutWith([squat, bench]));
 
-  expect(row.value).toContain('Light work.');
+  expect(row.value).toContain('Light intensity.');
   expect(row.value).not.toContain('Lower volume');
 });
 
@@ -784,7 +853,7 @@ test("a lift forced light on a single-lift day (heavy weekly slot already used) 
   );
 
   expect(row.value).not.toContain('Lower volume for the secondary lift.');
-  expect(row.value).toBe('6×4×60% · Light work.');
+  expect(row.value).toBe('6×4×60% · Light intensity.');
   expect(row.value).not.toContain('heavy work');
 });
 

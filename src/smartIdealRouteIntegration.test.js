@@ -108,9 +108,7 @@ test('beginner squat priority reaches generated training and taper workouts with
     expect(focused[number - 1].lifts.map(block => block.lift)).toEqual(['Deadlift', 'Squat']);
     expect(standard[number - 1].lifts.map(block => block.lift)).toEqual(['Deadlift', 'Bench']);
     expect(focused[number - 1].lifts[1].sets.length).toBeGreaterThanOrEqual(3);
-    expect(focused[number - 1].lifts[1].sets.every(set =>
-      set.reps >= 4 && set.pct >= 0.6
-    )).toBe(true);
+    expect(focused[number - 1].lifts[1].sets.every(set => set.pct >= 0.6)).toBe(true);
   }
   expect(focused.slice(0, 28).map(workout => workout.type)).toEqual(
     standard.slice(0, 28).map(workout => workout.type)
@@ -137,7 +135,7 @@ test('Smart exposes the full provisional ideal route through meet and one recove
   });
   const visible = workouts.filter(workout => workout.smartVisible !== false);
 
-  expect(visible).toHaveLength(29);
+  expect(visible).toHaveLength(28);
   expect(visible[0]).toMatchObject({
     number: 1,
     type: 'training',
@@ -146,15 +144,15 @@ test('Smart exposes the full provisional ideal route through meet and one recove
   expect(visible.slice(1).every(workout => (
     workout.smartFuturePreview === true && workout.smartSelectable === false
   ))).toBe(true);
+  expect(visible[26]).toMatchObject({
+    number: 27,
+    type: 'meet',
+    smartIdealRoute: { workoutNumber: 27, stage: 'meet' },
+  });
   expect(visible[27]).toMatchObject({
     number: 28,
-    type: 'meet',
-    smartIdealRoute: { workoutNumber: 28, stage: 'meet' },
-  });
-  expect(visible[28]).toMatchObject({
-    number: 29,
     type: 'rest',
-    smartIdealRoute: { workoutNumber: 29, stage: 'post-meet' },
+    smartIdealRoute: { workoutNumber: 28, stage: 'post-meet' },
   });
 
   visible
@@ -170,7 +168,7 @@ test('Smart exposes the full provisional ideal route through meet and one recove
 test('Smart previews every required recovery day after a meet with failed attempts', () => {
   let history = [];
 
-  for (let index = 0; index < 28; index += 1) {
+  for (let index = 0; index < 27; index += 1) {
     const workout = generateCurrent({
       history,
       currentIndex: index,
@@ -185,26 +183,26 @@ test('Smart previews every required recovery day after a meet with failed attemp
     ...baseOptions,
     athleteLevel: 'intermediate',
     history,
-    currentIndex: 28,
+    currentIndex: 27,
   });
   const recoveryPreview = workouts
     .filter(workout => workout.smartVisible !== false)
-    .slice(28);
+    .slice(27);
 
-  expect(recoveryPreview).toHaveLength(3);
+  expect(recoveryPreview).toHaveLength(2);
   expect(recoveryPreview.map(workout => ({
     number: workout.number,
     type: workout.type,
     stage: workout.smartIdealRoute?.stage,
     target: workout.smartIdealRoute?.postMeetRecoveryTarget,
-  }))).toEqual(Array.from({ length: 3 }, (_, offset) => ({
-    number: 29 + offset,
+  }))).toEqual(Array.from({ length: 2 }, (_, offset) => ({
+    number: 28 + offset,
     type: 'rest',
     stage: 'post-meet',
-    target: 3,
+    target: 2,
   })));
   expect(recoveryPreview[0]).toMatchObject({
-    number: 29,
+    number: 28,
     smartSelectable: true,
   });
   expect(recoveryPreview.slice(1).every(workout => (
@@ -422,15 +420,15 @@ test('the live ideal route starts with the exact intermediate W1 prescription', 
     readiness: {
       meetProjection: {
         available: true,
-        minimumWorkoutNumber: 28,
-        maximumWorkoutNumber: 28,
-        label: 'C1W28',
+        minimumWorkoutNumber: 27,
+        maximumWorkoutNumber: 27,
+        label: 'C1W27',
         projectedByIdealRoute: true,
       },
     },
   });
   expect(workout.smartIdealRoute).toMatchObject({
-    version: 1,
+    version: 3,
     workoutNumber: 1,
     athleteLevel: 'intermediate',
     stage: 'normal',
@@ -444,22 +442,29 @@ test('the live ideal route starts with the exact intermediate W1 prescription', 
 
   const squat = workout.lifts[0];
   expect(squat.sets[0]).toMatchObject({
-    labelKey: 'topTriple',
-    reps: 3,
+    labelKey: 'topSingle',
+    reps: 1,
     precisePct: 0.9,
     weight: 135,
   });
   expect(squat.sets.slice(1).every(set => (
     set.labelKey === 'backoff' &&
-    set.reps === 6 &&
-    set.precisePct === 0.6
+    set.reps === 4 &&
+    set.precisePct === 0.85
   ))).toBe(true);
 
   const bench = workout.lifts[1];
-  expect(bench.sets.every(set => (
-    set.labelKey === 'workSets' &&
-    set.precisePct === 0.6 &&
-    set.weight === 60
+  expect(bench.sets[0]).toMatchObject({
+    labelKey: 'topTriple',
+    reps: 3,
+    precisePct: 0.8,
+    weight: 80,
+  });
+  expect(bench.sets.slice(1).every(set => (
+    set.labelKey === 'backoff' &&
+    set.reps === 6 &&
+    set.precisePct === 0.75 &&
+    set.weight === 75
   ))).toBe(true);
   expectFullLiftGrids(workout);
 });
@@ -524,9 +529,9 @@ test('TOO HARD keeps the ideal route and inserts exactly one recovery day', () =
       reason: SMART_DECISION_REASONS.IDEAL_ROUTE,
       readiness: {
         meetProjection: {
-          label: 'C1W29',
-          minimumWorkoutNumber: 29,
-          maximumWorkoutNumber: 29,
+          label: 'C1W28',
+          minimumWorkoutNumber: 28,
+          maximumWorkoutNumber: 28,
           delayedByTooHardCount: 1,
           pendingTooHardDelayCount: 1,
         },
@@ -553,7 +558,7 @@ test('multiple failed sets in one non-meet workout still add only one rest day',
       reason: SMART_DECISION_REASONS.IDEAL_ROUTE,
       readiness: {
         meetProjection: {
-          label: 'C1W29',
+          label: 'C1W28',
           delayedByTooHardCount: 1,
         },
       },
@@ -606,7 +611,7 @@ test('an explicitly failed accessory set earns the same single TOO HARD rest day
     },
   });
   expect(recovery.smartDecisionSummary?.readiness?.meetProjection?.label)
-    .toBe('C1W29');
+    .toBe('C1W28');
 });
 
 test('a hard beginner W1 adds a rest before rather than consuming planned W2 rest', () => {
@@ -731,15 +736,15 @@ test('TOO EASY stays under route control while ending pristine status', () => {
   expect(acceleratedW2.type).toBe('training');
   expect(acceleratedW2.smartDecisionSummary.readiness.meetProjection)
     .toMatchObject({
-      label: 'C1W27',
-      minimumWorkoutNumber: 27,
-      maximumWorkoutNumber: 27,
+      label: 'C1W26',
+      minimumWorkoutNumber: 26,
+      maximumWorkoutNumber: 26,
       acceleratedByTooEasyCount: 1,
       pendingTooEasyAccelerationCount: 1,
     });
 });
 
-test('C4W22 TOO EASY keeps ideal W23 and moves the meet from W28 to W27', () => {
+test('C4W22 TOO EASY keeps ideal W23 and moves the meet from W27 to W26', () => {
   let history = [];
 
   for (let currentIndex = 0; currentIndex < 22; currentIndex += 1) {
@@ -765,9 +770,9 @@ test('C4W22 TOO EASY keeps ideal W23 and moves the meet from W28 to W27', () => 
       reason: SMART_DECISION_REASONS.IDEAL_ROUTE,
       readiness: {
         meetProjection: {
-          label: 'C1W27',
-          minimumWorkoutNumber: 27,
-          maximumWorkoutNumber: 27,
+          label: 'C1W26',
+          minimumWorkoutNumber: 26,
+          maximumWorkoutNumber: 26,
           acceleratedByTooEasyCount: 1,
         },
       },
@@ -780,27 +785,27 @@ test('C4W22 TOO EASY keeps ideal W23 and moves the meet from W28 to W27', () => 
     ]);
 
   history = completeWorkout(history, w23, 'good');
-  for (let currentIndex = 23; currentIndex < 26; currentIndex += 1) {
+  for (let currentIndex = 23; currentIndex < 25; currentIndex += 1) {
     const workout = generateCurrent({ history, currentIndex });
     expect(workout.smartDecisionSummary.readiness.meetProjection.label)
-      .toBe('C1W27');
+      .toBe('C1W26');
     history = completeWorkout(history, workout, 'good');
   }
 
-  const meet = generateCurrent({ history, currentIndex: 26 });
+  const meet = generateCurrent({ history, currentIndex: 25 });
   expect(meet).toMatchObject({
-    number: 27,
+    number: 26,
     type: 'meet',
     smartIdealRoute: {
-      workoutNumber: 28,
+      workoutNumber: 27,
       stage: 'meet',
     },
     smartDecisionSummary: {
       readiness: {
         meetProjection: {
-          label: 'C1W27',
-          minimumWorkoutNumber: 27,
-          maximumWorkoutNumber: 27,
+          label: 'C1W26',
+          minimumWorkoutNumber: 26,
+          maximumWorkoutNumber: 26,
         },
       },
     },
@@ -825,26 +830,21 @@ test('two TOO EASY taper workouts move the meet exactly two days closer', () => 
 
   expect(combinedW24.smartDecisionSummary.readiness.meetProjection)
     .toMatchObject({
-      label: 'C1W26',
-      minimumWorkoutNumber: 26,
-      maximumWorkoutNumber: 26,
+      label: 'C1W25',
+      minimumWorkoutNumber: 25,
+      maximumWorkoutNumber: 25,
       acceleratedByTooEasyCount: 2,
       pendingTooEasyAccelerationCount: 2,
     });
   expect(combinedW24.smartIdealRoute).toMatchObject({
-    workoutNumber: 25,
+    workoutNumber: 26,
     stage: 'taper',
-    accelerationCreditsConsumed: 1,
-    accelerationActions: ['remove-optional-rest'],
-    skippedRouteWorkoutNumbers: [24],
+    accelerationCreditsConsumed: 2,
+    accelerationActions: ['remove-optional-rest', 'remove-training'],
+    skippedRouteWorkoutNumbers: [24, 25],
   });
-  expect(combinedW24.lifts.map(({ lift, intensityRole }) => [
-    lift,
-    intensityRole,
-  ])).toEqual([
-    ['Bench', 'heavy'],
-    ['Squat', 'medium'],
-  ]);
+  expect(combinedW24.type).toBe('rest');
+  expect(combinedW24.lifts).toEqual([]);
 });
 
 test('legacy unmarked work is valid evidence and starts at the first unresolved heavy row', () => {
@@ -939,9 +939,9 @@ test('a beginner with only Squat evidence starts at the first unresolved Deadlif
       );
       expect(workout.smartDecisionSummary?.readiness?.meetProjection).toMatchObject({
         currentWorkoutNumber: 34,
-        minimumWorkoutNumber: 59,
-        maximumWorkoutNumber: 59,
-        minimumWorkoutsBeforeMeet: 25,
+        minimumWorkoutNumber: 58,
+        maximumWorkoutNumber: 58,
+        minimumWorkoutsBeforeMeet: 24,
         projectedByIdealRoute: true,
       });
       expect(
@@ -962,11 +962,11 @@ test('a beginner with only Squat evidence starts at the first unresolved Deadlif
     history = completeWorkout(history, workout, 'good');
   }
 
-  expect(new Set(projectedMeetLabels)).toEqual(new Set(['C1W59']));
+  expect(new Set(projectedMeetLabels)).toEqual(new Set(['C1W58']));
   expect(meet).toBeTruthy();
-  expect(meet.number).toBe(59);
+  expect(meet.number).toBe(58);
   expect(meet.smartIdealRoute).toMatchObject({
-    workoutNumber: 28,
+    workoutNumber: 27,
     stage: 'meet',
   });
 });
@@ -1050,7 +1050,7 @@ test('a legacy beginner inserts one rest after HARD and then resumes the ideal r
       expect(workout.smartDecisionSummary?.readiness).toMatchObject({
         meetPlanWeakestLift: 'Deadlift',
         meetPlanWeakestPhase: 'second-attempt',
-        meetProjection: { label: 'C1W48' },
+        meetProjection: { label: 'C1W47' },
       });
     }
 
@@ -1067,16 +1067,16 @@ test('a legacy beginner inserts one rest after HARD and then resumes the ideal r
   }
 
   expect(deliveredRouteNumbers).toEqual([
-    15, 16, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+    15, 16, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
   ]);
   expect(deliveredWorkoutTypes).toEqual([
     'training', 'rest', 'rest', 'training', 'rest', 'training',
-    'rest', 'rest', 'training', 'rest', 'training', 'training', 'rest', 'rest', 'meet',
+    'rest', 'rest', 'training', 'rest', 'training', 'training', 'rest', 'meet',
   ]);
   expect(meet).toBeTruthy();
-  expect(meet.number).toBe(49);
+  expect(meet.number).toBe(48);
   expect(meet.smartIdealRoute).toMatchObject({
-    workoutNumber: 28,
+    workoutNumber: 27,
     stage: 'meet',
   });
   expect(meet.lifts.find(block => block.lift === 'Squat').warmups)
@@ -1207,12 +1207,12 @@ test('the pristine route reaches the double phase and keeps every generated grid
 
   expect(w8.smartIdealRoute.phase).toBe('double');
   expect(heavy.sets[0]).toMatchObject({
-    labelKey: 'topDouble',
-    reps: 2,
+    labelKey: 'topSingle',
+    reps: 1,
     precisePct: 0.95,
   });
   expect(heavy.sets.slice(1).every(set => (
-    set.reps === 5 && set.precisePct === 0.65
+    set.reps === 4 && set.precisePct === 0.8
   ))).toBe(true);
   expectFullLiftGrids(w8);
 });
@@ -1265,7 +1265,7 @@ test('C4W18 top single and backoffs use the confirmed real Bench 1RM', () => {
   });
   expect(backoffs.length).toBeGreaterThan(0);
   expect(backoffs.every(set => (
-    set.weight === 70 && set.pct === 0.7 && set.precisePct === 0.7
+    set.weight === 75 && set.pct === 0.75 && set.precisePct === 0.75
   ))).toBe(true);
 });
 
@@ -1301,17 +1301,20 @@ test('beginner W22 keeps taper backoffs and four-rep light work on a full grid',
   expect(squat.sets.slice(1)).toEqual(
     expect.arrayContaining(Array.from({ length: 2 }, () => expect.objectContaining({
       labelKey: 'backoff',
-      weight: 27.5,
+      weight: 32.5,
       reps: 4,
-      precisePct: 0.6,
-      prescribedPct: 0.6,
+      precisePct: 0.75,
+      prescribedPct: 0.75,
     })))
   );
   expect(squat.warmups.length + squat.sets.length).toBe(4);
 
   expect(bench.warmups).toHaveLength(0);
   expect(bench.sets.map(({ weight, reps }) => ({ weight, reps })))
-    .toEqual(Array.from({ length: 4 }, () => ({ weight: 20, reps: 4 })));
+    .toEqual(expect.arrayContaining([
+      { weight: 25, reps: 3 },
+      ...Array.from({ length: 3 }, () => ({ weight: 20, reps: 6 })),
+    ]));
   expect(bench.warmups.length + bench.sets.length).toBe(4);
 });
 
@@ -1347,16 +1350,19 @@ test('beginner W24 uses a useful four-column deadlift ladder and preserves the p
   });
   expect(deadlift.sets[1]).toMatchObject({
     labelKey: 'backoff',
-    weight: 37.5,
+    weight: 45,
     reps: 4,
-    precisePct: 0.6,
-    prescribedPct: 0.6,
+    precisePct: 0.75,
+    prescribedPct: 0.75,
   });
   expect(deadlift.warmups.length + deadlift.sets.length).toBe(4);
 
   expect(bench.warmups).toHaveLength(0);
   expect(bench.sets.map(({ weight, reps }) => ({ weight, reps })))
-    .toEqual(Array.from({ length: 4 }, () => ({ weight: 22.5, reps: 4 })));
+    .toEqual(expect.arrayContaining([
+      { weight: 27.5, reps: 2 },
+      ...Array.from({ length: 3 }, () => ({ weight: 22.5, reps: 5 })),
+    ]));
   expect(bench.warmups.length + bench.sets.length).toBe(4);
 });
 
@@ -1392,27 +1398,30 @@ test('C4W22 gives the reported intermediate Squat four backoffs and Bench three 
   expect(squat.sets.slice(1)).toEqual(
     Array.from({ length: 4 }, () => expect.objectContaining({
       labelKey: 'backoff',
-      weight: 90,
+      weight: 110,
       reps: 4,
-      prescribedPct: 0.6,
+      prescribedPct: 0.75,
     }))
   );
   expect(squat.warmups.length + squat.sets.length).toBe(8);
 
   expect(bench.warmups.map(({ weight, reps }) => ({ weight, reps })))
-    .toEqual([{ weight: 20, reps: 5 }]);
-  expect(bench.sets).toEqual(
-    Array.from({ length: 3 }, () => expect.objectContaining({
-      labelKey: 'workSets',
-      weight: 60,
-      reps: 4,
-      prescribedPct: 0.6,
+    .toEqual([
+      { weight: 20, reps: 5 },
+      { weight: 70, reps: 3 },
+    ]);
+  expect(bench.sets[0]).toMatchObject({
+    labelKey: 'topTriple', weight: 80, reps: 3, prescribedPct: 0.8,
+  });
+  expect(bench.sets.slice(1)).toEqual(
+    Array.from({ length: 1 }, () => expect.objectContaining({
+      labelKey: 'backoff', weight: 65, reps: 6, prescribedPct: 0.65,
     }))
   );
   expect(bench.warmups.length + bench.sets.length).toBe(4);
 });
 
-test('beginner W25 fills three complete grids with a heavy single and useful backoffs', () => {
+test('beginner W25 uses the minimum taper volume needed to fill its grid', () => {
   const routeWorkout = getSmartIdealRouteWorkout({
     workoutNumber: 25,
     athleteLevel: 'beginner',
@@ -1429,7 +1438,7 @@ test('beginner W25 fills three complete grids with a heavy single and useful bac
   const bench = workout.lifts[0];
 
   expect(bench.lift).toBe('Bench');
-  expect(bench.warmups.length + bench.sets.length).toBe(12);
+  expect(bench.warmups.length + bench.sets.length).toBe(4);
   expect(bench.sets[0]).toMatchObject({
     labelKey: 'topSingle',
     reps: 1,
@@ -1439,13 +1448,18 @@ test('beginner W25 fills three complete grids with a heavy single and useful bac
     expect(set).toMatchObject({
       labelKey: 'backoff',
       reps: 4,
-      prescribedPct: 0.6,
+      prescribedPct: 0.75,
     });
-    expect(Number(set.weight)).toBeGreaterThanOrEqual(35 * 0.6);
+    expect(Number(set.weight)).toBeGreaterThanOrEqual(35 * 0.75);
   });
 });
 
-test('every ideal-route taper day preserves the universal taper dose from 10kg through 1000kg', () => {
+test('every ideal-route taper day preserves its role dose and reduced grid volume from 10kg through 1000kg', () => {
+  const taperDose = {
+    heavy: { topReps: 1, topPct: 0.90, volumeReps: 4, volumePct: 0.75 },
+    medium: { topReps: 2, topPct: 0.85, volumeReps: 5, volumePct: 0.70 },
+    light: { topReps: 3, topPct: 0.80, volumeReps: 6, volumePct: 0.65 },
+  };
   SMART_IDEAL_LEVELS.forEach(athleteLevel => {
     for (let workoutNumber = 22; workoutNumber <= 25; workoutNumber += 1) {
       const routeWorkout = getSmartIdealRouteWorkout({
@@ -1498,50 +1512,34 @@ test('every ideal-route taper day preserves the universal taper dose from 10kg t
             ),
           }).toMatchObject({ safeWarmupJumps: true });
 
-          if (liftBlock.intensityRole === 'heavy') {
-            const backoffs = workSets.filter(set => set.labelKey === 'backoff');
-            expect({
-              ...diagnostic,
-              topLabel: workSets[0]?.labelKey,
-              topReps: workSets[0]?.reps,
-              backoffCount: backoffs.length,
-            }).toMatchObject({
-              topLabel: 'topSingle',
-              topReps: 1,
+          const dose = taperDose[liftBlock.intensityRole];
+          const topSets = workSets.filter(set => set.labelKey.startsWith('top'));
+          const volumeSets = workSets.filter(set => (
+            set.labelKey === 'backoff' || set.labelKey === 'workSets'
+          ));
+          expect(volumeSets.length).toBeGreaterThanOrEqual(1);
+          expect(volumeSets.length).toBeLessThanOrEqual(4);
+          expect(topSets.length).toBeLessThanOrEqual(1);
+          topSets.forEach(set => {
+            expect(set).toMatchObject({
+              reps: dose.topReps,
+              prescribedPct: dose.topPct,
             });
-            expect(backoffs.length).toBeGreaterThanOrEqual(1);
-            if (routeWorkout.lifts.length === 1) {
-              expect(warmups.length + workSets.length)
-                .toBeGreaterThanOrEqual(12);
-            } else {
-              expect(backoffs.length).toBeLessThanOrEqual(4);
-            }
-            backoffs.forEach(set => {
-              expect({
-                ...diagnostic,
-                reps: set.reps,
-                prescribedPct: set.prescribedPct,
-                minimumPctMet: Number(set.weight) >= realOneRM * 0.60,
-              }).toMatchObject({
-                reps: 4,
-                prescribedPct: 0.6,
-                minimumPctMet: true,
-              });
-            });
-            return;
-          }
-
-          expect(workSets.length).toBeGreaterThanOrEqual(3);
-          workSets.forEach(set => {
+          });
+          volumeSets.forEach(set => {
             expect({
               ...diagnostic,
               labelKey: set.labelKey,
               reps: set.reps,
-              minimumPctMet: Number(set.weight) >= realOneRM * 0.60,
+              prescribedPct: set.prescribedPct,
+              barbellRoundedNearTarget: Math.abs(
+                Number(set.weight) - realOneRM * dose.volumePct
+              ) <= 1.25,
             }).toMatchObject({
-              labelKey: 'workSets',
-              reps: 4,
-              minimumPctMet: true,
+              labelKey: topSets.length ? 'backoff' : 'workSets',
+              reps: dose.volumeReps,
+              prescribedPct: dose.volumePct,
+              barbellRoundedNearTarget: true,
             });
           });
         });
@@ -1551,11 +1549,47 @@ test('every ideal-route taper day preserves the universal taper dose from 10kg t
 }, 15000);
 
 test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
+  '%s uses exactly the smallest allowed volume count that completes each four-column grid',
+  athleteLevel => {
+    const workouts = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
+      ...baseOptions,
+      athleteLevel,
+    });
+
+    workouts.slice(0, 27).filter(workout => workout.type === 'training')
+      .forEach(workout => {
+        workout.lifts.forEach(liftBlock => {
+          const isTaper = workout.smartIdealRoute?.stage === 'taper';
+          const minimum = isTaper ? 1 : 3;
+          const maximum = isTaper ? 4 : 6;
+          const topCount = liftBlock.sets.filter(set => (
+            set.labelKey.startsWith('top')
+          )).length;
+          const volumeSets = liftBlock.sets.filter(set => (
+            set.labelKey === 'backoff' || set.labelKey === 'workSets'
+          ));
+          const expectedCount = Array.from(
+            { length: maximum - minimum + 1 },
+            (_, index) => minimum + index
+          ).find(count => (
+            (liftBlock.warmups.length + topCount + count) % 4 === 0
+          ));
+
+          expect(volumeSets).toHaveLength(expectedCount);
+          expect(volumeSets.every(set => (
+            set.labelKey === (topCount ? 'backoff' : 'workSets')
+          ))).toBe(true);
+        });
+      });
+  }
+);
+
+test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
   '%s live route preserves dose, barbell, grid and Bench/Row invariants through the meet',
   athleteLevel => {
     let history = [];
 
-    for (let index = 0; index < 28; index += 1) {
+    for (let index = 0; index < 27; index += 1) {
       const workout = generateCurrent({
         history,
         currentIndex: index,
@@ -1598,31 +1632,20 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
           Number(workSets[0]?.weight) || 0
         )).toBe(true);
 
-        if (
-          workout.smartIdealRoute?.stage === 'normal' &&
-          ['medium', 'light'].includes(liftBlock.intensityRole)
-        ) {
-          expect(workSets.reduce(
-            (total, set) => total + Number(set.reps || 0),
-            0
-          )).toBeLessThanOrEqual(24);
-          workSets.forEach(set => {
-            expect(Number(set.reps)).toBeGreaterThanOrEqual(4);
-            expect(Number(set.reps)).toBeLessThanOrEqual(6);
-          });
+        if (workout.smartIdealRoute?.stage === 'normal') {
+          const volumeSets = workSets.filter(set => (
+            set.labelKey === 'backoff' || set.labelKey === 'workSets'
+          ));
+          expect(volumeSets.length).toBeGreaterThanOrEqual(3);
+          expect(volumeSets.length).toBeLessThanOrEqual(6);
         }
 
-        if (
-          workout.smartIdealRoute?.stage === 'taper' &&
-          ['medium', 'light'].includes(liftBlock.intensityRole)
-        ) {
-          expect(workSets.length).toBeGreaterThanOrEqual(3);
-          workSets.forEach(set => {
-            expect(Number(set.reps)).toBeGreaterThanOrEqual(4);
-            expect(Number(set.weight)).toBeGreaterThanOrEqual(
-              Number(baseOptions[liftBlock.lift.toLowerCase()]) * 0.60
-            );
-          });
+        if (workout.smartIdealRoute?.stage === 'taper') {
+          const volumeSets = workSets.filter(set => (
+            set.labelKey === 'backoff' || set.labelKey === 'workSets'
+          ));
+          expect(volumeSets.length).toBeGreaterThanOrEqual(1);
+          expect(volumeSets.length).toBeLessThanOrEqual(4);
         }
 
         if (
@@ -1639,7 +1662,7 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
             expect(set).toMatchObject({
               labelKey: 'backoff',
               reps: 4,
-              precisePct: 0.6,
+              precisePct: 0.75,
             });
           });
         }
@@ -1659,22 +1682,22 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
   }
 );
 
-test('elite ideal route reaches W28 meet and requires one post-meet recovery workout', () => {
+test('elite ideal route reaches W27 meet and requires one post-meet recovery workout', () => {
   let history = [];
 
-  for (let index = 0; index < 28; index += 1) {
+  for (let index = 0; index < 27; index += 1) {
     const workout = generateCurrent({
       history,
       currentIndex: index,
       athleteLevel: 'elite',
     });
 
-    if (index === 27) {
+    if (index === 26) {
       expect(workout.type).toBe('meet');
       expect(workout.smartIdealRoute).toMatchObject({
         stage: 'meet',
         postMeetRecoveryTarget: 1,
-        nextCycleWorkout: 30,
+        nextCycleWorkout: 29,
       });
       expectFullLiftGrids(workout);
     }
@@ -1684,7 +1707,7 @@ test('elite ideal route reaches W28 meet and requires one post-meet recovery wor
 
   expect(isSmartCycleCompleteAfterHistory(history, 1)).toBe(false);
 
-  for (let index = 28; index < 29; index += 1) {
+  for (let index = 27; index < 28; index += 1) {
     const recovery = generateCurrent({
       history,
       currentIndex: index,
@@ -1700,8 +1723,8 @@ test('elite ideal route reaches W28 meet and requires one post-meet recovery wor
   }
 });
 
-test('W28 remains the meet when readiness diagnostics are incomplete', () => {
-  const history = Array.from({ length: 27 }, (_, index) => ({
+test('W27 remains the meet when readiness diagnostics are incomplete', () => {
+  const history = Array.from({ length: 26 }, (_, index) => ({
     cycle: 1,
     workoutNumber: index + 1,
     workoutEffort: 'good',
@@ -1719,17 +1742,17 @@ test('W28 remains the meet when readiness diagnostics are incomplete', () => {
       sets: [],
     },
   }));
-  const w28 = generateCurrent({
+  const w27 = generateCurrent({
     history,
-    currentIndex: 27,
+    currentIndex: 26,
     options: { skipMeetProjectionSimulation: true },
   });
 
-  expect(w28.smartDecisionSummary?.readiness?.meetPlanReady).toBe(false);
-  expect(w28.type).toBe('meet');
-  expect(w28.number).toBe(28);
-  expect(w28.smartIdealRoute).toMatchObject({
-    workoutNumber: 28,
+  expect(w27.smartDecisionSummary?.readiness?.meetPlanReady).toBe(false);
+  expect(w27.type).toBe('meet');
+  expect(w27.number).toBe(27);
+  expect(w27.smartIdealRoute).toMatchObject({
+    workoutNumber: 27,
     stage: 'meet',
   });
 });

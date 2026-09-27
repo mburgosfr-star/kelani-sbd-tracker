@@ -130,9 +130,9 @@ import {
 } from './smartTrainingEngine';
 import { buildAutomaticNextSmartCycle } from './smartCycleTransition';
 import {
+  getSmartIdealNormalTrainingDays,
   isSmartIdealRouteEnabled,
   resolveSmartIdealRouteStartCycle,
-  SMART_IDEAL_NORMAL_ROUTE,
   SMART_TRAINING_FOCUSES,
   normalizeSmartTrainingFocus,
 } from './smartIdealRoute';
@@ -1747,6 +1747,10 @@ export function shouldUseCompactDashboardLayout({ workout, meetState, recentPrEv
 export function programScreenStyle() {
   return {
     ...responsiveContentScreenStyle(),
+    // The fixed screen height already ends above the reserved navigation
+    // space. Do not reserve that clearance twice: compact routes need these
+    // final pixels to keep the lower list toggle fully inside its viewport.
+    paddingBottom: 0,
     height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
     display: 'flex',
     flexDirection: 'column',
@@ -1779,7 +1783,7 @@ export function programWorkoutListVerticalSpacing({ compact = false } = {}) {
       ? '0 0 clamp(8px, 1.2dvh, 12px)'
       : '0 0 clamp(10px, 1.5dvh, 16px)',
     bottomToggleMargin: compact
-      ? 'clamp(8px, 1.2dvh, 12px) 0 0'
+      ? 'calc(clamp(8px, 1.2dvh, 12px) - 2px) 0 2px'
       : 'clamp(10px, 1.5dvh, 16px) 0 0',
   };
 }
@@ -6527,8 +6531,12 @@ function formatSmartPrescriptionPercent(pct) {
   return formatted ? `${formatted}%` : null;
 }
 
-function getSmartIntensityReasonDisplayText(liftBlock = {}, t = translations.en) {
-  const intensity = getSmartIntensityRole(liftBlock);
+function getSmartIntensityReasonDisplayText(
+  liftBlock = {},
+  t = translations.en,
+  workout = {},
+) {
+  const intensity = getDisplayedSmartIntensityRole({ liftBlock, workout });
   const reasonByIntensity = {
     heavy: t.smartHeavyTotalIntensityReason,
     medium: t.smartMediumTotalIntensityReason,
@@ -6538,7 +6546,12 @@ function getSmartIntensityReasonDisplayText(liftBlock = {}, t = translations.en)
   return reasonByIntensity[intensity] || reasonByIntensity.light;
 }
 
-function getSmartLiftPrescriptionPlan(liftBlock = {}, t = translations.en, isSingleLiftWorkout = false) {
+function getSmartLiftPrescriptionPlan(
+  liftBlock = {},
+  t = translations.en,
+  isSingleLiftWorkout = false,
+  workout = {},
+) {
   const prescription = liftBlock?.smartPrescription || null;
   if (!prescription) return null;
 
@@ -6577,16 +6590,10 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = translations.en, isSin
     const currentText = formatSmartPrescriptionPercent(currentPct);
     const previousText = formatSmartPrescriptionPercent(previousPct);
     const topLabel = getSmartSetDisplayLabel(topSet, t);
-    const currentWeight = Number(topSet.weight) || 0;
-    const previousWeight = Number(prescription.topSetAnchorWeight) || 0;
-    const weightText = currentWeight > 0 && previousWeight > 0
-      ? ` (${formatWeightFromKg(previousWeight, WEIGHT_UNITS.KG)} to ${formatWeightFromKg(currentWeight, WEIGHT_UNITS.KG)})`
-      : '';
-
     if (previousText && currentText) {
-      parts.push(`${topLabel}: ${previousText} to ${currentText}${weightText}`);
+      parts.push(`${topLabel}: ${previousText} to ${currentText}`);
     } else if (currentText) {
-      parts.push(`${topLabel}: ${currentText}${currentWeight > 0 ? ` (${formatWeightFromKg(currentWeight, WEIGHT_UNITS.KG)})` : ''}`);
+      parts.push(`${topLabel}: ${currentText}`);
     }
   }
 
@@ -6611,7 +6618,7 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = translations.en, isSin
     }).join(' + '));
   }
 
-  const reasonParts = [getSmartIntensityReasonDisplayText(liftBlock, t)];
+  const reasonParts = [getSmartIntensityReasonDisplayText(liftBlock, t, workout)];
   if (prescription.regressionReason) {
     reasonParts.push(
       prescription.regressionReason === 'ready-taper'
@@ -6664,6 +6671,7 @@ function getSmartLiftPrescriptionPlan(liftBlock = {}, t = translations.en, isSin
 function getFrequencySupplementedLiftPrescriptionPlan(
   liftBlock = {},
   t = translations.en,
+  workout = {},
 ) {
   const prescription = liftBlock?.smartPrescription || {};
 
@@ -6692,12 +6700,8 @@ function getFrequencySupplementedLiftPrescriptionPlan(
   const planParts = [
     `${t.smartTopSingle}: ${formatPct(topSingle.pct)}`,
     `${volumeSets.length}×${volumeReps}×${formatPct(volumePct)}`,
-    getSmartIntensityReasonDisplayText(liftBlock, t),
+    getSmartIntensityReasonDisplayText(liftBlock, t, workout),
   ];
-
-  planParts.push(
-    t.smartPrimarySelectionReason,
-  );
 
   return {
     label: `${liftBlock.lift} (${t.smartPrescriptionPlan})`,
@@ -6719,8 +6723,8 @@ export function getSmartPrescriptionDetailRows(workout = {}, t = translations.en
 
   return (workout.lifts || [])
     .map(liftBlock => (
-      getFrequencySupplementedLiftPrescriptionPlan(liftBlock, t)
-      || getSmartLiftPrescriptionPlan(liftBlock, t, isSingleLiftWorkout)
+      getFrequencySupplementedLiftPrescriptionPlan(liftBlock, t, workout)
+      || getSmartLiftPrescriptionPlan(liftBlock, t, isSingleLiftWorkout, workout)
     ))
     .filter(row => row?.value);
 }
@@ -6749,10 +6753,24 @@ export function buildSmartDiagnosticText(workout = {}, t = translations.en, curr
     lines.push(`${row.label}: ${row.value}`);
   });
 
-  if (selection.primaryLift || selection.secondaryLift) {
+  const selectedLiftByRole = (workout.lifts || []).reduce((result, liftBlock) => {
+    const role = String(
+      liftBlock?.smartPrescription?.role || liftBlock?.role || ''
+    ).toLowerCase();
+    if (['primary', 'secondary', 'tertiary'].includes(role) && !result[role]) {
+      result[role] = liftBlock.lift;
+    }
+    return result;
+  }, {});
+  const selectedPrimaryLift = selection.primaryLift || selectedLiftByRole.primary;
+  const selectedSecondaryLift = selection.secondaryLift || selectedLiftByRole.secondary;
+  const selectedTertiaryLift = selection.tertiaryLift || selectedLiftByRole.tertiary;
+
+  if (selectedPrimaryLift || selectedSecondaryLift || selectedTertiaryLift) {
     lines.push(
-      `Selection: primary=${selection.primaryLift || 'none'}, ` +
-      `secondary=${selection.secondaryLift || 'none'}`
+      `Selection: primary=${selectedPrimaryLift || 'none'}, ` +
+      `secondary=${selectedSecondaryLift || 'none'}` +
+      (selectedTertiaryLift ? `, tertiary=${selectedTertiaryLift}` : '')
     );
   }
 
@@ -6784,16 +6802,27 @@ export function buildSmartDiagnosticText(workout = {}, t = translations.en, curr
 
   (workout.lifts || []).forEach(liftBlock => {
     const prescription = liftBlock?.smartPrescription || {};
+    const displayedIntensity = getDisplayedSmartIntensityRole({
+      liftBlock,
+      workout,
+    });
+    const percentageDetails = [
+      ['topAnchor', prescription.topSetAnchorPct],
+      ['volumeAnchor', prescription.volumeAnchorPct],
+      ['plannedVolume', prescription.plannedVolumePct],
+    ]
+      .filter(([, value]) => Number(value) > 0)
+      .map(([label, value]) => `${label}=${formatDiagnosisPct(value)}`);
+    const technicalDetails = [
+      `role=${prescription.role || liftBlock.role || 'unknown'}`,
+      `intensity=${displayedIntensity}`,
+      ...percentageDetails,
+      `repeatVariation=${Boolean(prescription.repeatVariationApplied)}`,
+      `regression=${prescription.regressionReason || 'none'}`,
+      `gridItems=${Number(prescription.gridItemCount) || 0}`,
+    ];
     lines.push(
-      `${liftBlock.lift} technical: ` +
-      `role=${prescription.role || liftBlock.role || 'unknown'}, ` +
-      `intensity=${getSmartIntensityRole(liftBlock)}, ` +
-      `topAnchor=${formatDiagnosisPct(prescription.topSetAnchorPct)}, ` +
-      `volumeAnchor=${formatDiagnosisPct(prescription.volumeAnchorPct)}, ` +
-      `plannedVolume=${formatDiagnosisPct(prescription.plannedVolumePct)}, ` +
-      `repeatVariation=${Boolean(prescription.repeatVariationApplied)}, ` +
-      `regression=${prescription.regressionReason || 'none'}, ` +
-      `gridItems=${Number(prescription.gridItemCount) || 0}`
+      `${liftBlock.lift} technical: ${technicalDetails.join(', ')}`
     );
   });
 
@@ -9112,20 +9141,39 @@ function WorkoutSetupSection({ workoutSetup, onSave, t }) {
 function TrainingFocusSection({ trainingFocus, onChange, athleteLevel, t }) {
   const [open, setOpen] = useState(false);
   const beginner = athleteLevel === 'beginner';
-  const focused = beginner && trainingFocus === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT;
+  const normalizedFocus = normalizeSmartTrainingFocus(trainingFocus);
+  const activeFocus = !beginner && normalizedFocus === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT
+    ? SMART_TRAINING_FOCUSES.STANDARD
+    : normalizedFocus;
+  const focusContent = {
+    [SMART_TRAINING_FOCUSES.STANDARD]: {
+      label: t.trainingFocusBalanced,
+      explanation: t.trainingFocusBalancedExplanation,
+    },
+    [SMART_TRAINING_FOCUSES.PRACTICAL]: {
+      label: t.trainingFocusPractical,
+      explanation: t.trainingFocusPracticalExplanation,
+    },
+    [SMART_TRAINING_FOCUSES.BEGINNER_SQUAT]: {
+      label: t.trainingFocusSquat,
+      explanation: t.trainingFocusExplanation,
+    },
+  };
+  const activeContent = focusContent[activeFocus];
 
   return <>
     <SettingsListRow
       label={t.trainingFocus}
-      actionLabel={focused ? t.trainingFocusSquat : t.trainingFocusBalanced}
+      actionLabel={activeContent.label}
       onAction={() => setOpen(true)}
     />
     {open && <SettingsModal title={t.trainingFocus} onClose={() => setOpen(false)}>
       <p style={{ fontSize: 13, lineHeight: 1.45, color: THEME.muted }}>
-        {focused ? t.trainingFocusExplanation : t.trainingFocusBalancedExplanation}
+        {activeContent.explanation}
       </p>
       {[
         [SMART_TRAINING_FOCUSES.STANDARD, t.trainingFocusBalanced],
+        [SMART_TRAINING_FOCUSES.PRACTICAL, t.trainingFocusPractical],
         [SMART_TRAINING_FOCUSES.BEGINNER_SQUAT, beginner ? t.trainingFocusSquat : `${t.trainingFocusSquat} (${t.trainingFocusBeginnerOnlyShort})`],
       ].map(([value, label]) => <button
         type="button"
@@ -9133,7 +9181,7 @@ function TrainingFocusSection({ trainingFocus, onChange, athleteLevel, t }) {
         disabled={!beginner && value === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT}
         onClick={() => { onChange(value); setOpen(false); }}
         style={{
-          ...selectionModalButtonStyle((focused ? SMART_TRAINING_FOCUSES.BEGINNER_SQUAT : SMART_TRAINING_FOCUSES.STANDARD) === value),
+          ...selectionModalButtonStyle(activeFocus === value),
           opacity: !beginner && value === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT ? 0.5 : 1,
         }}
       >{label}</button>)}
@@ -9581,6 +9629,24 @@ export function getHistoricalSmartIntensityRole(liftBlock = {}) {
   return getSmartIntensityRole(liftBlock);
 }
 
+export function getDisplayedSmartIntensityRole({
+  liftBlock = {},
+  workout = {},
+  preserveHistoricalIntensityLabels = false,
+} = {}) {
+  const explicitRole = String(liftBlock.intensityRole || '').toLowerCase();
+  if (
+    workout?.smartIdealRoute &&
+    ['heavy', 'medium', 'light'].includes(explicitRole)
+  ) {
+    return explicitRole;
+  }
+
+  return preserveHistoricalIntensityLabels
+    ? getHistoricalSmartIntensityRole(liftBlock)
+    : getSmartIntensityRole(liftBlock);
+}
+
 function ProgramWorkoutTitleRows({
   workout,
   t,
@@ -9602,9 +9668,11 @@ function ProgramWorkoutTitleRows({
     workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant);
 
   const intensityLabel = liftBlock => {
-    const role = preserveHistoricalIntensityLabels
-      ? getHistoricalSmartIntensityRole(liftBlock)
-      : getSmartIntensityRole(liftBlock);
+    const role = getDisplayedSmartIntensityRole({
+      liftBlock,
+      workout,
+      preserveHistoricalIntensityLabels,
+    });
     const key = `smartIntensity${role[0].toUpperCase()}${role.slice(1)}`;
     return t[key] || role;
   };
@@ -10141,9 +10209,14 @@ function applyCompletedHistorySnapshotsToWorkouts(workouts = [], history = [], c
 }
 
 export function getSmartProgramTitle(trainingFocus, t) {
-  return normalizeSmartTrainingFocus(trainingFocus) === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT
-    ? t.trainingFocusSquat
-    : t.trainingFocusBalanced;
+  const normalizedFocus = normalizeSmartTrainingFocus(trainingFocus);
+  if (normalizedFocus === SMART_TRAINING_FOCUSES.PRACTICAL) {
+    return t.trainingFocusPractical;
+  }
+  if (normalizedFocus === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT) {
+    return t.trainingFocusSquat;
+  }
+  return t.trainingFocusBalanced;
 }
 
 function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], currentCycle, onSelect, onStartNewCycle, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, trainingFocus = SMART_TRAINING_FOCUSES.STANDARD, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
@@ -10650,8 +10723,10 @@ function Onboarding({ onStart, t }) {
       history: [],
       bodyWeights: [{ bodyWeight: startingBodyWeight }],
     });
-    const trainingDays = Object.values(SMART_IDEAL_NORMAL_ROUTE[athleteLevel])
-      .filter(lifts => lifts.length > 0).length;
+    const trainingDays = getSmartIdealNormalTrainingDays({
+      athleteLevel,
+      trainingFocus: selectedTrainingFocus,
+    });
 
     return { selectedWeightUnit, startingBodyWeight, s, b, d, athleteLevel, trainingDays };
   }
@@ -10662,7 +10737,11 @@ function Onboarding({ onStart, t }) {
       setOnboardingError(t.fillRequiredFields);
       return;
     }
-    if (step === 1 && profile.athleteLevel !== 'beginner') {
+    if (
+      step === 1 &&
+      profile.athleteLevel !== 'beginner' &&
+      selectedTrainingFocus === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT
+    ) {
       setSelectedTrainingFocus(SMART_TRAINING_FOCUSES.STANDARD);
     }
     setOnboardingError('');
@@ -10682,9 +10761,11 @@ function Onboarding({ onStart, t }) {
     onStart(startingProfile.s, startingProfile.b, startingProfile.d, {
       weightUnit: startingProfile.selectedWeightUnit,
       trainingModel: getNewUserTrainingModel(),
-      trainingFocus: startingProfile.athleteLevel === 'beginner'
-        ? selectedTrainingFocus
-        : SMART_TRAINING_FOCUSES.STANDARD,
+      trainingFocus:
+        startingProfile.athleteLevel !== 'beginner' &&
+        selectedTrainingFocus === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT
+          ? SMART_TRAINING_FOCUSES.STANDARD
+          : selectedTrainingFocus,
     }, { bodyWeight: startingProfile.startingBodyWeight });
   }
 
@@ -10958,9 +11039,10 @@ function Onboarding({ onStart, t }) {
           <div role="group" aria-label={t.onboardingGoalLabel} style={{ display: 'grid', gap: 10 }}>
             {[
               [SMART_TRAINING_FOCUSES.STANDARD, t.onboardingGeneralStrength, t.onboardingGeneralStrengthDescription],
+              [SMART_TRAINING_FOCUSES.PRACTICAL, t.trainingFocusPractical, t.onboardingPracticalRouteDescription],
               [SMART_TRAINING_FOCUSES.BEGINNER_SQUAT, t.onboardingSquatGoal, t.onboardingSquatGoalDescription],
             ].map(([focus, label, description]) => {
-              const available = focus === SMART_TRAINING_FOCUSES.STANDARD || startingProfile.athleteLevel === 'beginner';
+              const available = focus !== SMART_TRAINING_FOCUSES.BEGINNER_SQUAT || startingProfile.athleteLevel === 'beginner';
               const selected = available && selectedTrainingFocus === focus;
               return <button
                 type="button"
@@ -10975,9 +11057,6 @@ function Onboarding({ onStart, t }) {
               </button>;
             })}
           </div>
-          {startingProfile.athleteLevel !== 'beginner' && <p style={{ color: THEME.muted, fontSize: 12, lineHeight: 1.35 }}>
-            {t.trainingFocusBeginnerOnly}
-          </p>}
           <dl style={{ display: 'grid', gap: 12, margin: '22px 0 0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
               <dt style={{ color: THEME.muted, fontWeight: 700 }}>{t.onboardingCalculatedLevel}</dt>
@@ -12418,9 +12497,12 @@ function App() {
       history: [],
       bodyWeights: initialBodyData ? [{ ...initialBodyData }] : [],
     });
-    const startingTrainingFocus = startingAthleteLevel === 'beginner'
-      ? normalizeSmartTrainingFocus(profile.trainingFocus)
-      : SMART_TRAINING_FOCUSES.STANDARD;
+    const requestedTrainingFocus = normalizeSmartTrainingFocus(profile.trainingFocus);
+    const startingTrainingFocus =
+      startingAthleteLevel !== 'beginner' &&
+      requestedTrainingFocus === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT
+        ? SMART_TRAINING_FOCUSES.STANDARD
+        : requestedTrainingFocus;
 
     setWeightUnit(selectedWeightUnit);
     localStorage.setItem('weightUnit', selectedWeightUnit);
@@ -15531,7 +15613,10 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
               fontWeight: 900,
             }}>
               {nextWorkout.lifts.map((liftBlock, index) => {
-                const role = getSmartIntensityRole(liftBlock);
+                const role = getDisplayedSmartIntensityRole({
+                  liftBlock,
+                  workout: nextWorkout,
+                });
                 const key = `smartIntensity${role[0].toUpperCase()}${role.slice(1)}`;
                 return (
                   <span
