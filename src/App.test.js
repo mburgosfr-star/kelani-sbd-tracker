@@ -695,9 +695,11 @@ test('main headers divide cycle metadata from the screen content and Smart statu
 
 test('program workout cards tighten only when the compact list toggles are visible', () => {
   expect(programWorkoutCardSpacingStyle({ compact: true })).toEqual({
+    padding: 'clamp(4px, 0.55dvh, 6px) clamp(12px, 3vw, 16px)',
     marginBottom: 'clamp(1px, 0.25dvh, 3px)',
   });
   expect(programWorkoutCardSpacingStyle()).toEqual({
+    padding: 'clamp(9px, 1.2dvh, 12px) clamp(12px, 3vw, 16px)',
     marginBottom: 'clamp(6px, 0.8dvh, 9px)',
   });
 });
@@ -706,7 +708,7 @@ test('compact program lists pull both toggles closer to the workout cards', () =
   expect(programWorkoutListVerticalSpacing({ compact: true })).toEqual({
     listMarginTop: 'clamp(9px, 1.2dvh, 12px)',
     topToggleMargin: '0 0 clamp(8px, 1.2dvh, 12px)',
-    bottomToggleMargin: 'calc(clamp(8px, 1.2dvh, 12px) - 2px) 0 2px',
+    bottomToggleMargin: 'clamp(8px, 1.2dvh, 12px) 0 0',
   });
   expect(programWorkoutListVerticalSpacing()).toEqual({
     listMarginTop: 'clamp(9px, 1.2dvh, 12px)',
@@ -984,9 +986,12 @@ test('bottom navigation combines large icons, visible labels and a subtle divide
     gap: 1,
   });
   expect(bottomNavLabelStyle(true)).toMatchObject({
+    display: 'block',
+    minHeight: 14,
+    paddingBottom: 2,
     fontSize: 10,
     fontWeight: 800,
-    lineHeight: 1,
+    lineHeight: 1.2,
     whiteSpace: 'nowrap',
   });
 });

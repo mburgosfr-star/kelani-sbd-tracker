@@ -1770,6 +1770,9 @@ export function programHeaderStyle() {
 
 export function programWorkoutCardSpacingStyle({ compact = false } = {}) {
   return {
+    padding: compact
+      ? 'clamp(4px, 0.55dvh, 6px) clamp(12px, 3vw, 16px)'
+      : 'clamp(9px, 1.2dvh, 12px) clamp(12px, 3vw, 16px)',
     marginBottom: compact
       ? 'clamp(1px, 0.25dvh, 3px)'
       : 'clamp(6px, 0.8dvh, 9px)',
@@ -1783,7 +1786,7 @@ export function programWorkoutListVerticalSpacing({ compact = false } = {}) {
       ? '0 0 clamp(8px, 1.2dvh, 12px)'
       : '0 0 clamp(10px, 1.5dvh, 16px)',
     bottomToggleMargin: compact
-      ? 'calc(clamp(8px, 1.2dvh, 12px) - 2px) 0 2px'
+      ? 'clamp(8px, 1.2dvh, 12px) 0 0'
       : 'clamp(10px, 1.5dvh, 16px) 0 0',
   };
 }
@@ -10518,7 +10521,6 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
             style={{
               display: 'flex',
               alignItems: 'center',
-              padding: 'clamp(9px, 1.2dvh, 12px) clamp(12px, 3vw, 16px)',
               ...programWorkoutCardSpacingStyle({
                 compact: useCompactWorkoutCardSpacing,
               }),
@@ -11258,13 +11260,16 @@ export function bottomNavButtonStyle(active = false) {
 
 export function bottomNavLabelStyle(active = false) {
   return {
+    display: 'block',
     maxWidth: '100%',
+    minHeight: 14,
+    paddingBottom: 2,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     fontSize: 10,
     fontWeight: active ? 800 : 600,
-    lineHeight: 1,
+    lineHeight: 1.2,
     color: 'inherit',
   };
 }
