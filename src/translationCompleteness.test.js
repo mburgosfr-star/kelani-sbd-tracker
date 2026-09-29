@@ -43,7 +43,7 @@ test('every directly referenced UI translation exists in all languages', () => {
   }
 });
 
-test('Catalan action-button verbs use the imperative rather than the infinitive', () => {
+test('Catalan interactive-action verbs use the imperative rather than the infinitive', () => {
   const imperativeLabels = {
     activateWorkout: 'Activa l’entrenament',
     adjust: 'Ajusta',
@@ -82,6 +82,7 @@ test('Catalan action-button verbs use the imperative rather than the infinitive'
     startNewCycle: 'Comença un nou cicle',
     switchToSmartAction: 'Canvia permanentment a Smart',
     updateCheckNow: 'Comprova ara',
+    updateCheckAutomatically: 'Comprova automàticament si hi ha actualitzacions',
     updateDownloadGitHub: 'Baixa des de GitHub',
     updateDownloadIzzy: 'Obre a IzzyOnDroid',
     updatesAction: 'Gestiona',
@@ -90,6 +91,7 @@ test('Catalan action-button verbs use the imperative rather than the infinitive'
     usageShareAction: 'Comparteix dades d’ús',
     verifyRelease: 'Verifica la versió',
     view: 'Consulta',
+    whatsNewShowAutomatically: 'Mostra automàticament després de les actualitzacions',
     whatsNewView: 'Consulta les novetats',
   };
 
