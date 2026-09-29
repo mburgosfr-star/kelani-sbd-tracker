@@ -12,7 +12,7 @@ describe('WhatsNewModal', () => {
     render(
       <WhatsNewModal
         t={translations.en}
-        version="2.0.43"
+        version="2.0.44"
         showAfterUpdates={true}
         onShowAfterUpdatesChange={onShowAfterUpdatesChange}
         onClose={onClose}
@@ -20,10 +20,10 @@ describe('WhatsNewModal', () => {
     );
 
     expect(screen.getByText("What's new?")).toBeInTheDocument();
-    expect(screen.getByText('v2.0.43')).toBeInTheDocument();
-    expect(screen.getByText(translations.en.whatsNewPracticalRouteItem)).toBeInTheDocument();
-    expect(screen.getByText(translations.en.whatsNewSmartPlanningItem)).toBeInTheDocument();
-    expect(screen.getByText(translations.en.whatsNewRouteTimingItem)).toBeInTheDocument();
+    expect(screen.getByText('v2.0.44')).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewFixedChromeItem)).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewDashboardSpacingItem)).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewProgramSpacingItem)).toBeInTheDocument();
 
     const checkbox = screen.getByLabelText(
       translations.en.whatsNewShowAutomatically

@@ -3450,9 +3450,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewPracticalRouteItem,
-    t.whatsNewSmartPlanningItem,
-    t.whatsNewRouteTimingItem,
+    t.whatsNewFixedChromeItem,
+    t.whatsNewDashboardSpacingItem,
+    t.whatsNewProgramSpacingItem,
   ];
 
   return (
