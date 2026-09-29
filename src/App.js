@@ -1507,7 +1507,6 @@ const THEME = {
 const SUBTLE_DIVIDER = '1px solid rgba(255, 244, 230, 0.34)';
 const HEADER_CONTENT_GAP = 'clamp(9px, 1.2dvh, 12px)';
 const BOTTOM_NAV_DIVIDER_OFFSET = 'clamp(4px, 0.7dvh, 6px)';
-const PROGRAM_SHOW_ALL_TOP_BALANCE = 'clamp(14px, 2dvh, 18px)';
 
 export const FAILED_SET_COLOR = THEME.meet;
 const FAILED_SET_BACKGROUND = 'rgba(198, 40, 40, 0.22)';
@@ -1593,7 +1592,6 @@ function measureActualScreenContentBottom(viewport) {
 export function appViewportStyle({
   screen,
   workoutNeedsNavClearance = false,
-  allowVerticalScroll = false,
 } = {}) {
   return {
     paddingBottom: screen === 'current' && !workoutNeedsNavClearance
@@ -1606,21 +1604,16 @@ export function appViewportStyle({
     height: '100dvh',
     color: THEME.text,
     overflowX: 'hidden',
-    overflowY: allowVerticalScroll ? 'auto' : 'hidden',
+    // Every main screen owns a bounded middle scroll region. Letting this
+    // outer viewport scroll would allow content to travel behind the fixed
+    // header and outside the two divider lines.
+    overflowY: 'hidden',
     overscrollBehaviorY: 'none',
   };
 }
 
-export function shouldAllowAppVerticalScroll({
-  screen,
-  workout,
-  measuredOverflow = false,
-} = {}) {
-  return Boolean(
-    measuredOverflow ||
-    screen === 'current' ||
-    screen === 'all'
-  );
+export function shouldAllowAppVerticalScroll() {
+  return false;
 }
 
 export function shouldReserveWorkoutBottomNavSpace({
@@ -1678,26 +1671,45 @@ function responsiveContentScreenStyle(bottomOffset = BOTTOM_NAV_SPACE) {
   };
 }
 
-export function meetDayDashboardScreenStyle() {
+export function fixedChromeScreenStyle(baseStyle = {}) {
   return {
-    ...responsiveContentScreenStyle(),
-    gridTemplateRows: 'auto minmax(min-content, 1fr)',
-    alignContent: 'stretch',
-    rowGap: HEADER_CONTENT_GAP,
+    ...baseStyle,
+    minHeight: 0,
+    height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
   };
 }
 
-export function regularDashboardScreenStyle({ compact = false } = {}) {
+export function scrollableScreenContentStyle(style = {}) {
   return {
-    ...responsiveContentScreenStyle(),
-    gridTemplateRows: 'auto minmax(0, 1fr)',
-    alignContent: 'stretch',
-    rowGap: HEADER_CONTENT_GAP,
+    flex: '1 1 auto',
+    minHeight: 0,
+    overflowX: 'hidden',
+    overflowY: 'auto',
+    overscrollBehaviorY: 'none',
+    ...style,
   };
+}
+
+export function meetDayDashboardScreenStyle() {
+  return fixedChromeScreenStyle({
+    ...responsiveContentScreenStyle(),
+    rowGap: HEADER_CONTENT_GAP,
+  });
+}
+
+export function regularDashboardScreenStyle({ compact = false } = {}) {
+  return fixedChromeScreenStyle({
+    ...responsiveContentScreenStyle(),
+    rowGap: HEADER_CONTENT_GAP,
+  });
 }
 
 export function regularDashboardContentStyle({ spreadContent = false, compact = false } = {}) {
   return {
+    ...scrollableScreenContentStyle(),
     minHeight: 0,
     display: 'grid',
     alignContent: spreadContent ? 'space-evenly' : 'start',
@@ -1712,11 +1724,18 @@ export function regularDashboardContentStyle({ spreadContent = false, compact = 
   };
 }
 
-export function shouldUseExpandedDashboardLayout({ workout, meetState } = {}) {
+export function shouldUseExpandedDashboardLayout({ workout, meetState, compact = false } = {}) {
+  const liftCount = Array.isArray(workout?.lifts)
+    ? workout.lifts.length
+    : workout?.lift
+      ? 1
+      : 0;
+  const isSparseSingleLiftDay = workout?.type === 'training' && liftCount === 1 && !compact;
+
   return Boolean(
     workout &&
     !meetState?.isMeetDay &&
-    (workout.type === 'rest' || meetState?.hideRouteToMeet)
+    (workout.type === 'rest' || meetState?.hideRouteToMeet || isSparseSingleLiftDay)
   );
 }
 
@@ -1793,7 +1812,7 @@ export function programWorkoutListVerticalSpacing({ compact = false } = {}) {
 
 export function programWorkoutListContainerStyle({ showAll = false, marginTop = 0 } = {}) {
   const scrollViewportInset = typeof marginTop === 'number' ? `${marginTop}px` : marginTop;
-  const topInsetToVisibleDivider = `calc(${scrollViewportInset} + ${BOTTOM_NAV_DIVIDER_OFFSET} + ${PROGRAM_SHOW_ALL_TOP_BALANCE})`;
+  const topInsetToVisibleDivider = `calc(${scrollViewportInset} + ${BOTTOM_NAV_DIVIDER_OFFSET})`;
 
   return {
     flex: 1,
@@ -1862,6 +1881,7 @@ export function MeetDayDashboardPlan({
         if (event.key === 'Enter' || event.key === ' ') onOpenWorkout?.();
       }}
       style={{
+        ...scrollableScreenContentStyle(),
         ...meetDayDashboardContentStyle(),
         cursor: 'pointer',
       }}
@@ -1878,21 +1898,17 @@ export function MeetDayDashboardPlan({
 }
 
 export function activeWorkoutScreenStyle() {
-  return {
-    ...responsiveContentScreenStyle(),
-  };
+  return fixedChromeScreenStyle(responsiveContentScreenStyle());
 }
 
 export function meetWorkoutScreenStyle() {
-  return {
+  return fixedChromeScreenStyle({
     ...responsiveContentScreenStyle(),
     // A meet contains three full lift blocks plus the completion action.
     // The lift collection may absorb genuinely free viewport height, while
     // its intrinsic height still makes smaller screens scroll naturally.
-    display: 'flex',
-    flexDirection: 'column',
     paddingBottom: 4,
-  };
+  });
 }
 
 export function meetWorkoutLiftCollectionStyle() {
@@ -1929,11 +1945,10 @@ export function activeWorkoutLiftBlockStyle() {
 }
 
 export function restWorkoutScreenStyle() {
-  return {
+  return fixedChromeScreenStyle({
     ...responsiveContentScreenStyle(),
-    gridTemplateRows: 'auto minmax(0, 1fr) auto',
     paddingBottom: 32,
-  };
+  });
 }
 
 export function restWorkoutContentStyle() {
@@ -1950,15 +1965,7 @@ export function restWorkoutContentStyle() {
 
 export function restDayCompletedScreenStyle() {
   return {
-    // An absolute viewport-relative height, not a percentage: this div's own
-    // ancestors only set minHeight (never a definite height), so a
-    // percentage here would never resolve and the grid row below would
-    // collapse to content size instead of centering within free space.
-    // completedWorkoutScreenStyle() (the direct parent) has its own 20px +
-    // 16px vertical padding, which must be subtracted here too - otherwise
-    // this screen claims more height than its parent actually has left,
-    // forcing an unnecessary scroll despite ample visual space.
-    minHeight: `calc(100dvh - ${BOTTOM_NAV_SPACE}px - 36px)`,
+    minHeight: 0,
     display: 'grid',
     gridTemplateRows: 'minmax(0, 1fr)',
     background: 'transparent',
@@ -1981,10 +1988,9 @@ export function restDayCompletedContentStyle() {
 }
 
 export function completedWorkoutScreenStyle() {
-  return {
+  return fixedChromeScreenStyle({
     width: '100%',
     maxWidth: 500,
-    minHeight: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
     margin: '0 auto',
     padding: '20px clamp(10px, 3vw, 16px) 16px',
     boxSizing: 'border-box',
@@ -1992,7 +1998,7 @@ export function completedWorkoutScreenStyle() {
     color: THEME.text,
     fontFamily: 'sans-serif',
     overflowX: 'hidden',
-  };
+  });
 }
 
 export function meetCompletedAchievedWeightStyle() {
@@ -3395,6 +3401,7 @@ export function regularSettingsClusterStyle() {
 
 export function settingsContentLayoutStyle() {
   return {
+    ...scrollableScreenContentStyle(),
     background: 'transparent',
     border: 'none',
     borderRadius: 8,
@@ -7909,17 +7916,30 @@ export function CurrentWorkout({
               )}
             </>
           )}
-          secondary={smartModel ? (
+          titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
+          subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
+        />
+
+        <div
+          data-testid="screen-scroll-content"
+          style={scrollableScreenContentStyle({
+            display: 'grid',
+            gridTemplateRows: smartModel
+              ? 'auto minmax(0, 1fr) auto'
+              : 'minmax(0, 1fr) auto',
+            alignContent: 'stretch',
+          })}
+        >
+        {smartModel && (
+          <div data-testid="workout-header-secondary" style={appHeaderSecondaryStyle()}>
             <SmartDayTypeInline
               workout={workout}
               t={t}
               weightUnit={weightUnit}
               currentE1RMs={currentE1RMs}
             />
-          ) : null}
-          titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
-          subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
-        />
+          </div>
+        )}
 
         <div style={restWorkoutContentStyle()}>
           {renderActivateWorkoutCard()}
@@ -7983,6 +8003,7 @@ export function CurrentWorkout({
             {t.completeRestDay}
           </WorkoutCompletionButton>
         )}
+        </div>
       </div>
     );
   }
@@ -8046,14 +8067,6 @@ export function CurrentWorkout({
               )}
             </>
           )}
-          secondary={smartModel ? (
-            <SmartDayTypeInline
-              workout={workout}
-              t={t}
-              weightUnit={weightUnit}
-              currentE1RMs={currentE1RMs}
-            />
-          ) : null}
           titleStyle={{
             textShadow: 'none',
             fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize,
@@ -8064,6 +8077,27 @@ export function CurrentWorkout({
           }}
           subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
         />
+
+        <div
+          data-testid="screen-scroll-content"
+          style={scrollableScreenContentStyle(isMeetDay ? {
+            display: 'flex',
+            flexDirection: 'column',
+          } : {
+            display: 'grid',
+            alignContent: 'space-between',
+          })}
+        >
+        {smartModel && (
+          <div data-testid="workout-header-secondary" style={appHeaderSecondaryStyle()}>
+            <SmartDayTypeInline
+              workout={workout}
+              t={t}
+              weightUnit={weightUnit}
+              currentE1RMs={currentE1RMs}
+            />
+          </div>
+        )}
 
         {renderActivateWorkoutCard()}
 
@@ -8484,6 +8518,7 @@ export function CurrentWorkout({
             ? `${t.completeWorkout} ✓`
             : t.completeWorkout}
         </WorkoutCompletionButton>
+        </div>
       </div>
     );
   }
@@ -8511,35 +8546,45 @@ export function CurrentWorkout({
 
   return (
     <div style={activeWorkoutScreenStyle()}>
-      <h2 style={{
-        margin: '12px 0 8px',
-        textAlign: 'center',
-        fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize,
-        fontWeight: 900,
-        lineHeight: 1.15,
-        color: ({
-          Squat: THEME.red,
-          Bench: THEME.primary,
-          Deadlift: THEME.yellow,
-        }[workout.lift] || THEME.meet)
-      }}>
-        {t.workout} {workout.number}: {workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant)}
-      </h2>
+      <div data-testid="workout-screen-header" style={fixedScreenHeaderStyle()}>
+        <h2 style={{
+          margin: '12px 0 8px',
+          textAlign: 'center',
+          fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize,
+          fontWeight: 900,
+          lineHeight: 1.15,
+          color: ({
+            Squat: THEME.red,
+            Bench: THEME.primary,
+            Deadlift: THEME.yellow,
+          }[workout.lift] || THEME.meet)
+        }}>
+          {t.workout} {workout.number}: {workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant)}
+        </h2>
 
-      <div style={{ textAlign: 'center', color: THEME.muted, fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize, marginBottom: smartModel ? 0 : 12 }}>
-        {formatCycleWorkoutSubtitle({ t, currentCycle, workoutNumber: workout.number, totalWorkouts, smartModel })}
-        <div data-testid="app-header-divider" style={appHeaderDividerStyle()} />
-        {smartModel && (
-          <div style={appHeaderSecondaryStyle()}>
-            <SmartDayTypeInline
-              workout={workout}
-              t={t}
-              weightUnit={weightUnit}
-              currentE1RMs={currentE1RMs}
-            />
-          </div>
-        )}
+        <div style={{ textAlign: 'center', color: THEME.muted, fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize, marginBottom: smartModel ? 0 : 12 }}>
+          {formatCycleWorkoutSubtitle({ t, currentCycle, workoutNumber: workout.number, totalWorkouts, smartModel })}
+          <div data-testid="app-header-divider" style={appHeaderDividerStyle()} />
+        </div>
       </div>
+
+      <div
+        data-testid="screen-scroll-content"
+        style={scrollableScreenContentStyle({
+          display: 'grid',
+          alignContent: 'space-between',
+        })}
+      >
+      {smartModel && (
+        <div data-testid="workout-header-secondary" style={appHeaderSecondaryStyle()}>
+          <SmartDayTypeInline
+            workout={workout}
+            t={t}
+            weightUnit={weightUnit}
+            currentE1RMs={currentE1RMs}
+          />
+        </div>
+      )}
 
       {renderActivateWorkoutCard()}
 
@@ -8800,6 +8845,7 @@ export function CurrentWorkout({
           weightUnit={weightUnit}
         />
       )}
+      </div>
     </div>
   );
 }
@@ -9844,17 +9890,28 @@ export function appHeaderSecondaryStyle() {
   };
 }
 
-export function AppHeader({ title, subtitle, secondary, meta, children, titleStyle = {}, subtitleStyle = {}, containerStyle = {} }) {
+export function fixedScreenHeaderStyle() {
+  return {
+    // The header is a non-scrolling flex item. Its following sibling owns
+    // all vertical scrolling, so content can never pass above the divider.
+    position: 'relative',
+    zIndex: 20,
+    flex: '0 0 auto',
+    background: THEME.bg,
+  };
+}
+
+export function AppHeader({ title, subtitle, titleStyle = {}, subtitleStyle = {}, containerStyle = {} }) {
   const versionLabel = import.meta.env.VITE_APP_VERSION ? `v${import.meta.env.VITE_APP_VERSION}` : 'dev';
 
   return (
     <div
       style={{
+        ...fixedScreenHeaderStyle(),
         textAlign: 'center',
         marginTop: 0,
         marginBottom: 0,
         paddingTop: 'var(--kelani-native-top-offset, 0px)',
-        background: '#000000',
         ...containerStyle,
       }}
     >
@@ -9905,23 +9962,6 @@ export function AppHeader({ title, subtitle, secondary, meta, children, titleSty
         </>
       )}
 
-      {secondary && <div style={appHeaderSecondaryStyle()}>{secondary}</div>}
-
-      {meta && (
-        <div
-          style={{
-            color: THEME.muted,
-            fontSize: 13,
-            fontWeight: 800,
-            lineHeight: 1.35,
-            marginTop: 8,
-          }}
-        >
-          {meta}
-        </div>
-      )}
-
-      {children}
     </div>
   );
 }
@@ -15448,14 +15488,15 @@ const latestBodyDataRows = [
 
 const dashboardCurrentWorkout = workouts[currentIndex] || null;
 const dashboardMeetState = getDashboardMeetState(dashboardCurrentWorkout);
-const dashboardUsesExpandedLayout = shouldUseExpandedDashboardLayout({
-  workout: dashboardCurrentWorkout,
-  meetState: dashboardMeetState,
-});
 const dashboardUsesCompactLayout = shouldUseCompactDashboardLayout({
   workout: dashboardCurrentWorkout,
   meetState: dashboardMeetState,
   recentPrEvents: dashboardRecentPrEvents,
+});
+const dashboardUsesExpandedLayout = shouldUseExpandedDashboardLayout({
+  workout: dashboardCurrentWorkout,
+  meetState: dashboardMeetState,
+  compact: dashboardUsesCompactLayout,
 });
 const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
   Squat: { oneRM: best1RMs.Squat },
@@ -16053,7 +16094,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       )}
 
       {screen === 'settings' && (
-       <div style={{ ...responsiveContentScreenStyle(), display: 'flex', flexDirection: 'column' }}>
+       <div style={fixedChromeScreenStyle(responsiveContentScreenStyle())}>
   <AppHeader
     t={t}
     title={t.settings}
@@ -16153,15 +16194,10 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       )}
     {screen === 'completed' && (
   <div style={completedWorkoutScreenStyle()}>
-      <div style={completedWorkout?.type === 'rest'
-        ? restDayCompletedScreenStyle()
-        : { background: 'transparent', border: 'none', borderRadius: 12, padding: '8px 0 12px', textAlign: 'center' }}>
-        <div style={completedWorkout?.type === 'rest'
-          ? restDayCompletedContentStyle()
-          : { display: 'contents' }}>
-        <div style={{ fontSize: 40, marginBottom: 6 }}>🎉</div>
+      <div data-testid="completed-screen-header" style={fixedScreenHeaderStyle()}>
+        <div style={{ fontSize: 40, marginBottom: 6, textAlign: 'center' }}>🎉</div>
 
-        <h2 style={{ margin: '0 0 6px', color: THEME.brown }}>
+        <h2 style={{ margin: '0 0 6px', color: THEME.brown, textAlign: 'center' }}>
           {completedWorkoutIsMeet ? t.meetCompleted
             : completedWorkoutCanStartNewCycle ? (t.cycleCompleted)
             : completedWorkout?.type === 'rest'
@@ -16174,6 +16210,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           lineHeight: 1.3,
           margin: '0 0 8px',
           padding: '0 2px',
+          textAlign: 'center',
         }}>
           {completedWorkoutIsMeet ? t.meetCompletedSaved
             : completedWorkoutCanStartNewCycle ? (t.workoutAndCycleSaved)
@@ -16181,6 +16218,18 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
               ? (t.restDayCompletedSaved)
               : t.goodJobSaved}
         </p>
+        <div data-testid="app-header-divider" style={appHeaderDividerStyle()} />
+      </div>
+
+      <div
+        data-testid="screen-scroll-content"
+        style={scrollableScreenContentStyle(completedWorkout?.type === 'rest'
+          ? restDayCompletedScreenStyle()
+          : { background: 'transparent', border: 'none', borderRadius: 12, padding: '8px 0 12px', textAlign: 'center' })}
+      >
+        <div style={completedWorkout?.type === 'rest'
+          ? restDayCompletedContentStyle()
+          : { display: 'contents' }}>
 
         {completedWorkoutIsMeet && (
           <div style={{

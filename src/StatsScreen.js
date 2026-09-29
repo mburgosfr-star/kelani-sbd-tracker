@@ -62,7 +62,7 @@ function responsiveStatsChartGridStyle() {
 
 export function statsScreenStyle() {
   return {
-    minHeight: 600,
+    minHeight: 0,
     width: '100%',
     maxWidth: 500,
     height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
@@ -77,6 +77,19 @@ export function statsScreenStyle() {
     whiteSpace: 'nowrap',
     display: 'flex',
     flexDirection: 'column',
+    overflow: 'hidden',
+  };
+}
+
+export function statsScrollableContentStyle() {
+  return {
+    flex: '1 1 auto',
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    overflowX: 'hidden',
+    overflowY: 'auto',
+    overscrollBehaviorY: 'none',
   };
 }
 
@@ -585,6 +598,7 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
         subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
       />
 
+      <div data-testid="screen-scroll-content" style={statsScrollableContentStyle()}>
       <div style={statsTabListStyle(statsTabs.length)}>
         {statsTabs.map(tab => (
           <button
@@ -708,6 +722,7 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
       </div>
 
 
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsTabListStyle } from './StatsScreen';
-import App, { AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
+import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsScrollableContentStyle, statsTabListStyle } from './StatsScreen';
+import App, { AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollableScreenContentStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
 import { translations } from './translations';
 
 test.each(['nl', 'en', 'ca'])(
@@ -617,12 +617,25 @@ test('active completion button uses the same visible pulse concept as active set
   expect(button.style.animation).toContain('kelaniActiveWorkoutCompletionPulse');
 });
 
-test('active workout screen preserves its original balanced height', () => {
+test('active workout screen bounds scrolling between the fixed chrome', () => {
   expect(activeWorkoutScreenStyle()).toMatchObject({
-    display: 'grid',
-    alignContent: 'space-between',
+    minHeight: 0,
+    height: 'calc(100dvh - 78px)',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
   });
-  expect(activeWorkoutScreenStyle().transform).toBeUndefined();
+  expect(scrollableScreenContentStyle()).toMatchObject({
+    flex: '1 1 auto',
+    minHeight: 0,
+    overflowX: 'hidden',
+    overflowY: 'auto',
+    overscrollBehaviorY: 'none',
+  });
+  expect(fixedChromeScreenStyle()).toMatchObject({
+    height: 'calc(100dvh - 78px)',
+    overflow: 'hidden',
+  });
 });
 
 test('program screen uses the same responsive header alignment as other content screens', () => {
@@ -663,7 +676,13 @@ test('program header remains visible while the workout list scrolls', () => {
   });
 });
 
-test('main headers divide cycle metadata from the screen content and Smart status', () => {
+test('fixed main headers end at the divider before scrolling screen content', () => {
+  expect(fixedScreenHeaderStyle()).toEqual({
+    position: 'relative',
+    zIndex: 20,
+    flex: '0 0 auto',
+    background: '#000000',
+  });
   expect(appHeaderDividerStyle()).toMatchObject({
     width: '100%',
     height: 0,
@@ -684,13 +703,42 @@ test('main headers divide cycle metadata from the screen content and Smart statu
     <AppHeader
       title="Workout"
       subtitle="Cycle 1 · Workout 1 · Beginner"
-      secondary="Smart: Ideal Route"
     />
   );
 
   const divider = screen.getByTestId('app-header-divider');
+  expect(divider.parentElement).toHaveStyle({
+    position: 'relative',
+    zIndex: '20',
+    background: '#000000',
+  });
   expect(divider.previousSibling).toHaveTextContent('Cycle 1 · Workout 1 · Beginner');
-  expect(divider.nextSibling).toHaveTextContent('Smart: Ideal Route');
+  expect(divider.nextSibling).toBeNull();
+});
+
+test('Workout scroll content starts below the fixed header divider', async () => {
+  localStorage.clear();
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1,
+    trainingModel: 'smart',
+    currentCycle: 1,
+    prs: { Squat: 100, Bench: 75, Deadlift: 125 },
+    history: [],
+  }));
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Workout' }, { timeout: 3000 }));
+
+  const divider = await screen.findByTestId('app-header-divider');
+  const scrollContent = screen.getByTestId('screen-scroll-content');
+  const smartStatus = screen.getByTestId('workout-header-secondary');
+
+  expect(divider.parentElement.nextElementSibling).toBe(scrollContent);
+  expect(scrollContent).toContainElement(smartStatus);
+  expect(scrollContent).toHaveStyle({
+    minHeight: '0',
+    overflowY: 'auto',
+  });
 });
 
 test('program workout cards tighten only when the compact list toggles are visible', () => {
@@ -746,7 +794,7 @@ test('full program list starts at the top while the compact list remains centere
       justifyContent: 'flex-start',
       marginTop: 0,
       paddingTop: 0,
-      borderTop: 'calc(8px + clamp(4px, 0.7dvh, 6px) + clamp(14px, 2dvh, 18px)) solid transparent',
+      borderTop: 'calc(8px + clamp(4px, 0.7dvh, 6px)) solid transparent',
       borderBottom: '8px solid transparent',
       overflowY: 'auto',
       minHeight: 0,
@@ -790,30 +838,30 @@ test('meet warmups and attempts each consume one complete 12-column row', () => 
   expect(meetWorkoutGridSpan(4) * 4).toBe(12);
 });
 
-test('all workout screens permit natural overflow scrolling before measurement', () => {
+test('the shared viewport never scrolls behind fixed screen chrome', () => {
   expect(shouldAllowAppVerticalScroll({
     screen: 'current',
     workout: { type: 'meet' },
     measuredOverflow: false,
-  })).toBe(true);
+  })).toBe(false);
   expect(shouldAllowAppVerticalScroll({
     screen: 'current',
     workout: { type: 'training' },
     measuredOverflow: false,
-  })).toBe(true);
+  })).toBe(false);
   expect(shouldAllowAppVerticalScroll({
     screen: 'current',
     workout: { type: 'training', completed: true },
     measuredOverflow: false,
-  })).toBe(true);
+  })).toBe(false);
   expect(shouldAllowAppVerticalScroll({
     screen: 'settings',
     measuredOverflow: true,
-  })).toBe(true);
+  })).toBe(false);
   expect(shouldAllowAppVerticalScroll({
     screen: 'all',
     measuredOverflow: false,
-  })).toBe(true);
+  })).toBe(false);
   expect(shouldReserveWorkoutBottomNavSpace({
     screen: 'current',
     workout: { type: 'meet' },
@@ -833,9 +881,10 @@ test('all workout screens permit natural overflow scrolling before measurement',
 
 test('rest information sits optically above centre with its completion action below', () => {
   expect(restWorkoutScreenStyle()).toMatchObject({
-    display: 'grid',
-    alignContent: 'space-between',
-    gridTemplateRows: 'auto minmax(0, 1fr) auto',
+    display: 'flex',
+    flexDirection: 'column',
+    height: 'calc(100dvh - 78px)',
+    overflow: 'hidden',
     paddingBottom: 32,
   });
 
@@ -846,16 +895,9 @@ test('rest information sits optically above centre with its completion action be
   });
 });
 
-test('completed rest day content is distributed over the available screen height', () => {
-  // Must be an absolute viewport-relative height, not a percentage: every
-  // ancestor of this screen only sets minHeight (never a definite height),
-  // so a percentage here can never resolve, collapsing the centering grid
-  // row to content size and leaving the content stuck at the top. Must also
-  // subtract the parent's own 36px of vertical padding, or this screen
-  // claims more height than its parent has left and forces an unnecessary
-  // scroll.
+test('completed rest day content uses only the bounded middle region', () => {
   expect(restDayCompletedScreenStyle()).toMatchObject({
-    minHeight: 'calc(100dvh - 78px - 36px)',
+    minHeight: 0,
     display: 'grid',
     gridTemplateRows: 'minmax(0, 1fr)',
     boxSizing: 'border-box',
@@ -867,13 +909,13 @@ test('completed rest day content is distributed over the available screen height
   });
 });
 
-test('completed workout content leaves vertical overflow control to the shared viewport', () => {
+test('completed workout content uses fixed chrome with internal scrolling', () => {
   expect(completedWorkoutScreenStyle()).toMatchObject({
-    minHeight: 'calc(100dvh - 78px)',
+    minHeight: 0,
+    height: 'calc(100dvh - 78px)',
     overflowX: 'hidden',
+    overflow: 'hidden',
   });
-  expect(completedWorkoutScreenStyle().height).toBeUndefined();
-  expect(completedWorkoutScreenStyle().overflowY).toBeUndefined();
 });
 
 test('all main screens suppress tiny pseudo-overflow and scroll only for hidden content', () => {
@@ -900,7 +942,7 @@ test('all main screens suppress tiny pseudo-overflow and scroll only for hidden 
   expect(appViewportStyle({ screen: 'settings', allowVerticalScroll: true })).toMatchObject({
     height: '100dvh',
     paddingBottom: 78,
-    overflowY: 'auto',
+    overflowY: 'hidden',
   });
   expect(appViewportStyle({
     screen: 'current',
@@ -954,10 +996,17 @@ test.each(['nl', 'en', 'ca'])('meet completion feedback is translated in %s', la
 
 test('stats charts reserve extra clearance above the bottom navigation', () => {
   expect(statsScreenStyle()).toMatchObject({
+    minHeight: 0,
     height: 'calc(100dvh - 78px)',
     display: 'flex',
     flexDirection: 'column',
     paddingBottom: 32,
+    overflow: 'hidden',
+  });
+  expect(statsScrollableContentStyle()).toMatchObject({
+    flex: '1 1 auto',
+    minHeight: 0,
+    overflowY: 'auto',
   });
 });
 
@@ -1013,6 +1062,9 @@ test('settings distribute regular actions and keep Start over at the bottom', ()
   });
   expect(regularSettingsClusterStyle().transform).toBeUndefined();
   expect(settingsContentLayoutStyle()).toMatchObject({
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto',
     gridTemplateRows: 'minmax(0, 1fr) auto',
     marginTop: 'clamp(9px, 1.2dvh, 12px)',
     rowGap: 'clamp(5px, 0.8dvh, 10px)',
@@ -1664,8 +1716,10 @@ test('only the meet-plan card opens the meet workout, not the level badge', () =
 
 test('meet-day dashboard spreads the plan across the available vertical space', () => {
   expect(meetDayDashboardScreenStyle()).toMatchObject({
-    gridTemplateRows: 'auto minmax(min-content, 1fr)',
-    alignContent: 'stretch',
+    display: 'flex',
+    flexDirection: 'column',
+    height: 'calc(100dvh - 78px)',
+    overflow: 'hidden',
     rowGap: 'clamp(9px, 1.2dvh, 12px)',
   });
   expect(meetDayDashboardContentStyle()).toMatchObject({
@@ -1690,13 +1744,15 @@ test('post-meet recovery restores the dashboard but keeps route to meet hidden',
 
 test('post-meet dashboard distributes space between and around its cards', () => {
   expect(regularDashboardScreenStyle()).toMatchObject({
-    display: 'grid',
-    gridTemplateRows: 'auto minmax(0, 1fr)',
-    alignContent: 'stretch',
+    display: 'flex',
+    flexDirection: 'column',
+    height: 'calc(100dvh - 78px)',
+    overflow: 'hidden',
     rowGap: 'clamp(9px, 1.2dvh, 12px)',
   });
   expect(regularDashboardContentStyle({ spreadContent: true })).toMatchObject({
     display: 'grid',
+    overflowY: 'auto',
     alignContent: 'space-evenly',
     rowGap: 'clamp(10px, 1.4dvh, 16px)',
     paddingBottom: 'clamp(24px, 3.5dvh, 36px)',
@@ -1740,7 +1796,7 @@ test('PR-rich training dashboards use tighter spacing without changing sparse da
   })).toBe(false);
 });
 
-test('sparse rest dashboards use the expanded layout while training dashboards stay compact', () => {
+test('sparse rest and single-lift dashboards use the expanded layout', () => {
   expect(shouldUseExpandedDashboardLayout({
     workout: { type: 'rest' },
     meetState: { isMeetDay: false, hideRouteToMeet: false },
@@ -1749,6 +1805,27 @@ test('sparse rest dashboards use the expanded layout while training dashboards s
   expect(shouldUseExpandedDashboardLayout({
     workout: { type: 'training' },
     meetState: { isMeetDay: false, hideRouteToMeet: false },
+  })).toBe(false);
+
+  expect(shouldUseExpandedDashboardLayout({
+    workout: { type: 'training', lifts: [{ lift: 'Bench' }] },
+    meetState: { isMeetDay: false, hideRouteToMeet: false },
+  })).toBe(true);
+
+  expect(shouldUseExpandedDashboardLayout({
+    workout: { type: 'training', lift: 'Bench' },
+    meetState: { isMeetDay: false, hideRouteToMeet: false },
+  })).toBe(true);
+
+  expect(shouldUseExpandedDashboardLayout({
+    workout: { type: 'training', lifts: [{ lift: 'Squat' }, { lift: 'Bench' }] },
+    meetState: { isMeetDay: false, hideRouteToMeet: false },
+  })).toBe(false);
+
+  expect(shouldUseExpandedDashboardLayout({
+    workout: { type: 'training', lifts: [{ lift: 'Bench' }] },
+    meetState: { isMeetDay: false, hideRouteToMeet: false },
+    compact: true,
   })).toBe(false);
 
   expect(shouldUseExpandedDashboardLayout({
