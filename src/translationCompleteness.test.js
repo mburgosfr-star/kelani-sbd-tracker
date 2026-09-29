@@ -43,6 +43,61 @@ test('every directly referenced UI translation exists in all languages', () => {
   }
 });
 
+test('Catalan action-button verbs use the imperative rather than the infinitive', () => {
+  const imperativeLabels = {
+    activateWorkout: 'Activa l’entrenament',
+    adjust: 'Ajusta',
+    adjustProgram: 'Ajusta el programa',
+    cancel: 'Cancel·la',
+    check: 'Comprova',
+    close: 'Tanca',
+    completeRestDay: 'Completa el dia de descans',
+    completeWorkout: "Finalitza l'entrenament",
+    contactKelani: 'Contacta',
+    dataManagementAction: 'Gestiona',
+    edit: 'Edita',
+    editBodyData: 'Actualitza',
+    exportData: 'Exporta les dades',
+    exportDataShort: 'Exporta',
+    importBackupAction: 'Importa còpia',
+    importData: 'Importa les dades',
+    importDataShort: 'Importa',
+    onboardingStartSetup: 'Comença',
+    openWorkout: 'Obre l’entrenament',
+    plateCalculatorClose: 'Tanca',
+    reportBug: 'Informa d’un error',
+    reportIssueShort: 'Informa d’un error',
+    resetConfirmCancel: 'Cancel·la',
+    resetConfirmConfirm: 'Sí, esborra-ho tot',
+    restart: 'Torna a començar',
+    restTimerOpenDndSettings: 'Obre la configuració de No molestar',
+    restTimerTestAlert: 'Prova l’alerta',
+    save: 'Desa',
+    shareCycleExperience: 'Comparteix la teva experiència',
+    showAllWorkouts: 'Mostra tots els entrenaments',
+    showFewerWorkouts: 'Mostra menys entrenaments',
+    smartCopyDiagnosis: 'Copia el diagnòstic',
+    smartWorkoutInfo: 'Obre la informació de l’entrenament',
+    startFromScratch: 'Reinicia',
+    startNewCycle: 'Comença un nou cicle',
+    switchToSmartAction: 'Canvia permanentment a Smart',
+    updateCheckNow: 'Comprova ara',
+    updateDownloadGitHub: 'Baixa des de GitHub',
+    updateDownloadIzzy: 'Obre a IzzyOnDroid',
+    updatesAction: 'Gestiona',
+    usageCopy: 'Copia',
+    usageEmail: 'Envia per correu a Kelani',
+    usageShareAction: 'Comparteix dades d’ús',
+    verifyRelease: 'Verifica la versió',
+    view: 'Consulta',
+    whatsNewView: 'Consulta les novetats',
+  };
+
+  for (const [key, expectedLabel] of Object.entries(imperativeLabels)) {
+    expect(translations.ca[key]).toBe(expectedLabel);
+  }
+});
+
 test('UI components do not contain raw prose in JSX or literal accessibility labels', () => {
   for (const relativePath of userInterfaceSources) {
     const source = read(relativePath);
