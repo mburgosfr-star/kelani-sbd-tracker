@@ -8,12 +8,34 @@ import {
   getCurrentCycleBestMaxes,
 } from './workoutHistoryStats';
 import { buildSmartMeetPlanReadiness } from './smartTrainingEngine';
-import { formatEstimatedWeightFromKg, formatWeightFromKg } from './workoutUnits';
+import {
+  formatDecimalDisplay,
+  formatEstimatedWeightFromKg,
+  formatWeightFromKg,
+} from './workoutUnits';
 
 test('estimated weights display decimal precision without barbell rounding', () => {
   expect(formatEstimatedWeightFromKg(125.4166666667, 'kg')).toBe('125.42 kg');
   expect(formatEstimatedWeightFromKg(152.5, 'kg')).toBe('152.5 kg');
+  expect(formatEstimatedWeightFromKg(99.00000000000001, 'kg')).toBe('99 kg');
   expect(formatWeightFromKg(125.4166666667, 'kg')).toBe('125 kg');
+});
+
+test.each([
+  ['en', '99.5'],
+  ['nl', '99,5'],
+  ['ca', '99,5'],
+])('shared decimal formatting removes false .0 precision in %s', (language, decimalValue) => {
+  localStorage.setItem('language', language);
+
+  try {
+    expect(formatDecimalDisplay(99.00000000000001, { maximumFractionDigits: 2 })).toBe('99');
+    expect(formatEstimatedWeightFromKg(99.00000000000001, 'kg')).toBe('99 kg');
+    expect(formatEstimatedWeightFromKg(45.35923700100354, 'lb')).toBe('100 lb');
+    expect(formatDecimalDisplay(99.50000000000001, { maximumFractionDigits: 2 })).toBe(decimalValue);
+  } finally {
+    localStorage.removeItem('language');
+  }
 });
 
 function trainingEntry(sets) {

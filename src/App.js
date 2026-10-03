@@ -106,6 +106,12 @@ import {
   restoreOpenWorkoutSetWeight,
 } from './workoutSetActions';
 import { applyAccessoryPlanToWorkouts } from './accessoryGeneration';
+import {
+  buildSmartReturnTraining,
+  getDaysSinceLastCompletedWorkout,
+  restoreSmartReturnTraining,
+  SMART_RETURN_TRAINING,
+} from './smartReturnTraining';
 import { getActiveMultiLiftStep } from './workoutFocusSequence';
 import {
   ACCESSORY_CATALOG,
@@ -168,6 +174,27 @@ import {
   readUpdateCheckCache,
   shouldShowUpdateNotice,
 } from './appUpdates';
+import {
+  buildWorkoutScheduleDateKeys,
+  formatWorkoutScheduleDateRange,
+  formatWorkoutScheduleDate,
+  getMeetProjectionDateKeys,
+  localDateKey,
+} from './workoutScheduleDates';
+import {
+  buildCalendarEventSpecs,
+  createCalendarIntegrationSettings,
+  normalizeCalendarIntegrationSettings,
+} from './calendarIntegration';
+import { syncWorkoutCalendar } from './calendarSync';
+import {
+  deleteDeviceWorkoutEvent,
+  getCalendarPermissionState,
+  getWritableDeviceCalendars,
+  isNativeCalendarAvailable,
+  requestCalendarPermission,
+  upsertDeviceWorkoutEvent,
+} from './calendarNative';
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { translations } from './translations';
 import { App as CapacitorApp } from '@capacitor/app';
@@ -193,6 +220,7 @@ const REST_TIMER_TEST_GRACE_MS = 5_000;
 const REST_TIMER_STATE_KEY = 'kelani-sbd-tracker-active-rest-timer';
 const REST_TIMER_NOTIFICATION_STATUS_KEY = 'kelani-sbd-tracker-rest-timer-notification-status';
 const APP_NAVIGATION_STATE_KEY = 'kelani-sbd-tracker-navigation-state';
+const CALENDAR_SYNC_CONSENT_KEY = 'kelani-calendar-sync-consent-v1';
 const RESTORABLE_APP_SCREENS = new Set(['dashboard', 'all', 'current', 'stats', 'settings']);
 const DeviceAlertStatus = registerPlugin('DeviceAlertStatus');
 const RestTimerAlarm = registerPlugin('RestTimerAlarm');
@@ -1253,6 +1281,11 @@ export function validateImportedBackup(backup) {
     typeof data.showWhatsNewAfterUpdates !== 'boolean') return false;
   if (data.checkForUpdatesAutomatically !== undefined &&
     typeof data.checkForUpdatesAutomatically !== 'boolean') return false;
+  if (data.calendarIntegration !== undefined && (
+    !data.calendarIntegration ||
+    typeof data.calendarIntegration !== 'object' ||
+    Array.isArray(data.calendarIntegration)
+  )) return false;
 
   return true;
 }
@@ -1507,6 +1540,10 @@ const THEME = {
 const SUBTLE_DIVIDER = '1px solid rgba(255, 244, 230, 0.34)';
 const HEADER_CONTENT_GAP = 'clamp(9px, 1.2dvh, 12px)';
 const BOTTOM_NAV_DIVIDER_OFFSET = 'clamp(4px, 0.7dvh, 6px)';
+const RESPONSIVE_SCREEN_PADDING = 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px';
+const COMPACT_SCREEN_PADDING = 'clamp(6px, 0.8dvh, 8px) clamp(14px, 4vw, 20px) 10px';
+const COMPACT_CONTENT_ROW_GAP = 'clamp(6px, 0.8dvh, 9px)';
+const COMPACT_CONTENT_BOTTOM_PADDING = 'clamp(8px, 1.2dvh, 12px)';
 
 export const FAILED_SET_COLOR = THEME.meet;
 const FAILED_SET_BACKGROUND = 'rgba(198, 40, 40, 0.22)';
@@ -1534,6 +1571,38 @@ export function screenContentNeedsScroll(
 
   const visibleContentBottom = Math.max(0, measuredViewportHeight - measuredBottomInset);
   return measuredContentBottom - visibleContentBottom > measuredTolerance;
+}
+
+export function scrollRegionNeedsScroll(
+  {
+    scrollHeight = 0,
+    clientHeight = 0,
+  } = {},
+  tolerance = SCREEN_OVERFLOW_TOLERANCE_PX
+) {
+  const measuredScrollHeight = Number(scrollHeight);
+  const measuredClientHeight = Number(clientHeight);
+  const measuredTolerance = Math.max(0, Number(tolerance) || 0);
+
+  if (!Number.isFinite(measuredScrollHeight) || !Number.isFinite(measuredClientHeight)) {
+    return false;
+  }
+
+  return measuredScrollHeight - measuredClientHeight > measuredTolerance;
+}
+
+export function resolveAdaptiveScreenDensity(
+  previous = { screen: null, compact: false },
+  screen,
+  contentNeedsCompaction = false
+) {
+  const compact = previous.screen === screen
+    ? Boolean(previous.compact || contentNeedsCompaction)
+    : Boolean(contentNeedsCompaction);
+
+  return previous.screen === screen && previous.compact === compact
+    ? previous
+    : { screen, compact };
 }
 
 function getActiveScreenFlowRoot(viewport) {
@@ -1592,6 +1661,8 @@ function measureActualScreenContentBottom(viewport) {
 export function appViewportStyle({
   screen,
   workoutNeedsNavClearance = false,
+  compactToFit = false,
+  allowContentScroll = true,
 } = {}) {
   return {
     paddingBottom: screen === 'current' && !workoutNeedsNavClearance
@@ -1609,6 +1680,20 @@ export function appViewportStyle({
     // header and outside the two divider lines.
     overflowY: 'hidden',
     overscrollBehaviorY: 'none',
+    // Workout rows can contain preparation and accessory grids whose
+    // intrinsic height is not reflected reliably by the overflow probe.
+    // `auto` still has no scroll range when the complete workout fits.
+    '--kelani-screen-overflow-y': screen === 'current' || allowContentScroll
+      ? 'auto'
+      : 'hidden',
+    ...(compactToFit ? {
+      '--kelani-screen-padding': COMPACT_SCREEN_PADDING,
+      '--kelani-completed-screen-padding': '10px clamp(10px, 3vw, 16px)',
+      '--kelani-content-row-gap': COMPACT_CONTENT_ROW_GAP,
+      '--kelani-content-bottom-padding': COMPACT_CONTENT_BOTTOM_PADDING,
+      '--kelani-stats-card-gap': '1px',
+      '--kelani-stats-tab-gap': 'clamp(3px, 1vw, 5px)',
+    } : {}),
   };
 }
 
@@ -1639,7 +1724,7 @@ function balancedVerticalScreenStyle(bottomOffset = BOTTOM_NAV_SPACE) {
 }
 
 const RESPONSIVE_CONTENT_UI = Object.freeze({
-  screenPadding: 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px',
+  screenPadding: `var(--kelani-screen-padding, ${RESPONSIVE_SCREEN_PADDING})`,
   headerTitleFontSize: 'clamp(30px, 7vw, 36px)',
   headerSubtitleFontSize: 'clamp(15px, 3.4vw, 17px)',
   bodyFontSize: 'clamp(14px, 3.4vw, 17px)',
@@ -1687,7 +1772,7 @@ export function scrollableScreenContentStyle(style = {}) {
     flex: '1 1 auto',
     minHeight: 0,
     overflowX: 'hidden',
-    overflowY: 'auto',
+    overflowY: 'var(--kelani-screen-overflow-y, auto)',
     overscrollBehaviorY: 'none',
     ...style,
   };
@@ -1708,18 +1793,20 @@ export function regularDashboardScreenStyle({ compact = false } = {}) {
 }
 
 export function regularDashboardContentStyle({ spreadContent = false, compact = false } = {}) {
+  const defaultRowGap = spreadContent
+    ? 'clamp(10px, 1.4dvh, 16px)'
+    : compact
+      ? 'clamp(8px, 1.1dvh, 12px)'
+      : 'clamp(14px, 2.2dvh, 24px)';
+
   return {
     ...scrollableScreenContentStyle(),
     minHeight: 0,
     display: 'grid',
     alignContent: spreadContent ? 'space-evenly' : 'start',
-    rowGap: spreadContent
-      ? 'clamp(10px, 1.4dvh, 16px)'
-      : compact
-        ? 'clamp(8px, 1.1dvh, 12px)'
-        : 'clamp(14px, 2.2dvh, 24px)',
+    rowGap: `var(--kelani-content-row-gap, ${defaultRowGap})`,
     ...(spreadContent ? {
-      paddingBottom: 'clamp(24px, 3.5dvh, 36px)',
+      paddingBottom: 'var(--kelani-content-bottom-padding, clamp(24px, 3.5dvh, 36px))',
     } : {}),
   };
 }
@@ -1790,7 +1877,10 @@ export function programHeaderStyle() {
 export function programWorkoutCardSpacingStyle({ compact = false } = {}) {
   return {
     padding: compact
-      ? 'clamp(4px, 0.55dvh, 6px) clamp(12px, 3vw, 16px)'
+      // Keep short viewports at the proven compact minimum, but let tall
+      // screens use their spare height instead of leaving the centered list
+      // visibly compressed between its two toggle buttons.
+      ? 'clamp(4px, calc(1.75dvh - 8.25px), 7px) clamp(12px, 3vw, 16px)'
       : 'clamp(9px, 1.2dvh, 12px) clamp(12px, 3vw, 16px)',
     marginBottom: compact
       ? 'clamp(1px, 0.25dvh, 3px)'
@@ -1819,9 +1909,16 @@ export function programWorkoutListContainerStyle({ showAll = false, marginTop = 
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: showAll ? 'flex-start' : 'center',
+    // When the compact list fits, distribute spare height between its
+    // controls and workout cards. `space-around` keeps only half a share at
+    // the divider edges, so taller phones do not turn that spare height into
+    // two large empty bands above and below the centred list.
+    justifyContent: showAll ? 'flex-start' : 'space-around',
     marginTop: 0,
-    paddingTop: showAll ? 0 : marginTop,
+    // The bottom navigation divider is drawn this far below the Program
+    // viewport. Mirror that inset above the compact list so both toggle
+    // buttons have the same visual distance to their adjacent divider.
+    paddingTop: showAll ? 0 : BOTTOM_NAV_DIVIDER_OFFSET,
     borderTop: showAll ? `${topInsetToVisibleDivider} solid transparent` : 'none',
     borderBottom: showAll ? `${scrollViewportInset} solid transparent` : 'none',
     boxSizing: 'border-box',
@@ -1870,9 +1967,11 @@ export function MeetDayDashboardPlan({
   t,
   weightUnit = WEIGHT_UNITS.KG,
   onOpenWorkout,
+  scheduleDateLabel = '',
 }) {
   return (
     <div
+      data-testid="screen-scroll-content"
       role="button"
       tabIndex={0}
       aria-label={t.openWorkout || t.workout}
@@ -1886,6 +1985,20 @@ export function MeetDayDashboardPlan({
         cursor: 'pointer',
       }}
     >
+      {scheduleDateLabel && (
+        <div
+          data-testid="dashboard-workout-schedule-date"
+          style={{
+            color: THEME.muted,
+            fontSize: 'clamp(13px, 3.2vw, 16px)',
+            fontWeight: 800,
+            lineHeight: 1.3,
+            textAlign: 'center',
+          }}
+        >
+          {scheduleDateLabel}
+        </div>
+      )}
       <MeetPlanContent
         meetPlan={meetPlan}
         meetTotals={meetTotals}
@@ -1987,12 +2100,39 @@ export function restDayCompletedContentStyle() {
   };
 }
 
+export function CompletedScreenHeader({ title, message, compact = false }) {
+  return (
+    <div
+      data-testid="completed-screen-header"
+      style={compact ? { textAlign: 'center' } : fixedScreenHeaderStyle()}
+    >
+      <div style={{ fontSize: 40, marginBottom: 6, textAlign: 'center' }}>🎉</div>
+
+      <h2 style={{ margin: '0 0 6px', color: THEME.brown, textAlign: 'center' }}>
+        {title}
+      </h2>
+
+      <p style={{
+        color: THEME.muted,
+        lineHeight: 1.3,
+        margin: '0 0 8px',
+        padding: '0 2px',
+        textAlign: 'center',
+      }}>
+        {message}
+      </p>
+
+      {!compact && <div data-testid="app-header-divider" style={appHeaderDividerStyle()} />}
+    </div>
+  );
+}
+
 export function completedWorkoutScreenStyle() {
   return fixedChromeScreenStyle({
     width: '100%',
     maxWidth: 500,
     margin: '0 auto',
-    padding: '20px clamp(10px, 3vw, 16px) 16px',
+    padding: 'var(--kelani-completed-screen-padding, 20px clamp(10px, 3vw, 16px) 16px)',
     boxSizing: 'border-box',
     background: THEME.bg,
     color: THEME.text,
@@ -2626,6 +2766,20 @@ function WorkoutWeightCalculatorTrigger({
   );
 }
 
+export function activeWorkoutTargetNeedsScroll(target, margin = 8) {
+  const region = target?.closest?.('[data-testid="screen-scroll-content"]');
+  if (!region) return true;
+
+  const targetRect = target.getBoundingClientRect();
+  const regionRect = region.getBoundingClientRect();
+  // jsdom and detached nodes have no layout; keep the focus behavior when
+  // there is no trustworthy visibility measurement.
+  if (!targetRect.height || !regionRect.height) return true;
+
+  return targetRect.top < regionRect.top + margin ||
+    targetRect.bottom > regionRect.bottom - margin;
+}
+
 function useActiveWorkoutAutoScroll(isActive) {
   const targetRef = useRef(null);
   const scrolledForCurrentActivation = useRef(false);
@@ -2642,11 +2796,13 @@ function useActiveWorkoutAutoScroll(isActive) {
     ) return;
 
     scrolledForCurrentActivation.current = true;
-    targetRef.current.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center',
-      inline: 'nearest',
-    });
+    if (activeWorkoutTargetNeedsScroll(targetRef.current)) {
+      targetRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest',
+      });
+    }
   }, [isActive]);
 
   return targetRef;
@@ -3412,7 +3568,7 @@ export function settingsContentLayoutStyle() {
     minHeight: 0,
     display: 'grid',
     gridTemplateRows: 'minmax(0, 1fr) auto',
-    rowGap: 'clamp(5px, 0.8dvh, 10px)',
+    rowGap: 'var(--kelani-content-row-gap, clamp(5px, 0.8dvh, 10px))',
     alignContent: 'stretch',
   };
 }
@@ -3442,6 +3598,178 @@ function SettingsModal({ title, onClose, children }) {
   );
 }
 
+export function CalendarSettingsModal({ t, settings, onChange, onSync, syncStatus, syncing, pickerOpen, onPickerOpenChange, onClose }) {
+  const [permission, setPermission] = useState('checking');
+  const [calendars, setCalendars] = useState([]);
+  const [error, setError] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const nativeAvailable = isNativeCalendarAvailable();
+  const normalized = normalizeCalendarIntegrationSettings(settings);
+
+  useEffect(() => {
+    if (!nativeAvailable) {
+      setPermission('unavailable');
+      return;
+    }
+
+    let active = true;
+    async function loadCalendars() {
+      try {
+        const state = await getCalendarPermissionState();
+        if (!active) return;
+        setPermission(state);
+        if (state === 'granted') {
+          const available = await getWritableDeviceCalendars();
+          if (active) setCalendars(available);
+        }
+      } catch (cause) {
+        if (active) setError(true);
+      }
+    }
+    loadCalendars();
+    return () => { active = false; };
+  }, [nativeAvailable]);
+
+  async function allowCalendarAccess() {
+    setBusy(true);
+    setError(false);
+    try {
+      const state = await requestCalendarPermission();
+      setPermission(state);
+      if (state === 'granted') {
+        setCalendars(await getWritableDeviceCalendars());
+      }
+    } catch (cause) {
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const selectedCalendar = calendars.find(calendar =>
+    String(calendar.id) === normalized.calendarId &&
+    calendar.name === normalized.calendarName &&
+    String(calendar.accountName || '') === normalized.calendarAccountName &&
+    String(calendar.accountType || '') === normalized.calendarAccountType
+  );
+  const selectedCalendarAvailable = Boolean(selectedCalendar);
+  const calendarLabel = calendar => calendar.accountName && calendar.accountName !== calendar.name
+    ? `${calendar.name} (${calendar.accountName})`
+    : calendar.name;
+
+  if (pickerOpen) {
+    return (
+      <SettingsModal title={t.calendarChoosePlaceholder} onClose={() => onPickerOpenChange(false)}>
+        <div style={{ display: 'grid', gap: 8 }}>
+          {calendars.map(calendar => (
+            <button
+              key={calendar.id}
+              type="button"
+              aria-pressed={selectedCalendar?.id === calendar.id}
+              onClick={() => {
+                onChange({
+                  ...normalized,
+                  calendarId: String(calendar.id),
+                  calendarName: calendar.name || '',
+                  calendarAccountName: calendar.accountName || '',
+                  calendarAccountType: calendar.accountType || '',
+                  enabled: true,
+                });
+                onPickerOpenChange(false);
+              }}
+              style={{ ...modalActionButtonStyle(), textAlign: 'left', overflowWrap: 'anywhere' }}
+            >
+              {calendarLabel(calendar)}{selectedCalendar?.id === calendar.id ? ' ✓' : ''}
+            </button>
+          ))}
+        </div>
+        <button type="button" onClick={() => onPickerOpenChange(false)} style={compactModalActionButtonStyle('secondary')}>
+          {t.close}
+        </button>
+      </SettingsModal>
+    );
+  }
+
+  return (
+    <SettingsModal title={t.calendarTitle} onClose={onClose}>
+      <p style={{ color: THEME.text, fontSize: 13, lineHeight: 1.4, margin: '0 0 14px' }}>
+        {t.calendarSettingsIntro}
+      </p>
+      {!nativeAvailable ? (
+        <p style={{ color: THEME.muted, fontSize: 13 }}>{t.calendarAndroidOnly}</p>
+      ) : (
+        <>
+          {permission !== 'granted' && (
+            <button type="button" onClick={allowCalendarAccess} disabled={busy} style={compactModalActionButtonStyle('primary', '0 auto 14px')}>
+              {t.calendarAllowAccess}
+            </button>
+          )}
+          {permission === 'granted' && (
+            <>
+              <div style={{ display: 'grid', gap: 6, color: THEME.text, fontSize: 13, fontWeight: 800 }}>
+                <div>{t.calendarChoose}</div>
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded={false}
+                  disabled={syncing || calendars.length === 0}
+                  onClick={() => onPickerOpenChange(true)}
+                  style={{ ...modalInputStyle(), textAlign: 'left', cursor: 'pointer', overflowWrap: 'anywhere' }}
+                >
+                  {selectedCalendar ? calendarLabel(selectedCalendar) : t.calendarChoosePlaceholder}
+                </button>
+              </div>
+              {calendars.length === 0 && <p style={{ color: THEME.muted, fontSize: 13 }}>{t.calendarNoneWritable}</p>}
+              {normalized.calendarId && !selectedCalendarAvailable && (
+                <p style={{ color: THEME.muted, fontSize: 13 }}>{t.calendarSavedUnavailable}</p>
+              )}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, color: THEME.text, fontSize: 13, fontWeight: 800, margin: '14px 0' }}>
+                <input
+                  type="checkbox"
+                  checked={normalized.enabled && selectedCalendarAvailable}
+                  disabled={!selectedCalendarAvailable || syncing}
+                  onChange={event => onChange({ ...normalized, enabled: event.target.checked })}
+                  style={{ width: 20, height: 20, accentColor: THEME.primary }}
+                />
+                {t.calendarEnable}
+              </label>
+              <label style={{ display: 'grid', gap: 6, color: THEME.text, fontSize: 13, fontWeight: 800 }}>
+                {t.calendarStartTime}
+                <input
+                  type="time"
+                  value={normalized.defaultStartTime}
+                  disabled={syncing}
+                  onChange={event => onChange({ ...normalized, defaultStartTime: event.target.value })}
+                  style={modalInputStyle()}
+                />
+              </label>
+              <p style={{ color: THEME.muted, fontSize: 12, lineHeight: 1.35, margin: '14px 0 8px' }}>
+                {t.calendarSyncHint}
+              </p>
+              <button
+                type="button"
+                onClick={onSync}
+                disabled={syncing || (
+                  (!normalized.enabled || !selectedCalendarAvailable) && normalized.eventMappings.length === 0
+                )}
+                style={{ ...compactModalActionButtonStyle('primary', '0 auto 10px'), opacity: syncing ? 0.65 : 1 }}
+              >
+                {syncing ? t.calendarSyncing : t.calendarSyncNow}
+              </button>
+              {syncStatus === 'success' && <p role="status" style={{ color: THEME.green, fontSize: 13, textAlign: 'center' }}>{t.calendarSyncSuccess}</p>}
+              {syncStatus === 'error' && <p role="alert" style={{ color: THEME.red, fontSize: 13, textAlign: 'center' }}>{t.calendarSyncError}</p>}
+            </>
+          )}
+          {error && <p role="alert" style={{ color: THEME.red, fontSize: 13 }}>{t.calendarLoadError}</p>}
+        </>
+      )}
+      <button type="button" onClick={onClose} style={compactModalActionButtonStyle('secondary')}>
+        {t.close}
+      </button>
+    </SettingsModal>
+  );
+}
+
 export function WhatsNewModal({
   t,
   version,
@@ -3453,6 +3781,8 @@ export function WhatsNewModal({
     t.whatsNewFixedChromeItem,
     t.whatsNewDashboardSpacingItem,
     t.whatsNewProgramSpacingItem,
+    t.whatsNewReturnTrainingItem,
+    t.whatsNewCalendarItem,
   ];
 
   return (
@@ -3511,17 +3841,17 @@ export function WhatsNewModal({
         <span>{t.whatsNewShowAutomatically}</span>
       </label>
 
-      <div style={{ width: 'calc(50% - 4px)', margin: '0 auto' }}>
-        <button type="button" onClick={onClose} style={modalActionButtonStyle('primary')}>
-          {t.close}
-        </button>
-      </div>
+      <button type="button" onClick={onClose} style={compactModalActionButtonStyle('primary', '0 auto')}>
+        {t.close}
+      </button>
     </SettingsModal>
   );
 }
 
 export function UpdatesSettingsModal({
   t,
+  title,
+  children,
   currentVersion,
   latestVersion,
   checkStatus,
@@ -3543,7 +3873,9 @@ export function UpdatesSettingsModal({
           : t.updateNotChecked;
 
   return (
-    <SettingsModal title={t.updatesTitle} onClose={onClose}>
+    <SettingsModal title={title || t.updatesTitle} onClose={onClose}>
+      {children}
+      {children && <h4 style={{ color: THEME.primary, textAlign: 'center', margin: '4px 0 14px' }}>{t.updatesTitle}</h4>}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr) auto',
@@ -3557,11 +3889,9 @@ export function UpdatesSettingsModal({
         <strong>{currentVersion}</strong>
       </div>
 
-      <div style={{ width: 'calc(50% - 4px)', margin: '0 auto 14px' }}>
-        <button type="button" onClick={onOpenWhatsNew} style={modalActionButtonStyle()}>
-          {t.whatsNewView}
-        </button>
-      </div>
+      <button type="button" onClick={onOpenWhatsNew} style={compactModalActionButtonStyle('secondary', '0 auto 14px')}>
+        {t.whatsNewView}
+      </button>
 
       <label style={{
         display: 'flex',
@@ -3618,7 +3948,7 @@ export function UpdatesSettingsModal({
         >
           {checkStatus === 'checking' ? t.updateChecking : t.updateCheckNow}
         </button>
-        <button type="button" onClick={onClose} style={modalActionButtonStyle()}>
+        <button type="button" onClick={onClose} style={compactModalActionButtonStyle('secondary', '0 auto')}>
           {t.close}
         </button>
       </div>
@@ -3689,24 +4019,10 @@ export function UpdateAvailableModal({
         </button>
       </div>
 
-      <div style={{ width: 'calc(50% - 4px)', margin: '8px auto 0' }}>
-        <button type="button" onClick={onClose} style={modalActionButtonStyle()}>
-          {t.later}
-        </button>
-      </div>
+      <button type="button" onClick={onClose} style={compactModalActionButtonStyle('secondary', '8px auto 0')}>
+        {t.later}
+      </button>
     </SettingsModal>
-  );
-}
-
-function UpdatesSettingsSection({ t, onOpen }) {
-  return (
-    <>
-      <SettingsListRow
-        label={t.updatesTitle}
-        actionLabel={t.updatesAction}
-        onAction={onOpen}
-      />
-    </>
   );
 }
 
@@ -3749,6 +4065,21 @@ function modalActionButtonStyle(variant = 'secondary') {
     borderRadius: 8,
     cursor: 'pointer',
     boxSizing: 'border-box'
+  };
+}
+
+export function compactModalActionButtonStyle(
+  variant = 'secondary',
+  margin = '14px auto 0',
+  minWidth = 128
+) {
+  return {
+    ...modalActionButtonStyle(variant),
+    display: 'block',
+    width: 'fit-content',
+    minWidth,
+    maxWidth: '100%',
+    margin,
   };
 }
 
@@ -4160,7 +4491,7 @@ export function DataSection({ t, importOnly = false, triggerOnly = false }) {
             <button
               type="button"
               onClick={() => setShowDataManager(false)}
-              style={modalActionButtonStyle()}
+              style={compactModalActionButtonStyle()}
             >
               {t.close}
             </button>
@@ -4222,37 +4553,17 @@ export function DataSection({ t, importOnly = false, triggerOnly = false }) {
             ))}
           </div>
 
-          <div style={{ display: 'grid', gap: 4 }}>
+          <div style={modalActionRowStyle()}>
             <button
               onClick={confirmImport}
-              style={{
-                width: '100%',
-                padding: 12,
-                fontSize: 14,
-                fontWeight: 800,
-                background: THEME.card,
-                color: '#ffffff',
-                border: `1px solid ${THEME.primary}`,
-                borderRadius: 8,
-                cursor: 'pointer'
-              }}
+              style={modalActionButtonStyle('primary')}
             >
               {t.importData}
             </button>
 
             <button
               onClick={() => setPendingImport(null)}
-              style={{
-                width: '100%',
-                padding: 10,
-                fontSize: 14,
-                fontWeight: 700,
-                background: 'transparent',
-                color: THEME.text,
-                border: `1px solid ${THEME.primary}`,
-                borderRadius: 8,
-                cursor: 'pointer'
-              }}
+              style={modalActionButtonStyle()}
             >
               {t.cancel}
             </button>
@@ -4263,7 +4574,7 @@ export function DataSection({ t, importOnly = false, triggerOnly = false }) {
   );
 }
 
-function SupportActionButton({ children, onClick }) {
+function SupportActionButton({ children, onClick, compact = false }) {
   return (
     <button
       type="button"
@@ -4279,7 +4590,10 @@ function SupportActionButton({ children, onClick }) {
         cursor: 'pointer',
         minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
         height: 'clamp(52px, 6.5dvh, 60px)',
-        width: '100%',
+        width: compact ? 'fit-content' : '100%',
+        minWidth: compact ? 128 : undefined,
+        maxWidth: '100%',
+        margin: compact ? '0 auto' : undefined,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -4476,8 +4790,8 @@ export function AnonymousUsageShareModal({ metrics, t, onClose }) {
         <SupportActionButton onClick={emailReport}>{t.usageEmail}</SupportActionButton>
       </div>
 
-      <div style={{ width: 'calc(50% - 4px)', margin: '8px auto 0' }}>
-        <SupportActionButton onClick={onClose}>{t.close}</SupportActionButton>
+      <div style={{ marginTop: 8 }}>
+        <SupportActionButton compact onClick={onClose}>{t.close}</SupportActionButton>
       </div>
     </SettingsModal>
   );
@@ -4643,8 +4957,11 @@ export function MilestoneCelebrationModal({
   );
 }
 
-function AboutSupportSection({ t, language, usageMetrics }) {
-  const [showAbout, setShowAbout] = useState(false);
+function AboutSupportSection({
+  t, language, usageMetrics, currentVersion, latestVersion, checkStatus,
+  checkAutomatically, onCheckAutomaticallyChange, onCheck, onOpenWhatsNew,
+  onOpenUpdateLink, onPrepareUpdates, isOpen, onOpen, onClose,
+}) {
   const [showUsageSummary, setShowUsageSummary] = useState(false);
 
   function openLink(url) {
@@ -4697,16 +5014,29 @@ function AboutSupportSection({ t, language, usageMetrics }) {
   return (
     <>
       <SettingsListRow
-        label={t.about}
+        label={t.aboutAndUpdates}
         actionLabel={t.view}
-        onAction={() => setShowAbout(true)}
+        onAction={() => {
+          onPrepareUpdates();
+          onOpen();
+        }}
       />
 
-      {showAbout && (
-        <SettingsModal
-          title={t.about}
-          onClose={() => setShowAbout(false)}
+      {isOpen && (
+        <UpdatesSettingsModal
+          t={t}
+          title={t.aboutAndUpdates}
+          currentVersion={currentVersion}
+          latestVersion={latestVersion}
+          checkStatus={checkStatus}
+          checkAutomatically={checkAutomatically}
+          onCheckAutomaticallyChange={onCheckAutomaticallyChange}
+          onCheck={onCheck}
+          onOpenWhatsNew={onOpenWhatsNew}
+          onOpenLink={onOpenUpdateLink}
+          onClose={onClose}
         >
+          <h4 style={{ color: THEME.primary, textAlign: 'center', margin: '0 0 12px' }}>{t.about}</h4>
           <p style={{
             margin: '0 0 14px',
             color: THEME.text,
@@ -4764,12 +5094,7 @@ function AboutSupportSection({ t, language, usageMetrics }) {
             ))}
           </div>
 
-          <div style={{ width: 'calc(50% - 4px)', margin: '8px auto 0' }}>
-            <SupportActionButton onClick={() => setShowAbout(false)}>
-              {t.close}
-            </SupportActionButton>
-          </div>
-        </SettingsModal>
+        </UpdatesSettingsModal>
       )}
 
       {showUsageSummary && (
@@ -4819,7 +5144,7 @@ export function WeightUnitSection({ weightUnit, setWeightUnit, t }) {
                 }}
                 style={{
                   ...selectionModalButtonStyle(normalizedWeightUnit === unit),
-                  marginBottom: 0,
+                  margin: '0 auto',
                 }}
               >
                 {unit === WEIGHT_UNITS.KG ? t.weightUnitKg : t.weightUnitLb}
@@ -5240,16 +5565,9 @@ function RestTimeSection({ t }) {
               <button
                 onClick={handleOpenDoNotDisturbSettings}
                 style={{
+                  ...compactModalActionButtonStyle('primary', '0 auto'),
                   gridColumn: '1 / -1',
-                  width: '100%',
-                  padding: 10,
-                  fontSize: 14,
-                  fontWeight: 800,
-                  borderRadius: 8,
-                  border: `1px solid ${THEME.primary}`,
-                  background: THEME.card,
-                  color: THEME.text,
-                  cursor: 'pointer'
+                  justifySelf: 'center',
                 }}
               >
                 {t.restTimerOpenDndSettings}
@@ -5260,14 +5578,9 @@ function RestTimeSection({ t }) {
                 onClick={handleTestAlert}
                 disabled={alertTestKind === 'scheduled'}
                 style={{
+                  ...compactModalActionButtonStyle('primary', '0 auto'),
                   gridColumn: '1 / -1',
-                  width: '100%',
-                  padding: 10,
-                  fontSize: 14,
-                  fontWeight: 800,
-                  borderRadius: 8,
-                  border: `1px solid ${THEME.primary}`,
-                  background: THEME.card,
+                  justifySelf: 'center',
                   color: alertTestKind === 'scheduled' ? THEME.muted : THEME.text,
                   cursor: alertTestKind === 'scheduled' ? 'default' : 'pointer'
                 }}
@@ -5317,9 +5630,12 @@ function RestTimeSection({ t }) {
 
 
 
-function selectionModalButtonStyle(active) {
+export function selectionModalButtonStyle(active) {
   return {
-    width: '100%',
+    display: 'block',
+    width: 'fit-content',
+    minWidth: 128,
+    maxWidth: '100%',
     minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
     padding: 12,
     fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
@@ -5329,7 +5645,7 @@ function selectionModalButtonStyle(active) {
     border: `1px solid ${THEME.primary}`,
     borderRadius: 8,
     cursor: 'pointer',
-    marginBottom: 6
+    margin: '0 auto 6px'
   };
 }
 
@@ -5414,7 +5730,7 @@ function ModelSection({ trainingModel, switchToSmart, switchBlocked, t }) {
               setIsEditing(false);
             }}
             style={{
-              ...selectionModalButtonStyle(false),
+              ...compactModalActionButtonStyle('primary', '0 auto'),
               opacity: switchBlocked ? 0.45 : 1,
               cursor: switchBlocked ? 'not-allowed' : 'pointer',
             }}
@@ -5486,14 +5802,10 @@ function NewCycleModal({ prs, onStart, t, weightUnit = WEIGHT_UNITS.KG }) {
         <button
           onClick={onStart}
           style={{
-            width: '100%',
+            ...compactModalActionButtonStyle('primary', '0 auto', 160),
             padding: 14,
             fontSize: 16,
-            background: THEME.card,
             color: '#ffffff',
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 4,
-            cursor: 'pointer',
             fontWeight: 600
           }}
         >
@@ -5531,7 +5843,7 @@ function getSkippedSetMessage(set, t, isLastSet = false) {
   return t.topSetSkipped;
 }
 
-export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = false, showPhaseTags = false, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator, isLastGroupOfWorkout = false, workoutCompleted = false }) {
+export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = false, showPhaseTags = false, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator, isLastGroupOfWorkout = false, workoutCompleted = false, hasLaterSetAction = false }) {
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
   const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
@@ -5663,7 +5975,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
     </div>
   );
 
-  const feedback = failedEntry && !workoutCompleted ? (
+  const feedback = failedEntry && !workoutCompleted && !hasLaterSetAction ? (
     <div style={{
       marginTop: 8,
       padding: '7px 9px',
@@ -6142,14 +6454,9 @@ function ExerciseGuideModal({ lift, t, onClose }) {
           type="button"
           onClick={onClose}
           style={{
-            width: '100%',
+            ...compactModalActionButtonStyle('secondary', '0 auto'),
             padding: 11,
-            borderRadius: 8,
-            border: `1px solid ${THEME.primary}`,
-            background: 'transparent',
-            color: THEME.text,
             fontWeight: 800,
-            cursor: 'pointer'
           }}
         >
           {t.close}
@@ -6322,6 +6629,7 @@ function getKelaniWarmupJumpIssues(workout = {}) {
 
 export function getSmartDecisionReasonDisplayText(summary, t = translations.en, workout = {}) {
   t = completeUiTranslations(t);
+  if (workout?.smartReturnTraining) return t.smartReturnTrainingDetails;
   if (!summary?.reason) return null;
 
   const readiness = summary.readiness || {};
@@ -6513,6 +6821,24 @@ export function getSmartDecisionReasonDisplayText(summary, t = translations.en, 
 
 export function shouldShowSmartReasonWithStructuredDetails(dayType) {
   return [SMART_DAY_TYPES.RECOVERY, SMART_DAY_TYPES.DELOAD].includes(dayType);
+}
+
+export function shouldShowSmartDecisionReason(summary = {}, workout = {}) {
+  if (!summary?.reason) return false;
+  if (summary.reason !== SMART_DECISION_REASONS.IDEAL_ROUTE) return true;
+
+  if (
+    workout?.smartIdealRoute?.stage === 'post-meet' ||
+    workout?.smartIdealRoute?.adjustmentReason === 'too-hard-recovery'
+  ) {
+    return true;
+  }
+
+  const dayType = summary.dayType || workout?.smartDayType || workout?.type;
+  return ![
+    SMART_DAY_TYPES.TRAINING,
+    SMART_DAY_TYPES.RECOVERY,
+  ].includes(dayType);
 }
 
 function getSmartTrainingSelectionDisplayText(workout, t = translations.en) {
@@ -6868,7 +7194,12 @@ async function copySmartDiagnosticText(text = '') {
   if (!copied) throw new Error('Clipboard copy failed.');
 }
 
-export function getSmartModalDetailRows(workout = {}, t = translations.en, currentE1RMs = {}) {
+export function getSmartModalDetailRows(
+  workout = {},
+  t = translations.en,
+  currentE1RMs = {},
+  meetProjectionDateLabel = ''
+) {
   t = completeUiTranslations(t);
   const summary = workout?.smartDecisionSummary || {};
   const readiness = summary.readiness || {};
@@ -7072,7 +7403,7 @@ export function getSmartModalDetailRows(workout = {}, t = translations.en, curre
     rows.push({
       label: followsIdealRoute ? t.expectedMeetWindow : t.smartProjectedMeet,
       value: meetProjection.available
-        ? meetProjection.label
+        ? [meetProjection.label, meetProjectionDateLabel].filter(Boolean).join(' · ')
         : (t.smartProjectionUnavailable),
     });
 
@@ -7150,6 +7481,10 @@ export function SmartDayTypeInline({
   t,
   weightUnit = WEIGHT_UNITS.KG,
   currentE1RMs = {},
+  meetProjectionDateLabel = '',
+  onChooseReturnTraining = null,
+  daysSinceLastWorkout = null,
+  canChangeReturnTraining = false,
 }) {
   const [showSmartInfo, setShowSmartInfo] = useState(false);
   const [smartCopyStatus, setSmartCopyStatus] = useState(null);
@@ -7165,9 +7500,14 @@ export function SmartDayTypeInline({
       .replace(/(^|[.!?]\s+)([a-z])/g, (_, prefix, letter) => `${prefix}${letter.toUpperCase()}`);
   }
 
-  const reasonText = formatSmartInfoText(
-    getSmartDecisionReasonDisplayText(workout?.smartDecisionSummary, t, workout)
-  );
+  const reasonText = shouldShowSmartDecisionReason(
+    workout?.smartDecisionSummary,
+    workout
+  )
+    ? formatSmartInfoText(
+      getSmartDecisionReasonDisplayText(workout?.smartDecisionSummary, t, workout)
+    )
+    : null;
   const hasDedicatedPostMeetRecoveryExplanation = Boolean(
     workout?.smartDecisionSummary?.reason === SMART_DECISION_REASONS.POST_MEET_RECOVERY ||
     workout?.smartIdealRoute?.stage === 'post-meet'
@@ -7180,7 +7520,7 @@ export function SmartDayTypeInline({
     )
     : 0;
   const detailRows = [
-    ...getSmartModalDetailRows(workout, t, currentE1RMs),
+    ...getSmartModalDetailRows(workout, t, currentE1RMs, meetProjectionDateLabel),
     ...(meetDayProjectedTotal > 0 ? [{
       label: t.projectedTotal,
       value: formatWeightFromKg(meetDayProjectedTotal, weightUnit),
@@ -7292,6 +7632,14 @@ export function SmartDayTypeInline({
     textTransform: 'uppercase',
     overflowWrap: 'anywhere',
   };
+  const showReturnTrainingChoice = Boolean(
+    workout?.type === 'training' &&
+    !workout?.completed &&
+    onChooseReturnTraining &&
+    (canChangeReturnTraining || workout.smartReturnTraining)
+  );
+  const returnTrainingSuggested = daysSinceLastWorkout !== null &&
+    daysSinceLastWorkout >= SMART_RETURN_TRAINING.suggestedAfterDays;
 
   return (
     <>
@@ -7672,6 +8020,59 @@ export function SmartDayTypeInline({
                 </p>
               )}
 
+              {showReturnTrainingChoice && (
+                <section aria-label={t.smartReturnTrainingTitle}>
+                  <div style={smartModalDividerStyle} />
+                  <div style={smartModalSectionTitleStyle}>
+                    {t.smartReturnTrainingTitle}
+                  </div>
+                  <div style={{
+                    color: THEME.text,
+                    fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
+                    fontWeight: 800,
+                    lineHeight: 1.3,
+                  }}>
+                    {workout.smartReturnTraining
+                      ? t.smartReturnTrainingActive
+                      : returnTrainingSuggested
+                        ? t.smartReturnTrainingSuggested.replace('{days}', String(daysSinceLastWorkout))
+                        : t.smartReturnTrainingAvailable}
+                  </div>
+                  <div style={{
+                    marginTop: 5,
+                    color: smartModalMutedText,
+                    fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
+                    fontWeight: 600,
+                    lineHeight: 1.4,
+                  }}>
+                    {t.smartReturnTrainingDetails}
+                  </div>
+                  {canChangeReturnTraining && (
+                    <button
+                      type="button"
+                      onClick={() => onChooseReturnTraining(!workout.smartReturnTraining)}
+                      style={{
+                        display: 'block',
+                        minHeight: 44,
+                        margin: '12px auto 0',
+                        padding: '8px 14px',
+                        borderRadius: 9,
+                        border: `1px solid ${THEME.primary}`,
+                        background: `${THEME.primary}18`,
+                        color: THEME.primary,
+                        fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
+                        fontWeight: 900,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {workout.smartReturnTraining
+                        ? t.smartReturnTrainingRestore
+                        : t.smartReturnTrainingChoose}
+                    </button>
+                  )}
+                </section>
+              )}
+
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
@@ -7739,7 +8140,7 @@ export function SmartDayTypeInline({
 }
 
 export function CurrentWorkout({
-  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetWarmup, onToggleMeetSet, onMarkLiftBlockSetFailed, onRestoreLiftBlockSetWeight, onLiftBlockWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', preparationMode = 'basicFirst', workoutSetup = null, timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight, currentE1RMs = {} }) {
+  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetWarmup, onToggleMeetSet, onMarkLiftBlockSetFailed, onRestoreLiftBlockSetWeight, onLiftBlockWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, onChooseReturnTraining, daysSinceLastWorkout = null, canChangeReturnTraining = false, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', preparationMode = 'basicFirst', workoutSetup = null, timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight, currentE1RMs = {}, meetProjectionDateLabel = '' }) {
   const smartModel = isSmartTrainingModel(trainingModel);
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
@@ -7937,6 +8338,7 @@ export function CurrentWorkout({
               t={t}
               weightUnit={weightUnit}
               currentE1RMs={currentE1RMs}
+              meetProjectionDateLabel={meetProjectionDateLabel}
             />
           </div>
         )}
@@ -7994,15 +8396,23 @@ export function CurrentWorkout({
           </div>
         </div>
 
-        {!isReadOnly && (
-          <WorkoutCompletionButton
-            onClick={() => onComplete('easy')}
-            data-testid="complete-rest-day-button"
-            active={shouldFocusWorkoutCompletion({ restDay: true })}
-          >
-            {t.completeRestDay}
-          </WorkoutCompletionButton>
-        )}
+        <WorkoutCompletionButton
+          onClick={() => {
+            if (isReadOnly) return;
+            onComplete('easy');
+          }}
+          data-testid="complete-rest-day-button"
+          disabled={isReadOnly}
+          enabled={!isReadOnly}
+          active={shouldFocusWorkoutCompletion({
+            isReadOnly,
+            restDay: true,
+          })}
+        >
+          {workout.completed ? t.restDayCompleted : isReadOnly
+            ? t.previewNotCompletable
+            : t.completeRestDay}
+        </WorkoutCompletionButton>
         </div>
       </div>
     );
@@ -8085,6 +8495,10 @@ export function CurrentWorkout({
             flexDirection: 'column',
           } : {
             display: 'grid',
+            // Keep each preparation, lift and accessory block at its full
+            // content height. Implicit auto rows may shrink overflow-hidden
+            // blocks until only their headings remain visible.
+            gridAutoRows: 'max-content',
             alignContent: 'space-between',
           })}
         >
@@ -8095,6 +8509,10 @@ export function CurrentWorkout({
               t={t}
               weightUnit={weightUnit}
               currentE1RMs={currentE1RMs}
+              meetProjectionDateLabel={meetProjectionDateLabel}
+              onChooseReturnTraining={isReadOnly ? null : onChooseReturnTraining}
+              daysSinceLastWorkout={daysSinceLastWorkout}
+              canChangeReturnTraining={canChangeReturnTraining}
             />
           </div>
         )}
@@ -8144,6 +8562,12 @@ export function CurrentWorkout({
           const firstIncompleteWarmup = (liftBlock.warmups || []).findIndex(w => !w.done);
           const firstIncompleteSet = (liftBlock.sets || []).findIndex(s => !s.done);
           const allWarmupsDone = (liftBlock.warmups || []).every(w => w.done);
+          const hasActionInLaterLift = (workout.lifts || []).some((laterLiftBlock, laterLiftIndex) =>
+            laterLiftIndex > li &&
+            (laterLiftBlock.sets || []).some(laterSet =>
+              laterSet.done || laterSet.failed || laterSet.skipped
+            )
+          );
 
           return (
             <div
@@ -8294,6 +8718,7 @@ export function CurrentWorkout({
                         benchPressVariant={effectiveBenchPressVariant}
                         isLastGroupOfWorkout={li === (workout.lifts || []).length - 1}
                         workoutCompleted={Boolean(workout.completed)}
+                        hasLaterSetAction={hasActionInLaterLift}
                       />
                     </React.Fragment>
                   );
@@ -8336,6 +8761,12 @@ export function CurrentWorkout({
                           groupedSetEntries[groupedSetEntries.length - 1]?.index === (liftBlock.sets || []).length - 1
                         }
                         workoutCompleted={Boolean(workout.completed)}
+                        hasLaterSetAction={
+                          (liftBlock.sets || []).some((laterSet, laterIndex) =>
+                            laterIndex > groupedSetEntries[groupedSetEntries.length - 1]?.index &&
+                            (laterSet.done || laterSet.failed || laterSet.skipped)
+                          ) || hasActionInLaterLift
+                        }
                       />
                     </React.Fragment>
                   );
@@ -8570,8 +9001,9 @@ export function CurrentWorkout({
 
       <div
         data-testid="screen-scroll-content"
-        style={scrollableScreenContentStyle({
+          style={scrollableScreenContentStyle({
           display: 'grid',
+          gridAutoRows: 'max-content',
           alignContent: 'space-between',
         })}
       >
@@ -8582,6 +9014,7 @@ export function CurrentWorkout({
             t={t}
             weightUnit={weightUnit}
             currentE1RMs={currentE1RMs}
+            meetProjectionDateLabel={meetProjectionDateLabel}
           />
         </div>
       )}
@@ -8695,6 +9128,10 @@ export function CurrentWorkout({
                     groupedSetEntries[groupedSetEntries.length - 1]?.index === workout.sets.length - 1
                   }
                   workoutCompleted={Boolean(workout.completed)}
+                  hasLaterSetAction={(workout.sets || []).some((laterSet, laterIndex) =>
+                    laterIndex > groupedSetEntries[groupedSetEntries.length - 1]?.index &&
+                    (laterSet.done || laterSet.failed || laterSet.skipped)
+                  )}
                 />
               </React.Fragment>
             );
@@ -9053,6 +9490,15 @@ export function MeetPlanContent({
   );
 }
 
+export function meetPlanModalBackButtonStyle() {
+  return {
+    ...modalActionButtonStyle('primary'),
+    display: 'block',
+    width: 'min(160px, 100%)',
+    margin: '16px auto 0',
+  };
+}
+
 function MeetPlanModal({ meetPlan, meetTotals, t, weightUnit = WEIGHT_UNITS.KG, onClose }) {
   return (
     <SettingsModal title={t.meetPlanner} onClose={onClose}>
@@ -9066,7 +9512,7 @@ function MeetPlanModal({ meetPlan, meetTotals, t, weightUnit = WEIGHT_UNITS.KG, 
       <button
         type="button"
         onClick={onClose}
-        style={modalActionButtonStyle('primary')}
+        style={meetPlanModalBackButtonStyle()}
       >
         {t.back}
       </button>
@@ -9087,6 +9533,29 @@ function programActionButtonStyle(accentColor = THEME.primary, margin = '0') {
     border: `1px solid ${accentColor}`,
     borderRadius: 8,
     cursor: 'pointer',
+  };
+}
+
+export function compactProgramActionButtonStyle(
+  accentColor = THEME.primary,
+  margin = '0 auto',
+  minWidth = 128
+) {
+  return {
+    ...programActionButtonStyle(accentColor, margin),
+    display: 'block',
+    width: 'fit-content',
+    minWidth,
+    maxWidth: '100%',
+  };
+}
+
+export function workoutSetupModalButtonStyle(
+  accentColor = THEME.primary,
+  margin = '0 auto 10px'
+) {
+  return {
+    ...compactProgramActionButtonStyle(accentColor, margin),
   };
 }
 
@@ -9152,7 +9621,7 @@ function WorkoutSetupSection({ workoutSetup, onSave, t }) {
     const enabled = Boolean(draft[section]?.enabled);
     return (
       <section style={{ paddingTop: 12, marginTop: 12 }}>
-        <button type="button" onClick={() => toggleSection(section)} style={{ ...programActionButtonStyle(enabled ? THEME.primary : THEME.muted), margin: '0 0 10px' }}>
+        <button type="button" onClick={() => toggleSection(section)} style={workoutSetupModalButtonStyle(enabled ? THEME.primary : THEME.muted)}>
           {title}: {enabled ? t.enabled : t.disabled}
         </button>
         {enabled && BIG_LIFTS.map(lift => (
@@ -9182,7 +9651,7 @@ function WorkoutSetupSection({ workoutSetup, onSave, t }) {
     {open && <SettingsModal title={t.workoutSetup} onClose={() => setOpen(false)}>
       {renderSection('preparation', PREPARATION_CATALOG, t.preparation)}
       {renderSection('accessories', ACCESSORY_CATALOG, t.accessories)}
-      <button type="button" onClick={() => { onSave(normalizeWorkoutSetup(draft)); setOpen(false); }} style={{ ...programActionButtonStyle(THEME.primary), marginTop: 14 }}>{t.save}</button>
+      <button type="button" onClick={() => { onSave(normalizeWorkoutSetup(draft)); setOpen(false); }} style={workoutSetupModalButtonStyle(THEME.primary, '14px auto 0')}>{t.save}</button>
     </SettingsModal>}
   </>;
 }
@@ -9402,7 +9871,7 @@ function ProgramProfileSection({
       <button
         type="button"
         onClick={openWizard}
-        style={programActionButtonStyle(THEME.primary, '6px 0 0')}
+        style={compactProgramActionButtonStyle(THEME.primary, '6px auto 0')}
       >
         {t.adjustProgram}
       </button>
@@ -9431,8 +9900,9 @@ function ProgramProfileSection({
           </div>
 
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: step > 0 ? '1fr 1fr' : '1fr',
+            display: 'flex',
+            justifyContent: 'center',
+            flexWrap: 'wrap',
             gap: 8,
             marginTop: 14
           }}>
@@ -9440,7 +9910,7 @@ function ProgramProfileSection({
               <button
                 type="button"
                 onClick={() => setStep(prev => Math.max(0, prev - 1))}
-                style={programActionButtonStyle(THEME.primary)}
+                style={compactProgramActionButtonStyle(THEME.primary)}
               >
                 {t.back}
               </button>
@@ -9449,7 +9919,7 @@ function ProgramProfileSection({
             <button
               type="button"
               onClick={closeWizard}
-              style={programActionButtonStyle(THEME.primary)}
+              style={compactProgramActionButtonStyle(THEME.primary)}
             >
               {t.cancel}
             </button>
@@ -9487,7 +9957,7 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
       <Toast message={notice} />
       <button
         onClick={() => setShowStartCycleConfirm(true)}
-        style={programActionButtonStyle(THEME.primary, '6px 0 0')}
+        style={compactProgramActionButtonStyle(THEME.primary, '6px auto 0')}
       >
         {t.startNewCycle}
       </button>
@@ -9526,48 +9996,29 @@ function StartNewCycleSection({ onStartNewCycle, t }) {
               {t.startNewCycleConfirmText}
             </p>
 
-            <button
-              onClick={() => {
-                setShowStartCycleConfirm(false);
-                setNotice(t.startNewCycleStarted);
-                onStartNewCycle();
+            <div style={modalActionRowStyle()}>
+              <button
+                onClick={() => setShowStartCycleConfirm(false)}
+                style={modalActionButtonStyle()}
+              >
+                {t.cancel}
+              </button>
 
-                window.setTimeout(() => {
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }, 0);
-              }}
-              style={{
-                width: '100%',
-                padding: 12,
-                fontSize: 15,
-                fontWeight: 800,
-                background: THEME.card,
-                color: '#ffffff',
-                border: `1px solid ${THEME.primary}`,
-                borderRadius: 8,
-                cursor: 'pointer'
-              }}
-            >
-              {t.startNewCycle}
-            </button>
+              <button
+                onClick={() => {
+                  setShowStartCycleConfirm(false);
+                  setNotice(t.startNewCycleStarted);
+                  onStartNewCycle();
 
-            <button
-              onClick={() => setShowStartCycleConfirm(false)}
-              style={{
-                width: '100%',
-                marginTop: 8,
-                padding: 10,
-                fontSize: 14,
-                fontWeight: 700,
-                background: 'transparent',
-                color: THEME.text,
-                border: `1px solid ${THEME.primary}`,
-                borderRadius: 8,
-                cursor: 'pointer'
-              }}
-            >
-              {t.cancel}
-            </button>
+                  window.setTimeout(() => {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }, 0);
+                }}
+                style={modalActionButtonStyle('primary')}
+              >
+                {t.startNewCycle}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -10262,7 +10713,7 @@ export function getSmartProgramTitle(trainingFocus, t) {
   return t.trainingFocusBalanced;
 }
 
-function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], currentCycle, onSelect, onStartNewCycle, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, trainingFocus = SMART_TRAINING_FOCUSES.STANDARD, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
+function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], currentCycle, onSelect, onStartNewCycle, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, trainingFocus = SMART_TRAINING_FOCUSES.STANDARD, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, language = 'en', scheduleDateKeys = [], scheduleToday = new Date(), weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
   const currentWorkoutRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
   const [showProgramInfo, setShowProgramInfo] = useState(false);
@@ -10324,7 +10775,8 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
     if (!currentWorkoutRef.current) return;
 
     const id = window.setTimeout(() => {
-      currentWorkoutRef.current?.scrollIntoView({
+      if (typeof currentWorkoutRef.current?.scrollIntoView !== 'function') return;
+      currentWorkoutRef.current.scrollIntoView({
         behavior: 'auto',
         block: 'center',
       });
@@ -10516,7 +10968,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
           <button
             type="button"
             onClick={() => setShowProgramInfo(false)}
-            style={programActionButtonStyle(THEME.primary, '12px 0 0')}
+            style={compactProgramActionButtonStyle(THEME.primary, '12px auto 0')}
           >
             {t.back}
           </button>
@@ -10537,6 +10989,15 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
         );
         const isDone = completedWorkoutNumberSet.has(Number(workout.number)) || Boolean(workout.completed);
         const completedAtLabel = isDone ? formatCompletedAt(workout.completedAt, workout.completedDate || workout.date) : null;
+        const scheduleDateLabel = smartModel && !isDone
+          ? formatWorkoutScheduleDate(scheduleDateKeys[idx], {
+              language,
+              today: scheduleToday,
+              todayLabel: t.today,
+              tomorrowLabel: t.tomorrow,
+              compact: true,
+            })
+          : '';
         const focusColor = workout.type === 'meet'
           ? THEME.meet
           : workout.type === 'rest'
@@ -10635,6 +11096,19 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
                   marginTop: 3
                 }}>
                   ✓ {completedAtLabel}
+                </div>
+              )}
+              {scheduleDateLabel && (
+                <div
+                  data-testid={`program-workout-schedule-date-${workout.number}`}
+                  style={{
+                    fontSize: RESPONSIVE_CONTENT_UI.compactFontSize,
+                    color: THEME.muted,
+                    fontWeight: 700,
+                    marginTop: 3,
+                  }}
+                >
+                  {scheduleDateLabel}
                 </div>
               )}
             </div>
@@ -11456,9 +11930,14 @@ function App() {
   const [hasExistingProfile, setHasExistingProfile] = useState(false);
   const [showWhatsNewAfterUpdates, setShowWhatsNewAfterUpdates] = useState(true);
   const [showWhatsNew, setShowWhatsNew] = useState(false);
-  const [returnToUpdatesAfterWhatsNew, setReturnToUpdatesAfterWhatsNew] = useState(false);
   const [checkForUpdatesAutomatically, setCheckForUpdatesAutomatically] = useState(false);
-  const [showUpdatesSettings, setShowUpdatesSettings] = useState(false);
+  const [calendarIntegration, setCalendarIntegration] = useState(createCalendarIntegrationSettings);
+  const [showCalendarSettings, setShowCalendarSettings] = useState(false);
+  const [showCalendarPicker, setShowCalendarPicker] = useState(false);
+  const [calendarSyncStatus, setCalendarSyncStatus] = useState('idle');
+  const [calendarSyncing, setCalendarSyncing] = useState(false);
+  const calendarSyncInFlightRef = useRef(null);
+  const [showAboutUpdates, setShowAboutUpdates] = useState(false);
   const [showUpdateAvailable, setShowUpdateAvailable] = useState(false);
   const [latestAvailableVersion, setLatestAvailableVersion] = useState(null);
   const [updateCheckStatus, setUpdateCheckStatus] = useState('idle');
@@ -11543,7 +12022,14 @@ function App() {
   const t = translations[language];
   const [screen, setScreen] = useState(null);
   const appViewportRef = useRef(null);
-  const [appAllowsVerticalScroll, setAppAllowsVerticalScroll] = useState(false);
+  const [adaptiveScreenDensity, setAdaptiveScreenDensity] = useState({
+    screen: null,
+    compact: false,
+  });
+  const [screenContentScroll, setScreenContentScroll] = useState({
+    screen: null,
+    enabled: true,
+  });
   const [workoutNeedsNavClearance, setWorkoutNeedsNavClearance] = useState(false);
   const [workouts, setWorkouts] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -11562,6 +12048,7 @@ function App() {
   const [activeMilestoneCelebration, setActiveMilestoneCelebration] = useState(null);
   const [showWorkoutEffortPrompt, setShowWorkoutEffortPrompt] = useState(false);
   const [currentCycle, setCurrentCycle] = useState(1);
+  const [scheduleToday, setScheduleToday] = useState(() => localDateKey());
   const [bodyWeights, setBodyWeights] = useState([]);
   const [recordedStrengthRatioMaxes, setRecordedStrengthRatioMaxes] = useState({});
   const calculatedStrengthRatioMaxes = useMemo(
@@ -11754,9 +12241,11 @@ function App() {
         contentBottom,
         viewportHeight: viewport.clientHeight,
       });
-      setAppAllowsVerticalScroll(previous =>
-        previous === nextAllowsScroll ? previous : nextAllowsScroll
-      );
+      setAdaptiveScreenDensity(previous => resolveAdaptiveScreenDensity(
+        previous,
+        screen,
+        nextAllowsScroll
+      ));
     };
 
     const scheduleMeasure = () => {
@@ -11811,6 +12300,80 @@ function App() {
     };
   }, [screen]);
 
+  useLayoutEffect(() => {
+    const viewport = appViewportRef.current;
+    if (!viewport) return undefined;
+
+    let frameId = null;
+    let resizeObserver = null;
+
+    const measure = () => {
+      frameId = null;
+      const scrollRegions = Array.from(
+        viewport.querySelectorAll('[data-testid="screen-scroll-content"]')
+      );
+      const nextEnabled = scrollRegions.some(region => scrollRegionNeedsScroll({
+        scrollHeight: region.scrollHeight,
+        clientHeight: region.clientHeight,
+      }));
+
+      setScreenContentScroll(previous => (
+        previous.screen === screen && previous.enabled === nextEnabled
+          ? previous
+          : { screen, enabled: nextEnabled }
+      ));
+    };
+
+    const scheduleMeasure = () => {
+      if (frameId !== null) return;
+      if (typeof window.requestAnimationFrame === 'function') {
+        frameId = window.requestAnimationFrame(measure);
+      } else {
+        measure();
+      }
+    };
+
+    const observeScrollRegions = () => {
+      resizeObserver?.disconnect();
+      resizeObserver = typeof ResizeObserver === 'function'
+        ? new ResizeObserver(scheduleMeasure)
+        : null;
+
+      viewport.querySelectorAll('[data-testid="screen-scroll-content"]').forEach(region => {
+        resizeObserver?.observe(region);
+        Array.from(region.children).forEach(child => resizeObserver?.observe(child));
+      });
+    };
+
+    observeScrollRegions();
+    measure();
+
+    const mutationObserver = typeof MutationObserver === 'function'
+      ? new MutationObserver(() => {
+          observeScrollRegions();
+          scheduleMeasure();
+        })
+      : null;
+    mutationObserver?.observe(viewport, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    window.addEventListener('resize', scheduleMeasure);
+    window.visualViewport?.addEventListener('resize', scheduleMeasure);
+
+    return () => {
+      if (frameId !== null && typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener('resize', scheduleMeasure);
+      window.visualViewport?.removeEventListener('resize', scheduleMeasure);
+      mutationObserver?.disconnect();
+      resizeObserver?.disconnect();
+    };
+  }, [screen, adaptiveScreenDensity]);
+
   useEffect(() => {
     if (!workouts.length) return;
 
@@ -11818,7 +12381,7 @@ function App() {
   }, [history, currentCycle, workouts.length]);
 
   const completedWorkoutCount = getCompletedWorkoutCount(history, currentCycle);
-  const completedWorkoutNumbers = Array.from(new Set(
+  const completedWorkoutNumbers = useMemo(() => Array.from(new Set(
     (history || [])
       .filter(entry =>
         Number(getEntryCycle(entry)) === Number(currentCycle) &&
@@ -11826,9 +12389,130 @@ function App() {
       )
       .map(entry => Number(entry.workoutNumber))
       .filter(Number.isFinite)
-  ));
+  )), [history, currentCycle]);
   const currentIndex = Math.max(completedWorkoutCount, currentWorkoutIndex);
+  const smartWorkoutScheduleDateKeys = useMemo(
+    () => isSmartTrainingModel(trainingModel)
+      ? buildWorkoutScheduleDateKeys({
+          workouts,
+          currentIndex,
+          history,
+          today: scheduleToday,
+        })
+      : [],
+    [trainingModel, workouts, currentIndex, history, scheduleToday]
+  );
+  const syncCalendar = useCallback(async (automatic = false) => {
+    if (calendarSyncInFlightRef.current) return calendarSyncInFlightRef.current;
+    if (!isNativeCalendarAvailable()) return;
+
+    const task = (async () => {
+      setCalendarSyncing(true);
+      if (!automatic) setCalendarSyncStatus('idle');
+      try {
+        const permission = await getCalendarPermissionState();
+        if (permission !== 'granted') throw new Error('Calendar permission unavailable');
+        if (calendarIntegration.enabled) {
+          const available = await getWritableDeviceCalendars();
+          const matches = available.some(calendar =>
+            String(calendar.id) === calendarIntegration.calendarId &&
+            calendar.name === calendarIntegration.calendarName &&
+            String(calendar.accountName || '') === calendarIntegration.calendarAccountName &&
+            String(calendar.accountType || '') === calendarIntegration.calendarAccountType
+          );
+          if (!matches) throw new Error('Selected calendar unavailable');
+        }
+
+        const desiredEvents = buildCalendarEventSpecs({
+          workouts,
+          scheduleDateKeys: smartWorkoutScheduleDateKeys,
+          currentIndex,
+          currentCycle,
+          startTime: calendarIntegration.defaultStartTime,
+          today: scheduleToday,
+          titleTemplate: t.calendarEventTitle,
+        });
+        const completedWorkoutKeys = new Set(completedWorkoutNumbers.map(number => `${currentCycle}:${number}`));
+        const result = await syncWorkoutCalendar({
+          settings: calendarIntegration,
+          desiredEvents,
+          completedWorkoutKeys,
+          today: scheduleToday,
+          upsertEvent: upsertDeviceWorkoutEvent,
+          deleteEvent: deleteDeviceWorkoutEvent,
+          onProgress: eventMappings => setCalendarIntegration(prev => ({ ...prev, eventMappings })),
+        });
+        if (result.created || result.updated || result.removed ||
+          calendarIntegration.hasSynced !== calendarIntegration.enabled) {
+          setCalendarIntegration(prev => ({
+            ...prev,
+            eventMappings: result.mappings,
+            hasSynced: prev.enabled,
+          }));
+        }
+        if (!automatic && calendarIntegration.enabled) {
+          localStorage.setItem(CALENDAR_SYNC_CONSENT_KEY, '1');
+        }
+        setCalendarSyncStatus('success');
+      } catch (error) {
+        console.warn('Could not synchronize workout calendar', error);
+        if (error?.code === 'EVENT_NOT_FOUND') {
+          setCalendarIntegration(prev => ({ ...prev, hasSynced: false }));
+        }
+        setCalendarSyncStatus('error');
+      } finally {
+        setCalendarSyncing(false);
+      }
+    })();
+    calendarSyncInFlightRef.current = task;
+    try {
+      return await task;
+    } finally {
+      calendarSyncInFlightRef.current = null;
+    }
+  }, [calendarIntegration, workouts, smartWorkoutScheduleDateKeys, currentIndex, currentCycle, completedWorkoutNumbers, scheduleToday, t]);
+
+  useEffect(() => {
+    if (!hasLoadedData || !calendarIntegration.hasSynced ||
+      localStorage.getItem(CALENDAR_SYNC_CONSENT_KEY) !== '1' ||
+      !isNativeCalendarAvailable()) return;
+    syncCalendar(true);
+  }, [hasLoadedData, calendarIntegration.hasSynced, syncCalendar]);
   const PROGRAM_VERSION = 'kelani-program-profiles-v6';
+
+  useEffect(() => {
+    let midnightTimeout = null;
+
+    const refreshScheduleDay = () => {
+      setScheduleToday(localDateKey());
+    };
+    const scheduleMidnightRefresh = () => {
+      const now = new Date();
+      const nextMidnight = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1,
+        0,
+        0,
+        1
+      );
+      midnightTimeout = window.setTimeout(() => {
+        refreshScheduleDay();
+        scheduleMidnightRefresh();
+      }, nextMidnight.getTime() - now.getTime());
+    };
+    const refreshWhenVisible = () => {
+      if (!document.hidden) refreshScheduleDay();
+    };
+
+    scheduleMidnightRefresh();
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      if (midnightTimeout !== null) window.clearTimeout(midnightTimeout);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, []);
 
   useEffect(() => {
     if (appViewportRef.current) {
@@ -11845,8 +12529,18 @@ function App() {
           return;
         }
 
-        if (showUpdatesSettings) {
-          setShowUpdatesSettings(false);
+        if (showCalendarPicker) {
+          setShowCalendarPicker(false);
+          return;
+        }
+
+        if (showCalendarSettings) {
+          setShowCalendarSettings(false);
+          return;
+        }
+
+        if (showAboutUpdates && !showWhatsNew) {
+          setShowAboutUpdates(false);
           return;
         }
 
@@ -11903,7 +12597,7 @@ function App() {
     return () => {
       if (listener) listener.remove();
     };
-  }, [screen, completedWorkoutIndex, activeMilestoneCelebration, showWhatsNew, showUpdatesSettings, showUpdateAvailable, returnToUpdatesAfterWhatsNew]);
+  }, [screen, completedWorkoutIndex, activeMilestoneCelebration, showWhatsNew, showAboutUpdates, showUpdateAvailable, showCalendarSettings, showCalendarPicker]);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -12080,6 +12774,7 @@ function App() {
       setBenchPressVariant(savedBenchPressVariant);
       setShowWhatsNewAfterUpdates(data.showWhatsNewAfterUpdates !== false);
       setCheckForUpdatesAutomatically(data.checkForUpdatesAutomatically === true);
+      setCalendarIntegration(normalizeCalendarIntegrationSettings(data.calendarIntegration));
       setHasExistingProfile(true);
 
       const restorableSelectedIndex = getRestorableSelectedIndex(
@@ -12167,6 +12862,7 @@ function App() {
       benchPressVariant,
       showWhatsNewAfterUpdates,
       checkForUpdatesAutomatically,
+      calendarIntegration,
       inProgress: {
         programVersion: PROGRAM_VERSION,
         currentCycle,
@@ -12235,7 +12931,7 @@ function App() {
         });
       }
     }
-  }, [hasLoadedData, history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, workoutSetup, trainingFocus, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, showWhatsNewAfterUpdates, checkForUpdatesAutomatically, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
+  }, [hasLoadedData, history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, workoutSetup, trainingFocus, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, showWhatsNewAfterUpdates, checkForUpdatesAutomatically, calendarIntegration, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
 
   useEffect(() => {
     if (!hasLoadedData || showLaunchSplash || showWhatsNew) return;
@@ -12265,10 +12961,6 @@ function App() {
       localStorage.setItem(WHATS_NEW_LAST_SEEN_KEY, currentVersion);
     }
     setShowWhatsNew(false);
-    if (returnToUpdatesAfterWhatsNew) {
-      setReturnToUpdatesAfterWhatsNew(false);
-      setShowUpdatesSettings(true);
-    }
   }
 
   const installedUpdateVersion = (import.meta.env.VITE_APP_VERSION || 'dev') === 'dev'
@@ -12346,14 +13038,13 @@ function App() {
     performUpdateCheck,
   ]);
 
-  function openUpdatesSettings() {
+  function prepareUpdatesSettings() {
     const cachedCheck = readUpdateCheckCache(localStorage);
     if (cachedCheck) {
       applyLatestReleaseVersion(cachedCheck.latestVersion);
     } else {
       setUpdateCheckStatus('idle');
     }
-    setShowUpdatesSettings(true);
   }
 
   function closeUpdateAvailable() {
@@ -12680,6 +13371,7 @@ function handleResetApp() {
   localStorage.removeItem(WHATS_NEW_LAST_SEEN_KEY);
   localStorage.removeItem(UPDATE_CHECK_CACHE_KEY);
   localStorage.removeItem(UPDATE_DISMISSED_VERSION_KEY);
+  localStorage.removeItem(CALENDAR_SYNC_CONSENT_KEY);
 
   localStorage.setItem('squatVariant', 'standard');
   localStorage.setItem('benchPressVariant', 'standard');
@@ -12704,9 +13396,12 @@ function handleResetApp() {
   setActiveMilestoneCelebration(null);
   setShowWhatsNew(false);
   setShowWhatsNewAfterUpdates(true);
-  setReturnToUpdatesAfterWhatsNew(false);
   setCheckForUpdatesAutomatically(false);
-  setShowUpdatesSettings(false);
+  setCalendarIntegration(createCalendarIntegrationSettings());
+  setShowCalendarSettings(false);
+  setShowCalendarPicker(false);
+  setCalendarSyncStatus('idle');
+  setShowAboutUpdates(false);
   setShowUpdateAvailable(false);
   setLatestAvailableVersion(null);
   setUpdateCheckStatus('idle');
@@ -13510,6 +14205,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     stopTimer();
 
     const finishedWorkout = JSON.parse(JSON.stringify(workout));
+    delete finishedWorkout.smartReturnBaseline;
     finishedWorkout.completed = true;
     finishedWorkout.completedAt = new Date().toISOString();
     const nextAccessoryPRs = mergeAccessoryPrsFromWorkout(
@@ -13729,13 +14425,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
   const newEntries = results.map(result => ({
     workoutNumber: workout.number,
     cycle: currentCycle,
-    smartDayType: isSmartTrainingModel(trainingModel)
-      ? (finishedWorkout.type === 'rest'
-        ? SMART_DAY_TYPES.RECOVERY
-        : finishedWorkout.type === 'meet'
-          ? SMART_DAY_TYPES.MEET
-          : SMART_DAY_TYPES.TRAINING)
-      : null,
+    smartDayType: completedSmartDayType,
     lift: result.lift,
     topWeight: result.oneRMToday,
     topReps: 1,
@@ -15225,6 +15915,17 @@ function activateSelectedWorkout() {
   setSelectedIndex(selectedIndex);
 }
 
+function chooseReturnTraining(enabled) {
+  if (!isSmartTrainingModel(trainingModel) || selectedIndex !== currentIndex) return;
+  setWorkouts(previous => previous.map((workout, index) => {
+    if (index !== currentIndex || workout?.type !== 'training' ||
+      workout?.completed || workoutHasUserProgress(workout)) return workout;
+    return enabled
+      ? buildSmartReturnTraining(workout)
+      : restoreSmartReturnTraining(workout);
+  }));
+}
+
 if (screen === 'current' && !workouts[selectedIndex]) {
   return <Onboarding onStart={handleStart} t={t}/>;
 }
@@ -15487,6 +16188,33 @@ const latestBodyDataRows = [
 ].filter(row => row.value);
 
 const dashboardCurrentWorkout = workouts[currentIndex] || null;
+const dashboardScheduleDateLabel = isSmartTrainingModel(trainingModel)
+  ? formatWorkoutScheduleDate(smartWorkoutScheduleDateKeys[currentIndex], {
+      language,
+      today: scheduleToday,
+      todayLabel: t.today,
+      tomorrowLabel: t.tomorrow,
+    })
+  : '';
+const formatMeetProjectionDateForWorkout = (workout, workoutIndex) => {
+  const projection = workout?.smartDecisionSummary?.readiness?.meetProjection;
+  if (!projection?.available || !projection.label) return '';
+
+  return formatWorkoutScheduleDateRange(getMeetProjectionDateKeys({
+    projectionLabel: projection.label,
+    currentCycle,
+    currentWorkoutNumber: workout?.number,
+    currentWorkoutDate: smartWorkoutScheduleDateKeys[workoutIndex],
+  }), { language });
+};
+const dashboardMeetProjectionDateLabel = formatMeetProjectionDateForWorkout(
+  dashboardCurrentWorkout,
+  currentIndex
+);
+const selectedMeetProjectionDateLabel = formatMeetProjectionDateForWorkout(
+  workouts[selectedIndex],
+  selectedIndex
+);
 const dashboardMeetState = getDashboardMeetState(dashboardCurrentWorkout);
 const dashboardUsesCompactLayout = shouldUseCompactDashboardLayout({
   workout: dashboardCurrentWorkout,
@@ -15503,6 +16231,10 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
   Bench: { oneRM: best1RMs.Bench },
   Deadlift: { oneRM: best1RMs.Deadlift },
 });
+const screenUsesCompactDensity =
+  adaptiveScreenDensity.screen === screen && adaptiveScreenDensity.compact;
+const screenAllowsContentScroll =
+  screenContentScroll.screen === screen ? screenContentScroll.enabled : true;
 
     return (
   <div
@@ -15510,6 +16242,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
     data-testid="app-viewport"
     style={appViewportStyle({
       screen,
+      compactToFit: screenUsesCompactDensity,
+      allowContentScroll: screenAllowsContentScroll,
       workoutNeedsNavClearance: shouldReserveWorkoutBottomNavSpace({
         screen,
         workout: workouts[selectedIndex],
@@ -15518,7 +16252,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       allowVerticalScroll: shouldAllowAppVerticalScroll({
         screen,
         workout: workouts[selectedIndex],
-        measuredOverflow: appAllowsVerticalScroll,
+        measuredOverflow: screenUsesCompactDensity,
       }),
     })}
   >
@@ -15543,6 +16277,10 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           onComplete={completeWorkout}
           onViewAll={() => setScreen('all')}
           onActivateWorkout={activateSelectedWorkout}
+          onChooseReturnTraining={chooseReturnTraining}
+          daysSinceLastWorkout={getDaysSinceLastCompletedWorkout(history)}
+          canChangeReturnTraining={selectedIndex === currentIndex &&
+            !workoutHasUserProgress(workouts[selectedIndex])}
           showNewCycle={showNewCycle}
           newCyclePRs={prs}
           onStartNewCycle={handleStartNewCycle}
@@ -15566,6 +16304,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           eStrengthMax={eStrengthMax}
           latestBodyWeight={latestBodyWeight}
           currentE1RMs={currentCycleBestE1RMs}
+          meetProjectionDateLabel={selectedMeetProjectionDateLabel}
         />
       )}
 
@@ -15607,14 +16346,18 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         t={t}
         weightUnit={weightUnit}
         onOpenWorkout={() => changeScreen('current')}
+        scheduleDateLabel={dashboardScheduleDateLabel}
       />
     )}
 
     {!dashboardMeetState.isMeetDay && (
-    <div style={regularDashboardContentStyle({
-      spreadContent: dashboardUsesExpandedLayout,
-      compact: dashboardUsesCompactLayout,
-    })}>
+    <div
+      data-testid="screen-scroll-content"
+      style={regularDashboardContentStyle({
+        spreadContent: dashboardUsesExpandedLayout,
+        compact: dashboardUsesCompactLayout,
+      })}
+    >
 
     {!dashboardMeetState.isMeetDay && workouts[currentIndex] && (() => {
       const nextWorkout = workouts[currentIndex];
@@ -15643,10 +16386,33 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
               ? 'clamp(28px, 7vw, 34px)'
               : 'clamp(24px, 6vw, 30px)',
             fontWeight: 900,
-            marginBottom: planLines.length ? 'clamp(8px, 1.2dvh, 12px)' : 0
+            marginBottom: dashboardScheduleDateLabel
+              ? 4
+              : planLines.length
+                ? 'clamp(8px, 1.2dvh, 12px)'
+                : 0
           }}>
             <WorkoutTitle workout={nextWorkout} t={t} benchPressVariant={benchPressVariant} />
           </div>
+
+          {dashboardScheduleDateLabel && (
+            <div
+              data-testid="dashboard-workout-schedule-date"
+              style={{
+                color: THEME.muted,
+                fontSize: dashboardUsesExpandedLayout
+                  ? 'clamp(14px, 3.4vw, 17px)'
+                  : 'clamp(13px, 3.1vw, 15px)',
+                fontWeight: 800,
+                lineHeight: 1.3,
+                margin: planLines.length
+                  ? '0 0 clamp(8px, 1.2dvh, 12px)'
+                  : '4px 0 0',
+              }}
+            >
+              {dashboardScheduleDateLabel}
+            </div>
+          )}
 
           {isSmartTrainingModel(trainingModel) && (nextWorkout.lifts || []).length > 0 && (
             <div style={{
@@ -15739,10 +16505,32 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
               <span>{t.dashboardMeetRouteTitle}</span>
               <TapInfoIcon color={THEME.meet} />
             </div>
-            <div style={{ color: THEME.text, fontSize: dashboardUsesExpandedLayout ? 'clamp(16px, 3.8vw, 19px)' : 'clamp(14px, 3.3vw, 16px)', fontWeight: 800, marginBottom: 6, lineHeight: 1.35 }}>
-              {dashboardMeetProjection?.available
-                ? `${t.expectedMeetWindow}: ${dashboardMeetProjection.label}`
-                : (t.smartProjectionUnavailable)}
+            <div
+              data-testid={dashboardMeetProjection?.available && dashboardMeetProjectionDateLabel
+                ? 'dashboard-expected-meet-date'
+                : undefined}
+              style={{
+                color: THEME.text,
+                fontSize: dashboardUsesExpandedLayout
+                  ? 'clamp(16px, 3.8vw, 19px)'
+                  : 'clamp(14px, 3.3vw, 16px)',
+                fontWeight: 800,
+                marginBottom: 6,
+                lineHeight: 1.35,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {dashboardMeetProjection?.available ? (
+                <>
+                  {t.expectedMeetWindow}:{' '}
+                  {dashboardMeetProjectionDateLabel && (
+                    <span style={{ color: THEME.muted }}>
+                      {dashboardMeetProjectionDateLabel} ·{' '}
+                    </span>
+                  )}
+                  {dashboardMeetProjection.label}
+                </>
+              ) : (t.smartProjectionUnavailable)}
             </div>
           </div>
 
@@ -16059,6 +16847,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           onApplyProgramSettings={applyProgramSettings}
           onChangeProgramProfile={changeProgramProfile}
           t={t}
+          language={language}
+          scheduleDateKeys={smartWorkoutScheduleDateKeys}
+          scheduleToday={scheduleToday}
           weightUnit={weightUnit}
           benchPressVariant={benchPressVariant}
             athleteLevel={athleteLevel}
@@ -16115,7 +16906,7 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
     subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
   />
 
-  <div style={settingsContentLayoutStyle()}>
+  <div data-testid="screen-scroll-content" style={settingsContentLayoutStyle()}>
     <div
       data-testid="regular-settings-cluster"
       style={regularSettingsClusterStyle()}
@@ -16167,15 +16958,28 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         t={t}
       />
 
+      <SettingsListRow
+        label={t.calendarTitle}
+        actionLabel={t.calendarOpen}
+        onAction={() => setShowCalendarSettings(true)}
+      />
+
       <AboutSupportSection
         t={t}
         language={language}
         usageMetrics={anonymousUsageMetrics}
-      />
-
-      <UpdatesSettingsSection
-        t={t}
-        onOpen={openUpdatesSettings}
+        currentVersion={installedUpdateVersion}
+        latestVersion={latestAvailableVersion}
+        checkStatus={updateCheckStatus}
+        checkAutomatically={checkForUpdatesAutomatically}
+        onCheckAutomaticallyChange={setCheckForUpdatesAutomatically}
+        onCheck={() => performUpdateCheck({ automatic: false })}
+        onOpenWhatsNew={() => setShowWhatsNew(true)}
+        onOpenUpdateLink={openUpdateDownload}
+        onPrepareUpdates={prepareUpdatesSettings}
+        isOpen={showAboutUpdates}
+        onOpen={() => setShowAboutUpdates(true)}
+        onClose={() => setShowAboutUpdates(false)}
       />
     </div>
 
@@ -16194,32 +16998,16 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
       )}
     {screen === 'completed' && (
   <div style={completedWorkoutScreenStyle()}>
-      <div data-testid="completed-screen-header" style={fixedScreenHeaderStyle()}>
-        <div style={{ fontSize: 40, marginBottom: 6, textAlign: 'center' }}>🎉</div>
-
-        <h2 style={{ margin: '0 0 6px', color: THEME.brown, textAlign: 'center' }}>
-          {completedWorkoutIsMeet ? t.meetCompleted
-            : completedWorkoutCanStartNewCycle ? (t.cycleCompleted)
-            : completedWorkout?.type === 'rest'
-              ? (t.restDayCompleted)
-              : t.workoutCompleted}
-        </h2>
-
-        <p style={{
-          color: THEME.muted,
-          lineHeight: 1.3,
-          margin: '0 0 8px',
-          padding: '0 2px',
-          textAlign: 'center',
-        }}>
-          {completedWorkoutIsMeet ? t.meetCompletedSaved
-            : completedWorkoutCanStartNewCycle ? (t.workoutAndCycleSaved)
-            : completedWorkout?.type === 'rest'
-              ? (t.restDayCompletedSaved)
-              : t.goodJobSaved}
-        </p>
-        <div data-testid="app-header-divider" style={appHeaderDividerStyle()} />
-      </div>
+      {completedWorkout?.type !== 'rest' && (
+        <CompletedScreenHeader
+          title={completedWorkoutIsMeet ? t.meetCompleted
+            : completedWorkoutCanStartNewCycle ? t.cycleCompleted
+            : t.workoutCompleted}
+          message={completedWorkoutIsMeet ? t.meetCompletedSaved
+            : completedWorkoutCanStartNewCycle ? t.workoutAndCycleSaved
+            : t.goodJobSaved}
+        />
+      )}
 
       <div
         data-testid="screen-scroll-content"
@@ -16230,6 +17018,14 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         <div style={completedWorkout?.type === 'rest'
           ? restDayCompletedContentStyle()
           : { display: 'contents' }}>
+
+        {completedWorkout?.type === 'rest' && (
+          <CompletedScreenHeader
+            compact
+            title={t.restDayCompleted}
+            message={t.restDayCompletedSaved}
+          />
+        )}
 
         {completedWorkoutIsMeet && (
           <div style={{
@@ -16559,8 +17355,9 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
           completedWorkoutIsMeet,
           completedWorkoutCanStartNewCycle,
         }) && (
-          <div style={{ width: 'min(260px, 100%)', margin: '8px auto 0' }}>
+          <div style={{ marginTop: 8 }}>
             <SupportActionButton
+              compact
               onClick={() => window.open(
                 buildCycleFeedbackEmailUrl({
                   t,
@@ -16601,22 +17398,23 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
   />
 )}
 
-{showUpdatesSettings && (
-  <UpdatesSettingsModal
+{showCalendarSettings && (
+  <CalendarSettingsModal
     t={t}
-    currentVersion={installedUpdateVersion}
-    latestVersion={latestAvailableVersion}
-    checkStatus={updateCheckStatus}
-    checkAutomatically={checkForUpdatesAutomatically}
-    onCheckAutomaticallyChange={setCheckForUpdatesAutomatically}
-    onCheck={() => performUpdateCheck({ automatic: false })}
-    onOpenWhatsNew={() => {
-      setReturnToUpdatesAfterWhatsNew(true);
-      setShowUpdatesSettings(false);
-      setShowWhatsNew(true);
+    settings={calendarIntegration}
+    onChange={value => {
+      setCalendarSyncStatus('idle');
+      setCalendarIntegration(normalizeCalendarIntegrationSettings(value));
     }}
-    onOpenLink={openUpdateDownload}
-    onClose={() => setShowUpdatesSettings(false)}
+    onSync={() => syncCalendar(false)}
+    syncStatus={calendarSyncStatus}
+    syncing={calendarSyncing}
+    pickerOpen={showCalendarPicker}
+    onPickerOpenChange={setShowCalendarPicker}
+    onClose={() => {
+      setShowCalendarPicker(false);
+      setShowCalendarSettings(false);
+    }}
   />
 )}
 
@@ -16708,16 +17506,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
         type="button"
         onClick={() => setShowWorkoutEffortPrompt(false)}
         style={{
-          width: '100%',
-          marginTop: 10,
-          padding: 10,
+          ...compactModalActionButtonStyle('secondary', '10px auto 0'),
           fontSize: 14,
-          fontWeight: 700,
-          background: 'transparent',
-          color: THEME.text,
-          border: `1px solid ${THEME.primary}`,
-          borderRadius: 8,
-          cursor: 'pointer'
         }}
       >
         {t.cancel}

@@ -333,6 +333,17 @@ test('rejects malformed manual backup data before it can replace saved data', ()
       checkForUpdatesAutomatically: 'yes',
     },
   })).toBe(false);
+  expect(validateImportedBackup({
+    ...validEnvelope,
+    data: {
+      ...validEnvelope.data,
+      calendarIntegration: { enabled: true, calendarId: '7', defaultStartTime: '19:30' },
+    },
+  })).toBe(true);
+  expect(validateImportedBackup({
+    ...validEnvelope,
+    data: { ...validEnvelope.data, calendarIntegration: [] },
+  })).toBe(false);
 });
 
 test('does not treat failures, manual exports or unverified records as automatic backups', () => {

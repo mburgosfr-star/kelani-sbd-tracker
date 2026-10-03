@@ -1,4 +1,5 @@
 import { getCompletedWorkoutNumbers, getEntryCycle } from './workoutHistoryStats';
+import { buildSmartReturnTraining, SMART_RETURN_TRAINING } from './smartReturnTraining';
 
 export function setHasUserState(set) {
   if (!set) return false;
@@ -83,6 +84,14 @@ export function workoutHasUserProgress(workout) {
     accessoriesHaveUserProgress(workout?.accessories);
 }
 
+function returnWorkoutHasLoadProgress(workout) {
+  const liftBlocks = workout?.lifts?.length ? workout.lifts : [workout];
+  return liftBlocks.some(block =>
+    (block?.sets || []).some(setHasUserState) ||
+    (block?.warmups || []).some(warmup => warmup?.done)
+  ) || accessoriesHaveUserProgress(workout?.accessories);
+}
+
 function repairPaddedMeetWarmups(workout, generated) {
   if (workout?.type !== 'meet' || generated?.type !== 'meet') return workout;
 
@@ -145,6 +154,15 @@ export function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, hist
     if (workout.completed) return workout;
     const generated = generatedWorkouts[index];
     if (!generated) return workout;
+    if (workout.smartReturnTraining && workout.type === generated.type &&
+      workout.smartIdealRoute?.workoutNumber === generated.smartIdealRoute?.workoutNumber) {
+      if (workout.smartReturnTrainingVersion !== SMART_RETURN_TRAINING.version &&
+        workout.smartReturnBaseline && !returnWorkoutHasLoadProgress(workout)) {
+        const upgraded = buildSmartReturnTraining(workout.smartReturnBaseline);
+        return { ...upgraded, prepItems: mergeWorkoutPrepItems(workout, upgraded) };
+      }
+      return workout;
+    }
 
     const isCompleted = completedWorkoutNumbers.has(Number(generated.number || workout.number));
     const prepDone = isCompleted;

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsScrollableContentStyle, statsTabListStyle } from './StatsScreen';
-import App, { AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactPrepLabelStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollableScreenContentStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle } from './App';
+import App, { AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
 import { translations } from './translations';
 
 test.each(['nl', 'en', 'ca'])(
@@ -586,6 +586,29 @@ test('rest and training completion actions share the same compact button style',
   });
 });
 
+test('a completed rest day keeps its disabled completion action visible', () => {
+  expect(translations.en.restDayCompleted).toBe('Rest day completed');
+
+  render(
+    <CurrentWorkout
+      workout={{ type: 'rest', number: 1, completed: true }}
+      currentCycle={1}
+      totalWorkouts={1}
+      isReadOnly
+      onComplete={vi.fn()}
+      t={translations.en}
+    />
+  );
+
+  const button = screen.getByTestId('complete-rest-day-button');
+  expect(button).toBeDisabled();
+  expect(button).toHaveTextContent(translations.en.restDayCompleted);
+  expect(button).toHaveStyle({
+    color: '#666',
+    cursor: 'not-allowed',
+  });
+});
+
 test('workout completion becomes the final dynamic-focus action', () => {
   expect(shouldFocusWorkoutCompletion({ restDay: true })).toBe(true);
   expect(shouldFocusWorkoutCompletion({
@@ -629,7 +652,7 @@ test('active workout screen bounds scrolling between the fixed chrome', () => {
     flex: '1 1 auto',
     minHeight: 0,
     overflowX: 'hidden',
-    overflowY: 'auto',
+    overflowY: 'var(--kelani-screen-overflow-y, auto)',
     overscrollBehaviorY: 'none',
   });
   expect(fixedChromeScreenStyle()).toMatchObject({
@@ -643,7 +666,7 @@ test('program screen uses the same responsive header alignment as other content 
     width: '100%',
     maxWidth: 500,
     margin: '0 auto',
-    padding: 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px',
+    padding: 'var(--kelani-screen-padding, clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px)',
     paddingBottom: 0,
     boxSizing: 'border-box',
     height: 'calc(100dvh - 78px)',
@@ -737,13 +760,13 @@ test('Workout scroll content starts below the fixed header divider', async () =>
   expect(scrollContent).toContainElement(smartStatus);
   expect(scrollContent).toHaveStyle({
     minHeight: '0',
-    overflowY: 'auto',
+    overflowY: 'var(--kelani-screen-overflow-y, auto)',
   });
 });
 
 test('program workout cards tighten only when the compact list toggles are visible', () => {
   expect(programWorkoutCardSpacingStyle({ compact: true })).toEqual({
-    padding: 'clamp(4px, 0.55dvh, 6px) clamp(12px, 3vw, 16px)',
+    padding: 'clamp(4px, calc(1.75dvh - 8.25px), 7px) clamp(12px, 3vw, 16px)',
     marginBottom: 'clamp(1px, 0.25dvh, 3px)',
   });
   expect(programWorkoutCardSpacingStyle()).toEqual({
@@ -778,12 +801,12 @@ test('program workout window keeps the current workout centered among at most se
     .toEqual(entries);
 });
 
-test('full program list starts at the top while the compact list remains centered', () => {
+test('compact program list distributes spare height without large divider gaps', () => {
   expect(programWorkoutListContainerStyle({ showAll: false, marginTop: 8 }))
     .toMatchObject({
-      justifyContent: 'center',
+      justifyContent: 'space-around',
       marginTop: 0,
-      paddingTop: 8,
+      paddingTop: 'clamp(4px, 0.7dvh, 6px)',
       borderTop: 'none',
       borderBottom: 'none',
       overflowY: 'hidden',
@@ -909,12 +932,37 @@ test('completed rest day content uses only the bounded middle region', () => {
   });
 });
 
+test('compact completion content stays together without a header divider', () => {
+  const { rerender } = render(
+    <CompletedScreenHeader
+      compact
+      title="Rest day complete"
+      message="Rest day saved."
+    />
+  );
+
+  expect(screen.getByTestId('completed-screen-header')).toHaveStyle({
+    textAlign: 'center',
+  });
+  expect(screen.queryByTestId('app-header-divider')).not.toBeInTheDocument();
+
+  rerender(
+    <CompletedScreenHeader
+      title="Workout complete"
+      message="Workout saved."
+    />
+  );
+
+  expect(screen.getByTestId('app-header-divider')).toBeInTheDocument();
+});
+
 test('completed workout content uses fixed chrome with internal scrolling', () => {
   expect(completedWorkoutScreenStyle()).toMatchObject({
     minHeight: 0,
     height: 'calc(100dvh - 78px)',
     overflowX: 'hidden',
     overflow: 'hidden',
+    padding: 'var(--kelani-completed-screen-padding, 20px clamp(10px, 3vw, 16px) 16px)',
   });
 });
 
@@ -931,6 +979,9 @@ test('all main screens suppress tiny pseudo-overflow and scroll only for hidden 
     contentBottom: 798,
     viewportHeight: 873,
   })).toBe(true);
+  expect(scrollRegionNeedsScroll({ scrollHeight: 700, clientHeight: 700 })).toBe(false);
+  expect(scrollRegionNeedsScroll({ scrollHeight: 702, clientHeight: 700 })).toBe(false);
+  expect(scrollRegionNeedsScroll({ scrollHeight: 703, clientHeight: 700 })).toBe(true);
 
   expect(appViewportStyle({ screen: 'completed', allowVerticalScroll: false })).toMatchObject({
     height: '100dvh',
@@ -943,6 +994,14 @@ test('all main screens suppress tiny pseudo-overflow and scroll only for hidden 
     height: '100dvh',
     paddingBottom: 78,
     overflowY: 'hidden',
+    '--kelani-screen-overflow-y': 'auto',
+  });
+  expect(appViewportStyle({ screen: 'dashboard', allowContentScroll: false }))
+    .toMatchObject({ '--kelani-screen-overflow-y': 'hidden' });
+  expect(appViewportStyle({ screen: 'dashboard', compactToFit: true })).toMatchObject({
+    '--kelani-screen-padding': 'clamp(6px, 0.8dvh, 8px) clamp(14px, 4vw, 20px) 10px',
+    '--kelani-content-row-gap': 'clamp(6px, 0.8dvh, 9px)',
+    '--kelani-content-bottom-padding': 'clamp(8px, 1.2dvh, 12px)',
   });
   expect(appViewportStyle({
     screen: 'current',
@@ -1000,13 +1059,13 @@ test('stats charts reserve extra clearance above the bottom navigation', () => {
     height: 'calc(100dvh - 78px)',
     display: 'flex',
     flexDirection: 'column',
-    paddingBottom: 32,
+    paddingBottom: 'var(--kelani-content-bottom-padding, 32px)',
     overflow: 'hidden',
   });
   expect(statsScrollableContentStyle()).toMatchObject({
     flex: '1 1 auto',
     minHeight: 0,
-    overflowY: 'auto',
+    overflowY: 'var(--kelani-screen-overflow-y, auto)',
   });
 });
 
@@ -1064,10 +1123,10 @@ test('settings distribute regular actions and keep Start over at the bottom', ()
   expect(settingsContentLayoutStyle()).toMatchObject({
     flex: 1,
     minHeight: 0,
-    overflowY: 'auto',
+    overflowY: 'var(--kelani-screen-overflow-y, auto)',
     gridTemplateRows: 'minmax(0, 1fr) auto',
     marginTop: 'clamp(9px, 1.2dvh, 12px)',
-    rowGap: 'clamp(5px, 0.8dvh, 10px)',
+    rowGap: 'var(--kelani-content-row-gap, clamp(5px, 0.8dvh, 10px))',
     alignContent: 'stretch',
   });
 });
@@ -1752,14 +1811,14 @@ test('post-meet dashboard distributes space between and around its cards', () =>
   });
   expect(regularDashboardContentStyle({ spreadContent: true })).toMatchObject({
     display: 'grid',
-    overflowY: 'auto',
+    overflowY: 'var(--kelani-screen-overflow-y, auto)',
     alignContent: 'space-evenly',
-    rowGap: 'clamp(10px, 1.4dvh, 16px)',
-    paddingBottom: 'clamp(24px, 3.5dvh, 36px)',
+    rowGap: 'var(--kelani-content-row-gap, clamp(10px, 1.4dvh, 16px))',
+    paddingBottom: 'var(--kelani-content-bottom-padding, clamp(24px, 3.5dvh, 36px))',
   });
   expect(regularDashboardContentStyle()).toMatchObject({
     alignContent: 'start',
-    rowGap: 'clamp(14px, 2.2dvh, 24px)',
+    rowGap: 'var(--kelani-content-row-gap, clamp(14px, 2.2dvh, 24px))',
   });
 });
 
@@ -1783,7 +1842,7 @@ test('PR-rich training dashboards use tighter spacing without changing sparse da
   expect(regularDashboardScreenStyle({ compact: true }).rowGap)
     .toBe('clamp(9px, 1.2dvh, 12px)');
   expect(regularDashboardContentStyle({ compact: true }).rowGap)
-    .toBe('clamp(8px, 1.1dvh, 12px)');
+    .toBe('var(--kelani-content-row-gap, clamp(8px, 1.1dvh, 12px))');
 
   expect(shouldUseCompactDashboardLayout({
     workout: { type: 'training' },
@@ -1970,6 +2029,101 @@ test('recovery and deload reasons stay visible beside structured Smart details',
   expect(shouldShowSmartReasonWithStructuredDetails('meet')).toBe(false);
 });
 
+test('generic Ideal Route reasons are hidden for ordinary training and planned recovery', () => {
+  expect(shouldShowSmartDecisionReason({
+    reason: 'ideal-route',
+    dayType: 'training',
+  }, {
+    type: 'training',
+    smartIdealRoute: { stage: 'normal' },
+  })).toBe(false);
+
+  expect(shouldShowSmartDecisionReason({
+    reason: 'ideal-route',
+    dayType: 'recovery',
+  }, {
+    type: 'rest',
+    smartIdealRoute: { stage: 'normal' },
+  })).toBe(false);
+});
+
+test('informative Ideal Route adjustments and other Smart reasons remain visible', () => {
+  expect(shouldShowSmartDecisionReason({
+    reason: 'ideal-route',
+    dayType: 'recovery',
+  }, {
+    type: 'rest',
+    smartIdealRoute: {
+      stage: 'normal',
+      adjustmentReason: 'too-hard-recovery',
+    },
+  })).toBe(true);
+
+  expect(shouldShowSmartDecisionReason({
+    reason: 'ideal-route',
+    dayType: 'recovery',
+  }, {
+    type: 'rest',
+    smartIdealRoute: { stage: 'post-meet' },
+  })).toBe(true);
+
+  expect(shouldShowSmartDecisionReason({
+    reason: 'fatigue-recovery',
+    dayType: 'recovery',
+  })).toBe(true);
+});
+
+test('planned Ideal Route recovery omits the tautological Reason row in the Smart modal', () => {
+  render(
+    <SmartDayTypeInline
+      workout={{
+        type: 'rest',
+        smartDayType: 'recovery',
+        smartDecisionSummary: {
+          reason: 'ideal-route',
+          dayType: 'recovery',
+          readiness: {},
+        },
+        smartIdealRoute: { stage: 'normal' },
+      }}
+      t={translations.en}
+    />
+  );
+
+  fireEvent.click(screen.getByRole('button', {
+    name: /Smart: Rest & recovery/i,
+  }));
+
+  expect(screen.queryByText(translations.en.smartReason)).not.toBeInTheDocument();
+  expect(screen.queryByText(translations.en.smartReasonIdealRouteRecovery))
+    .not.toBeInTheDocument();
+});
+
+test('Smart modal shows the projected meet date beside its workout projection', () => {
+  render(
+    <SmartDayTypeInline
+      workout={{
+        type: 'training',
+        smartDayType: 'training',
+        smartDecisionSummary: {
+          reason: 'ideal-route',
+          dayType: 'training',
+          readiness: {
+            meetProjection: { available: true, label: 'C4W29' },
+          },
+        },
+        smartIdealRoute: { stage: 'normal' },
+      }}
+      t={translations.en}
+      meetProjectionDateLabel="October 12"
+    />
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: /Smart:/i }));
+
+  expect(screen.getByText('C4W29 · October 12')).toBeInTheDocument();
+});
+
 test.each(['nl', 'en', 'ca'])('fatigue details consistently show score, threshold and reason in %s', language => {
   const t = translations[language];
   const summary = {
@@ -2079,6 +2233,52 @@ test('meet planner shows the weight unit inside the attempt value only', () => {
 
   expect(screen.getAllByText('130 kg').length).toBeGreaterThan(0);
   expect(screen.queryByText('kg')).not.toBeInTheDocument();
+});
+
+test('meet planner Back action keeps a compact centered button shape', () => {
+  expect(meetPlanModalBackButtonStyle()).toMatchObject({
+    display: 'block',
+    width: 'min(160px, 100%)',
+    margin: '16px auto 0',
+    borderRadius: 8,
+  });
+});
+
+test('Workout setup actions use compact centered button shapes', () => {
+  expect(workoutSetupModalButtonStyle()).toMatchObject({
+    display: 'block',
+    width: 'fit-content',
+    minWidth: 128,
+    maxWidth: '100%',
+    margin: '0 auto 10px',
+    borderRadius: 8,
+  });
+  expect(workoutSetupModalButtonStyle('#fff', '14px auto 0').margin)
+    .toBe('14px auto 0');
+});
+
+test('standalone modal, program and selection actions use compact centered button shapes', () => {
+  expect(compactModalActionButtonStyle()).toMatchObject({
+    display: 'block',
+    width: 'fit-content',
+    minWidth: 128,
+    maxWidth: '100%',
+    margin: '14px auto 0',
+  });
+  expect(compactProgramActionButtonStyle()).toMatchObject({
+    display: 'block',
+    width: 'fit-content',
+    minWidth: 128,
+    maxWidth: '100%',
+    margin: '0 auto',
+  });
+  expect(selectionModalButtonStyle(false)).toMatchObject({
+    display: 'block',
+    width: 'fit-content',
+    minWidth: 128,
+    maxWidth: '100%',
+    margin: '0 auto 6px',
+  });
 });
 
 beforeAll(() => {
@@ -2436,6 +2636,35 @@ test('Smart squat priority is opt-in, persists, and changes the planned beginner
   expect(screen.getByText(/replaces medium Bench with light Squat/)).toBeInTheDocument();
 });
 
+test('Smart workout dates appear on Dashboard and in the Program completion-label space', async () => {
+  localStorage.clear();
+  localStorage.setItem('language', 'en');
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1,
+    trainingModel: 'smart',
+    currentCycle: 1,
+    prs: { Squat: 100, Bench: 75, Deadlift: 125 },
+    history: [],
+  }));
+
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Dashboard' }, { timeout: 3000 }));
+  expect(screen.getByTestId('dashboard-workout-schedule-date'))
+    .toHaveTextContent(/^Today · /);
+  expect(screen.getByTestId('dashboard-expected-meet-date'))
+    .toHaveTextContent(/^Expected meet: .+ · C\d+W\d+$/);
+  expect(screen.getByTestId('dashboard-expected-meet-date')).toHaveStyle({
+    whiteSpace: 'nowrap',
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Program' }));
+  expect(await screen.findByTestId('program-workout-schedule-date-1'))
+    .toHaveTextContent(/^Today · /);
+  expect(screen.getByTestId('program-workout-schedule-date-2'))
+    .toHaveTextContent(/^Tomorrow · /);
+});
+
 test('Smart practical route is available above beginner and immediately replaces an untouched workout', async () => {
   localStorage.clear();
   localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
@@ -2492,7 +2721,7 @@ test('Smart squat priority is unavailable above beginner and stale focus is clea
   });
 });
 
-test('settings combines support, feedback, source, identity and release verification in About', async () => {
+test('settings combines About and Updates in one modal', async () => {
   localStorage.clear();
   localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
     version: 1,
@@ -2518,9 +2747,14 @@ test('settings combines support, feedback, source, identity and release verifica
   // only a compact row with a button that opens them in a modal.
   expect(screen.queryByText(/com\.kelani\.sbdtracker/)).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Support' })).not.toBeInTheDocument();
+  expect(screen.getByText('About & Updates')).toBeInTheDocument();
+  expect(screen.queryByText('Updates')).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: 'View' }));
 
+  expect(screen.getByRole('heading', { name: 'About & Updates' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Automatically check for updates')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Check now' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Support' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Share usage data' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Feedback' })).toBeInTheDocument();
@@ -2546,12 +2780,13 @@ test('settings combines support, feedback, source, identity and release verifica
     'GitHub repo',
     'IzzyOnDroid (NeoStore)',
     'Verify release',
-    'Close',
   ].map(name => screen.getByRole('button', { name }));
   expect(new Set(supportActionButtons.map(button => button.style.height)))
     .toEqual(new Set(['clamp(52px, 6.5dvh, 60px)']));
-  expect(screen.getByRole('button', { name: 'Close' }).parentElement.style.width)
-    .toBe('calc(50% - 4px)');
+  expect(screen.getByRole('button', { name: 'Close' }).style.width)
+    .toBe('fit-content');
+  expect(screen.getByRole('button', { name: 'Close' }).style.minWidth)
+    .toBe('128px');
 
   const openSpy = jest.spyOn(window, 'open').mockImplementation(() => {});
   fireEvent.click(screen.getByRole('button', { name: 'Feedback' }));

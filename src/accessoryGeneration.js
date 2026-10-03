@@ -491,6 +491,10 @@ export function applyAccessoryPlanToWorkouts(
     const generated = generatedWorkouts[index];
     if (completedWorkoutNumbers.has(Number(generated?.number || workout.number))) return workout;
     if (!generated) return workout;
+    if (workout.smartReturnTraining && workout.type === generated.type &&
+      workout.smartIdealRoute?.workoutNumber === generated.smartIdealRoute?.workoutNumber) {
+      return workout;
+    }
 
     // A route change may replace a lift or its intensity in the active day.
     // Never transfer checked sets into a different plan mid-workout.

@@ -562,6 +562,8 @@ function getSmartIdealRouteAdjustmentState({
     : [];
   const earnedAccelerationCredits = activeRouteHistory.filter(({ snapshot }) => {
     if (snapshot?.type !== 'training') return false;
+    // A deliberately lighter return session is expected to feel easy.
+    if (snapshot?.smartReturnTraining) return false;
     if (hasAutomaticTooHardWorkoutOutcome(snapshot)) return false;
 
     return String(snapshot.workoutEffort || '')
@@ -618,6 +620,7 @@ export function isSmartIdealRoutePristine({
   return getUniqueCompletedSmartWorkoutSnapshots(history, currentCycle)
     .every(({ snapshot }) => {
       if (!snapshot?.smartIdealRoute) return false;
+      if (snapshot.smartReturnTraining) return false;
 
       if (countFailedOrSkippedSetsFromSnapshot(snapshot) > 0) return false;
 

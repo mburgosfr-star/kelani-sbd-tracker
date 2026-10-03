@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(DeviceAlertStatusPlugin.class);
         registerPlugin(RestTimerAlarmPlugin.class);
+        registerPlugin(CalendarIntegrationPlugin.class);
         super.onCreate(savedInstanceState);
 
         Window window = getWindow();

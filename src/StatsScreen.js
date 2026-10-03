@@ -33,8 +33,9 @@ const THEME = {
 };
 
 const BOTTOM_NAV_SPACE = 78;
+const RESPONSIVE_SCREEN_PADDING = 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px';
 const RESPONSIVE_CONTENT_UI = Object.freeze({
-  screenPadding: 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px',
+  screenPadding: `var(--kelani-screen-padding, ${RESPONSIVE_SCREEN_PADDING})`,
   headerTitleFontSize: 'clamp(30px, 7vw, 36px)',
   headerSubtitleFontSize: 'clamp(15px, 3.4vw, 17px)',
   bodyFontSize: 'clamp(14px, 3.4vw, 17px)',
@@ -56,7 +57,7 @@ function responsiveStatsChartGridStyle() {
     minHeight: 0,
     display: 'grid',
     gridTemplateRows: 'repeat(3, minmax(0, 1fr))',
-    gap: RESPONSIVE_STATS_UI.cardGap,
+    gap: `var(--kelani-stats-card-gap, ${RESPONSIVE_STATS_UI.cardGap})`,
   };
 }
 
@@ -68,7 +69,7 @@ export function statsScreenStyle() {
     height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
     margin: '0 auto',
     padding: RESPONSIVE_CONTENT_UI.screenPadding,
-    paddingBottom: 32,
+    paddingBottom: 'var(--kelani-content-bottom-padding, 32px)',
     boxSizing: 'border-box',
     color: THEME.text,
     fontFamily: 'sans-serif',
@@ -88,7 +89,7 @@ export function statsScrollableContentStyle() {
     display: 'flex',
     flexDirection: 'column',
     overflowX: 'hidden',
-    overflowY: 'auto',
+    overflowY: 'var(--kelani-screen-overflow-y, auto)',
     overscrollBehaviorY: 'none',
   };
 }
@@ -97,9 +98,9 @@ export function statsTabListStyle(tabCount = 4) {
   return {
     display: 'grid',
     gridTemplateColumns: `repeat(${Math.max(1, Number(tabCount) || 1)}, minmax(0, 1fr))`,
-    gap: RESPONSIVE_STATS_UI.tabGap,
+    gap: `var(--kelani-stats-tab-gap, ${RESPONSIVE_STATS_UI.tabGap})`,
     marginTop: 'clamp(9px, 1.2dvh, 12px)',
-    marginBottom: RESPONSIVE_STATS_UI.cardGap,
+    marginBottom: `var(--kelani-stats-card-gap, ${RESPONSIVE_STATS_UI.cardGap})`,
   };
 }
 

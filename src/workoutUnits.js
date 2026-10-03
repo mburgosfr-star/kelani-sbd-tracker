@@ -79,10 +79,11 @@ export function formatDecimalDisplay(value, { minimumFractionDigits, maximumFrac
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return '-';
 
-  const hasDecimal = !Number.isInteger(numericValue);
+  const roundedValue = Number(numericValue.toFixed(maximumFractionDigits));
+  const hasDecimal = !Number.isInteger(roundedValue);
   const minDigits = minimumFractionDigits ?? (hasDecimal ? 1 : 0);
 
-  return numericValue.toLocaleString(decimalLocale(), {
+  return roundedValue.toLocaleString(decimalLocale(), {
     minimumFractionDigits: minDigits,
     maximumFractionDigits,
   });

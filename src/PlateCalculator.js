@@ -128,7 +128,11 @@ export default function PlateCalculator({ weightKg, onClose, theme, t }) {
         <button
           onClick={onClose}
           style={{
-            width: '100%',
+            display: 'block',
+            width: 'fit-content',
+            minWidth: 128,
+            maxWidth: '100%',
+            margin: '0 auto',
             padding: 12,
             fontSize: 14,
             fontWeight: 700,

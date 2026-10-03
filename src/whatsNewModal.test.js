@@ -24,6 +24,8 @@ describe('WhatsNewModal', () => {
     expect(screen.getByText(translations.en.whatsNewFixedChromeItem)).toBeInTheDocument();
     expect(screen.getByText(translations.en.whatsNewDashboardSpacingItem)).toBeInTheDocument();
     expect(screen.getByText(translations.en.whatsNewProgramSpacingItem)).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewReturnTrainingItem)).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewCalendarItem)).toBeInTheDocument();
 
     const checkbox = screen.getByLabelText(
       translations.en.whatsNewShowAutomatically

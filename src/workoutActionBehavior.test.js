@@ -182,10 +182,10 @@ function renderCurrentWorkout(workout, { t = translations.en, isReadOnly = false
     startTimer: jest.fn(),
   };
 
-  render(
+  const renderWorkout = nextWorkout => (
     <CurrentWorkout
       trainingModel="smart"
-      workout={workout}
+      workout={nextWorkout}
       currentCycle={1}
       totalWorkouts={1}
       isReadOnly={isReadOnly}
@@ -200,9 +200,58 @@ function renderCurrentWorkout(workout, { t = translations.en, isReadOnly = false
       {...handlers}
     />
   );
+  const view = render(renderWorkout(workout));
 
-  return handlers;
+  return {
+    ...handlers,
+    rerenderWorkout: nextWorkout => view.rerender(renderWorkout(nextWorkout)),
+  };
 }
+
+test('clears missed-set feedback after the next set in another group is checked', () => {
+  const missedBackoff = {
+    labelKey: 'backoff',
+    weight: 80,
+    originalWeight: 80,
+    pct: 0.7,
+    originalPct: 0.7,
+    reps: 5,
+    done: false,
+    failed: true,
+    skipped: true,
+  };
+  const nextSet = {
+    labelKey: 'topTriple',
+    weight: 90,
+    originalWeight: 90,
+    pct: 0.8,
+    originalPct: 0.8,
+    reps: 3,
+    done: false,
+    failed: false,
+    skipped: false,
+  };
+  const workout = {
+    number: 1,
+    type: 'training',
+    lift: 'Squat',
+    prepItems: [],
+    warmups: [],
+    sets: [missedBackoff, nextSet],
+    accessories: [],
+    cooldownItems: [],
+  };
+  const view = renderCurrentWorkout(workout);
+
+  expect(screen.getByText(translations.en.topSetSkipped)).toBeInTheDocument();
+
+  view.rerenderWorkout({
+    ...workout,
+    sets: [missedBackoff, { ...nextSet, done: true }],
+  });
+
+  expect(screen.queryByText(translations.en.topSetSkipped)).not.toBeInTheDocument();
+});
 
 test('meet day labels every warm-up and each attempt in the workout grid', () => {
   renderCurrentWorkout({
