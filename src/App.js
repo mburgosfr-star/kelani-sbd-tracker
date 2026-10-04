@@ -1543,7 +1543,6 @@ const BOTTOM_NAV_DIVIDER_OFFSET = 'clamp(4px, 0.7dvh, 6px)';
 const RESPONSIVE_SCREEN_PADDING = 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px';
 const COMPACT_SCREEN_PADDING = 'clamp(6px, 0.8dvh, 8px) clamp(14px, 4vw, 20px) 10px';
 const COMPACT_CONTENT_ROW_GAP = 'clamp(6px, 0.8dvh, 9px)';
-const COMPACT_CONTENT_BOTTOM_PADDING = 'clamp(8px, 1.2dvh, 12px)';
 
 export const FAILED_SET_COLOR = THEME.meet;
 const FAILED_SET_BACKGROUND = 'rgba(198, 40, 40, 0.22)';
@@ -1690,7 +1689,6 @@ export function appViewportStyle({
       '--kelani-screen-padding': COMPACT_SCREEN_PADDING,
       '--kelani-completed-screen-padding': '10px clamp(10px, 3vw, 16px)',
       '--kelani-content-row-gap': COMPACT_CONTENT_ROW_GAP,
-      '--kelani-content-bottom-padding': COMPACT_CONTENT_BOTTOM_PADDING,
       '--kelani-stats-card-gap': '1px',
       '--kelani-stats-tab-gap': 'clamp(3px, 1vw, 5px)',
     } : {}),
@@ -1738,7 +1736,7 @@ const RESPONSIVE_SETTINGS_UI = Object.freeze({
   descriptionFontSize: 'clamp(13px, 3.2vw, 16px)',
   valueFontSize: 'clamp(15px, 3.7vw, 18px)',
   buttonFontSize: 'clamp(15px, 3.7vw, 18px)',
-  buttonMinHeight: 'clamp(44px, 5.5dvh, 52px)',
+  buttonMinHeight: 'var(--kelani-button-height)',
   modalTitleFontSize: 'clamp(20px, 4.8vw, 24px)',
   modalBodyFontSize: 'clamp(15px, 3.6vw, 18px)',
 });
@@ -1803,11 +1801,11 @@ export function regularDashboardContentStyle({ spreadContent = false, compact = 
     ...scrollableScreenContentStyle(),
     minHeight: 0,
     display: 'grid',
-    alignContent: spreadContent ? 'space-evenly' : 'start',
+    // Share spare height between the dashboard sections on every regular day.
+    // When the sections need more height, grid falls back to start alignment
+    // so the content can still scroll normally.
+    alignContent: 'safe space-evenly',
     rowGap: `var(--kelani-content-row-gap, ${defaultRowGap})`,
-    ...(spreadContent ? {
-      paddingBottom: 'var(--kelani-content-bottom-padding, clamp(24px, 3.5dvh, 36px))',
-    } : {}),
   };
 }
 
@@ -2171,7 +2169,7 @@ export function workoutCompletionButtonStyle({ enabled = true, active = false } 
   return {
     display: 'block',
     width: 'auto',
-    minHeight: 44,
+    minHeight: 'var(--kelani-button-height)',
     padding: '10px 28px',
     fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
     fontWeight: 700,
@@ -2564,6 +2562,7 @@ function WorkoutCircle({
       <button
         type="button"
         aria-label={label}
+        data-kelani-button-size="contextual"
         title={label}
         onClick={event => {
           event.stopPropagation();
@@ -2737,6 +2736,7 @@ function WorkoutWeightCalculatorTrigger({
     <button
       type="button"
       data-testid="workout-weight-calculator-trigger"
+      data-kelani-button-size="contextual"
       title={label}
       aria-label={label}
       onClick={event => {
@@ -3187,6 +3187,7 @@ function SetActionButton({ title, onClick, borderColor, disabled = false, childr
     <button
       type="button"
       title={title}
+      data-kelani-button-size="contextual"
       aria-label={title}
       disabled={disabled}
       onClick={onClick}
@@ -3573,19 +3574,19 @@ export function settingsContentLayoutStyle() {
   };
 }
 
-function SettingsModal({ title, onClose, children }) {
+function SettingsModal({ title, onClose, children, zIndex = 650, inactive = false, nested = false }) {
   return (
-    <div style={{
+    <div aria-hidden={inactive} inert={inactive} style={{
       position: 'fixed',
       top: 0,
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(0,0,0,0.65)',
+      background: nested ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.65)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 650,
+      zIndex,
       padding: 'clamp(12px, 4vw, 20px)',
       boxSizing: 'border-box',
       overscrollBehavior: 'none',
@@ -3861,6 +3862,7 @@ export function UpdatesSettingsModal({
   onOpenWhatsNew,
   onOpenLink,
   onClose,
+  inactive = false,
 }) {
   const statusText = checkStatus === 'checking'
     ? t.updateChecking
@@ -3873,7 +3875,7 @@ export function UpdatesSettingsModal({
           : t.updateNotChecked;
 
   return (
-    <SettingsModal title={title || t.updatesTitle} onClose={onClose}>
+    <SettingsModal title={title || t.updatesTitle} onClose={onClose} inactive={inactive}>
       {children}
       {children && <h4 style={{ color: THEME.primary, textAlign: 'center', margin: '4px 0 14px' }}>{t.updatesTitle}</h4>}
       <div style={{
@@ -3889,7 +3891,12 @@ export function UpdatesSettingsModal({
         <strong>{currentVersion}</strong>
       </div>
 
-      <button type="button" onClick={onOpenWhatsNew} style={compactModalActionButtonStyle('secondary', '0 auto 14px')}>
+      <button type="button" onClick={onOpenWhatsNew} style={{
+        ...modalActionButtonStyle('secondary'),
+        display: 'block',
+        width: `calc((100% - ${MODAL_ACTION_ROW_GAP}px) / 2)`,
+        margin: '0 auto 14px',
+      }}>
         {t.whatsNewView}
       </button>
 
@@ -3948,7 +3955,7 @@ export function UpdatesSettingsModal({
         >
           {checkStatus === 'checking' ? t.updateChecking : t.updateCheckNow}
         </button>
-        <button type="button" onClick={onClose} style={compactModalActionButtonStyle('secondary', '0 auto')}>
+        <button type="button" onClick={onClose} style={modalActionButtonStyle('secondary')}>
           {t.close}
         </button>
       </div>
@@ -4040,11 +4047,13 @@ function modalInputStyle() {
   };
 }
 
+const MODAL_ACTION_ROW_GAP = 8;
+
 function modalActionRowStyle() {
   return {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-    gap: 8,
+    gap: MODAL_ACTION_ROW_GAP,
     marginTop: 14
   };
 }
@@ -4589,7 +4598,6 @@ function SupportActionButton({ children, onClick, compact = false }) {
         borderRadius: 8,
         cursor: 'pointer',
         minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
-        height: 'clamp(52px, 6.5dvh, 60px)',
         width: compact ? 'fit-content' : '100%',
         minWidth: compact ? 128 : undefined,
         maxWidth: '100%',
@@ -4961,6 +4969,7 @@ function AboutSupportSection({
   t, language, usageMetrics, currentVersion, latestVersion, checkStatus,
   checkAutomatically, onCheckAutomaticallyChange, onCheck, onOpenWhatsNew,
   onOpenUpdateLink, onPrepareUpdates, isOpen, onOpen, onClose,
+  projectOpen, onProjectOpen, onProjectBack,
 }) {
   const [showUsageSummary, setShowUsageSummary] = useState(false);
 
@@ -4997,6 +5006,8 @@ function AboutSupportSection({
       label: t.reportIssueShort || t.reportBug,
       onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=bug_report.md'),
     },
+  ];
+  const projectLinks = [
     {
       label: t.githubRepository,
       onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker'),
@@ -5022,6 +5033,44 @@ function AboutSupportSection({
         }}
       />
 
+      {isOpen && projectOpen && (
+        <SettingsModal title={t.projectAndVerification} onClose={onProjectBack} zIndex={660} nested>
+          <div style={{ display: 'grid', gap: 14 }}>
+            {facts.map(([label, value]) => (
+              <div key={label}>
+                <div style={{ color: THEME.muted, fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>
+                  {label}
+                </div>
+                <div style={{
+                  color: THEME.text,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  lineHeight: 1.4,
+                  overflowWrap: 'anywhere',
+                  marginTop: 3,
+                }}>{value}</div>
+              </div>
+            ))}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 8,
+            }}>
+              {projectLinks.map(item => (
+                <div key={item.label} style={{ display: 'grid' }}>
+                  <SupportActionButton onClick={item.onClick}>
+                    {item.label}
+                  </SupportActionButton>
+                </div>
+              ))}
+              <SupportActionButton onClick={onProjectBack}>
+                {t.back}
+              </SupportActionButton>
+            </div>
+          </div>
+        </SettingsModal>
+      )}
+
       {isOpen && (
         <UpdatesSettingsModal
           t={t}
@@ -5035,10 +5084,10 @@ function AboutSupportSection({
           onOpenWhatsNew={onOpenWhatsNew}
           onOpenLink={onOpenUpdateLink}
           onClose={onClose}
+          inactive={projectOpen}
         >
-          <h4 style={{ color: THEME.primary, textAlign: 'center', margin: '0 0 12px' }}>{t.about}</h4>
           <p style={{
-            margin: '0 0 14px',
+            margin: '0 0 16px',
             color: THEME.text,
             fontSize: 14,
             fontWeight: 700,
@@ -5050,49 +5099,42 @@ function AboutSupportSection({
 
           <div style={{
             display: 'grid',
-            gap: 9,
-            marginBottom: 16,
-            textAlign: 'center',
-          }}>
-            {facts.map(([label, value]) => (
-              <div key={label} style={{ textAlign: 'center' }}>
-                <div style={{
-                  color: THEME.muted,
-                  fontSize: 11,
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.3,
-                }}>
-                  {label}
-                </div>
-                <div style={{
-                  color: THEME.text,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  lineHeight: 1.35,
-                  overflowWrap: 'anywhere',
-                  marginTop: 2,
-                  textAlign: 'center',
-                }}>
-                  {value}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{
-            display: 'grid',
             gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
             gap: 8,
           }}>
-            {actions.map(item => (
-              <div key={item.label}>
+            {actions.map((item, index) => (
+              <div key={item.label} style={index === actions.length - 1 ? {
+                display: 'grid',
+                gridColumn: '1 / -1',
+                width: 'calc(50% - 4px)',
+                justifySelf: 'center',
+              } : { display: 'grid' }}>
                 <SupportActionButton onClick={item.onClick}>
                   {item.label}
                 </SupportActionButton>
               </div>
             ))}
           </div>
+
+          <button type="button" onClick={onProjectOpen} style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              width: 'fit-content',
+              minHeight: 'var(--kelani-button-height)',
+              margin: '10px auto 12px',
+              padding: '8px 12px',
+              background: 'transparent',
+              border: 'none',
+              color: THEME.primary,
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: 'pointer',
+              textAlign: 'center',
+            }}>
+              <span>{t.projectAndVerification}</span>
+              <TapInfoIcon color={THEME.primary} />
+            </button>
 
         </UpdatesSettingsModal>
       )}
@@ -7651,6 +7693,7 @@ export function SmartDayTypeInline({
         <button
           type="button"
           aria-label={`Smart: ${label}. ${t.smartWorkoutInfo}`}
+          data-kelani-button-size="contextual"
           aria-expanded={showSmartInfo}
           onClick={() => {
             setSmartCopyStatus(null);
@@ -8053,7 +8096,7 @@ export function SmartDayTypeInline({
                       onClick={() => onChooseReturnTraining(!workout.smartReturnTraining)}
                       style={{
                         display: 'block',
-                        minHeight: 44,
+                        minHeight: 'var(--kelani-button-height)',
                         margin: '12px auto 0',
                         padding: '8px 14px',
                         borderRadius: 9,
@@ -8593,6 +8636,7 @@ export function CurrentWorkout({
                     <button
                       type="button"
                       disabled={!guideAvailable}
+                      data-kelani-button-size="contextual"
                       onClick={() => guideAvailable && setSelectedExerciseGuideLift(liftBlock.lift)}
                       title={guideAvailable ? (t.exerciseGuide) : undefined}
                       aria-label={guideAvailable
@@ -10553,6 +10597,7 @@ function AthleteLevelBadge({
       <button
         type="button"
         onClick={() => setShowModal(true)}
+        data-kelani-button-size="contextual"
         aria-label={`${t.athleteLevelBadgeLabel}: ${levelLabel}`}
         style={{
           appearance: 'none',
@@ -10827,6 +10872,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
                 <button
                   type="button"
                   aria-label={t.programTrainingFactors}
+                  data-kelani-button-size="contextual"
                   onClick={(event) => {
                     event.stopPropagation();
                     setShowProgramInfo(true);
@@ -11563,6 +11609,7 @@ function Onboarding({ onStart, t }) {
               return <button
                 type="button"
                 key={focus}
+                data-kelani-button-size="contextual"
                 disabled={!available}
                 aria-pressed={selected}
                 onClick={() => setSelectedTrainingFocus(focus)}
@@ -11620,13 +11667,13 @@ function Onboarding({ onStart, t }) {
         }}>
           {step === 1
             ? <DataSection t={t} importOnly={true} triggerOnly={true} />
-            : <button type="button" onClick={() => setStep(current => Math.max(current - 1, 1))} style={{ width: 'min(150px, calc(50vw - 28px))', minHeight: 44, background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.primary}`, borderRadius: 4, fontWeight: 700, cursor: 'pointer' }}>{t.onboardingBack}</button>}
+            : <button type="button" onClick={() => setStep(current => Math.max(current - 1, 1))} style={{ width: 'min(150px, calc(50vw - 28px))', minHeight: 'var(--kelani-button-height)', background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.primary}`, borderRadius: 4, fontWeight: 700, cursor: 'pointer' }}>{t.onboardingBack}</button>}
           <button
             type="button"
             onClick={step === 3 ? handleStart : handleNext}
             style={{
               width: 'min(150px, calc(50vw - 28px))',
-              minHeight: 44,
+              minHeight: 'var(--kelani-button-height)',
               padding: '9px 16px',
               fontSize: 16,
               background: THEME.primary,
@@ -11804,6 +11851,7 @@ export function BottomNav({ screen, onChange, t }) {
         <button
           key={item.key}
           aria-label={item.label}
+          data-kelani-button-size="contextual"
           title={item.label}
           onClick={() => {
             onChange(item.key);
@@ -11938,6 +11986,7 @@ function App() {
   const [calendarSyncing, setCalendarSyncing] = useState(false);
   const calendarSyncInFlightRef = useRef(null);
   const [showAboutUpdates, setShowAboutUpdates] = useState(false);
+  const [showProjectVerification, setShowProjectVerification] = useState(false);
   const [showUpdateAvailable, setShowUpdateAvailable] = useState(false);
   const [latestAvailableVersion, setLatestAvailableVersion] = useState(null);
   const [updateCheckStatus, setUpdateCheckStatus] = useState('idle');
@@ -12539,6 +12588,11 @@ function App() {
           return;
         }
 
+        if (showProjectVerification) {
+          setShowProjectVerification(false);
+          return;
+        }
+
         if (showAboutUpdates && !showWhatsNew) {
           setShowAboutUpdates(false);
           return;
@@ -12597,7 +12651,7 @@ function App() {
     return () => {
       if (listener) listener.remove();
     };
-  }, [screen, completedWorkoutIndex, activeMilestoneCelebration, showWhatsNew, showAboutUpdates, showUpdateAvailable, showCalendarSettings, showCalendarPicker]);
+  }, [screen, completedWorkoutIndex, activeMilestoneCelebration, showWhatsNew, showAboutUpdates, showProjectVerification, showUpdateAvailable, showCalendarSettings, showCalendarPicker]);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -16978,8 +17032,17 @@ const screenAllowsContentScroll =
         onOpenUpdateLink={openUpdateDownload}
         onPrepareUpdates={prepareUpdatesSettings}
         isOpen={showAboutUpdates}
-        onOpen={() => setShowAboutUpdates(true)}
-        onClose={() => setShowAboutUpdates(false)}
+        onOpen={() => {
+          setShowProjectVerification(false);
+          setShowAboutUpdates(true);
+        }}
+        onClose={() => {
+          setShowProjectVerification(false);
+          setShowAboutUpdates(false);
+        }}
+        projectOpen={showProjectVerification}
+        onProjectOpen={() => setShowProjectVerification(true)}
+        onProjectBack={() => setShowProjectVerification(false)}
       />
     </div>
 

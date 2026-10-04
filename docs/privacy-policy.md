@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-09-25
+Last updated: 2026-10-04
 
 Kelani SBD Tracker is an offline-first powerlifting tracker for Squat, Bench Press and Deadlift training.
 
@@ -8,7 +8,7 @@ The app is built to work without accounts, ads, tracking or automatic analytics.
 
 ## Data collection
 
-Kelani SBD Tracker does not automatically collect personal data and does not automatically send training data to the developer or to any server.
+Kelani SBD Tracker does not automatically collect personal data or send your full training records to the developer or a Kelani server. If you enable calendar integration, brief workout events can reach your chosen calendar provider as described below.
 
 The app stores your training data locally on your device. This may include:
 
@@ -18,8 +18,9 @@ The app stores your training data locally on your device. This may include:
 - Meet Planner attempts
 - Meet prep checklist state
 - App settings such as language and rest time
+- Optional calendar settings and links to calendar events created by Kelani
 
-This data stays on your device unless you choose to export or share it.
+This app data stays on your device unless you choose to export or share it. The optional Android calendar integration described below also writes brief workout events to the calendar you select.
 
 ## Optional anonymous usage summary
 
@@ -42,11 +43,21 @@ The summary does not contain:
 - Device information or identifiers
 - Individual workouts or full training history
 
-Nothing is sent automatically. Copying keeps the decision and destination under your control. Choosing email opens your email app with the summary prepared for you; the message is sent only if you choose to send it. An email you send also gives the developer the sender information and other metadata normally included by your email provider.
+The usage summary is not sent automatically. Copying keeps the decision and destination under your control. Choosing email opens your email app with the summary prepared for you; the message is sent only if you choose to send it. An email you send also gives the developer the sender information and other metadata normally included by your email provider.
+
+## Optional Android calendar integration
+
+Calendar integration is off by default and is available in the Android app. If you choose to allow access, Android grants Kelani permission to read and write calendar data. Kelani reads the list of visible, writable calendars, including their names and account names and types, so you can select one. To update or remove an event, Kelani also reads that event's calendar ID and description to confirm that it created the event.
+
+After you select a calendar and start the first sync manually, Kelani can create and update events for current and future, incomplete workouts in that calendar. An event contains a short translated title (such as `Kelani workout · C5W21`), its start and end time, the device time zone, and a Kelani marker used to identify the event. It does not contain your weights, PRs, body data or full workout plan. Later automatic syncs update Kelani's own future events. Kelani may remove one of those future events when it is no longer planned or when you turn calendar integration off; it does not remove past or completed workout events during sync.
+
+Kelani stores the selected calendar's ID, name, account name and account type, the default start time, and links to its created events in local app data. Those settings and links can also be included in a backup you choose to export. Kelani does not send calendar data to the developer or a Kelani server. Events written to your selected device calendar are handled by that calendar and its provider. Depending on the calendar or account you choose, the provider may synchronize those events to its cloud service and other devices under its own privacy terms.
 
 ## Accounts
 
 Kelani SBD Tracker does not use accounts. You do not need to sign in, register or provide an email address.
+
+If you choose a calendar linked to an external account, that account is managed by the calendar provider, not by Kelani.
 
 ## Ads and tracking
 
@@ -62,13 +73,13 @@ The latest result and check time are stored locally on your device. Kelani never
 
 ## Data sharing
 
-Kelani SBD Tracker does not automatically share your training or body data with the developer or third parties. The limited GitHub request used for enabled update checks is described above.
+Kelani SBD Tracker does not automatically share your training or body data with the developer. Optional calendar events can be handled and synchronized by your chosen calendar provider as described above. The limited GitHub request used for enabled update checks is described above.
 
 If you use the export, contact or sharing features, you choose what to send and where it goes. That action is controlled by you and may involve other apps and service providers on your device.
 
 ## Data retention and deletion
 
-Your app data is kept locally on your device.
+Your app data is kept locally on your device. Events added to a selected calendar are kept by that calendar and may also be retained by its provider. Removing Kelani or its app data does not necessarily remove events already written to a calendar.
 
 You can delete your data by clearing the app data, uninstalling the app, or replacing it with an imported backup.
 

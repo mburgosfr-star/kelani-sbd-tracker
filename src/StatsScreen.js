@@ -43,7 +43,7 @@ const RESPONSIVE_CONTENT_UI = Object.freeze({
 const RESPONSIVE_STATS_UI = Object.freeze({
   tabGap: 'clamp(5px, 1.5vw, 8px)',
   tabFontSize: 'clamp(13px, 3.2vw, 16px)',
-  tabMinHeight: 'clamp(38px, 5dvh, 42px)',
+  tabMinHeight: 'var(--kelani-button-height)',
   cardGap: 'clamp(2px, 0.4dvh, 4px)',
   cardPadding: 'clamp(1px, 0.7vw, 3px)',
   chartTitleFontSize: 'clamp(18px, 4.4vw, 21px)',

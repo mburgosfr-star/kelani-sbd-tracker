@@ -1,6 +1,6 @@
 Kelani SBD Tracker és una aplicació de seguiment de powerlifting tranquil·la i offline-first per a un entrenament estructurat de Squat, Bench Press i Deadlift.
 
-T'ajuda a planificar, registrar i completar entrenaments SBD sense comptes, anuncis, subscripcions, analítica automàtica, telemetria ni dependència del núvol. Les teves dades d'entrenament es queden al teu dispositiu, tret que triïs explícitament exportar-les o compartir-les.
+T'ajuda a planificar, registrar i completar entrenaments SBD sense comptes, anuncis, subscripcions, analítica automàtica, telemetria ni sincronització al núvol de Kelani. Les dades desades a l'aplicació es queden al teu dispositiu, tret que triïs exportar-les o compartir-les. La integració opcional amb el calendari d'Android escriu esdeveniments breus d'entrenament al calendari que triïs; el proveïdor els pot sincronitzar.
 
 Smart Training:
 
@@ -26,6 +26,7 @@ Funcions:
 - Seguiment de l'esforç percebut per sèrie i per entrenament completat
 - Alternatives d'exercicis per a períodes d'entrenament amb menys càrrega
 - Exportació i importació local de dades
+- Sincronització opcional dels entrenaments futurs amb un calendari d'Android seleccionat després de concedir-hi accés i iniciar la primera sincronització
 - Resum d'ús anònim opcional, generat localment i mostrat completament abans que decideixis si el vols compartir
 - Interfície en anglès, català i neerlandès
 
@@ -37,6 +38,7 @@ Privadesa i independència:
 - Sense seguiment
 - Sense subscripció
 - Sense mur de pagament
-- Ús totalment offline
+- Les funcions principals d'entrenament funcionen sense connexió
+- La integració opcional amb el calendari d'Android fa servir permisos de lectura i escriptura; el proveïdor del calendari pot sincronitzar els esdeveniments
 
 Kelani està pensat per a un progrés de força pràctic i a llarg termini, no per a l'engagement de xarxes socials.

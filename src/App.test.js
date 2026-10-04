@@ -578,7 +578,7 @@ test('rest and training completion actions share the same compact button style',
   expect(workoutCompletionButtonStyle()).toMatchObject({
     display: 'block',
     width: 'auto',
-    minHeight: 44,
+    minHeight: 'var(--kelani-button-height)',
     padding: '10px 28px',
     fontWeight: 700,
     borderRadius: 8,
@@ -1001,7 +1001,6 @@ test('all main screens suppress tiny pseudo-overflow and scroll only for hidden 
   expect(appViewportStyle({ screen: 'dashboard', compactToFit: true })).toMatchObject({
     '--kelani-screen-padding': 'clamp(6px, 0.8dvh, 8px) clamp(14px, 4vw, 20px) 10px',
     '--kelani-content-row-gap': 'clamp(6px, 0.8dvh, 9px)',
-    '--kelani-content-bottom-padding': 'clamp(8px, 1.2dvh, 12px)',
   });
   expect(appViewportStyle({
     screen: 'current',
@@ -1460,7 +1459,7 @@ test('settings rows use responsive text and phone-sized action targets', () => {
 
   expect(screen.getByText('Profile').style.fontSize).toBe('clamp(16px, 4vw, 20px)');
   const action = screen.getByRole('button', { name: 'Edit' });
-  expect(action.style.minHeight).toBe('clamp(44px, 5.5dvh, 52px)');
+  expect(action.style.minHeight).toBe('var(--kelani-button-height)');
   expect(action.style.fontSize).toBe('clamp(15px, 3.7vw, 18px)');
   expect(action.style.whiteSpace).toBe('normal');
 });
@@ -1801,7 +1800,7 @@ test('post-meet recovery restores the dashboard but keeps route to meet hidden',
   });
 });
 
-test('post-meet dashboard distributes space between and around its cards', () => {
+test('regular dashboards distribute spare height between and around their sections', () => {
   expect(regularDashboardScreenStyle()).toMatchObject({
     display: 'flex',
     flexDirection: 'column',
@@ -1812,14 +1811,15 @@ test('post-meet dashboard distributes space between and around its cards', () =>
   expect(regularDashboardContentStyle({ spreadContent: true })).toMatchObject({
     display: 'grid',
     overflowY: 'var(--kelani-screen-overflow-y, auto)',
-    alignContent: 'space-evenly',
+    alignContent: 'safe space-evenly',
     rowGap: 'var(--kelani-content-row-gap, clamp(10px, 1.4dvh, 16px))',
-    paddingBottom: 'var(--kelani-content-bottom-padding, clamp(24px, 3.5dvh, 36px))',
   });
   expect(regularDashboardContentStyle()).toMatchObject({
-    alignContent: 'start',
+    alignContent: 'safe space-evenly',
     rowGap: 'var(--kelani-content-row-gap, clamp(14px, 2.2dvh, 24px))',
   });
+  expect(regularDashboardContentStyle({ compact: true }).alignContent)
+    .toBe('safe space-evenly');
 });
 
 test('PR-rich training dashboards use tighter spacing without changing sparse dashboards', () => {
@@ -2760,33 +2760,16 @@ test('settings combines About and Updates in one modal', async () => {
   expect(screen.getByRole('button', { name: 'Feedback' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Share your experience' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Report issue' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'GitHub repo' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'IzzyOnDroid (NeoStore)' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Verify release' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
-  const packageValue = screen.getByText(/com\.kelani\.sbdtracker/);
-  expect(packageValue).toBeInTheDocument();
-  expect(packageValue.style.textAlign).toBe('center');
-  expect(screen.getByText(
-    /15d23f2e5ee95ebc2a530b48be6f27dad7a568f722bc819f4571b3470a2ff39d/
-  ).style.textAlign).toBe('center');
-
-  const supportActionButtons = [
+  expect(screen.queryByRole('button', { name: 'GitHub repo' })).not.toBeInTheDocument();
+  const mainActionButtons = [
     'Support',
     'Share usage data',
     'Feedback',
     'Share your experience',
     'Report issue',
-    'GitHub repo',
-    'IzzyOnDroid (NeoStore)',
-    'Verify release',
   ].map(name => screen.getByRole('button', { name }));
-  expect(new Set(supportActionButtons.map(button => button.style.height)))
-    .toEqual(new Set(['clamp(52px, 6.5dvh, 60px)']));
-  expect(screen.getByRole('button', { name: 'Close' }).style.width)
-    .toBe('fit-content');
-  expect(screen.getByRole('button', { name: 'Close' }).style.minWidth)
-    .toBe('128px');
+  expect(new Set(mainActionButtons.map(button => button.style.minHeight)))
+    .toEqual(new Set(['var(--kelani-button-height)']));
 
   const openSpy = jest.spyOn(window, 'open').mockImplementation(() => {});
   fireEvent.click(screen.getByRole('button', { name: 'Feedback' }));
@@ -2805,6 +2788,41 @@ test('settings combines About and Updates in one modal', async () => {
     '_blank',
     'noopener,noreferrer'
   );
+
+  const projectButton = screen.getByRole('button', { name: 'Project & Verification' });
+  expect(projectButton.querySelector('[aria-hidden="true"]')).toHaveTextContent('i');
+  fireEvent.click(projectButton);
+  expect(screen.getByRole('heading', { name: 'Project & Verification' })).toBeInTheDocument();
+  const backgroundModal = screen.getByRole('heading', {
+    name: 'About & Updates', hidden: true,
+  }).parentElement.parentElement;
+  expect(backgroundModal).toHaveAttribute('inert');
+  expect(backgroundModal.style.zIndex).toBe('650');
+  expect(screen.getByRole('heading', { name: 'Project & Verification' })
+    .parentElement.parentElement.style.zIndex).toBe('660');
+  expect(screen.queryByRole('button', { name: 'Support' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'GitHub repo' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'IzzyOnDroid (NeoStore)' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Verify release' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Verify release' }).parentElement.parentElement)
+    .toBe(screen.getByRole('button', { name: 'Back' }).parentElement);
+  const packageValue = screen.getByText(/com\.kelani\.sbdtracker/);
+  expect(packageValue).toBeInTheDocument();
+  expect(packageValue.style.overflowWrap).toBe('anywhere');
+  expect(screen.getByText(
+    /15d23f2e5ee95ebc2a530b48be6f27dad7a568f722bc819f4571b3470a2ff39d/
+  ).style.overflowWrap).toBe('anywhere');
+
+  const projectActionButtons = [
+    'GitHub repo',
+    'IzzyOnDroid (NeoStore)',
+    'Verify release',
+    'Back',
+  ].map(name => screen.getByRole('button', { name }));
+  expect(new Set(projectActionButtons.map(button => button.style.minHeight)))
+    .toEqual(new Set(['var(--kelani-button-height)']));
   fireEvent.click(screen.getByRole('button', { name: 'IzzyOnDroid (NeoStore)' }));
   expect(openSpy).toHaveBeenCalledWith(
     'https://apt.izzysoft.de/packages/com.kelani.sbdtracker',
@@ -2819,6 +2837,16 @@ test('settings combines About and Updates in one modal', async () => {
   );
   openSpy.mockRestore();
 
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  expect(screen.getByRole('heading', { name: 'About & Updates' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Automatically check for updates')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'GitHub repo' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Close' }).style.width)
+    .toBe(screen.getByRole('button', { name: 'Check now' }).style.width);
+  expect(screen.getByRole('button', { name: 'View updates' }).style.width)
+    .toBe('calc(0.5 * (100% - 8px))');
+  expect(screen.getByRole('button', { name: 'Check now' }).parentElement.style.gap)
+    .toBe('8px');
   fireEvent.click(screen.getByRole('button', { name: 'Close' }));
   expect(screen.queryByText(/com\.kelani\.sbdtracker/)).not.toBeInTheDocument();
 });
