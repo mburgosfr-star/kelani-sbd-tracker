@@ -1,4 +1,5 @@
 import { parseWorkoutDateKey } from './workoutScheduleDates';
+import { getEntryCycle, isCompletedHistoryEntry } from './workoutHistoryStats';
 
 export const DEFAULT_CALENDAR_START_TIME = '18:00';
 export const CALENDAR_MINUTES_PER_SET = 5;
@@ -30,6 +31,7 @@ function normalizeEventMapping(mapping) {
 export function createCalendarIntegrationSettings(overrides = {}) {
   return normalizeCalendarIntegrationSettings({
     enabled: false,
+    deleteCompletedWorkouts: false,
     calendarId: null,
     calendarName: '',
     calendarAccountName: '',
@@ -54,6 +56,7 @@ export function normalizeCalendarIntegrationSettings(value = {}) {
 
   return {
     enabled: value?.enabled === true && Boolean(calendarId),
+    deleteCompletedWorkouts: value?.deleteCompletedWorkouts === true,
     calendarId,
     calendarName: String(value?.calendarName || ''),
     calendarAccountName: String(value?.calendarAccountName || ''),
@@ -68,6 +71,12 @@ export function normalizeCalendarIntegrationSettings(value = {}) {
       : null,
     promptsDisabled: value?.promptsDisabled === true,
   };
+}
+
+export function getCompletedCalendarWorkoutKeys(history = []) {
+  return new Set(history.filter(isCompletedHistoryEntry).map(entry => (
+    `${getEntryCycle(entry)}:${Number(entry.workoutNumber)}`
+  )));
 }
 
 function prescribedSetCount(item) {

@@ -19,7 +19,8 @@ export async function syncWorkoutCalendar({
   if (!todayKey) throw new Error('Invalid calendar date');
 
   const desired = normalized.enabled
-    ? desiredEvents.filter(event => event && event.dateKey >= todayKey)
+    ? desiredEvents.filter(event => event && event.dateKey >= todayKey &&
+      !completedWorkoutKeys.has(workoutKey(event.cycleId, event.workoutId)))
     : [];
   const desiredByKey = new Map(desired.map(event => [workoutKey(event.cycleId, event.workoutId), event]));
   let mappings = [...normalized.eventMappings];
@@ -36,7 +37,10 @@ export async function syncWorkoutCalendar({
     const key = workoutKey(mapping.cycleId, mapping.workoutId);
     const stillDesired = desiredByKey.has(key) &&
       (mapping.calendarId || normalized.calendarId) === normalized.calendarId;
-    if (stillDesired || mapping.syncedDate < todayKey || completedWorkoutKeys.has(key)) continue;
+    const completed = completedWorkoutKeys.has(key);
+    if (completed
+      ? !normalized.deleteCompletedWorkouts
+      : stillDesired || mapping.syncedDate < todayKey) continue;
 
     try {
       await deleteEvent({

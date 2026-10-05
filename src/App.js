@@ -183,6 +183,7 @@ import {
 } from './workoutScheduleDates';
 import {
   buildCalendarEventSpecs,
+  getCompletedCalendarWorkoutKeys,
   createCalendarIntegrationSettings,
   normalizeCalendarIntegrationSettings,
 } from './calendarIntegration';
@@ -3733,6 +3734,16 @@ export function CalendarSettingsModal({ t, settings, onChange, onSync, syncStatu
                   style={{ width: 20, height: 20, accentColor: THEME.primary }}
                 />
                 {t.calendarEnable}
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, color: THEME.text, fontSize: 13, fontWeight: 800, margin: '14px 0', minHeight: 44 }}>
+                <input
+                  type="checkbox"
+                  checked={normalized.deleteCompletedWorkouts}
+                  disabled={syncing}
+                  onChange={event => onChange({ ...normalized, deleteCompletedWorkouts: event.target.checked })}
+                  style={{ width: 20, height: 20, flexShrink: 0, accentColor: THEME.primary }}
+                />
+                {t.calendarDeleteCompleted}
               </label>
               <label style={{ display: 'grid', gap: 6, color: THEME.text, fontSize: 13, fontWeight: 800 }}>
                 {t.calendarStartTime}
@@ -11985,6 +11996,7 @@ function App() {
   const [calendarSyncStatus, setCalendarSyncStatus] = useState('idle');
   const [calendarSyncing, setCalendarSyncing] = useState(false);
   const calendarSyncInFlightRef = useRef(null);
+  const calendarSyncPendingRef = useRef(null);
   const [showAboutUpdates, setShowAboutUpdates] = useState(false);
   const [showProjectVerification, setShowProjectVerification] = useState(false);
   const [showUpdateAvailable, setShowUpdateAvailable] = useState(false);
@@ -12452,7 +12464,10 @@ function App() {
     [trainingModel, workouts, currentIndex, history, scheduleToday]
   );
   const syncCalendar = useCallback(async (automatic = false) => {
-    if (calendarSyncInFlightRef.current) return calendarSyncInFlightRef.current;
+    if (calendarSyncInFlightRef.current) {
+      calendarSyncPendingRef.current = () => syncCalendar(automatic);
+      return calendarSyncInFlightRef.current;
+    }
     if (!isNativeCalendarAvailable()) return;
 
     const task = (async () => {
@@ -12481,7 +12496,7 @@ function App() {
           today: scheduleToday,
           titleTemplate: t.calendarEventTitle,
         });
-        const completedWorkoutKeys = new Set(completedWorkoutNumbers.map(number => `${currentCycle}:${number}`));
+        const completedWorkoutKeys = getCompletedCalendarWorkoutKeys(history);
         const result = await syncWorkoutCalendar({
           settings: calendarIntegration,
           desiredEvents,
@@ -12518,8 +12533,11 @@ function App() {
       return await task;
     } finally {
       calendarSyncInFlightRef.current = null;
+      const pendingSync = calendarSyncPendingRef.current;
+      calendarSyncPendingRef.current = null;
+      if (pendingSync) void pendingSync();
     }
-  }, [calendarIntegration, workouts, smartWorkoutScheduleDateKeys, currentIndex, currentCycle, completedWorkoutNumbers, scheduleToday, t]);
+  }, [calendarIntegration, workouts, smartWorkoutScheduleDateKeys, currentIndex, currentCycle, history, scheduleToday, t]);
 
   useEffect(() => {
     if (!hasLoadedData || !calendarIntegration.hasSynced ||

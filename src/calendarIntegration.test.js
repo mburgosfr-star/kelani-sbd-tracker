@@ -4,6 +4,7 @@ import {
   countPlannedWorkoutSets,
   createCalendarIntegrationSettings,
   getFutureCalendarWorkouts,
+  getCompletedCalendarWorkoutKeys,
   getWorkoutCalendarDurationMinutes,
   normalizeCalendarIntegrationSettings,
   shouldShowCalendarCyclePrompt,
@@ -12,6 +13,7 @@ import {
 test('normalizes old or incomplete calendar settings safely', () => {
   expect(createCalendarIntegrationSettings()).toEqual({
     enabled: false,
+    deleteCompletedWorkouts: false,
     calendarId: null,
     calendarName: '',
     calendarAccountName: '',
@@ -23,7 +25,19 @@ test('normalizes old or incomplete calendar settings safely', () => {
     promptsDisabled: false,
   });
   expect(normalizeCalendarIntegrationSettings({ enabled: true, defaultStartTime: '99:99' }))
-    .toMatchObject({ enabled: false, defaultStartTime: DEFAULT_CALENDAR_START_TIME });
+    .toMatchObject({ enabled: false, deleteCompletedWorkouts: false, defaultStartTime: DEFAULT_CALENDAR_START_TIME });
+  expect(normalizeCalendarIntegrationSettings({ deleteCompletedWorkouts: 'true' }).deleteCompletedWorkouts).toBe(false);
+  expect(normalizeCalendarIntegrationSettings({ deleteCompletedWorkouts: true }).deleteCompletedWorkouts).toBe(true);
+});
+
+test('calendar completion keys include older cycles and ignore non-workout history', () => {
+  expect([...getCompletedCalendarWorkoutKeys([
+    { cycle: 4, workoutNumber: 28, workoutSnapshot: { type: 'meet' } },
+    { cycle: 5, workoutNumber: 1, lift: 'Squat' },
+    { cycle: 5, workoutNumber: 1, lift: 'Bench' },
+    { workoutNumber: 2, lift: 'Deadlift' },
+    { cycle: 5, workoutNumber: 2, type: 'bodyweight', weight: 80 },
+  ])]).toEqual(['4:28', '5:1', '1:2']);
 });
 
 test('builds local-time future events from scheduled training sets', () => {
