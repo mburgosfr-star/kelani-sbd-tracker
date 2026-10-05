@@ -27,6 +27,7 @@ Features:
 - Exercise alternatives for lower-stress training periods
 - Local data export and import
 - Optional sync of future workouts to a selected Android calendar after you grant calendar access and start the first sync
+- Optionally remove Kelani calendar events when workouts are completed in the app
 - Optional anonymous usage summary generated locally and shown in full before you choose whether to share it
 - English, Catalan and Dutch interface
 

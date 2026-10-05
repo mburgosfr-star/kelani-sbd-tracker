@@ -1,0 +1,6 @@
+Optionally delete calendar events for completed workouts.
+Better Dashboard spacing, including rest days.
+More compact workout completion summaries.
+Clearer About & Updates and project verification.
+More consistent action button sizes.
+Clarified calendar privacy information.

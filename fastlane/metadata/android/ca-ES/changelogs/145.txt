@@ -1,0 +1,6 @@
+Elimina opcionalment els esdeveniments dels entrenaments completats.
+Millor distribució del Tauler, també en dies de descans.
+Resums d’entrenament més compactes.
+About & Updates i verificació del projecte més clars.
+Dimensions més coherents dels botons d’acció.
+Informació de privadesa del calendari més clara.

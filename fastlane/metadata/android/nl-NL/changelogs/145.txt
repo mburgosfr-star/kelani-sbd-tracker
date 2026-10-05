@@ -1,0 +1,6 @@
+Verwijder optioneel agenda-afspraken van voltooide workouts.
+Betere Dashboard-ruimteverdeling, ook op rustdagen.
+Compactere workoutsamenvattingen.
+Overzichtelijker About & Updates en projectverificatie.
+Consistentere afmetingen van actieknoppen.
+Verduidelijkte privacy-informatie over de agenda.

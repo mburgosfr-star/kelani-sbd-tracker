@@ -27,6 +27,7 @@ Functies:
 - Oefeningalternatieven voor periodes met minder belasting
 - Lokale data-export en -import
 - Optioneel toekomstige workouts synchroniseren met een gekozen Android-agenda nadat je toegang geeft en de eerste synchronisatie start
+- Optioneel Kelani-agenda-afspraken verwijderen wanneer workouts in de app zijn voltooid
 - Optionele anonieme gebruikssamenvatting die lokaal wordt gemaakt en volledig wordt getoond voordat je kiest of je die deelt
 - Interface in het Engels, Catalaans en Nederlands
 

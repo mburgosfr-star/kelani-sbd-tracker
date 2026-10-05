@@ -3790,11 +3790,11 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewFixedChromeItem,
+    t.whatsNewCompletedCalendarItem,
     t.whatsNewDashboardSpacingItem,
-    t.whatsNewProgramSpacingItem,
-    t.whatsNewReturnTrainingItem,
-    t.whatsNewCalendarItem,
+    t.whatsNewCompletionLayoutItem,
+    t.whatsNewAboutLayoutItem,
+    t.whatsNewButtonConsistencyItem,
   ];
 
   return (
