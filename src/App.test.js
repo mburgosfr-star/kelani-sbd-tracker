@@ -962,7 +962,7 @@ test('completed workout content uses fixed chrome with internal scrolling', () =
     height: 'calc(100dvh - 78px)',
     overflowX: 'hidden',
     overflow: 'hidden',
-    padding: 'var(--kelani-completed-screen-padding, 20px clamp(10px, 3vw, 16px) 16px)',
+    padding: 'var(--kelani-completed-screen-padding, 12px clamp(10px, 3vw, 16px) 8px)',
   });
 });
 
@@ -1811,15 +1811,15 @@ test('regular dashboards distribute spare height between and around their sectio
   expect(regularDashboardContentStyle({ spreadContent: true })).toMatchObject({
     display: 'grid',
     overflowY: 'var(--kelani-screen-overflow-y, auto)',
-    alignContent: 'safe space-evenly',
+    alignContent: 'space-evenly',
     rowGap: 'var(--kelani-content-row-gap, clamp(10px, 1.4dvh, 16px))',
   });
   expect(regularDashboardContentStyle()).toMatchObject({
-    alignContent: 'safe space-evenly',
+    alignContent: 'space-evenly',
     rowGap: 'var(--kelani-content-row-gap, clamp(14px, 2.2dvh, 24px))',
   });
   expect(regularDashboardContentStyle({ compact: true }).alignContent)
-    .toBe('safe space-evenly');
+    .toBe('space-evenly');
 });
 
 test('PR-rich training dashboards use tighter spacing without changing sparse dashboards', () => {

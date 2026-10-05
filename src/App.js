@@ -1803,9 +1803,9 @@ export function regularDashboardContentStyle({ spreadContent = false, compact = 
     minHeight: 0,
     display: 'grid',
     // Share spare height between the dashboard sections on every regular day.
-    // When the sections need more height, grid falls back to start alignment
-    // so the content can still scroll normally.
-    alignContent: 'safe space-evenly',
+    // Distributed alignment already uses safe centre alignment as its fallback.
+    // Do not prefix space-evenly with safe: that combination is invalid CSS.
+    alignContent: 'space-evenly',
     rowGap: `var(--kelani-content-row-gap, ${defaultRowGap})`,
   };
 }
@@ -2131,7 +2131,7 @@ export function completedWorkoutScreenStyle() {
     width: '100%',
     maxWidth: 500,
     margin: '0 auto',
-    padding: 'var(--kelani-completed-screen-padding, 20px clamp(10px, 3vw, 16px) 16px)',
+    padding: 'var(--kelani-completed-screen-padding, 12px clamp(10px, 3vw, 16px) 8px)',
     boxSizing: 'border-box',
     background: THEME.bg,
     color: THEME.text,
@@ -17094,11 +17094,11 @@ const screenAllowsContentScroll =
         data-testid="screen-scroll-content"
         style={scrollableScreenContentStyle(completedWorkout?.type === 'rest'
           ? restDayCompletedScreenStyle()
-          : { background: 'transparent', border: 'none', borderRadius: 12, padding: '8px 0 12px', textAlign: 'center' })}
+          : { background: 'transparent', border: 'none', borderRadius: 12, padding: '4px 0', boxSizing: 'border-box', textAlign: 'center' })}
       >
         <div style={completedWorkout?.type === 'rest'
           ? restDayCompletedContentStyle()
-          : { display: 'contents' }}>
+          : { display: 'flow-root' }}>
 
         {completedWorkout?.type === 'rest' && (
           <CompletedScreenHeader
@@ -17178,7 +17178,7 @@ const screenAllowsContentScroll =
               display: 'flex',
               justifyContent: 'space-between',
               gap: 12,
-              marginBottom: 6
+              marginBottom: 4
             }}>
               <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
               <strong style={{ color: '#ffffff', textAlign: 'right' }}>{value}</strong>
@@ -17191,7 +17191,7 @@ const screenAllowsContentScroll =
               border: 'none',
               color: THEME.text,
               borderRadius: 8,
-              padding: '8px 12px',
+              padding: '4px 12px',
               marginBottom: 4,
               textAlign: 'left'
             }}>
@@ -17255,13 +17255,13 @@ const screenAllowsContentScroll =
           border: 'none',
           color: THEME.text,
           borderRadius: 8,
-          padding: '6px 12px',
+          padding: '4px 12px',
           marginBottom: 6,
           textAlign: 'left'
         }}>
           {(() => {
             const row = (label, value, isPR, estimated = false) => (
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                 <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
                 <strong style={{ color: '#ffffff' }}>
                   {(estimated ? formatEstimatedWeightFromKg : formatWeightFromKg)(value, weightUnit)} {isPR ? '🚀' : ''}
@@ -17278,7 +17278,7 @@ const screenAllowsContentScroll =
             });
 
             return liftSummaries.map((summary, index) => (
-              <div key={summary.lift} style={{ marginTop: index === 0 ? 0 : 10 }}>
+              <div key={summary.lift} style={{ marginTop: index === 0 ? 0 : 8 }}>
                 <div style={{
                   color: ({
                     Squat: THEME.red,
@@ -17287,7 +17287,7 @@ const screenAllowsContentScroll =
                   }[summary.lift] || THEME.primary),
                   fontSize: 16,
                   fontWeight: 900,
-                  marginBottom: 6,
+                  marginBottom: 4,
                   textAlign: 'center'
                 }}>
                   {liftLabel(summary.lift, t)} · {t.oneRME1RMHeading}
@@ -17309,8 +17309,8 @@ const screenAllowsContentScroll =
             border: 'none',
             color: THEME.text,
             borderRadius: 8,
-            padding: '4px 4px 8px',
-            marginBottom: 8,
+            padding: '4px',
+            marginBottom: 4,
             textAlign: 'left'
           }}>
             {(completedWorkout.lifts || []).map((liftBlock, liftIndex) => (
@@ -17383,7 +17383,7 @@ const screenAllowsContentScroll =
                         display: 'grid',
                         gridTemplateColumns: '1fr auto',
                         gap: 12,
-                        padding: '5px 0 5px 8px',
+                        padding: '4px 0 4px 8px',
                         opacity: group.isInvalidSet ? 0.75 : 1,
                         borderLeft: group.isInvalidSet && completedWorkoutIsMeet
                           ? `3px solid ${FAILED_SET_COLOR}`
