@@ -68,6 +68,7 @@ Use Node.js 22. Android builds additionally require Java 21.
 
 ```bash
 npm ci
+npm run security:check
 CI=true npm test -- --runInBand
 npm run build
 ```

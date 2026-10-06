@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { checkDependencySecurity } = require('./check-dependency-security');
 
 const {
   root,
@@ -181,6 +182,9 @@ function main() {
   if (remoteTag) {
     fail(`Remote tag ${tag} already exists.`);
   }
+
+  // Verify live security reports before changing version fields or writing proof.
+  checkDependencySecurity({ dependabot: true });
 
   const files = [
     'package.json',

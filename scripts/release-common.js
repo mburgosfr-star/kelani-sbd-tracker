@@ -640,6 +640,7 @@ function releaseScriptHashes(base = root) {
     "android/app/build.gradle",
     "scripts/run-tests.js",
     "scripts/check-public-repository-boundary.js",
+    "scripts/check-dependency-security.js",
     "scripts/build-release-apk.js",
     "scripts/mark-web-tested.js",
     "scripts/prepare-release.js",

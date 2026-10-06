@@ -23,6 +23,7 @@ function read(relativePath) {
 const pkg = JSON.parse(read('package.json'));
 
 const expectedScripts = {
+  'security:check': 'node scripts/check-dependency-security.js',
   'privacy:check':
     'node scripts/check-public-repository-boundary.js',
   'release:build': 'node scripts/build-release-apk.js',
@@ -70,6 +71,7 @@ for (const [name, expected] of Object.entries(expectedScripts)) {
 }
 
 const requiredFiles = [
+  'scripts/check-dependency-security.js',
   'scripts/check-public-repository-boundary.js',
   'scripts/release-common.js',
   'scripts/build-release-apk.js',
@@ -93,6 +95,12 @@ if (fs.existsSync(path.join(root, 'scripts/create-github-release.js'))) {
 
 const webTestMarker = read('scripts/mark-web-tested.js');
 const prepareRelease = read('scripts/prepare-release.js');
+if (
+  !prepareRelease.includes('checkDependencySecurity({ dependabot: true })') ||
+  prepareRelease.indexOf('checkDependencySecurity({ dependabot: true })') > prepareRelease.indexOf('const originals =')
+) {
+  fail('Release preparation must verify dependency security before changing version files.');
+}
 const stageRelease = read('scripts/stage-release.js');
 const buildRelease = read('scripts/build-release-apk.js');
 const preflight = read('scripts/release-preflight.js');
@@ -351,6 +359,7 @@ for (const signal of [
 
 for (const signal of [
   'npm run release:self-check',
+  'npm run security:check',
   'npm test -- --runInBand',
   'npm run build',
   'npm run android:izzy-test',
@@ -384,6 +393,7 @@ for (const requiredPath of [
   "android/app/build.gradle",
   "scripts/run-tests.js",
   "scripts/check-public-repository-boundary.js",
+  "scripts/check-dependency-security.js",
   "scripts/mark-web-tested.js",
   "scripts/prepare-release.js",
   "scripts/stage-release.js",
