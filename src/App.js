@@ -3808,17 +3808,6 @@ export function WhatsNewModal({
         v{version}
       </div>
 
-      <p style={{
-        color: THEME.text,
-        fontSize: 14,
-        fontWeight: 700,
-        lineHeight: 1.4,
-        margin: '0 0 12px',
-        textAlign: 'center',
-      }}>
-        {t.whatsNewIntro}
-      </p>
-
       <ul style={{
         color: THEME.text,
         fontSize: 14,
