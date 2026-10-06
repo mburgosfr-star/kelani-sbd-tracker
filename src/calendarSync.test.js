@@ -1,5 +1,7 @@
 import { vi } from 'vitest';
-import { syncWorkoutCalendar } from './calendarSync';
+import { syncWorkoutCalendar as syncCalendar } from './calendarSync';
+
+const syncWorkoutCalendar = options => syncCalendar({ ensureReminder: vi.fn().mockResolvedValue(undefined), ...options });
 
 const event = {
   cycleId: 5,
@@ -148,4 +150,32 @@ test('does not silently recreate an event removed in the calendar', async () => 
   })).rejects.toMatchObject({ code: 'EVENT_NOT_FOUND' });
   expect(onProgress).toHaveBeenCalledWith([]);
   expect(upsertEvent).toHaveBeenCalledTimes(1);
+});
+
+
+test('migrates reminders once without rewriting a manually moved event', async () => {
+  const mapping = { cycleId: 5, workoutId: 18, calendarId: '7', eventId: '42',
+    syncedDate: event.dateKey, startTime: event.startTime, durationMinutes: event.durationMinutes };
+  const ensureReminder = vi.fn().mockResolvedValue(undefined);
+  const upsertEvent = vi.fn();
+  const result = await syncWorkoutCalendar({ settings: { ...settings, eventMappings: [mapping] },
+    desiredEvents: [event], today, upsertEvent, deleteEvent: vi.fn(), ensureReminder });
+  expect(upsertEvent).not.toHaveBeenCalled();
+  expect(ensureReminder).toHaveBeenCalledWith({ calendarId: '7', eventId: '42', cycleId: 5, workoutId: 18 });
+  expect(result.mappings[0].reminderInitialized).toBe(true);
+  await syncWorkoutCalendar({ settings: { ...settings, eventMappings: result.mappings },
+    desiredEvents: [{ ...event, startTime: '20:00' }], today,
+    upsertEvent: vi.fn().mockResolvedValue('42'), deleteEvent: vi.fn(), ensureReminder });
+  expect(ensureReminder).toHaveBeenCalledTimes(1);
+});
+
+test('does not persist reminder migration when ownership or provider validation fails', async () => {
+  const mapping = { cycleId: 5, workoutId: 18, calendarId: '7', eventId: '42',
+    syncedDate: event.dateKey, startTime: event.startTime, durationMinutes: event.durationMinutes };
+  const onProgress = vi.fn();
+  await expect(syncWorkoutCalendar({ settings: { ...settings, eventMappings: [mapping] },
+    desiredEvents: [event], today, upsertEvent: vi.fn(), deleteEvent: vi.fn(), onProgress,
+    ensureReminder: vi.fn().mockRejectedValue(Object.assign(new Error('Not managed'), { code: 'EVENT_NOT_MANAGED' }))
+  })).rejects.toMatchObject({ code: 'EVENT_NOT_MANAGED' });
+  expect(onProgress).not.toHaveBeenCalled();
 });

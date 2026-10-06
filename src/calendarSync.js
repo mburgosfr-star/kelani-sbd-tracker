@@ -12,6 +12,7 @@ export async function syncWorkoutCalendar({
   today = new Date(),
   upsertEvent,
   deleteEvent,
+  ensureReminder,
   onProgress = () => {},
 }) {
   const normalized = normalizeCalendarIntegrationSettings(settings);
@@ -64,11 +65,11 @@ export async function syncWorkoutCalendar({
       mapping.syncedDate === event.dateKey &&
       mapping.startTime === event.startTime &&
       mapping.durationMinutes === event.durationMinutes;
-    if (unchanged) continue;
+    if (unchanged && mapping.reminderInitialized) continue;
 
     let eventId;
     try {
-      eventId = await upsertEvent({
+      eventId = unchanged ? mapping.eventId : await upsertEvent({
         calendarId: normalized.calendarId,
         eventId: mapping?.eventId || null,
         cycleId: event.cycleId,
@@ -77,6 +78,14 @@ export async function syncWorkoutCalendar({
         startMillis: event.startMillis,
         endMillis: event.endMillis,
       });
+      if (mapping && !mapping.reminderInitialized) {
+        await ensureReminder({
+          calendarId: normalized.calendarId,
+          eventId: String(eventId),
+          cycleId: event.cycleId,
+          workoutId: event.workoutId,
+        });
+      }
     } catch (error) {
       if (mapping && error?.code === 'EVENT_NOT_FOUND') {
         recordProgress(mappings.filter(item => item !== mapping));
@@ -92,6 +101,7 @@ export async function syncWorkoutCalendar({
       startTime: event.startTime,
       durationMinutes: event.durationMinutes,
       reminderMinutes: 0,
+      reminderInitialized: true,
     };
     recordProgress([...mappings.filter(item => item !== mapping), nextMapping]);
     if (mapping) updated += 1;

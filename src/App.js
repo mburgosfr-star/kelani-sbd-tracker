@@ -190,6 +190,7 @@ import {
 import { syncWorkoutCalendar } from './calendarSync';
 import {
   deleteDeviceWorkoutEvent,
+  ensureDeviceWorkoutEventReminder,
   getCalendarPermissionState,
   getWritableDeviceCalendars,
   isNativeCalendarAvailable,
@@ -11140,7 +11141,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
                     borderRadius: 3,
                     marginLeft: 8
                   }}>
-                    {t.now}
+                    {t.programNext}
                   </span>
                 )}
               </div>
@@ -12504,6 +12505,7 @@ function App() {
           today: scheduleToday,
           upsertEvent: upsertDeviceWorkoutEvent,
           deleteEvent: deleteDeviceWorkoutEvent,
+          ensureReminder: ensureDeviceWorkoutEventReminder,
           onProgress: eventMappings => setCalendarIntegration(prev => ({ ...prev, eventMappings })),
         });
         if (result.created || result.updated || result.removed ||

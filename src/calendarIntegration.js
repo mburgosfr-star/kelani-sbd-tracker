@@ -24,6 +24,7 @@ function normalizeEventMapping(mapping) {
     syncedDate: parseWorkoutDateKey(mapping.syncedDate),
     startTime: validStartTime(mapping.startTime) ? mapping.startTime : DEFAULT_CALENDAR_START_TIME,
     durationMinutes: Math.max(0, Number(mapping.durationMinutes) || 0),
+    reminderInitialized: mapping.reminderInitialized === true,
     reminderMinutes: Math.max(0, Number(mapping.reminderMinutes) || 0),
   };
 }

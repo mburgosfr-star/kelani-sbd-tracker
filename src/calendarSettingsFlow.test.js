@@ -13,6 +13,7 @@ vi.mock('./calendarNative', () => ({
     { id: '7', name: 'Training', accountName: 'local' },
   ],
   upsertDeviceWorkoutEvent: async () => '42',
+  ensureDeviceWorkoutEventReminder: async () => {},
   deleteDeviceWorkoutEvent: calendarMocks.deleteEvent,
 }));
 

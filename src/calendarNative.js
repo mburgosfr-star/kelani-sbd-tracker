@@ -35,3 +35,8 @@ export async function deleteDeviceWorkoutEvent(mapping) {
   if (!isNativeCalendarAvailable()) throw new Error('Calendar unavailable');
   await CalendarIntegration.deleteWorkoutEvent(mapping);
 }
+
+export async function ensureDeviceWorkoutEventReminder(mapping) {
+  if (!isNativeCalendarAvailable()) throw new Error('Calendar unavailable');
+  await CalendarIntegration.ensureWorkoutEventReminder(mapping);
+}

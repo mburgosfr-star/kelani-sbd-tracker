@@ -117,3 +117,11 @@ test('cycle prompts distinguish not now from permanent suppression', () => {
   expect(shouldShowCalendarCyclePrompt({ promptsDisabled: true }, 4)).toBe(false);
   expect(shouldShowCalendarCyclePrompt({ enabled: true, calendarId: '7' }, 4)).toBe(false);
 });
+
+
+test('reminder initialization survives storage normalization while legacy mappings remain migratable', () => {
+  const base = { cycleId: 1, workoutId: 2, eventId: '3' };
+  expect(normalizeCalendarIntegrationSettings({ eventMappings: [base] }).eventMappings[0].reminderInitialized).toBe(false);
+  const initialized = normalizeCalendarIntegrationSettings({ eventMappings: [{ ...base, reminderInitialized: true }] });
+  expect(normalizeCalendarIntegrationSettings(JSON.parse(JSON.stringify(initialized))).eventMappings[0].reminderInitialized).toBe(true);
+});

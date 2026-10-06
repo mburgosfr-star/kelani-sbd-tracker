@@ -2,6 +2,11 @@ package com.kelani.sbdtracker;
 
 import android.Manifest;
 import android.content.ContentUris;
+import android.content.ContentProviderOperation;
+import android.content.ContentProviderResult;
+import android.provider.CalendarContract;
+import android.provider.CalendarContract.Reminders;
+import java.util.ArrayList;
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.net.Uri;
@@ -144,12 +149,23 @@ public class CalendarIntegrationPlugin extends Plugin {
             long eventId;
             if (eventIdText == null || eventIdText.isEmpty()) {
                 values.put(Events.CALENDAR_ID, calendarId);
-                Uri inserted = getContext().getContentResolver().insert(Events.CONTENT_URI, values);
-                if (inserted == null) {
+                values.put(Events.HAS_ALARM, 1);
+                // Create the event and reminder together, so a reminder failure
+                // cannot leave an untracked event that is duplicated on retry.
+                ArrayList<ContentProviderOperation> operations = new ArrayList<>();
+                operations.add(ContentProviderOperation.newInsert(Events.CONTENT_URI)
+                    .withValues(values).build());
+                operations.add(ContentProviderOperation.newInsert(Reminders.CONTENT_URI)
+                    .withValueBackReference(Reminders.EVENT_ID, 0)
+                    .withValue(Reminders.MINUTES, 0)
+                    .withValue(Reminders.METHOD, Reminders.METHOD_ALERT).build());
+                ContentProviderResult[] results = getContext().getContentResolver()
+                    .applyBatch(CalendarContract.AUTHORITY, operations);
+                if (results[0].uri == null) {
                     call.reject("Could not create workout event", "INSERT_FAILED");
                     return;
                 }
-                eventId = ContentUris.parseId(inserted);
+                eventId = ContentUris.parseId(results[0].uri);
             } else {
                 eventId = Long.parseLong(eventIdText);
                 int status = managedEventStatus(eventId, calendarId, marker);
@@ -175,6 +191,61 @@ public class CalendarIntegrationPlugin extends Plugin {
             call.reject("Calendar permission is required", "PERMISSION_DENIED", error);
         } catch (Exception error) {
             call.reject("Could not save workout event", "SAVE_FAILED", error);
+        }
+    }
+
+    @PluginMethod
+    public void ensureWorkoutEventReminder(PluginCall call) {
+        if (getPermissionState("calendar") != PermissionState.GRANTED) {
+            call.reject("Calendar permission is required", "PERMISSION_DENIED");
+            return;
+        }
+        try {
+            String eventIdText = call.getString("eventId");
+            String calendarIdText = call.getString("calendarId");
+            Integer cycleId = call.getInt("cycleId");
+            Integer workoutId = call.getInt("workoutId");
+            if (eventIdText == null || calendarIdText == null || cycleId == null || workoutId == null) {
+                call.reject("Invalid workout event", "INVALID_EVENT");
+                return;
+            }
+            long eventId = Long.parseLong(eventIdText);
+            long calendarId = Long.parseLong(calendarIdText);
+            String marker = EVENT_MARKER_PREFIX + cycleId + ":" + workoutId;
+            int status = managedEventStatus(eventId, calendarId, marker);
+            if (status != 1) {
+                call.reject("Workout event is missing or is not managed by Kelani",
+                    status == -1 ? "EVENT_NOT_FOUND" : "EVENT_NOT_MANAGED");
+                return;
+            }
+            if (!isWritableCalendar(calendarId)) {
+                call.reject("Selected calendar is not writable", "CALENDAR_UNAVAILABLE");
+                return;
+            }
+            // Keep every existing reminder, including a manually chosen time.
+            try (Cursor cursor = getContext().getContentResolver().query(
+                Reminders.CONTENT_URI, new String[] { Reminders._ID },
+                Reminders.EVENT_ID + "=?", new String[] { String.valueOf(eventId) }, null
+            )) {
+                if (cursor == null) throw new IllegalStateException("Could not read event reminders");
+                if (cursor.moveToFirst()) {
+                    call.resolve();
+                    return;
+                }
+            }
+            ArrayList<ContentProviderOperation> operations = new ArrayList<>();
+            operations.add(ContentProviderOperation.newInsert(Reminders.CONTENT_URI)
+                .withValue(Reminders.EVENT_ID, eventId)
+                .withValue(Reminders.MINUTES, 0)
+                .withValue(Reminders.METHOD, Reminders.METHOD_ALERT).build());
+            operations.add(ContentProviderOperation.newUpdate(ContentUris.withAppendedId(Events.CONTENT_URI, eventId))
+                .withValue(Events.HAS_ALARM, 1).withExpectedCount(1).build());
+            getContext().getContentResolver().applyBatch(CalendarContract.AUTHORITY, operations);
+            call.resolve();
+        } catch (SecurityException error) {
+            call.reject("Calendar permission is required", "PERMISSION_DENIED", error);
+        } catch (Exception error) {
+            call.reject("Could not initialize workout reminder", "REMINDER_FAILED", error);
         }
     }
 
