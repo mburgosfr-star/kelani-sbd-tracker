@@ -3791,11 +3791,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewCompletedCalendarItem,
-    t.whatsNewDashboardSpacingItem,
-    t.whatsNewCompletionLayoutItem,
-    t.whatsNewAboutLayoutItem,
-    t.whatsNewButtonConsistencyItem,
+    t.whatsNewCalendarReminderItem,
+    t.whatsNewCalendarReminderControlItem,
+    t.whatsNewNextWorkoutBadgeItem,
   ];
 
   return (

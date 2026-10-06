@@ -1,0 +1,4 @@
+Els esdeveniments del calendari reben un recordatori a l’hora d’inici.
+Els esdeveniments futurs existents el reben si encara no en tenen.
+Les sincronitzacions respecten els recordatoris que canviïs o eliminis al calendari.
+La insígnia del Programa mostra SEGÜENT en lloc d’ARA.

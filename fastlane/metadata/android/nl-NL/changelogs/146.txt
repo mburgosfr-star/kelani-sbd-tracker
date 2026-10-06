@@ -1,0 +1,4 @@
+Agenda-afspraken krijgen een herinnering op de starttijd.
+Bestaande toekomstige afspraken krijgen die als ze nog geen herinnering hebben.
+Latere synchronisaties behouden herinneringen die je in je agenda wijzigt of verwijdert.
+De Programma-badge toont nu VOLGENDE in plaats van NU.

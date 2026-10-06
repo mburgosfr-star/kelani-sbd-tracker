@@ -1,0 +1,4 @@
+Calendar events now have a reminder at their start time.
+Existing future events receive one if they have no reminder.
+Reminders you change or remove in your calendar stay that way during later syncs.
+The Program badge now shows NEXT instead of NOW.
