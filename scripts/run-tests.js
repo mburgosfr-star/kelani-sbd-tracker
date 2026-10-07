@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const { spawnSync } = require('child_process');
+const { version } = require('../package.json');
 
 const unsupportedJestArguments = new Set([
   '--runInBand',
@@ -34,7 +35,9 @@ const result = spawnSync(
   ['run', ...forwardedArguments],
   {
     cwd: process.cwd(),
-    env: process.env,
+    // Match the isolated distribution build even during ordinary local tests.
+    // An explicit version remains available for targeted development scenarios.
+    env: { ...process.env, VITE_APP_VERSION: process.env.VITE_APP_VERSION || version },
     stdio: 'inherit',
     shell: false,
   }
