@@ -26,6 +26,7 @@ test('Calendar settings are available from Settings, persist and restore without
   localStorage.clear();
   localStorage.setItem(storageKey, JSON.stringify({
     version: 1,
+    showWhatsNewAfterUpdates: false,
     trainingModel: 'classic',
     currentCycle: 1,
     prs: { Squat: 100, Bench: 75, Deadlift: 125 },
@@ -77,7 +78,7 @@ test('enabling completed cleanup automatically deletes a mapped completed workou
   calendarMocks.deleteEvent.mockClear();
   localStorage.setItem('kelani-calendar-sync-consent-v1', '1');
   localStorage.setItem(storageKey, JSON.stringify({
-    version: 1, trainingModel: 'classic', currentCycle: 2,
+    version: 1, showWhatsNewAfterUpdates: false, trainingModel: 'classic', currentCycle: 2,
     prs: { Squat: 100, Bench: 75, Deadlift: 125 },
     history: [{ cycle: 1, workoutNumber: 28, lift: 'Squat', weight: 100, reps: 1 }],
     calendarIntegration: {
@@ -104,7 +105,7 @@ test('enabling completed cleanup automatically deletes a mapped completed workou
 async function openSavedCalendar() {
   localStorage.clear();
   localStorage.setItem(storageKey, JSON.stringify({
-    version: 1, trainingModel: 'classic', currentCycle: 1,
+    version: 1, showWhatsNewAfterUpdates: false, trainingModel: 'classic', currentCycle: 1,
     prs: { Squat: 100, Bench: 75, Deadlift: 125 }, history: [],
     calendarIntegration: {
       enabled: true, calendarId: '7', calendarName: 'Training',
