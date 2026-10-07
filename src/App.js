@@ -3791,9 +3791,10 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewCalendarReminderItem,
-    t.whatsNewCalendarReminderControlItem,
-    t.whatsNewNextWorkoutBadgeItem,
+    t.whatsNewCalendarSyncItem,
+    t.whatsNewCalendarDeletionItem,
+    t.whatsNewCalendarStatusItem,
+    t.whatsNewRestNotificationItem,
   ];
 
   return (

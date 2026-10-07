@@ -1,0 +1,4 @@
+Fixed synchronization when changing the default calendar time.
+Manually deleted calendar events stay deleted during later syncs.
+Calendar success and error messages clear when you close the window.
+Tap an expired rest timer notification to open your current Workout.

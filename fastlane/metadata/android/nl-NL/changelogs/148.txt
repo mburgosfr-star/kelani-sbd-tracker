@@ -1,0 +1,4 @@
+Synchronisatie na het wijzigen van de standaard agendatijd hersteld.
+Handmatig verwijderde agenda-afspraken blijven verwijderd.
+Succes- en foutmeldingen verdwijnen bij het sluiten van het Agenda-venster.
+Tik op een verlopen rusttijdmelding om je huidige Workout te openen.

@@ -12,7 +12,7 @@ describe('WhatsNewModal', () => {
     render(
       <WhatsNewModal
         t={translations.en}
-        version="2.0.47"
+        version="2.0.48"
         showAfterUpdates={true}
         onShowAfterUpdatesChange={onShowAfterUpdatesChange}
         onClose={onClose}
@@ -20,10 +20,12 @@ describe('WhatsNewModal', () => {
     );
 
     expect(screen.getByText("What's new?")).toBeInTheDocument();
-    expect(screen.getByText('v2.0.47')).toBeInTheDocument();
-    expect(screen.getByText(translations.en.whatsNewCalendarReminderItem)).toBeInTheDocument();
-    expect(screen.getByText(translations.en.whatsNewCalendarReminderControlItem)).toBeInTheDocument();
-    expect(screen.getByText(translations.en.whatsNewNextWorkoutBadgeItem)).toBeInTheDocument();
+    expect(screen.getByText('v2.0.48')).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewCalendarSyncItem)).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewCalendarDeletionItem)).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewCalendarStatusItem)).toBeInTheDocument();
+
+    expect(screen.getByText(translations.en.whatsNewRestNotificationItem)).toBeInTheDocument();
 
     const checkbox = screen.getByLabelText(
       translations.en.whatsNewShowAutomatically

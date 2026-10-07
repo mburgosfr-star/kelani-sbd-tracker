@@ -1,0 +1,4 @@
+S’ha corregit la sincronització quan canvies l’hora predeterminada del calendari.
+Els esdeveniments eliminats manualment continuen eliminats.
+Els missatges d’èxit i d’error desapareixen quan tanques el Calendari.
+Toca la notificació del descans finalitzat per obrir l’entrenament actual.
