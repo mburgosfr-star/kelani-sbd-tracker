@@ -55,6 +55,30 @@ test('reschedules only its mapped event and removes it when disabled', async () 
   expect(disabled.mappings).toEqual([]);
 });
 
+test('changing the default time updates every planned linked workout without duplicates or reminder resets', async () => {
+  const desiredEvents = [event, { ...event, workoutId: 19 }].map(item => ({
+    ...item, startTime: '10:00',
+    startMillis: new Date(2026, 9, 2, 10).getTime(),
+    endMillis: new Date(2026, 9, 2, 11, 30).getTime(),
+  }));
+  const eventMappings = desiredEvents.map((item, index) => ({
+    cycleId: item.cycleId, workoutId: item.workoutId, calendarId: '7', eventId: String(42 + index),
+    syncedDate: item.dateKey, startTime: '09:00', durationMinutes: 90, reminderInitialized: true,
+  }));
+  const upsertEvent = vi.fn().mockImplementation(async item => item.eventId);
+  const ensureReminder = vi.fn();
+  const deleteEvent = vi.fn();
+  const result = await syncWorkoutCalendar({
+    settings: { ...settings, eventMappings }, desiredEvents, today, upsertEvent, ensureReminder, deleteEvent,
+  });
+  expect(result).toMatchObject({ created: 0, updated: 2, removed: 0 });
+  expect(upsertEvent.mock.calls.map(([item]) => item.eventId)).toEqual(['42', '43']);
+  expect(upsertEvent.mock.calls.every(([item]) => item.startMillis === desiredEvents[0].startMillis)).toBe(true);
+  expect(result.mappings.every(item => item.startTime === '10:00')).toBe(true);
+  expect(ensureReminder).not.toHaveBeenCalled();
+  expect(deleteEvent).not.toHaveBeenCalled();
+});
+
 test('completed workouts are kept as history while unrelated events are never queried', async () => {
   const mapping = {
     cycleId: 5, workoutId: 18, calendarId: '7', eventId: '42',

@@ -360,6 +360,7 @@ for (const signal of [
 for (const signal of [
   'npm run release:self-check',
   'npm run security:check',
+  './gradlew :app:testReleaseUnitTest --no-daemon',
   'npm test -- --runInBand',
   'npm run build',
   'npm run android:izzy-test',

@@ -56,6 +56,13 @@ jobs:
       - name: Build production web assets
         run: npm run build
 
+      - name: Prepare Android unit tests
+        run: npx cap sync android
+
+      - name: Run Android unit tests
+        working-directory: android
+        run: ./gradlew :app:testReleaseUnitTest --no-daemon
+
       - name: Run isolated Izzy and NeoStore build
         run: npm run android:izzy-test
 

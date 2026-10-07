@@ -107,7 +107,9 @@ public class CalendarIntegrationPlugin extends Plugin {
         String[] projection = new String[] { Events.CALENDAR_ID, Events.DESCRIPTION };
         try (Cursor cursor = getContext().getContentResolver().query(uri, projection, null, null, null)) {
             if (cursor == null || !cursor.moveToFirst()) return -1;
-            return cursor.getLong(0) == calendarId && marker.equals(cursor.getString(1)) ? 1 : 0;
+            return CalendarEventIdentity.isManagedEvent(
+                cursor.getLong(0), calendarId, cursor.getString(1), marker
+            ) ? 1 : 0;
         }
     }
 
