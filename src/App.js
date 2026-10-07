@@ -11985,6 +11985,20 @@ function App() {
   const [calendarSyncing, setCalendarSyncing] = useState(false);
   const calendarSyncInFlightRef = useRef(null);
   const calendarSyncPendingRef = useRef(null);
+  const calendarModalSessionRef = useRef(null);
+  const calendarFeedbackSessionRef = useRef(null);
+  const openCalendarSettings = useCallback(() => {
+    calendarModalSessionRef.current = {};
+    setCalendarSyncStatus('idle');
+    setShowCalendarSettings(true);
+  }, []);
+  const closeCalendarSettings = useCallback(() => {
+    calendarModalSessionRef.current = null;
+    calendarFeedbackSessionRef.current = null;
+    setCalendarSyncStatus('idle');
+    setShowCalendarPicker(false);
+    setShowCalendarSettings(false);
+  }, []);
   const [showAboutUpdates, setShowAboutUpdates] = useState(false);
   const [showProjectVerification, setShowProjectVerification] = useState(false);
   const [showUpdateAvailable, setShowUpdateAvailable] = useState(false);
@@ -12452,15 +12466,22 @@ function App() {
     [trainingModel, workouts, currentIndex, history, scheduleToday]
   );
   const syncCalendar = useCallback(async (automatic = false) => {
+    if (!automatic) calendarFeedbackSessionRef.current = calendarModalSessionRef.current;
     if (calendarSyncInFlightRef.current) {
       calendarSyncPendingRef.current = () => syncCalendar(automatic);
       return calendarSyncInFlightRef.current;
     }
     if (!isNativeCalendarAvailable()) return;
 
+    const modalSession = calendarFeedbackSessionRef.current;
+    const reportStatus = status => {
+      if (modalSession && calendarModalSessionRef.current === modalSession) {
+        setCalendarSyncStatus(status);
+      }
+    };
     const task = (async () => {
       setCalendarSyncing(true);
-      if (!automatic) setCalendarSyncStatus('idle');
+      if (!automatic) reportStatus('idle');
       try {
         const permission = await getCalendarPermissionState();
         if (permission !== 'granted') throw new Error('Calendar permission unavailable');
@@ -12506,13 +12527,13 @@ function App() {
         if (!automatic && calendarIntegration.enabled) {
           localStorage.setItem(CALENDAR_SYNC_CONSENT_KEY, '1');
         }
-        setCalendarSyncStatus('success');
+        reportStatus('success');
       } catch (error) {
         console.warn('Could not synchronize workout calendar', error);
         if (error?.code === 'EVENT_NOT_FOUND') {
           setCalendarIntegration(prev => ({ ...prev, hasSynced: false }));
         }
-        setCalendarSyncStatus('error');
+        reportStatus('error');
       } finally {
         setCalendarSyncing(false);
       }
@@ -12591,7 +12612,7 @@ function App() {
         }
 
         if (showCalendarSettings) {
-          setShowCalendarSettings(false);
+          closeCalendarSettings();
           return;
         }
 
@@ -12658,7 +12679,7 @@ function App() {
     return () => {
       if (listener) listener.remove();
     };
-  }, [screen, completedWorkoutIndex, activeMilestoneCelebration, showWhatsNew, showAboutUpdates, showProjectVerification, showUpdateAvailable, showCalendarSettings, showCalendarPicker]);
+  }, [screen, completedWorkoutIndex, activeMilestoneCelebration, showWhatsNew, showAboutUpdates, showProjectVerification, showUpdateAvailable, showCalendarSettings, showCalendarPicker, closeCalendarSettings]);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -13459,9 +13480,7 @@ function handleResetApp() {
   setShowWhatsNewAfterUpdates(true);
   setCheckForUpdatesAutomatically(false);
   setCalendarIntegration(createCalendarIntegrationSettings());
-  setShowCalendarSettings(false);
-  setShowCalendarPicker(false);
-  setCalendarSyncStatus('idle');
+  closeCalendarSettings();
   setShowAboutUpdates(false);
   setShowUpdateAvailable(false);
   setLatestAvailableVersion(null);
@@ -17022,7 +17041,7 @@ const screenAllowsContentScroll =
       <SettingsListRow
         label={t.calendarTitle}
         actionLabel={t.calendarOpen}
-        onAction={() => setShowCalendarSettings(true)}
+        onAction={openCalendarSettings}
       />
 
       <AboutSupportSection
@@ -17473,6 +17492,7 @@ const screenAllowsContentScroll =
     t={t}
     settings={calendarIntegration}
     onChange={value => {
+      calendarFeedbackSessionRef.current = calendarModalSessionRef.current;
       setCalendarSyncStatus('idle');
       setCalendarIntegration(normalizeCalendarIntegrationSettings(value));
     }}
@@ -17481,10 +17501,7 @@ const screenAllowsContentScroll =
     syncing={calendarSyncing}
     pickerOpen={showCalendarPicker}
     onPickerOpenChange={setShowCalendarPicker}
-    onClose={() => {
-      setShowCalendarPicker(false);
-      setShowCalendarSettings(false);
-    }}
+    onClose={closeCalendarSettings}
   />
 )}
 

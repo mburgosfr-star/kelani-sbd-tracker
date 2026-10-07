@@ -1,13 +1,16 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import App from './App';
 
-const calendarMocks = vi.hoisted(() => ({ deleteEvent: vi.fn().mockResolvedValue(undefined) }));
+const calendarMocks = vi.hoisted(() => ({
+  deleteEvent: vi.fn().mockResolvedValue(undefined),
+  permission: vi.fn().mockResolvedValue('granted'),
+}));
 
 vi.mock('./calendarNative', () => ({
   isNativeCalendarAvailable: () => true,
-  getCalendarPermissionState: async () => 'granted',
+  getCalendarPermissionState: calendarMocks.permission,
   requestCalendarPermission: async () => 'granted',
   getWritableDeviceCalendars: async () => [
     { id: '7', name: 'Training', accountName: 'local' },
@@ -96,4 +99,47 @@ test('enabling completed cleanup automatically deletes a mapped completed workou
   }));
   await waitFor(() => expect(JSON.parse(localStorage.getItem(storageKey)).calendarIntegration)
     .toMatchObject({ deleteCompletedWorkouts: true, eventMappings: [] }));
+}, 10000);
+
+async function openSavedCalendar() {
+  localStorage.clear();
+  localStorage.setItem(storageKey, JSON.stringify({
+    version: 1, trainingModel: 'classic', currentCycle: 1,
+    prs: { Squat: 100, Bench: 75, Deadlift: 125 }, history: [],
+    calendarIntegration: {
+      enabled: true, calendarId: '7', calendarName: 'Training',
+      calendarAccountName: 'local', hasSynced: false, eventMappings: [],
+    },
+  }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 }));
+  fireEvent.click(screen.getByRole('button', { name: 'Set up calendar' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Sync now' })).not.toBeDisabled());
+}
+
+test.each(['success', 'error'])('closing Calendar clears the %s message on reopening', async result => {
+  await openSavedCalendar();
+  if (result === 'error') calendarMocks.permission.mockResolvedValueOnce('denied');
+  fireEvent.click(screen.getByRole('button', { name: 'Sync now' }));
+  const message = result === 'success'
+    ? 'Calendar updated.' : 'Sync failed. Check the calendar and try again.';
+  expect(await screen.findByText(message)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Set up calendar' }));
+  await screen.findByLabelText('Default start time');
+  expect(screen.queryByText(message)).not.toBeInTheDocument();
+}, 10000);
+
+test.each(['granted', 'denied'])('a late sync result (%s) cannot appear in a reopened Calendar', async permission => {
+  await openSavedCalendar();
+  let finishPermission;
+  calendarMocks.permission.mockImplementationOnce(() => new Promise(resolve => { finishPermission = resolve; }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sync now' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Set up calendar' }));
+  await screen.findByLabelText('Default start time');
+  await act(async () => { finishPermission(permission); });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Sync now' })).not.toBeDisabled());
+  expect(screen.queryByText('Calendar updated.')).not.toBeInTheDocument();
+  expect(screen.queryByText('Sync failed. Check the calendar and try again.')).not.toBeInTheDocument();
 }, 10000);
