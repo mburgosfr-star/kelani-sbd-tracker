@@ -27,6 +27,9 @@ public class RestTimerAlarmReceiver extends BroadcastReceiver {
 
         Intent launchIntent = context.getPackageManager()
             .getLaunchIntentForPackage(context.getPackageName());
+        if (launchIntent != null) {
+            launchIntent.putExtra(RestTimerAlarmPlugin.EXTRA_NOTIFICATION_TAP_ID, notificationId);
+        }
         PendingIntent contentIntent = launchIntent == null
             ? null
             : PendingIntent.getActivity(

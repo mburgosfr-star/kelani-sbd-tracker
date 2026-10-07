@@ -28,6 +28,29 @@ public class RestTimerAlarmPlugin extends Plugin {
     public static final String EXTRA_TRIGGER_AT = "restTimerTriggerAt";
     public static final String EXTRA_NOTIFICATION_ID = "restTimerNotificationId";
 
+    public static final String EXTRA_NOTIFICATION_TAP_ID = "restTimerNotificationTapId";
+
+    @Override
+    public void load() {
+        handleNotificationTap(getActivity().getIntent());
+    }
+
+    @Override
+    protected void handleOnNewIntent(Intent intent) {
+        handleNotificationTap(intent);
+    }
+
+    private void handleNotificationTap(Intent intent) {
+        if (intent == null || !intent.hasExtra(EXTRA_NOTIFICATION_TAP_ID)) return;
+        int notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_TAP_ID, -1);
+        intent.removeExtra(EXTRA_NOTIFICATION_TAP_ID);
+        if (notificationId != REST_TIMER_NOTIFICATION_ID) return;
+        JSObject data = new JSObject();
+        data.put("id", notificationId);
+        // Keep cold-start taps until React has loaded the saved workout.
+        notifyListeners("notificationTapped", data, true);
+    }
+
     private static final String ALARM_STATE = "kelani_rest_timer_alarm_state";
     private static final String PENDING_AT_PREFIX = "pendingAt:";
     private static final String LAST_SCHEDULED_AT_PREFIX = "lastScheduledAt:";

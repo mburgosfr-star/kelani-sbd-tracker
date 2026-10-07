@@ -69,3 +69,15 @@ test('starting a new native rest timer dismisses the previous delivered alert', 
     'cancelAlarm(getContext(), notificationId, true, cancelLegacyAlarm);'
   );
 });
+
+test('notification taps reach React on both cold and existing Android activity launches', () => {
+  const receiver = read('android/app/src/main/java/com/kelani/sbdtracker/RestTimerAlarmReceiver.java');
+  const plugin = read('android/app/src/main/java/com/kelani/sbdtracker/RestTimerAlarmPlugin.java');
+  expect(receiver).toContain('launchIntent.putExtra(RestTimerAlarmPlugin.EXTRA_NOTIFICATION_TAP_ID, notificationId)');
+  expect(plugin).toContain('handleNotificationTap(getActivity().getIntent())');
+  expect(plugin).toContain('protected void handleOnNewIntent(Intent intent)');
+  expect(plugin).toContain('handleNotificationTap(intent)');
+  expect(plugin).toContain('intent.removeExtra(EXTRA_NOTIFICATION_TAP_ID)');
+  expect(plugin).toContain('if (notificationId != REST_TIMER_NOTIFICATION_ID) return;');
+  expect(plugin).toContain('notifyListeners("notificationTapped", data, true)');
+});

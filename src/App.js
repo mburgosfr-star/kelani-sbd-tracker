@@ -12213,6 +12213,8 @@ function App() {
     persistNavigationState(screen, selectedIndex);
   }, [hasLoadedData, screen, selectedIndex]);
 
+
+
   useEffect(() => {
     if (!hasLoadedData || !Capacitor.isNativePlatform()) return undefined;
 
@@ -12454,6 +12456,33 @@ function App() {
       .filter(Number.isFinite)
   )), [history, currentCycle]);
   const currentIndex = Math.max(completedWorkoutCount, currentWorkoutIndex);
+
+  useEffect(() => {
+    if (!hasLoadedData || !Capacitor.isNativePlatform()) return undefined;
+
+    let listener;
+    let disposed = false;
+    RestTimerAlarm.addListener('notificationTapped', ({ id }) => {
+      if (disposed || id !== REST_TIMER_NOTIFICATION_ID) return;
+      closeCalendarSettings();
+      setShowAboutUpdates(false);
+      setShowProjectVerification(false);
+      setShowUpdateAvailable(false);
+      setShowWhatsNew(false);
+      setShowResetConfirm(false);
+      setSelectedIndex(Math.max(0, Math.min(currentIndex, workouts.length - 1)));
+      setScreen('current');
+    }).then(nextListener => {
+      if (disposed) nextListener.remove();
+      else listener = nextListener;
+    }).catch(error => {
+      console.error('Could not listen for rest timer notification taps', error);
+    });
+    return () => {
+      disposed = true;
+      listener?.remove();
+    };
+  }, [hasLoadedData, currentIndex, workouts.length, closeCalendarSettings]);
   const smartWorkoutScheduleDateKeys = useMemo(
     () => isSmartTrainingModel(trainingModel)
       ? buildWorkoutScheduleDateKeys({
