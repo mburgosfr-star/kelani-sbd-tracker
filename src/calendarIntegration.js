@@ -25,6 +25,7 @@ function normalizeEventMapping(mapping) {
     startTime: validStartTime(mapping.startTime) ? mapping.startTime : DEFAULT_CALENDAR_START_TIME,
     durationMinutes: Math.max(0, Number(mapping.durationMinutes) || 0),
     reminderInitialized: mapping.reminderInitialized === true,
+    deletedExternally: mapping.deletedExternally === true,
     reminderMinutes: Math.max(0, Number(mapping.reminderMinutes) || 0),
   };
 }

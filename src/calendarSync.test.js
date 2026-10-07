@@ -149,7 +149,7 @@ test('completed cleanup retains mappings when the native bridge refuses ownershi
   expect(onProgress).not.toHaveBeenCalled();
 });
 
-test('completed cleanup forgets a mapping if its event has already been deleted', async () => {
+test('completed cleanup remembers a prior manual deletion', async () => {
   const deleteEvent = vi.fn().mockRejectedValue(Object.assign(new Error('Gone'), { code: 'EVENT_NOT_FOUND' }));
   const result = await syncWorkoutCalendar({
     settings: { ...settings, deleteCompletedWorkouts: true, eventMappings: [{
@@ -157,7 +157,7 @@ test('completed cleanup forgets a mapping if its event has already been deleted'
     }] },
     completedWorkoutKeys: new Set(['5:18']), today, upsertEvent: vi.fn(), deleteEvent,
   });
-  expect(result).toMatchObject({ mappings: [], removed: 1 });
+  expect(result).toMatchObject({ mappings: [expect.objectContaining({ eventId: '42', deletedExternally: true })], removed: 0 });
 });
 
 test('does not silently recreate an event removed in the calendar', async () => {
@@ -168,12 +168,73 @@ test('does not silently recreate an event removed in the calendar', async () => 
   const onProgress = vi.fn();
   const missing = Object.assign(new Error('Gone'), { code: 'EVENT_NOT_FOUND' });
   const upsertEvent = vi.fn().mockRejectedValue(missing);
-  await expect(syncWorkoutCalendar({
+  const result = await syncWorkoutCalendar({
     settings: { ...settings, eventMappings: [mapping] },
     desiredEvents: [event], today, upsertEvent, deleteEvent: vi.fn(), onProgress,
-  })).rejects.toMatchObject({ code: 'EVENT_NOT_FOUND' });
-  expect(onProgress).toHaveBeenCalledWith([]);
+  });
+  expect(result.mappings[0]).toMatchObject({ eventId: '42', deletedExternally: true });
+  expect(onProgress).toHaveBeenCalledWith([expect.objectContaining({ deletedExternally: true })]);
   expect(upsertEvent).toHaveBeenCalledTimes(1);
+
+  upsertEvent.mockClear();
+  const deleteEvent = vi.fn();
+  for (const changedSettings of [{}, { enabled: false }, { calendarId: '8', enabled: true }]) {
+    const repeat = await syncWorkoutCalendar({
+      settings: { ...settings, eventMappings: JSON.parse(JSON.stringify(result.mappings)), ...changedSettings },
+      desiredEvents: [{ ...event, startTime: '10:00', dateKey: '2026-10-03' }],
+      today, upsertEvent, deleteEvent,
+    });
+    expect(repeat.mappings[0].deletedExternally).toBe(true);
+  }
+  expect(upsertEvent).not.toHaveBeenCalled();
+  expect(deleteEvent).not.toHaveBeenCalled();
+});
+
+test('a deleted workout does not block synchronizing the remaining planned workouts', async () => {
+  const mapping = { cycleId: 5, workoutId: 18, calendarId: '7', eventId: '42',
+    syncedDate: event.dateKey, startTime: '09:00', durationMinutes: 90, reminderInitialized: true };
+  const upsertEvent = vi.fn()
+    .mockRejectedValueOnce(Object.assign(new Error('Gone'), { code: 'EVENT_NOT_FOUND' }))
+    .mockResolvedValueOnce('43');
+  const result = await syncWorkoutCalendar({
+    settings: { ...settings, eventMappings: [mapping] },
+    desiredEvents: [event, { ...event, workoutId: 19 }], today, upsertEvent, deleteEvent: vi.fn(),
+  });
+  expect(result).toMatchObject({ created: 1, updated: 0 });
+  expect(result.mappings).toEqual([
+    expect.objectContaining({ eventId: '42', deletedExternally: true }),
+    expect.objectContaining({ eventId: '43', workoutId: 19 }),
+  ]);
+});
+
+test('missing events during reminder migration remain deleted on later syncs', async () => {
+  const mapping = { cycleId: 5, workoutId: 18, calendarId: '7', eventId: '42',
+    syncedDate: event.dateKey, startTime: event.startTime, durationMinutes: event.durationMinutes };
+  const upsertEvent = vi.fn();
+  const result = await syncWorkoutCalendar({
+    settings: { ...settings, eventMappings: [mapping] }, desiredEvents: [event], today,
+    upsertEvent, deleteEvent: vi.fn(),
+    ensureReminder: vi.fn().mockRejectedValue(Object.assign(new Error('Gone'), { code: 'EVENT_NOT_FOUND' })),
+  });
+  expect(result.mappings[0].deletedExternally).toBe(true);
+  await syncWorkoutCalendar({
+    settings: { ...settings, eventMappings: result.mappings }, desiredEvents: [event], today,
+    upsertEvent, deleteEvent: vi.fn(),
+  });
+  expect(upsertEvent).not.toHaveBeenCalled();
+});
+
+test('permission and ownership failures do not mark an event as manually deleted', async () => {
+  const mapping = { cycleId: 5, workoutId: 18, calendarId: '7', eventId: '42', syncedDate: event.dateKey };
+  for (const code of ['PERMISSION_DENIED', 'EVENT_NOT_MANAGED', 'SAVE_FAILED']) {
+    const onProgress = vi.fn();
+    await expect(syncWorkoutCalendar({
+      settings: { ...settings, eventMappings: [mapping] }, desiredEvents: [event], today,
+      upsertEvent: vi.fn().mockRejectedValue(Object.assign(new Error('Failure'), { code })),
+      deleteEvent: vi.fn(), onProgress,
+    })).rejects.toMatchObject({ code });
+    expect(onProgress).not.toHaveBeenCalled();
+  }
 });
 
 

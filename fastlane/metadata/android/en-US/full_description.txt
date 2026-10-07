@@ -29,6 +29,7 @@ Features:
 - Optional sync of future workouts to a selected Android calendar after you grant calendar access and start the first sync
 - Optionally remove Kelani calendar events when workouts are completed in the app
 - Workout calendar events include a reminder at the start time; reminders you later change or remove in your calendar are preserved
+- Workout events you manually delete in your calendar stay deleted during later syncs
 - Optional anonymous usage summary generated locally and shown in full before you choose whether to share it
 - English, Catalan and Dutch interface
 

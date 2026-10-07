@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { normalizeCalendarIntegrationSettings } from './calendarIntegration';
 import {
   AUTO_BACKUP_PATH,
   buildBackupPayload,
@@ -97,6 +98,21 @@ test('an import invalidates the previous automatic backup status', () => {
   expect(JSON.parse(values.get('kel-powerlifting-user-data-v1'))).toEqual(importedData);
   expect(values.has('kelani-sbd-tracker-auto-backup-status')).toBe(false);
   expect(values.has('kelani-sbd-tracker-manual-backup-status')).toBe(true);
+});
+
+test('export and import preserve manually deleted calendar workouts', () => {
+  const data = makeStoredData({ calendarIntegration: normalizeCalendarIntegrationSettings({
+    enabled: true, calendarId: '7', eventMappings: [{
+      cycleId: 8, workoutId: 12, calendarId: '7', eventId: '42', deletedExternally: true,
+    }],
+  }) });
+  const exported = JSON.parse(JSON.stringify(buildBackupPayload(data)));
+  expect(validateImportedBackup(exported)).toBe(true);
+  const values = new Map();
+  storeImportedBackup({ setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) }, exported.data);
+  const restored = JSON.parse(values.get('kel-powerlifting-user-data-v1'));
+  expect(normalizeCalendarIntegrationSettings(restored.calendarIntegration).eventMappings[0])
+    .toMatchObject({ cycleId: 8, workoutId: 12, eventId: '42', deletedExternally: true });
 });
 
 test('removes the obsolete full browser backup mirror before canonical persistence', () => {

@@ -29,6 +29,7 @@ Functies:
 - Optioneel toekomstige workouts synchroniseren met een gekozen Android-agenda nadat je toegang geeft en de eerste synchronisatie start
 - Optioneel Kelani-agenda-afspraken verwijderen wanneer workouts in de app zijn voltooid
 - Workoutafspraken krijgen een herinnering op de starttijd; herinneringen die je later in je agenda wijzigt of verwijdert blijven behouden
+- Workoutafspraken die je handmatig in je agenda verwijdert, blijven verwijderd bij latere synchronisaties
 - Optionele anonieme gebruikssamenvatting die lokaal wordt gemaakt en volledig wordt getoond voordat je kiest of je die deelt
 - Interface in het Engels, Catalaans en Nederlands
 

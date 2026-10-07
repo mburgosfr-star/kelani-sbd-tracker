@@ -16,7 +16,7 @@ Smart Training follows a level-specific 28-workout ideal route: W1-W21 build str
 - Builds toward meet attempts, tapers and schedules an SBD Meet Day.
 - Shows past, current and provisional future workouts, and explains readiness and expected meet timing.
 - Tracks 1RM, e1RM, SBD totals, Strength, eStrength and body statistics.
-- Can optionally add future workouts to a selected Android calendar after you grant calendar access and start the first sync. Events receive a reminder at their start time, which you can adjust in your calendar. You can also choose to remove Kelani's calendar events for completed workouts. The selected calendar provider may sync those events to your account.
+- Can optionally add future workouts to a selected Android calendar after you grant calendar access and start the first sync. Events receive a reminder at their start time, which you can adjust in your calendar. Workout events you manually delete stay deleted during later syncs. You can also choose to remove Kelani's calendar events for completed workouts. The selected calendar provider may sync those events to your account.
 - Can check GitHub for newer releases and link directly to GitHub or IzzyOnDroid without downloading or installing anything automatically.
 
 During training you can complete or fail sets, adjust and restore weights, use a rest timer and open the plate calculator. Failed sets automatically make the workout **Too hard**; optional work left unchecked is not treated as failure.

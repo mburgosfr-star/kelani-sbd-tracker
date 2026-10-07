@@ -104,12 +104,13 @@ public class CalendarIntegrationPlugin extends Plugin {
 
     private int managedEventStatus(long eventId, long calendarId, String marker) {
         Uri uri = ContentUris.withAppendedId(Events.CONTENT_URI, eventId);
-        String[] projection = new String[] { Events.CALENDAR_ID, Events.DESCRIPTION };
+        String[] projection = new String[] { Events.CALENDAR_ID, Events.DESCRIPTION, Events.DELETED };
         try (Cursor cursor = getContext().getContentResolver().query(uri, projection, null, null, null)) {
             if (cursor == null || !cursor.moveToFirst()) return -1;
-            return CalendarEventIdentity.isManagedEvent(
-                cursor.getLong(0), calendarId, cursor.getString(1), marker
-            ) ? 1 : 0;
+            // Account-backed calendars can retain a deleted row until provider sync.
+            return CalendarEventIdentity.eventStatus(
+                cursor.getLong(0), calendarId, cursor.getString(1), marker, cursor.getInt(2) != 0
+            );
         }
     }
 

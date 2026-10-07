@@ -21,7 +21,9 @@ export async function syncWorkoutCalendar({
 
   const desired = normalized.enabled
     ? desiredEvents.filter(event => event && event.dateKey >= todayKey &&
-      !completedWorkoutKeys.has(workoutKey(event.cycleId, event.workoutId)))
+      !completedWorkoutKeys.has(workoutKey(event.cycleId, event.workoutId)) &&
+      !normalized.eventMappings.some(mapping => mapping.deletedExternally &&
+        workoutKey(mapping.cycleId, mapping.workoutId) === workoutKey(event.cycleId, event.workoutId)))
     : [];
   const desiredByKey = new Map(desired.map(event => [workoutKey(event.cycleId, event.workoutId), event]));
   let mappings = [...normalized.eventMappings];
@@ -35,6 +37,8 @@ export async function syncWorkoutCalendar({
   }
 
   for (const mapping of [...mappings]) {
+    // Keep the deletion decision even when the route, calendar or time changes.
+    if (mapping.deletedExternally) continue;
     const key = workoutKey(mapping.cycleId, mapping.workoutId);
     const stillDesired = desiredByKey.has(key) &&
       (mapping.calendarId || normalized.calendarId) === normalized.calendarId;
@@ -52,6 +56,9 @@ export async function syncWorkoutCalendar({
       });
     } catch (error) {
       if (error?.code !== 'EVENT_NOT_FOUND') throw error;
+      recordProgress(mappings.map(item => item === mapping
+        ? { ...mapping, deletedExternally: true } : item));
+      continue;
     }
     recordProgress(mappings.filter(item => item !== mapping));
     removed += 1;
@@ -88,7 +95,10 @@ export async function syncWorkoutCalendar({
       }
     } catch (error) {
       if (mapping && error?.code === 'EVENT_NOT_FOUND') {
-        recordProgress(mappings.filter(item => item !== mapping));
+        recordProgress(mappings.map(item => item === mapping
+          ? { ...mapping, deletedExternally: true } : item));
+        // A missing linked event is a user's calendar choice, not a sync failure.
+        continue;
       }
       throw error;
     }

@@ -125,3 +125,11 @@ test('reminder initialization survives storage normalization while legacy mappin
   const initialized = normalizeCalendarIntegrationSettings({ eventMappings: [{ ...base, reminderInitialized: true }] });
   expect(normalizeCalendarIntegrationSettings(JSON.parse(JSON.stringify(initialized))).eventMappings[0].reminderInitialized).toBe(true);
 });
+
+test('manual calendar deletions survive reload while legacy event mappings remain active', () => {
+  const base = { cycleId: 8, workoutId: 12, calendarId: '7', eventId: '3' };
+  expect(normalizeCalendarIntegrationSettings({ eventMappings: [base] }).eventMappings[0].deletedExternally).toBe(false);
+  const saved = normalizeCalendarIntegrationSettings({ eventMappings: [{ ...base, deletedExternally: true }] });
+  expect(normalizeCalendarIntegrationSettings(JSON.parse(JSON.stringify(saved))).eventMappings[0])
+    .toMatchObject({ eventId: '3', deletedExternally: true });
+});
