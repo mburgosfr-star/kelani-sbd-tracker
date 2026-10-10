@@ -10406,7 +10406,6 @@ export function AppHeader({ title, subtitle, titleStyle = {}, subtitleStyle = {}
         textAlign: 'center',
         marginTop: 0,
         marginBottom: 0,
-        paddingTop: 'var(--kelani-native-top-offset, 0px)',
         ...containerStyle,
       }}
     >

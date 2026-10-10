@@ -5,11 +5,11 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 
-// Local phone patch: force black Android system bars
+// Keep system bars readable. Capacitor reserves their actual space on Android,
+// including enforced edge-to-edge on Android 15 and newer.
 if (Capacitor.isNativePlatform()) {
-  document.documentElement.style.setProperty("--kelani-native-top-offset", "18px");
   StatusBar.show().catch(() => {});
-  StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
+  StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
   StatusBar.setBackgroundColor({ color: "#000000" }).catch(() => {});
   StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
 }
