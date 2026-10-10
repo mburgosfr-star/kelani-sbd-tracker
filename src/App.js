@@ -17136,7 +17136,13 @@ const screenAllowsContentScroll =
       >
         <div style={completedWorkout?.type === 'rest'
           ? restDayCompletedContentStyle()
-          : { display: 'flow-root' }}>
+          : {
+            display: 'grid',
+            minHeight: '100%',
+            boxSizing: 'border-box',
+            alignContent: 'space-evenly',
+            rowGap: 4,
+          }}>
 
         {completedWorkout?.type === 'rest' && (
           <CompletedScreenHeader
