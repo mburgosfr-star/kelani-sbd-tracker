@@ -1543,7 +1543,8 @@ const SUBTLE_DIVIDER = '1px solid rgba(255, 244, 230, 0.34)';
 const HEADER_CONTENT_GAP = 'clamp(9px, 1.2dvh, 12px)';
 const BOTTOM_NAV_DIVIDER_OFFSET = 'clamp(4px, 0.7dvh, 6px)';
 const RESPONSIVE_SCREEN_PADDING = 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px';
-const COMPACT_SCREEN_PADDING = 'clamp(6px, 0.8dvh, 8px) clamp(14px, 4vw, 20px) 10px';
+// Compact content keeps the same header position as every other screen.
+const COMPACT_SCREEN_PADDING = 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 10px';
 const COMPACT_CONTENT_ROW_GAP = 'clamp(6px, 0.8dvh, 9px)';
 
 export const FAILED_SET_COLOR = THEME.meet;
@@ -1954,7 +1955,8 @@ export function meetDayDashboardContentStyle() {
   return {
     minHeight: 0,
     display: 'grid',
-    gridTemplateRows: 'auto auto minmax(min-content, 1fr) auto',
+    // Title and date share one row. Spare height belongs to the lift collection.
+    gridTemplateRows: 'auto auto auto minmax(min-content, 1fr) auto',
     alignContent: 'stretch',
     rowGap: 'clamp(4px, 0.8dvh, 8px)',
     padding: 'clamp(2px, 0.4dvh, 4px) 4px clamp(4px, 0.8dvh, 8px)',
@@ -1985,20 +1987,31 @@ export function MeetDayDashboardPlan({
         cursor: 'pointer',
       }}
     >
-      {scheduleDateLabel && (
-        <div
-          data-testid="dashboard-workout-schedule-date"
-          style={{
-            color: THEME.muted,
-            fontSize: 'clamp(13px, 3.2vw, 16px)',
-            fontWeight: 800,
-            lineHeight: 1.3,
-            textAlign: 'center',
-          }}
-        >
-          {scheduleDateLabel}
-        </div>
-      )}
+      <div style={{ textAlign: 'center' }}>
+        <h3 style={{
+          color: THEME.meet,
+          fontSize: 'clamp(24px, 6vw, 30px)',
+          fontWeight: 900,
+          lineHeight: 1.2,
+          margin: '0 0 4px',
+        }}>
+          {t.sbdMeetDay || t.meetDay}
+        </h3>
+        {scheduleDateLabel && (
+          <div
+            data-testid="dashboard-workout-schedule-date"
+            style={{
+              color: THEME.muted,
+              fontSize: 'clamp(13px, 3.2vw, 16px)',
+              fontWeight: 800,
+              lineHeight: 1.3,
+              textAlign: 'center',
+            }}
+          >
+            {scheduleDateLabel}
+          </div>
+        )}
+      </div>
       <MeetPlanContent
         meetPlan={meetPlan}
         meetTotals={meetTotals}
@@ -2038,7 +2051,7 @@ export function meetWorkoutLiftBlockStyle() {
     border: 'none',
     borderRadius: 8,
     overflow: 'visible',
-    margin: '0 0 3px',
+    marginBottom: 'clamp(4px, 0.8dvh, 8px)',
   };
 }
 
@@ -2952,7 +2965,6 @@ export function WorkoutLiftGrid({
   children,
   testId = 'workout-lift-grid',
   columnCount = 4,
-  compactVertical = false,
 }) {
   return (
     <div
@@ -2962,18 +2974,12 @@ export function WorkoutLiftGrid({
         gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
         justifyContent: 'start',
         columnGap: RESPONSIVE_WORKOUT_UI.circleGap,
-        rowGap: compactVertical
-          ? 'clamp(3px, 0.4dvh, 4px)'
-          : RESPONSIVE_WORKOUT_UI.circleGap,
+        rowGap: RESPONSIVE_WORKOUT_UI.circleGap,
         padding: `12px ${RESPONSIVE_WORKOUT_UI.rowPaddingX} 0`,
-        marginBottom: compactVertical
-          ? 2
-          : RESPONSIVE_WORKOUT_UI.sectionGap,
-        '--workout-circle-item-row-gap': compactVertical
-          ? '4px'
-          : RESPONSIVE_WORKOUT_UI.labelCircleGap,
-        '--workout-weight-label-line-height': compactVertical ? 1.05 : 1.08,
-        '--workout-weight-percent-margin-top': compactVertical ? '1px' : '2px',
+        marginBottom: RESPONSIVE_WORKOUT_UI.sectionGap,
+        '--workout-circle-item-row-gap': RESPONSIVE_WORKOUT_UI.labelCircleGap,
+        '--workout-weight-label-line-height': 1.08,
+        '--workout-weight-percent-margin-top': '2px',
       }}
     >
       {children}
@@ -3791,10 +3797,11 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewCalendarSyncItem,
-    t.whatsNewCalendarDeletionItem,
-    t.whatsNewCalendarStatusItem,
-    t.whatsNewRestNotificationItem,
+    t.whatsNewMeetDashboardItem,
+    t.whatsNewMeetWorkoutItem,
+    t.whatsNewHeadersItem,
+    t.whatsNewCompletionItem,
+    t.whatsNewAndroidItem,
   ];
 
   return (
@@ -8521,11 +8528,7 @@ export function CurrentWorkout({
             </>
           )}
           titleStyle={{
-            textShadow: 'none',
             fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
             color: isMeetDay ? THEME.meet : THEME.text
           }}
           subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
@@ -8621,7 +8624,7 @@ export function CurrentWorkout({
                 : activeWorkoutLiftBlockStyle()}
             >
               <div style={{
-                padding: isMeetDay ? '0 10px' : '2px 10px 4px',
+                padding: '2px 10px 4px',
                 textAlign: 'center',
               }}>
                 {(() => {
@@ -8647,8 +8650,8 @@ export function CurrentWorkout({
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 7,
-                        minHeight: isMeetDay ? 30 : 'clamp(32px, 7vw, 38px)',
-                        padding: isMeetDay ? '2px 10px' : '4px 12px',
+                        minHeight: 'clamp(32px, 7vw, 38px)',
+                        padding: '4px 12px',
                         border: 'none',
                         borderRadius: 8,
                         background: 'transparent',
@@ -8687,7 +8690,6 @@ export function CurrentWorkout({
               <WorkoutLiftGrid
                 testId={`workout-lift-grid-${li}`}
                 columnCount={isMeetDay ? 12 : 4}
-                compactVertical={isMeetDay}
               >
                 <WarmupGrid
                   compactGrid
@@ -9021,27 +9023,23 @@ export function CurrentWorkout({
 
   return (
     <div style={activeWorkoutScreenStyle()}>
-      <div data-testid="workout-screen-header" style={fixedScreenHeaderStyle()}>
-        <h2 style={{
-          margin: '12px 0 8px',
-          textAlign: 'center',
-          fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize,
-          fontWeight: 900,
-          lineHeight: 1.15,
-          color: ({
-            Squat: THEME.red,
-            Bench: THEME.primary,
-            Deadlift: THEME.yellow,
-          }[workout.lift] || THEME.meet)
-        }}>
-          {t.workout} {workout.number}: {workoutLiftLabel(workout.lift, t, effectiveBenchPressVariant)}
-        </h2>
-
-        <div style={{ textAlign: 'center', color: THEME.muted, fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize, marginBottom: smartModel ? 0 : 12 }}>
-          {formatCycleWorkoutSubtitle({ t, currentCycle, workoutNumber: workout.number, totalWorkouts, smartModel })}
-          <div data-testid="app-header-divider" style={appHeaderDividerStyle()} />
-        </div>
-      </div>
+      <AppHeader
+        title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
+        subtitle={(
+          <>
+            {formatCycleWorkoutSubtitle({ t, currentCycle, workoutNumber: workout.number, totalWorkouts, smartModel })}
+            {smartModel && (
+              <AthleteLevelBadge
+                athleteLevel={athleteLevel}
+                eStrengthRatio={eStrengthRatio}
+                eStrengthMax={eStrengthMax}
+                latestBodyWeight={latestBodyWeight}
+                t={t}
+              />
+            )}
+          </>
+        )}
+      />
 
       <div
         data-testid="screen-scroll-content"
@@ -9388,6 +9386,35 @@ export function MeetPlanContent({
   dashboardLayout = false,
 }) {
   const statsWeightUnit = normalizeWeightUnit(weightUnit);
+  const attemptColumns = [
+    ['opener', t.opener, '90%'],
+    ['second', t.secondAttempt, '97.5%'],
+    ['third', t.thirdAttempt, '102.5%'],
+  ];
+  const attemptGridStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+    gap: 6,
+  };
+
+  function renderAttemptHeading(label, pct) {
+    return (
+      <>
+        <div style={{
+          color: THEME.text,
+          fontSize: dashboardLayout ? 'clamp(12px, 3.1vw, 14px)' : 12,
+          fontWeight: 800,
+          lineHeight: 1.3,
+        }}>{label}</div>
+        <div style={{
+          color: THEME.muted,
+          fontSize: dashboardLayout ? 12 : 11,
+          fontWeight: 700,
+          margin: '2px 0 4px',
+        }}>{pct}</div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -9418,16 +9445,39 @@ export function MeetPlanContent({
         }}>
           {meetTotals.third ? formatWeightFromKg(meetTotals.third, statsWeightUnit) : '-'}
         </div>
+        <div style={{
+          color: THEME.muted,
+          fontSize: dashboardLayout ? 'clamp(13px, 3.2vw, 15px)' : 13,
+          lineHeight: 1.4,
+          marginTop: 6,
+        }}>
+          {t.projectedTotalExplanation}
+        </div>
       </div>
 
       <div style={{
         minHeight: 0,
         display: 'grid',
         gridTemplateRows: dashboardLayout
-          ? 'repeat(3, minmax(min-content, 1fr))'
+          ? `auto repeat(${meetPlan.length}, minmax(min-content, 1fr))`
           : undefined,
         gap: dashboardLayout ? 'clamp(6px, 1dvh, 10px)' : 10,
       }}>
+        {dashboardLayout && (
+          <div data-testid="meet-plan-attempt-headings" style={attemptGridStyle}>
+            {attemptColumns.map(([key, label, pct]) => (
+              <div key={key} style={{
+                minWidth: 0,
+                padding: '1px 3px',
+                textAlign: 'center',
+                display: 'grid',
+                gridTemplateRows: '1fr auto',
+              }}>
+                {renderAttemptHeading(label, pct)}
+              </div>
+            ))}
+          </div>
+        )}
         {meetPlan.map(row => {
           const color = getLiftThemeColor(row.lift);
 
@@ -9461,33 +9511,10 @@ export function MeetPlanContent({
                 </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
-                {[
-                  ['opener', t.opener, '90%', row.opener],
-                  ['second', t.secondAttempt, '97.5%', row.second],
-                  ['third', t.thirdAttempt, '102.5%', row.third],
-                ].map(([key, label, pct, value]) => (
+              <div style={attemptGridStyle}>
+                {attemptColumns.map(([key, label, pct]) => (
                   <div key={key} style={{ padding: '1px 3px', textAlign: 'center' }}>
-                    <div style={{
-                      color: THEME.text,
-                      fontSize: dashboardLayout ? 'clamp(12px, 3.1vw, 14px)' : 12,
-                      fontWeight: 800,
-                      lineHeight: 1.15,
-                      minHeight: dashboardLayout ? 'clamp(18px, 2.6dvh, 22px)' : 18,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                      {label}
-                    </div>
-                    <div style={{
-                      color: THEME.muted,
-                      fontSize: dashboardLayout ? 12 : 11,
-                      fontWeight: 700,
-                      margin: '2px 0 4px',
-                    }}>
-                      {pct}
-                    </div>
+                    {!dashboardLayout && renderAttemptHeading(label, pct)}
                     <div style={{
                       width: '100%',
                       boxSizing: 'border-box',
@@ -9500,7 +9527,7 @@ export function MeetPlanContent({
                       fontSize: dashboardLayout ? 'clamp(17px, 4.2vw, 20px)' : 15,
                       fontWeight: 800,
                     }}>
-                      {value ? formatWeightFromKg(value, statsWeightUnit) : '-'}
+                      {row[key] ? formatWeightFromKg(row[key], statsWeightUnit) : '-'}
                     </div>
                   </div>
                 ))}
@@ -10416,7 +10443,7 @@ export function AppHeader({ title, subtitle, titleStyle = {}, subtitleStyle = {}
           margin: '4px 0 0',
           color: THEME.meet,
           textShadow: '0 0 10px rgba(255,45,45,0.45)',
-          fontSize: 30,
+          fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize,
           fontWeight: 900,
           lineHeight: 1.1,
           letterSpacing: -0.4,
@@ -10443,7 +10470,7 @@ export function AppHeader({ title, subtitle, titleStyle = {}, subtitleStyle = {}
           <div
             style={{
               color: THEME.text,
-              fontSize: 15,
+              fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize,
               fontWeight: 700,
               lineHeight: 1.35,
               marginTop: 16,
@@ -16427,9 +16454,7 @@ const screenAllowsContentScroll =
   >
     <AppHeader
       t={t}
-      title={dashboardMeetState.isMeetDay
-        ? (t.sbdMeetDay || t.meetDay)
-        : (t.appName)}
+      title={t.appName}
       subtitle={(
         <DashboardCycleWorkoutLabel
           t={t}

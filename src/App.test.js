@@ -730,6 +730,10 @@ test('fixed main headers end at the divider before scrolling screen content', ()
   );
 
   const divider = screen.getByTestId('app-header-divider');
+  expect(screen.getByRole('heading', { name: 'Workout' }).style.fontSize)
+    .toBe('clamp(30px, 7vw, 36px)');
+  expect(divider.previousSibling.style.fontSize)
+    .toBe('clamp(15px, 3.4vw, 17px)');
   expect(divider.parentElement).toHaveStyle({
     position: 'relative',
     zIndex: '20',
@@ -831,7 +835,7 @@ test('activeWorkoutLiftBlockStyle uses normal margins', () => {
   });
 });
 
-test('meet workout keeps the standard top spacing and balanced compact lift spacing', () => {
+test('meet workout keeps the standard top and lift spacing', () => {
   expect(meetWorkoutScreenStyle()).toMatchObject({
     display: 'flex',
     flexDirection: 'column',
@@ -840,7 +844,7 @@ test('meet workout keeps the standard top spacing and balanced compact lift spac
   expect(meetWorkoutScreenStyle().paddingTop).toBeUndefined();
   expect(meetWorkoutLiftBlockStyle()).toMatchObject({
     overflow: 'visible',
-    margin: '0 0 3px',
+    marginBottom: 'clamp(4px, 0.8dvh, 8px)',
   });
   expect(meetWorkoutLiftBlockStyle().marginTop).toBeUndefined();
   expect(workoutCompletionButtonMargin({ isMeetDay: true })).toBe('8px auto 0');
@@ -999,7 +1003,7 @@ test('all main screens suppress tiny pseudo-overflow and scroll only for hidden 
   expect(appViewportStyle({ screen: 'dashboard', allowContentScroll: false }))
     .toMatchObject({ '--kelani-screen-overflow-y': 'hidden' });
   expect(appViewportStyle({ screen: 'dashboard', compactToFit: true })).toMatchObject({
-    '--kelani-screen-padding': 'clamp(6px, 0.8dvh, 8px) clamp(14px, 4vw, 20px) 10px',
+    '--kelani-screen-padding': 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 10px',
     '--kelani-content-row-gap': 'clamp(6px, 0.8dvh, 9px)',
   });
   expect(appViewportStyle({
@@ -1783,7 +1787,7 @@ test('meet-day dashboard spreads the plan across the available vertical space', 
   expect(meetDayDashboardContentStyle()).toMatchObject({
     minHeight: 0,
     display: 'grid',
-    gridTemplateRows: 'auto auto minmax(min-content, 1fr) auto',
+    gridTemplateRows: 'auto auto auto minmax(min-content, 1fr) auto',
     alignContent: 'stretch',
     rowGap: 'clamp(4px, 0.8dvh, 8px)',
   });

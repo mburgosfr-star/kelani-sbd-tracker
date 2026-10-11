@@ -21,11 +21,12 @@ describe('WhatsNewModal', () => {
 
     expect(screen.getByText("What's new?")).toBeInTheDocument();
     expect(screen.getByText('v2.0.48')).toBeInTheDocument();
-    expect(screen.getByText(translations.en.whatsNewCalendarSyncItem)).toBeInTheDocument();
-    expect(screen.getByText(translations.en.whatsNewCalendarDeletionItem)).toBeInTheDocument();
-    expect(screen.getByText(translations.en.whatsNewCalendarStatusItem)).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewMeetDashboardItem)).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewMeetWorkoutItem)).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewHeadersItem)).toBeInTheDocument();
 
-    expect(screen.getByText(translations.en.whatsNewRestNotificationItem)).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewCompletionItem)).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewAndroidItem)).toBeInTheDocument();
 
     const checkbox = screen.getByLabelText(
       translations.en.whatsNewShowAutomatically
