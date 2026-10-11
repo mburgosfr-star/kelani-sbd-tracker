@@ -1,0 +1,5 @@
+Tauler de competició més clar, amb intents alineats i una explicació del total previst.
+Més espai entre les sèries d’escalfament i els intents de competició.
+Capçaleres coherents amb títols sense retallar.
+Millor distribució de l’espai després d’entrenaments curts o d’un sol exercici.
+Compatibilitat amb Android 16 i espai adaptat a les barres del sistema.

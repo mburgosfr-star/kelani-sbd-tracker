@@ -1,0 +1,5 @@
+Clearer meet-day dashboard with aligned attempts and an explanation of the projected total.
+More space between meet-day warm-ups and attempts.
+Consistent Workout headers without clipped titles.
+Better spacing after short and single-lift workouts.
+Android 16 support with updated system-bar spacing.

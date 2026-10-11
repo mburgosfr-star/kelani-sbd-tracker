@@ -1,0 +1,5 @@
+Duidelijker wedstrijddashboard met uitgelijnde pogingen en uitleg van het verwachte totaal.
+Meer ruimte tussen opwarmsets en wedstrijdpogingen.
+Consistente workoutheaders zonder afgekapte titels.
+Betere ruimteverdeling na korte en single-lift-workouts.
+Ondersteuning voor Android 16 met aangepaste ruimte voor systeembalken.
