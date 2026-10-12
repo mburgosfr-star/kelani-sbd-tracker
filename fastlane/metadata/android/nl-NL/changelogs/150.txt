@@ -1,0 +1,4 @@
+Workout centreert de actieve lift en neemt bij de laatste meetlift de afrondknop mee als alles samen past.
+De afrondknop blijft volledig zichtbaar tijdens het pulseren.
+Programma toont meteen alle bevestigde rustdagen na een meet.
+Lichtere focusanimaties en minder onnodige schermmetingen tijdens rusttimers.

@@ -1607,6 +1607,21 @@ export function resolveAdaptiveScreenDensity(
     : { screen, compact };
 }
 
+export function shouldMeasureScreenMutations(mutations = []) {
+  return mutations.some(mutation => {
+    const element = mutation.target?.nodeType === 1
+      ? mutation.target
+      : mutation.target?.parentElement;
+    const timerTick = element?.closest?.('[data-kelani-timer-tick]');
+    if (!timerTick) return true;
+    if (mutation.type === 'characterData') return false;
+    // A timer digit can be replaced rather than edited. Ignore only text
+    // updates; timer insertion, removal and completion still need layout.
+    return mutation.type !== 'childList' ||
+      [...mutation.addedNodes, ...mutation.removedNodes].some(node => node.nodeType !== 3);
+  });
+}
+
 function getActiveScreenFlowRoot(viewport) {
   return Array.from(viewport.children).find(child => {
     const style = window.getComputedStyle(child);
@@ -2184,6 +2199,8 @@ export function workoutCompletionButtonStyle({ enabled = true, active = false } 
   return {
     display: 'block',
     width: 'auto',
+    maxWidth: 'calc(100% - 24px)',
+    flexShrink: 0,
     minHeight: 'var(--kelani-button-height)',
     padding: '10px 28px',
     fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
@@ -2193,7 +2210,7 @@ export function workoutCompletionButtonStyle({ enabled = true, active = false } 
     border: `1px solid ${THEME.primary}`,
     borderRadius: 8,
     cursor: enabled ? 'pointer' : 'not-allowed',
-    margin: '14px auto 10px',
+    margin: '14px auto 18px',
     opacity: 1,
     boxShadow: isActive
       ? '0 0 0 3px rgba(255, 138, 61, 0.30)'
@@ -2243,21 +2260,12 @@ export function WorkoutCompletionButton({
         <style>{`
           @keyframes kelaniActiveWorkoutCompletionPulse {
             0% {
-              box-shadow:
-                0 0 0 2px rgba(255, 138, 61, 0.34),
-                0 0 0 0 rgba(255, 138, 61, 0.56);
               transform: scale(1);
             }
             50% {
-              box-shadow:
-                0 0 0 4px rgba(255, 138, 61, 0.28),
-                0 0 0 10px rgba(255, 138, 61, 0.00);
               transform: scale(1.035);
             }
             100% {
-              box-shadow:
-                0 0 0 2px rgba(255, 138, 61, 0.34),
-                0 0 0 0 rgba(255, 138, 61, 0.00);
               transform: scale(1);
             }
           }
@@ -2270,6 +2278,7 @@ export function WorkoutCompletionButton({
         type="button"
         disabled={disabled}
         data-dynamic-focus={hasDynamicFocus ? 'true' : 'false'}
+        data-workout-completion-action="true"
         style={{
           ...workoutCompletionButtonStyle({
             enabled: enabled && !disabled,
@@ -2285,7 +2294,7 @@ export function WorkoutCompletionButton({
 }
 
 export function workoutCompletionButtonMargin({ isMeetDay = false } = {}) {
-  return isMeetDay ? '8px auto 0' : '2px auto 18px';
+  return isMeetDay ? '8px auto 18px' : '2px auto 18px';
 }
 
 // // const APP_TOP_BAR_HEIGHT = 50; // unused // unused after local black statusbar patch
@@ -2501,10 +2510,12 @@ function RestTimer({ seconds, endTime, onDismiss, t }) {
       </svg>
 
       <div>
-        <div style={{
+        <div data-kelani-timer-tick="true" style={{
           fontSize: 28,
           fontWeight: 700,
           color: '#ffffff',
+          whiteSpace: 'nowrap',
+          fontVariantNumeric: 'tabular-nums',
           fontFamily: 'monospace'
         }}>
           {mins}:{String(secs).padStart(2, '0')}
@@ -2553,21 +2564,12 @@ function WorkoutCircle({
         <style>{`
           @keyframes kelaniActiveWorkoutCirclePulse {
             0% {
-              box-shadow:
-                0 0 0 2px rgba(255, 138, 61, 0.34),
-                0 0 0 0 rgba(255, 138, 61, 0.56);
               transform: scale(1);
             }
             50% {
-              box-shadow:
-                0 0 0 4px rgba(255, 138, 61, 0.28),
-                0 0 0 11px rgba(255, 138, 61, 0.00);
               transform: scale(1.12);
             }
             100% {
-              box-shadow:
-                0 0 0 2px rgba(255, 138, 61, 0.34),
-                0 0 0 0 rgba(255, 138, 61, 0.00);
               transform: scale(1);
             }
           }
@@ -2781,43 +2783,60 @@ function WorkoutWeightCalculatorTrigger({
   );
 }
 
-export function activeWorkoutTargetNeedsScroll(target, margin = 8) {
+export function scrollActiveWorkoutTarget(target) {
   const region = target?.closest?.('[data-testid="screen-scroll-content"]');
-  if (!region) return true;
+  const targetRect = target?.getBoundingClientRect?.();
+  const regionRect = region?.getBoundingClientRect?.();
 
-  const targetRect = target.getBoundingClientRect();
-  const regionRect = region.getBoundingClientRect();
-  // jsdom and detached nodes have no layout; keep the focus behavior when
-  // there is no trustworthy visibility measurement.
-  if (!targetRect.height || !regionRect.height) return true;
+  if (!targetRect?.height || !regionRect?.height || typeof region?.scrollTo !== 'function') {
+    target?.scrollIntoView?.({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    return;
+  }
 
-  return targetRect.top < regionRect.top + margin ||
-    targetRect.bottom > regionRect.bottom - margin;
+  let focusRect = targetRect;
+  const lift = target.closest('[data-workout-focus-section]');
+  const liftRect = lift?.getBoundingClientRect();
+  const availableHeight = region.clientHeight || regionRect.height;
+  const margin = 8;
+
+  if (liftRect?.height && liftRect.height <= availableHeight - 2 * margin) {
+    focusRect = liftRect;
+    if (lift.dataset.workoutFocusEnd === 'true') {
+      const completion = region.querySelector('[data-workout-completion-action]');
+      const completionRect = completion?.getBoundingClientRect();
+      const bottom = Math.max(liftRect.bottom, completionRect?.bottom || liftRect.bottom);
+      // The last meet lift and its completion action form one overview,
+      // provided both fit. Otherwise keep the whole lift in view.
+      if (bottom - liftRect.top <= availableHeight - 2 * margin) {
+        focusRect = { top: liftRect.top, height: bottom - liftRect.top };
+      }
+    }
+  }
+
+  // Scroll only the bounded workout region, never the fixed header or page.
+  const top = region.scrollTop + focusRect.top - regionRect.top +
+    (focusRect.height - availableHeight) / 2;
+  const maxTop = Math.max(0, region.scrollHeight - availableHeight);
+  region.scrollTo({ top: Math.min(maxTop, Math.max(0, top)), behavior: 'smooth' });
 }
 
 function useActiveWorkoutAutoScroll(isActive) {
   const targetRef = useRef(null);
-  const scrolledForCurrentActivation = useRef(false);
 
   useEffect(() => {
-    if (!isActive) {
-      scrolledForCurrentActivation.current = false;
-      return;
+    if (!isActive || !targetRef.current) return undefined;
+
+    const target = targetRef.current;
+    const region = target.closest?.('[data-testid="screen-scroll-content"]');
+    // Wait for the new active-set controls and rest timer to receive layout
+    // before measuring their position in the Android WebView or browser.
+    if (region?.getBoundingClientRect().height && typeof window.requestAnimationFrame === 'function') {
+      const frame = window.requestAnimationFrame(() => scrollActiveWorkoutTarget(target));
+      return () => window.cancelAnimationFrame(frame);
     }
 
-    if (
-      scrolledForCurrentActivation.current ||
-      typeof targetRef.current?.scrollIntoView !== 'function'
-    ) return;
-
-    scrolledForCurrentActivation.current = true;
-    if (activeWorkoutTargetNeedsScroll(targetRef.current)) {
-      targetRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-        inline: 'nearest',
-      });
-    }
+    scrollActiveWorkoutTarget(target);
+    return undefined;
   }, [isActive]);
 
   return targetRef;
@@ -3797,11 +3816,10 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewMeetDashboardItem,
-    t.whatsNewMeetWorkoutItem,
-    t.whatsNewHeadersItem,
-    t.whatsNewCompletionItem,
-    t.whatsNewAndroidItem,
+    t.whatsNewWorkoutFocusItem,
+    t.whatsNewCompletionVisibilityItem,
+    t.whatsNewRecoveryPreviewItem,
+    t.whatsNewRenderingItem,
   ];
 
   return (
@@ -8619,6 +8637,8 @@ export function CurrentWorkout({
             <div
             key={liftBlock.lift}
               data-testid={`workout-lift-${liftBlock.lift}`}
+              data-workout-focus-section="true"
+              data-workout-focus-end={isMeetDay && li === workout.lifts.length - 1 ? 'true' : undefined}
               style={isMeetDay
                 ? meetWorkoutLiftBlockStyle()
                 : activeWorkoutLiftBlockStyle()}
@@ -12367,7 +12387,8 @@ function App() {
     measure();
 
     const mutationObserver = typeof MutationObserver === 'function'
-      ? new MutationObserver(() => {
+      ? new MutationObserver(mutations => {
+          if (!shouldMeasureScreenMutations(mutations)) return;
           observeDirectChildren();
           scheduleMeasure();
         })
@@ -12441,7 +12462,8 @@ function App() {
     measure();
 
     const mutationObserver = typeof MutationObserver === 'function'
-      ? new MutationObserver(() => {
+      ? new MutationObserver(mutations => {
+          if (!shouldMeasureScreenMutations(mutations)) return;
           observeScrollRegions();
           scheduleMeasure();
         })

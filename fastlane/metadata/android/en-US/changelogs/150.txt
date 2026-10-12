@@ -1,0 +1,4 @@
+Workout centres the active lift and includes completion with the last meet lift when both fit.
+The completion button stays fully visible while pulsing.
+Program immediately shows all confirmed post-meet recovery days.
+Lighter focus animations and fewer unnecessary screen measurements during rest timers.

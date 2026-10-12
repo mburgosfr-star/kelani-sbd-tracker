@@ -1,0 +1,4 @@
+L’entrenament centra l’exercici actiu i inclou la finalització amb l’últim exercici de competició si tot hi cap.
+El botó de finalització es manté visible durant l’animació.
+El Programa mostra tots els dies de recuperació confirmats després d’una competició.
+Animacions més lleugeres i menys mesures innecessàries durant el descans.

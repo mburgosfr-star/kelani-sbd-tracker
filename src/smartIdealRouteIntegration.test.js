@@ -2,6 +2,7 @@ import {
   buildSmartIdealTrainingWorkout,
   countFailedOrSkippedSetsFromSnapshot,
   generateWorkoutsForTrainingModel,
+  regenerateSmartWorkoutsAfterCompletion,
   getNextSmartIdealRouteWorkoutNumber,
   hasAutomaticTooHardWorkoutOutcome,
   isSmartCycleCompleteAfterHistory,
@@ -167,6 +168,7 @@ test('Smart exposes the full provisional ideal route through meet and one recove
 
 test('Smart previews every required recovery day after a meet with failed attempts', () => {
   let history = [];
+  let cachedPlan = null;
 
   for (let index = 0; index < 27; index += 1) {
     const workout = generateCurrent({
@@ -174,8 +176,13 @@ test('Smart previews every required recovery day after a meet with failed attemp
       currentIndex: index,
       athleteLevel: 'intermediate',
     });
+    if (workout.type === 'meet') {
+      cachedPlan = generateWorkoutsForTrainingModel('smart', {
+        ...baseOptions, athleteLevel: 'intermediate', history, currentIndex: index,
+      });
+    }
     history = workout.type === 'meet'
-      ? completeWorkoutWithFailures(history, workout, { failedSetCount: 3 })
+      ? completeWorkoutWithFailures(history, workout, { failedSetCount: 1 })
       : completeWorkout(history, workout);
   }
 
@@ -208,6 +215,30 @@ test('Smart previews every required recovery day after a meet with failed attemp
   expect(recoveryPreview.slice(1).every(workout => (
     workout.smartFuturePreview === true && workout.smartSelectable === false
   ))).toBe(true);
+
+  const finishedMeet = history.at(-1).workoutSnapshot;
+  const completedNumbers = new Set(history.map(entry => entry.workoutNumber));
+  const savedPlan = cachedPlan.filter(workout => workout.smartVisible !== false).map(workout => ({
+    ...workout,
+    completed: completedNumbers.has(workout.number),
+  }));
+  expect(savedPlan).toHaveLength(28);
+  const refreshed = regenerateSmartWorkoutsAfterCompletion({
+    workouts: savedPlan,
+    finishedWorkout: finishedMeet,
+    completedIndex: 26,
+    nextHistory: history,
+    currentCycle: 1,
+    nextWorkoutIndex: 27,
+    generationOptions: { ...baseOptions, athleteLevel: 'intermediate' },
+  });
+  expect(refreshed.filter(workout => workout.smartVisible !== false)).toHaveLength(29);
+  expect(refreshed[26]).toEqual(finishedMeet);
+  expect(refreshed[26].workoutEffort).toBe('hard');
+  expect(countFailedOrSkippedSetsFromSnapshot(refreshed[26])).toBe(1);
+  expect(refreshed.slice(0, 26)).toEqual(savedPlan.slice(0, 26));
+  expect(refreshed.filter(workout => workout.smartVisible !== false).slice(27))
+    .toEqual(recoveryPreview);
 });
 
 function completeWorkout(history, workout, effort = 'good') {

@@ -101,13 +101,20 @@ export function regenerateSmartWorkoutsAfterCompletion({
         : workout
   );
 
+  // Completion can extend the route, for example by confirming a second
+  // post-meet recovery day. Merge over the full new plan so those extra
+  // rows are not dropped by the state-preserving mapper.
+  const workoutsToMerge = generatedWorkouts.length > workoutsWithCompletedSnapshot.length
+    ? generatedWorkouts.map((workout, index) => workoutsWithCompletedSnapshot[index] || workout)
+    : workoutsWithCompletedSnapshot;
+
   const activeWorkoutNumber =
     Number(generatedWorkouts[normalizedNextWorkoutIndex]?.number) ||
     normalizedNextWorkoutIndex + 1;
 
   return removeDeprecatedPrepItemsFromWorkouts(
     applyAccessoryPlanToWorkouts(
-      workoutsWithCompletedSnapshot,
+      workoutsToMerge,
       generatedWorkouts,
       getCompletedWorkoutNumbers(nextHistory, currentCycle),
       activeWorkoutNumber

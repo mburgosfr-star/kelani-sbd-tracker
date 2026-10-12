@@ -59,11 +59,7 @@ body,
   }
 
   @keyframes kelaniRowGlow {
-    0%, 100% {
-      box-shadow: 0 0 0 0 var(--kelani-pulse-color, rgba(255, 138, 61, 0.32));
-    }
-    50% {
-      box-shadow: 0 0 0 5px var(--kelani-pulse-color, rgba(255, 138, 61, 0));
-    }
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.85; }
   }
 }
