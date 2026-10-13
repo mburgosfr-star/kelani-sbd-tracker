@@ -72,7 +72,8 @@ export async function syncWorkoutCalendar({
       mapping.syncedDate === event.dateKey &&
       mapping.startTime === event.startTime &&
       mapping.durationMinutes === event.durationMinutes;
-    const unchanged = timingUnchanged && Boolean(mapping.provisional) === Boolean(event.provisional);
+    const unchanged = timingUnchanged && (!mapping.provisional || mapping.identityVerified === true) &&
+      Boolean(mapping.provisional) === Boolean(event.provisional);
     if (unchanged && mapping.reminderInitialized) continue;
 
     let eventId;
@@ -114,6 +115,7 @@ export async function syncWorkoutCalendar({
       durationMinutes: event.durationMinutes,
       reminderMinutes: 0,
       reminderInitialized: true,
+      identityVerified: true,
       ...(event.provisional ? { provisional: true } : {}),
     };
     recordProgress([...mappings.filter(item => item !== mapping), nextMapping]);

@@ -1,0 +1,5 @@
+Consistente maten en tekststijl voor actieknoppen.
+Evenwichtigere ruimteverdeling bij Onboarding.
+Gecentreerde Programma-knoppen en compacte volledige lijsten.
+Minder onnodig scrollen op SBD-dashboards.
+De agenda plant nu de resterende cyclus en één voorlopige volgende cyclus. De verwachting verandert mee; handmatig verwijderde afspraken blijven verwijderd.

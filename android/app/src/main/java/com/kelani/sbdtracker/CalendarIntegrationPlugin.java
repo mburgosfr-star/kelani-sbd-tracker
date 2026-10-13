@@ -115,7 +115,7 @@ public class CalendarIntegrationPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void upsertWorkoutEvent(PluginCall call) {
+    public synchronized void upsertWorkoutEvent(PluginCall call) {
         if (getPermissionState("calendar") != PermissionState.GRANTED) {
             call.reject("Calendar permission is required", "PERMISSION_DENIED");
             return;
@@ -142,6 +142,18 @@ public class CalendarIntegrationPlugin extends Plugin {
             }
 
             String marker = EVENT_MARKER_PREFIX + cycleId + ":" + workoutId;
+            if (eventIdText == null || eventIdText.isEmpty()) {
+                // A retried or queued sync may not yet have persisted its mapping.
+                // Look up only this exact Kelani identity, never unrelated events.
+                try (Cursor cursor = getContext().getContentResolver().query(
+                    Events.CONTENT_URI, new String[] { Events._ID },
+                    Events.CALENDAR_ID + "=? AND " + Events.DESCRIPTION + "=? AND " + Events.DELETED + "=0",
+                    new String[] { String.valueOf(calendarId), marker }, Events._ID + " ASC"
+                )) {
+                    if (cursor == null) throw new IllegalStateException("Could not resolve workout identity");
+                    if (cursor.moveToFirst()) eventIdText = cursor.getString(0);
+                }
+            }
             ContentValues values = new ContentValues();
             values.put(Events.TITLE, title);
             values.put(Events.DESCRIPTION, marker);
@@ -192,6 +204,7 @@ public class CalendarIntegrationPlugin extends Plugin {
                 }
             }
 
+            removeIdenticalManagedDuplicates(eventId, calendarId, marker);
             JSObject result = new JSObject();
             result.put("eventId", String.valueOf(eventId));
             call.resolve(result);
@@ -199,6 +212,58 @@ public class CalendarIntegrationPlugin extends Plugin {
             call.reject("Calendar permission is required", "PERMISSION_DENIED", error);
         } catch (Exception error) {
             call.reject("Could not save workout event", "SAVE_FAILED", error);
+        }
+    }
+
+    private String reminderSignature(long eventId) {
+        StringBuilder signature = new StringBuilder();
+        try (Cursor cursor = getContext().getContentResolver().query(
+            Reminders.CONTENT_URI, new String[] { Reminders.MINUTES, Reminders.METHOD },
+            Reminders.EVENT_ID + "=?", new String[] { String.valueOf(eventId) },
+            Reminders.MINUTES + " ASC, " + Reminders.METHOD + " ASC"
+        )) {
+            if (cursor == null) throw new IllegalStateException("Could not compare reminders");
+            while (cursor.moveToNext()) signature.append(cursor.getInt(0)).append(':').append(cursor.getInt(1)).append(';');
+        }
+        return signature.toString();
+    }
+
+    private void removeIdenticalManagedDuplicates(long retainedId, long calendarId, String marker) {
+        String title;
+        long start;
+        long end;
+        try (Cursor cursor = getContext().getContentResolver().query(
+            ContentUris.withAppendedId(Events.CONTENT_URI, retainedId),
+            new String[] { Events.TITLE, Events.DTSTART, Events.DTEND }, null, null, null
+        )) {
+            if (cursor == null || !cursor.moveToFirst()) throw new IllegalStateException("Could not read retained workout");
+            title = cursor.getString(0);
+            start = cursor.getLong(1);
+            end = cursor.getLong(2);
+        }
+        String reminders = reminderSignature(retainedId);
+        ArrayList<Long> duplicates = new ArrayList<>();
+        try (Cursor cursor = getContext().getContentResolver().query(
+            Events.CONTENT_URI, new String[] { Events._ID },
+            Events.CALENDAR_ID + "=? AND " + Events.DESCRIPTION + "=? AND " + Events.DELETED + "=0 AND " +
+                Events._ID + "<>? AND " + Events.TITLE + "=? AND " + Events.DTSTART + "=? AND " + Events.DTEND + "=?",
+            new String[] { String.valueOf(calendarId), marker, String.valueOf(retainedId), title,
+                String.valueOf(start), String.valueOf(end) }, null
+        )) {
+            if (cursor == null) throw new IllegalStateException("Could not check duplicate workout events");
+            while (cursor.moveToNext()) duplicates.add(cursor.getLong(0));
+        }
+        // Preserve copies whose timing, title or reminders differ: they may
+        // contain deliberate manual changes. Delete only exact managed copies.
+        for (long duplicateId : duplicates) {
+            if (reminders.equals(reminderSignature(duplicateId))) {
+                int removed = getContext().getContentResolver().delete(
+                    ContentUris.withAppendedId(Events.CONTENT_URI, duplicateId),
+                    Events.CALENDAR_ID + "=? AND " + Events.DESCRIPTION + "=?",
+                    new String[] { String.valueOf(calendarId), marker }
+                );
+                if (removed != 1) throw new IllegalStateException("Could not remove duplicate workout event");
+            }
         }
     }
 

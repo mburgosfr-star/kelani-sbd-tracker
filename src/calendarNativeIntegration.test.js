@@ -21,7 +21,7 @@ test('registers the Android calendar bridge and declares permissions', () => {
   expect(plugin).toContain('name = "CalendarIntegration"');
   expect(plugin).toContain('public void getWritableCalendars(PluginCall call)');
   expect(plugin).toContain('Calendars.CAL_ACCESS_CONTRIBUTOR');
-  expect(plugin).toContain('public void upsertWorkoutEvent(PluginCall call)');
+  expect(plugin).toContain('public synchronized void upsertWorkoutEvent(PluginCall call)');
   expect(plugin).toContain('public void deleteWorkoutEvent(PluginCall call)');
   expect(plugin).toContain('managedEventStatus(eventId, calendarId, marker)');
 });

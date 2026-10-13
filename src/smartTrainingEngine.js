@@ -6173,6 +6173,34 @@ function projectedSmartHistoryEntries(workout, currentCycle) {
   });
 }
 
+// Calendar-only simulation. Synthetic success stays in this local history copy;
+// it must never be persisted as completed training or update the user's PRs.
+export function projectNextSmartCalendarCycle(options = {}) {
+  let history = [...(options.history || [])];
+  const currentCycle = Number(options.currentCycle) || 1;
+  function projectCycle(cycle, startIndex) {
+    const projected = [];
+    for (let index = startIndex; index < startIndex + SMART_MEET_PROJECTION_MAX_FUTURE_WORKOUTS; index += 1) {
+      if (isSmartCycleCompleteAfterHistory(history, cycle)) return projected;
+      const generated = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
+        ...options, history, currentCycle: cycle, currentIndex: index,
+        idealRouteEnabled: cycle === currentCycle ? options.idealRouteEnabled :
+          (options.idealRouteEnabledForNextCycle ?? options.idealRouteEnabled),
+        meetPlannerAttempts: cycle === currentCycle ? options.meetPlannerAttempts : {},
+        skipMeetProjectionSimulation: true,
+      });
+      const workout = generated[index];
+      if (!workout) throw new Error('Calendar cycle forecast is incomplete');
+      projected.push(workout);
+      history = [...history, ...projectedSmartHistoryEntries(workout, cycle)];
+    }
+    if (isSmartCycleCompleteAfterHistory(history, cycle)) return projected;
+    throw new Error('Calendar cycle forecast exceeded its planning limit');
+  }
+  projectCycle(currentCycle, Math.max(Number(options.currentIndex) || 0, 0));
+  return projectCycle(currentCycle + 1, 0);
+}
+
 export function projectSmartMeetBySuccessfulSimulation(options = {}) {
   const currentCycle = Number(options.currentCycle || options.data?.currentCycle) || 1;
   const startIndex = Math.max(Number(options.currentIndex) || 0, 0);

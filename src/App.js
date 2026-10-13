@@ -128,6 +128,7 @@ import { generateCooldownItems } from './classicProgramTemplates';
 import {
   regenerateSmartWorkoutsAfterCompletion,
   generateWorkoutsForTrainingModel,
+  projectNextSmartCalendarCycle,
   isSmartMeetdayReady,
   getSmartMeetCompletedTrainingDays,
   isSmartCycleCompleteAfterHistory,
@@ -12038,6 +12039,8 @@ function App() {
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [calendarSyncStatus, setCalendarSyncStatus] = useState('idle');
   const [calendarSyncing, setCalendarSyncing] = useState(false);
+  const calendarIntegrationRef = useRef(calendarIntegration);
+  calendarIntegrationRef.current = calendarIntegration;
   const calendarSyncInFlightRef = useRef(null);
   const calendarSyncPendingRef = useRef(null);
   const calendarModalSessionRef = useRef(null);
@@ -12555,7 +12558,7 @@ function App() {
     if (!calendarIntegration.enabled || !isSmartTrainingModel(trainingModel) ||
         !prs.Squat || !prs.Bench || !prs.Deadlift) return [];
     const loadMaxes = normalizeOneRMs(oneRMs, prs);
-    return generateWorkoutsForTrainingModel(trainingModel, {
+    return projectNextSmartCalendarCycle({
       programProfile,
       squat: isSmartTrainingModel(trainingModel) ? loadMaxes.Squat : prs.Squat,
       bench: isSmartTrainingModel(trainingModel) ? loadMaxes.Bench : prs.Bench,
@@ -12571,11 +12574,15 @@ function App() {
       squatVariant,
       cooldownMode,
       history,
-      currentIndex: 0,
-      currentCycle: currentCycle + 1,
+      currentIndex,
+      currentCycle,
       meetPlannerAttempts: {},
       oneRMs,
       idealRouteEnabled: isSmartIdealRouteEnabled({
+        currentCycle,
+        startCycle: smartIdealRouteStartCycle,
+      }),
+      idealRouteEnabledForNextCycle: isSmartIdealRouteEnabled({
         currentCycle: currentCycle + 1,
         startCycle: smartIdealRouteStartCycle,
       }),
@@ -12583,7 +12590,7 @@ function App() {
   }, [calendarIntegration.enabled, trainingModel, prs, oneRMs, programProfile,
     accessoryMode, accessoryPRs, preparationMode, workoutSetup, trainingFocus,
     athleteLevel, deadliftVariant, benchPressVariant, squatVariant, cooldownMode,
-    history, currentCycle, smartIdealRouteStartCycle]);
+    history, currentCycle, currentIndex, smartIdealRouteStartCycle]);
   const syncCalendar = useCallback(async (automatic = false) => {
     if (!automatic) calendarFeedbackSessionRef.current = calendarModalSessionRef.current;
     if (calendarSyncInFlightRef.current) {
@@ -12599,18 +12606,19 @@ function App() {
       }
     };
     const task = (async () => {
+      const settings = calendarIntegrationRef.current;
       setCalendarSyncing(true);
       if (!automatic) reportStatus('idle');
       try {
         const permission = await getCalendarPermissionState();
         if (permission !== 'granted') throw new Error('Calendar permission unavailable');
-        if (calendarIntegration.enabled) {
+        if (settings.enabled) {
           const available = await getWritableDeviceCalendars();
           const matches = available.some(calendar =>
-            String(calendar.id) === calendarIntegration.calendarId &&
-            calendar.name === calendarIntegration.calendarName &&
-            String(calendar.accountName || '') === calendarIntegration.calendarAccountName &&
-            String(calendar.accountType || '') === calendarIntegration.calendarAccountType
+            String(calendar.id) === settings.calendarId &&
+            calendar.name === settings.calendarName &&
+            String(calendar.accountName || '') === settings.calendarAccountName &&
+            String(calendar.accountType || '') === settings.calendarAccountType
           );
           if (!matches) throw new Error('Selected calendar unavailable');
         }
@@ -12620,7 +12628,7 @@ function App() {
           scheduleDateKeys: smartWorkoutScheduleDateKeys,
           currentIndex,
           currentCycle,
-          startTime: calendarIntegration.defaultStartTime,
+          startTime: settings.defaultStartTime,
           today: scheduleToday,
           titleTemplate: t.calendarEventTitle,
           provisionalTitleTemplate: t.calendarProvisionalEventTitle,
@@ -12628,24 +12636,27 @@ function App() {
         });
         const completedWorkoutKeys = getCompletedCalendarWorkoutKeys(history);
         const result = await syncWorkoutCalendar({
-          settings: calendarIntegration,
+          settings,
           desiredEvents,
           completedWorkoutKeys,
           today: scheduleToday,
           upsertEvent: upsertDeviceWorkoutEvent,
           deleteEvent: deleteDeviceWorkoutEvent,
           ensureReminder: ensureDeviceWorkoutEventReminder,
-          onProgress: eventMappings => setCalendarIntegration(prev => ({ ...prev, eventMappings })),
+          onProgress: eventMappings => {
+            calendarIntegrationRef.current = { ...calendarIntegrationRef.current, eventMappings };
+            setCalendarIntegration(prev => ({ ...prev, eventMappings }));
+          },
         });
         if (result.created || result.updated || result.removed ||
-          calendarIntegration.hasSynced !== calendarIntegration.enabled) {
+          settings.hasSynced !== settings.enabled) {
           setCalendarIntegration(prev => ({
             ...prev,
             eventMappings: result.mappings,
             hasSynced: prev.enabled,
           }));
         }
-        if (!automatic && calendarIntegration.enabled) {
+        if (!automatic && settings.enabled) {
           localStorage.setItem(CALENDAR_SYNC_CONSENT_KEY, '1');
         }
         reportStatus('success');

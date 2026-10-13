@@ -2,6 +2,7 @@ import {
   buildSmartIdealTrainingWorkout,
   countFailedOrSkippedSetsFromSnapshot,
   generateWorkoutsForTrainingModel,
+  projectNextSmartCalendarCycle,
   regenerateSmartWorkoutsAfterCompletion,
   getNextSmartIdealRouteWorkoutNumber,
   hasAutomaticTooHardWorkoutOutcome,
@@ -197,6 +198,16 @@ test('Smart previews every required recovery day after a meet with failed attemp
     .slice(27);
 
   expect(recoveryPreview).toHaveLength(2);
+  const beforeForecast = JSON.stringify(history);
+  const nextCycleForecast = projectNextSmartCalendarCycle({
+    ...baseOptions, athleteLevel: 'intermediate', history, currentIndex: 27,
+  });
+  expect(nextCycleForecast[0].type).toBe('training');
+  expect(nextCycleForecast.filter(workout => workout.type === 'training').length).toBeGreaterThan(7);
+  expect(nextCycleForecast.filter(workout => workout.type === 'meet')).toHaveLength(1);
+  expect(nextCycleForecast.every(workout => !workout.completed)).toBe(true);
+  expect(JSON.stringify(history)).toBe(beforeForecast);
+
   expect(recoveryPreview.map(workout => ({
     number: workout.number,
     type: workout.type,

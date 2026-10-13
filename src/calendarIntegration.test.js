@@ -1,4 +1,4 @@
-import { generateWorkoutsForTrainingModel } from './smartTrainingEngine';
+import { projectNextSmartCalendarCycle } from './smartTrainingEngine';
 import {
   DEFAULT_CALENDAR_START_TIME,
   buildCalendarEventSpecs,
@@ -160,9 +160,9 @@ test('plans exactly one provisional cycle after the current recovery days withou
 
 
 test.each(['standard', 'practical'])('forecasts a complete next cycle using the existing %s route', trainingFocus => {
-  const nextCycleWorkouts = generateWorkoutsForTrainingModel('smart', {
+  const nextCycleWorkouts = projectNextSmartCalendarCycle({
     programProfile: 'kelaniSbd', squat: 150, bench: 100, deadlift: 180,
-    currentCycle: 6, currentIndex: 0, athleteLevel: 'intermediate',
+    currentCycle: 5, currentIndex: 0, athleteLevel: 'intermediate',
     trainingFocus, idealRouteEnabled: true, history: [],
     preparationMode: 'off', accessoryMode: 'off', meetPlannerAttempts: {},
   });

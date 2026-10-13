@@ -293,3 +293,18 @@ test('deleted provisional events stay deleted when their cycle becomes current',
   expect(upsertEvent).not.toHaveBeenCalled();
   expect(deleteEvent).not.toHaveBeenCalled();
 });
+
+
+test('reconciles legacy provisional identities once while preserving calendar timing', async () => {
+  const provisional = { ...event, provisional: true };
+  const mapping = { ...event, calendarId: '7', eventId: '42', syncedDate: event.dateKey,
+    provisional: true, reminderInitialized: true };
+  const upsertEvent = vi.fn().mockResolvedValue('42');
+  const result = await syncWorkoutCalendar({ settings: { ...settings, eventMappings: [mapping] },
+    desiredEvents: [provisional], today, upsertEvent, deleteEvent: vi.fn() });
+  expect(upsertEvent).toHaveBeenCalledWith(expect.objectContaining({ eventId: '42', preserveTiming: true }));
+  expect(result.mappings[0].identityVerified).toBe(true);
+  await syncWorkoutCalendar({ settings: { ...settings, eventMappings: result.mappings },
+    desiredEvents: [provisional], today, upsertEvent, deleteEvent: vi.fn() });
+  expect(upsertEvent).toHaveBeenCalledTimes(1);
+});

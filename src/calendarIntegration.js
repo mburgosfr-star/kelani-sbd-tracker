@@ -28,6 +28,7 @@ function normalizeEventMapping(mapping) {
     deletedExternally: mapping.deletedExternally === true,
     reminderMinutes: Math.max(0, Number(mapping.reminderMinutes) || 0),
     ...(mapping.provisional === true ? { provisional: true } : {}),
+    ...(mapping.identityVerified === true ? { identityVerified: true } : {}),
   };
 }
 
