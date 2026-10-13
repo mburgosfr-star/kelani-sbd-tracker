@@ -22,6 +22,10 @@ test('registers the Android calendar bridge and declares permissions', () => {
   expect(plugin).toContain('public void getWritableCalendars(PluginCall call)');
   expect(plugin).toContain('Calendars.CAL_ACCESS_CONTRIBUTOR');
   expect(plugin).toContain('public synchronized void upsertWorkoutEvent(PluginCall call)');
+  // Android rejects selections on event item deletion URIs, including exact
+  // duplicate cleanup. Ownership must be checked before an ID-only deletion.
+  expect(plugin).toContain('managedEventStatus(duplicateId, calendarId, marker) != 1');
+  expect(plugin).toContain('ContentUris.withAppendedId(Events.CONTENT_URI, duplicateId), null, null');
   expect(plugin).toContain('public void deleteWorkoutEvent(PluginCall call)');
   expect(plugin).toContain('managedEventStatus(eventId, calendarId, marker)');
 });

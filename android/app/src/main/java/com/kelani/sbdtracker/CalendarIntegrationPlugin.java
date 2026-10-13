@@ -257,10 +257,11 @@ public class CalendarIntegrationPlugin extends Plugin {
         // contain deliberate manual changes. Delete only exact managed copies.
         for (long duplicateId : duplicates) {
             if (reminders.equals(reminderSignature(duplicateId))) {
+                // Item URIs reject a selection. Revalidate ownership first,
+                // then delete this one already-compared event by its exact ID.
+                if (managedEventStatus(duplicateId, calendarId, marker) != 1) continue;
                 int removed = getContext().getContentResolver().delete(
-                    ContentUris.withAppendedId(Events.CONTENT_URI, duplicateId),
-                    Events.CALENDAR_ID + "=? AND " + Events.DESCRIPTION + "=?",
-                    new String[] { String.valueOf(calendarId), marker }
+                    ContentUris.withAppendedId(Events.CONTENT_URI, duplicateId), null, null
                 );
                 if (removed != 1) throw new IllegalStateException("Could not remove duplicate workout event");
             }
