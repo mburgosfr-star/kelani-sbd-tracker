@@ -830,9 +830,10 @@ test('program workout window keeps the current workout centered among at most se
 test('compact program list distributes spare height without large divider gaps', () => {
   expect(programWorkoutListContainerStyle({ showAll: false, marginTop: 8 }))
     .toMatchObject({
-      justifyContent: 'space-around',
+      justifyContent: 'space-between',
       marginTop: 0,
-      paddingTop: 'clamp(4px, 0.7dvh, 6px)',
+      paddingTop: 8,
+      paddingBottom: 8,
       borderTop: 'none',
       borderBottom: 'none',
       overflowY: 'hidden',
@@ -842,9 +843,10 @@ test('compact program list distributes spare height without large divider gaps',
     .toMatchObject({
       justifyContent: 'flex-start',
       marginTop: 0,
-      paddingTop: 0,
-      borderTop: 'calc(8px + clamp(4px, 0.7dvh, 6px)) solid transparent',
-      borderBottom: '8px solid transparent',
+      paddingTop: 8,
+      paddingBottom: 8,
+      borderTop: 'none',
+      borderBottom: 'none',
       overflowY: 'auto',
       minHeight: 0,
     });
@@ -1848,7 +1850,15 @@ test('regular dashboards distribute spare height between and around their sectio
     .toBe('space-evenly');
 });
 
-test('PR-rich training dashboards use tighter spacing without changing sparse dashboards', () => {
+test('three-lift and PR-rich training dashboards use tighter spacing without changing sparse dashboards', () => {
+  expect(shouldUseCompactDashboardLayout({
+    workout: { type: 'training', lifts: [{ lift: 'Squat' }, { lift: 'Bench' }, { lift: 'Deadlift' }] },
+    meetState: { isMeetDay: false },
+  })).toBe(true);
+  expect(shouldUseCompactDashboardLayout({
+    workout: { type: 'training', lifts: [{ lift: 'Squat' }, { lift: 'Bench' }] },
+    meetState: { isMeetDay: false },
+  })).toBe(false);
   const recentPrEvents = {
     lifts: {
       Squat: { oneRMGain: 2.5, e1RMGain: 0 },
@@ -2330,12 +2340,12 @@ test('offers backup import directly from the compact setup actions', async () =>
   )).toBeInTheDocument();
 });
 
-test('onboarding reserves the ordinary navigation footprint without showing navigation', async () => {
+test('onboarding uses the full viewport without reserving absent navigation', async () => {
   localStorage.clear();
   render(<App />);
 
   const content = await screen.findByTestId('onboarding-content', {}, { timeout: 3000 });
-  expect(content.style.minHeight).toBe(`calc(100dvh - ${BOTTOM_NAV_SPACE}px)`);
+  expect(content.style.minHeight).toBe('100dvh');
   expect(screen.queryByRole('button', { name: 'Dashboard' })).not.toBeInTheDocument();
 });
 
@@ -2364,7 +2374,7 @@ test('three-step onboarding persists beginner squat focus and previews calculate
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Bench Weight' }), { target: { value: '35' } });
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Deadlift Weight' }), { target: { value: '62.5' } });
   const onboardingContent = screen.getByTestId('onboarding-content');
-  expect(onboardingContent).toHaveStyle({ display: 'grid', gridTemplateRows: 'auto auto minmax(auto, 1fr) auto' });
+  expect(onboardingContent).toHaveStyle({ display: 'grid', alignContent: 'space-between', padding: '24px 20px 37px' });
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
   expect(screen.getByText('Step 2 of 3')).toBeInTheDocument();

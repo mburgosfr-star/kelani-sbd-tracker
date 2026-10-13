@@ -182,7 +182,7 @@ import {
   localDateKey,
 } from './workoutScheduleDates';
 import {
-  buildCalendarEventSpecs,
+  buildCalendarPlanningEventSpecs,
   getCompletedCalendarWorkoutKeys,
   createCalendarIntegrationSettings,
   normalizeCalendarIntegrationSettings,
@@ -1862,7 +1862,9 @@ export function shouldUseCompactDashboardLayout({ workout, meetState, recentPrEv
     workout &&
     workout.type !== 'rest' &&
     !meetState?.isMeetDay &&
-    countDashboardRecentPrLines(recentPrEvents) >= 6
+    // Three lifts add six prescription lines before the strength/body metrics.
+    // Reduce spacing for these dense days as well as PR-rich dashboards.
+    ((workout.lifts || []).length >= 3 || countDashboardRecentPrLines(recentPrEvents) >= 6)
   );
 }
 
@@ -1917,26 +1919,19 @@ export function programWorkoutListVerticalSpacing({ compact = false } = {}) {
 }
 
 export function programWorkoutListContainerStyle({ showAll = false, marginTop = 0 } = {}) {
-  const scrollViewportInset = typeof marginTop === 'number' ? `${marginTop}px` : marginTop;
-  const topInsetToVisibleDivider = `calc(${scrollViewportInset} + ${BOTTOM_NAV_DIVIDER_OFFSET})`;
-
   return {
     flex: 1,
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    // When the compact list fits, distribute spare height between its
-    // controls and workout cards. `space-around` keeps only half a share at
-    // the divider edges, so taller phones do not turn that spare height into
-    // two large empty bands above and below the centred list.
-    justifyContent: showAll ? 'flex-start' : 'space-around',
+    // Anchor the first and last controls at the content edges. Only the
+    // spaces between cards expand when the short list fits the viewport.
+    justifyContent: showAll ? 'flex-start' : 'space-between',
     marginTop: 0,
-    // The bottom navigation divider is drawn this far below the Program
-    // viewport. Mirror that inset above the compact list so both toggle
-    // buttons have the same visual distance to their adjacent divider.
-    paddingTop: showAll ? 0 : BOTTOM_NAV_DIVIDER_OFFSET,
-    borderTop: showAll ? `${topInsetToVisibleDivider} solid transparent` : 'none',
-    borderBottom: showAll ? `${scrollViewportInset} solid transparent` : 'none',
+    paddingTop: marginTop,
+    paddingBottom: marginTop,
+    borderTop: 'none',
+    borderBottom: 'none',
     boxSizing: 'border-box',
     overflowX: 'hidden',
     overflowY: showAll ? 'auto' : 'hidden',
@@ -3692,6 +3687,7 @@ export function CalendarSettingsModal({ t, settings, onChange, onSync, syncStatu
           {calendars.map(calendar => (
             <button
               key={calendar.id}
+              data-kelani-button-layout="selection"
               type="button"
               aria-pressed={selectedCalendar?.id === calendar.id}
               onClick={() => {
@@ -3738,6 +3734,7 @@ export function CalendarSettingsModal({ t, settings, onChange, onSync, syncStatu
                 <div>{t.calendarChoose}</div>
                 <button
                   type="button"
+                  data-kelani-button-layout="selection"
                   aria-haspopup="dialog"
                   aria-expanded={false}
                   disabled={syncing || calendars.length === 0}
@@ -4342,7 +4339,7 @@ export function DataSection({ t, importOnly = false, triggerOnly = false }) {
           type="button"
           onClick={() => importInputRef.current?.click()}
           style={{
-            width: 'min(170px, calc(50vw - 24px))',
+            width: 'var(--kelani-button-width)',
             padding: '11px 8px',
             fontSize: 14,
             fontWeight: 800,
@@ -5141,7 +5138,7 @@ function AboutSupportSection({
             ))}
           </div>
 
-          <button type="button" onClick={onProjectOpen} style={{
+          <button data-kelani-button-layout="selection" type="button" onClick={onProjectOpen} style={{
               display: 'flex',
               alignItems: 'center',
               gap: 6,
@@ -9881,6 +9878,7 @@ function ProgramProfileSection({
     return (
       <button
         key={value}
+        data-kelani-button-layout="selection"
         type="button"
         onClick={onClick}
         autoFocus={active}
@@ -10834,7 +10832,8 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
     maximumVisible: compactVisibleCount,
   });
   const hasHiddenWorkouts = allowedWorkoutEntries.length > compactVisibleCount;
-  const useCompactWorkoutCardSpacing = hasHiddenWorkouts && !showAllWorkouts;
+  // Expanding changes the number of rows, not the spacing within each row.
+  const useCompactWorkoutCardSpacing = hasHiddenWorkouts;
   const workoutListVerticalSpacing = programWorkoutListVerticalSpacing({
     compact: useCompactWorkoutCardSpacing,
   });
@@ -10889,6 +10888,10 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
               ? workoutListVerticalSpacing.topToggleMargin
               : workoutListVerticalSpacing.bottomToggleMargin
           ),
+          display: 'block',
+          alignSelf: 'center',
+          marginLeft: 'auto',
+          marginRight: 'auto',
           padding: 'clamp(12px, 1.6dvh, 15px)',
           fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
         }}
@@ -11117,6 +11120,8 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
               ...programWorkoutCardSpacingStyle({
                 compact: useCompactWorkoutCardSpacing,
               }),
+              // Preserve natural row height when the full list overflows.
+              flexShrink: 0,
               borderRadius: 8,
               border: isCurrent
                 ? `2px solid ${focusColor}`
@@ -11392,21 +11397,21 @@ function Onboarding({ onStart, t }) {
       <div
         data-testid="onboarding-content"
         style={{
-        // Reserve the same vertical footprint as the ordinary bottom nav.
-        // Onboarding has no visible navigation, but using its content area
-        // keeps the setup controls from sitting unnaturally low.
-        ...balancedVerticalScreenStyle(BOTTOM_NAV_SPACE),
-        gridTemplateRows: 'auto auto minmax(auto, 1fr) auto',
-        alignContent: 'stretch',
+        // Onboarding has no bottom navigation: distribute its content
+        // across the full viewport and let longer steps scroll naturally.
+        ...balancedVerticalScreenStyle(0),
+        gridTemplateRows: step === 1 ? undefined : 'auto auto minmax(auto, 1fr) auto',
+        alignContent: step === 1 ? 'space-between' : 'stretch',
         maxWidth: 500,
         margin: '0 auto',
-        padding: '14px 20px',
+        // Match the visible top margin, including the logo's 13px dark inset.
+        padding: '24px 20px 37px',
         boxSizing: 'border-box',
         fontFamily: 'sans-serif',
         background: '#000000',
         color: THEME.text,
         overflowX: 'hidden',
-        rowGap: 'clamp(10px, 2dvh, 20px)',
+        rowGap: 'clamp(12px, 2dvh, 20px)',
       }}>
       <div style={{ textAlign: 'center' }}>
         <img
@@ -11445,7 +11450,7 @@ function Onboarding({ onStart, t }) {
       </div>
 
       <div data-testid="onboarding-step-content" style={{
-        display: 'grid',
+        display: step === 1 ? 'contents' : 'grid',
         alignContent: 'space-between',
         gridTemplateRows: step === 1 ? undefined : 'minmax(auto, 1fr)',
         rowGap: 'clamp(5px, 0.8dvh, 8px)',
@@ -11548,6 +11553,7 @@ function Onboarding({ onStart, t }) {
             </div>
           </div>
 
+          <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gap: 16 }}>
           <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateColumns: '76px minmax(0, 1fr) 68px', gap: 8, color: THEME.muted, fontSize: 11, fontWeight: 800, textAlign: 'center' }}>
             <span />
             <span>{t.weight}</span>
@@ -11635,6 +11641,7 @@ function Onboarding({ onStart, t }) {
           </div>
           );
         })}
+          </div>
         </div>}
 
         {step === 2 && startingProfile && <section style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', alignContent: 'space-between', minHeight: '100%' }}>
@@ -11713,12 +11720,12 @@ function Onboarding({ onStart, t }) {
         }}>
           {step === 1
             ? <DataSection t={t} importOnly={true} triggerOnly={true} />
-            : <button type="button" onClick={() => setStep(current => Math.max(current - 1, 1))} style={{ width: 'min(150px, calc(50vw - 28px))', minHeight: 'var(--kelani-button-height)', background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.primary}`, borderRadius: 4, fontWeight: 700, cursor: 'pointer' }}>{t.onboardingBack}</button>}
+            : <button type="button" onClick={() => setStep(current => Math.max(current - 1, 1))} style={{ width: 'var(--kelani-button-width)', minHeight: 'var(--kelani-button-height)', background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.primary}`, borderRadius: 4, fontWeight: 700, cursor: 'pointer' }}>{t.onboardingBack}</button>}
           <button
             type="button"
             onClick={step === 3 ? handleStart : handleNext}
             style={{
-              width: 'min(150px, calc(50vw - 28px))',
+              width: 'var(--kelani-button-width)',
               minHeight: 'var(--kelani-button-height)',
               padding: '9px 16px',
               fontSize: 16,
@@ -12543,6 +12550,39 @@ function App() {
       : [],
     [trainingModel, workouts, currentIndex, history, scheduleToday]
   );
+  const nextCycleCalendarWorkouts = useMemo(() => {
+    if (!calendarIntegration.enabled || !isSmartTrainingModel(trainingModel) ||
+        !prs.Squat || !prs.Bench || !prs.Deadlift) return [];
+    const loadMaxes = normalizeOneRMs(oneRMs, prs);
+    return generateWorkoutsForTrainingModel(trainingModel, {
+      programProfile,
+      squat: isSmartTrainingModel(trainingModel) ? loadMaxes.Squat : prs.Squat,
+      bench: isSmartTrainingModel(trainingModel) ? loadMaxes.Bench : prs.Bench,
+      deadlift: isSmartTrainingModel(trainingModel) ? loadMaxes.Deadlift : prs.Deadlift,
+      accessoryMode,
+      accessoryPRs,
+      preparationMode,
+      workoutSetup,
+      trainingFocus,
+      athleteLevel,
+      deadliftVariant,
+      benchPressVariant,
+      squatVariant,
+      cooldownMode,
+      history,
+      currentIndex: 0,
+      currentCycle: currentCycle + 1,
+      meetPlannerAttempts: {},
+      oneRMs,
+      idealRouteEnabled: isSmartIdealRouteEnabled({
+        currentCycle: currentCycle + 1,
+        startCycle: smartIdealRouteStartCycle,
+      }),
+    });
+  }, [calendarIntegration.enabled, trainingModel, prs, oneRMs, programProfile,
+    accessoryMode, accessoryPRs, preparationMode, workoutSetup, trainingFocus,
+    athleteLevel, deadliftVariant, benchPressVariant, squatVariant, cooldownMode,
+    history, currentCycle, smartIdealRouteStartCycle]);
   const syncCalendar = useCallback(async (automatic = false) => {
     if (!automatic) calendarFeedbackSessionRef.current = calendarModalSessionRef.current;
     if (calendarSyncInFlightRef.current) {
@@ -12574,7 +12614,7 @@ function App() {
           if (!matches) throw new Error('Selected calendar unavailable');
         }
 
-        const desiredEvents = buildCalendarEventSpecs({
+        const desiredEvents = buildCalendarPlanningEventSpecs({
           workouts,
           scheduleDateKeys: smartWorkoutScheduleDateKeys,
           currentIndex,
@@ -12582,6 +12622,8 @@ function App() {
           startTime: calendarIntegration.defaultStartTime,
           today: scheduleToday,
           titleTemplate: t.calendarEventTitle,
+          provisionalTitleTemplate: t.calendarProvisionalEventTitle,
+          nextCycleWorkouts: nextCycleCalendarWorkouts,
         });
         const completedWorkoutKeys = getCompletedCalendarWorkoutKeys(history);
         const result = await syncWorkoutCalendar({
@@ -12625,7 +12667,7 @@ function App() {
       calendarSyncPendingRef.current = null;
       if (pendingSync) void pendingSync();
     }
-  }, [calendarIntegration, workouts, smartWorkoutScheduleDateKeys, currentIndex, currentCycle, history, scheduleToday, t]);
+  }, [calendarIntegration, workouts, smartWorkoutScheduleDateKeys, nextCycleCalendarWorkouts, currentIndex, currentCycle, history, scheduleToday, t]);
 
   useEffect(() => {
     if (!hasLoadedData || !calendarIntegration.hasSynced ||

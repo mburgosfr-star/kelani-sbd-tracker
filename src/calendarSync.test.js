@@ -264,3 +264,32 @@ test('does not persist reminder migration when ownership or provider validation 
   })).rejects.toMatchObject({ code: 'EVENT_NOT_MANAGED' });
   expect(onProgress).not.toHaveBeenCalled();
 });
+
+
+test('promotes a provisional event in place without changing its manually adjusted time or reminders', async () => {
+  const upsertEvent = vi.fn().mockResolvedValue('42');
+  const deleteEvent = vi.fn();
+  const provisional = { ...event, provisional: true, title: 'Provisional workout' };
+  const forecast = await syncWorkoutCalendar({ settings, desiredEvents: [provisional], today, upsertEvent, deleteEvent });
+  upsertEvent.mockClear();
+  const result = await syncWorkoutCalendar({
+    settings: { ...settings, eventMappings: forecast.mappings },
+    desiredEvents: [event], today, upsertEvent, deleteEvent,
+  });
+  expect(result).toMatchObject({ created: 0, updated: 1, removed: 0 });
+  expect(upsertEvent).toHaveBeenCalledWith(expect.objectContaining({ eventId: '42', title: event.title, preserveTiming: true }));
+  expect(result.mappings[0].provisional).toBeUndefined();
+  expect(deleteEvent).not.toHaveBeenCalled();
+});
+
+test('deleted provisional events stay deleted when their cycle becomes current', async () => {
+  const upsertEvent = vi.fn();
+  const deleteEvent = vi.fn();
+  const result = await syncWorkoutCalendar({
+    settings: { ...settings, eventMappings: [{ ...event, eventId: '42', calendarId: '7', provisional: true, deletedExternally: true }] },
+    desiredEvents: [event], today, upsertEvent, deleteEvent,
+  });
+  expect(result.mappings[0].deletedExternally).toBe(true);
+  expect(upsertEvent).not.toHaveBeenCalled();
+  expect(deleteEvent).not.toHaveBeenCalled();
+});

@@ -145,9 +145,14 @@ public class CalendarIntegrationPlugin extends Plugin {
             ContentValues values = new ContentValues();
             values.put(Events.TITLE, title);
             values.put(Events.DESCRIPTION, marker);
-            values.put(Events.DTSTART, startMillis);
-            values.put(Events.DTEND, endMillis);
-            values.put(Events.EVENT_TIMEZONE, TimeZone.getDefault().getID());
+            // Removing a provisional label alone must preserve manually moved events.
+            boolean preserveTiming = Boolean.TRUE.equals(call.getBoolean("preserveTiming", false))
+                && eventIdText != null && !eventIdText.isEmpty();
+            if (!preserveTiming) {
+                values.put(Events.DTSTART, startMillis);
+                values.put(Events.DTEND, endMillis);
+                values.put(Events.EVENT_TIMEZONE, TimeZone.getDefault().getID());
+            }
 
             long eventId;
             if (eventIdText == null || eventIdText.isEmpty()) {

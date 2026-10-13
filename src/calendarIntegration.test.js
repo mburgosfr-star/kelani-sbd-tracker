@@ -1,6 +1,8 @@
+import { generateWorkoutsForTrainingModel } from './smartTrainingEngine';
 import {
   DEFAULT_CALENDAR_START_TIME,
   buildCalendarEventSpecs,
+  buildCalendarPlanningEventSpecs,
   countPlannedWorkoutSets,
   createCalendarIntegrationSettings,
   getFutureCalendarWorkouts,
@@ -132,4 +134,46 @@ test('manual calendar deletions survive reload while legacy event mappings remai
   const saved = normalizeCalendarIntegrationSettings({ eventMappings: [{ ...base, deletedExternally: true }] });
   expect(normalizeCalendarIntegrationSettings(JSON.parse(JSON.stringify(saved))).eventMappings[0])
     .toMatchObject({ eventId: '3', deletedExternally: true });
+});
+
+
+test('plans exactly one provisional cycle after the current recovery days without changing workouts', () => {
+  const training = number => ({ number, type: 'training', lifts: [{ sets: [{}] }] });
+  const workouts = [training(28), { number: 29, type: 'rest' }, { number: 30, type: 'rest' }];
+  const nextCycleWorkouts = [training(1), { number: 2, type: 'rest' }, training(3)];
+  const before = JSON.stringify({ workouts, nextCycleWorkouts });
+  const specs = buildCalendarPlanningEventSpecs({
+    workouts, nextCycleWorkouts, currentCycle: 5, currentIndex: 0,
+    scheduleDateKeys: ['2026-10-30', '2026-10-31', '2026-11-01'],
+    today: new Date(2026, 9, 30), startTime: '10:00',
+    titleTemplate: 'Kelani C{cycle}W{workout}',
+    provisionalTitleTemplate: 'Kelani provisional C{cycle}W{workout}',
+  });
+  expect(specs.map(({ cycleId, workoutId, dateKey }) => [cycleId, workoutId, dateKey]))
+    .toEqual([[5, 28, '2026-10-30'], [6, 1, '2026-11-02'], [6, 3, '2026-11-04']]);
+  expect(specs[0].provisional).toBeUndefined();
+  expect(specs[1]).toMatchObject({ provisional: true, title: 'Kelani provisional C6W1' });
+  expect(JSON.stringify({ workouts, nextCycleWorkouts })).toBe(before);
+  const mapping = normalizeCalendarIntegrationSettings({ eventMappings: [{ ...specs[1], eventId: '9' }] });
+  expect(normalizeCalendarIntegrationSettings(JSON.parse(JSON.stringify(mapping))).eventMappings[0].provisional).toBe(true);
+});
+
+
+test.each(['standard', 'practical'])('forecasts a complete next cycle using the existing %s route', trainingFocus => {
+  const nextCycleWorkouts = generateWorkoutsForTrainingModel('smart', {
+    programProfile: 'kelaniSbd', squat: 150, bench: 100, deadlift: 180,
+    currentCycle: 6, currentIndex: 0, athleteLevel: 'intermediate',
+    trainingFocus, idealRouteEnabled: true, history: [],
+    preparationMode: 'off', accessoryMode: 'off', meetPlannerAttempts: {},
+  });
+  expect(nextCycleWorkouts.some(workout => workout.type === 'meet')).toBe(true);
+  const specs = buildCalendarPlanningEventSpecs({
+    workouts: [{ number: 30, type: 'rest' }], scheduleDateKeys: ['2026-10-13'],
+    currentCycle: 5, nextCycleWorkouts, today: new Date(2026, 9, 13),
+    provisionalTitleTemplate: 'Provisional C{cycle}W{workout}',
+  });
+  expect(specs.length).toBeGreaterThan(7);
+  expect(specs.every(event => event.cycleId === 6 && event.provisional)).toBe(true);
+  expect(specs[0].dateKey).toBe('2026-10-14');
+  expect(specs.at(-1).workoutId).toBe(nextCycleWorkouts.find(workout => workout.type === 'meet').number);
 });

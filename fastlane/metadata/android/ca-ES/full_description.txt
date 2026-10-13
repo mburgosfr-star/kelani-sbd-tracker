@@ -27,6 +27,7 @@ Funcions:
 - Alternatives d'exercicis per a períodes d'entrenament amb menys càrrega
 - Exportació i importació local de dades
 - Sincronització opcional dels entrenaments futurs amb un calendari d'Android seleccionat després de concedir-hi accés i iniciar la primera sincronització
+- La planificació del calendari inclou la resta del cicle actual i un cicle següent provisional; la previsió pot canviar
 - Eliminació opcional dels esdeveniments de Kelani del calendari quan es completen els entrenaments a l’aplicació
 - Els esdeveniments d’entrenament inclouen un recordatori a l’hora d’inici; es respecten els recordatoris que després canviïs o eliminis al calendari
 - Els esdeveniments d’entrenament que eliminis manualment del calendari continuen eliminats en les sincronitzacions posteriors

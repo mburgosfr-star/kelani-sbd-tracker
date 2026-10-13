@@ -604,6 +604,7 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
         {statsTabs.map(tab => (
           <button
             key={tab.key}
+            data-kelani-button-layout="selection"
             onClick={() => setActivescreen(tab.key)}
             style={{
               width: '100%',

@@ -1,4 +1,4 @@
-import { parseWorkoutDateKey } from './workoutScheduleDates';
+import { addLocalDays, parseWorkoutDateKey } from './workoutScheduleDates';
 import { getEntryCycle, isCompletedHistoryEntry } from './workoutHistoryStats';
 
 export const DEFAULT_CALENDAR_START_TIME = '18:00';
@@ -27,6 +27,7 @@ function normalizeEventMapping(mapping) {
     reminderInitialized: mapping.reminderInitialized === true,
     deletedExternally: mapping.deletedExternally === true,
     reminderMinutes: Math.max(0, Number(mapping.reminderMinutes) || 0),
+    ...(mapping.provisional === true ? { provisional: true } : {}),
   };
 }
 
@@ -171,4 +172,23 @@ export function buildCalendarEventSpecs({
           .replace('{workout}', String(workoutId)),
       }];
     });
+}
+
+// Calendar-only forecast. Never append these workouts to the active program.
+export function buildCalendarPlanningEventSpecs({ nextCycleWorkouts = [], provisionalTitleTemplate, ...options } = {}) {
+  const currentEvents = buildCalendarEventSpecs(options);
+  const todayKey = parseWorkoutDateKey(options.today || new Date());
+  const cycleDates = (options.scheduleDateKeys || []).map(parseWorkoutDateKey).filter(Boolean);
+  if (!todayKey || !cycleDates.length || !nextCycleWorkouts.length) return currentEvents;
+  const lastDate = cycleDates.at(-1);
+  const startDate = [addLocalDays(lastDate, 1), todayKey].sort().at(-1);
+  const nextEvents = buildCalendarEventSpecs({
+    ...options,
+    workouts: nextCycleWorkouts,
+    scheduleDateKeys: nextCycleWorkouts.map((_, index) => addLocalDays(startDate, index)),
+    currentIndex: 0,
+    currentCycle: Number(options.currentCycle) + 1,
+    titleTemplate: provisionalTitleTemplate,
+  }).map(event => ({ ...event, provisional: true }));
+  return [...currentEvents, ...nextEvents];
 }
