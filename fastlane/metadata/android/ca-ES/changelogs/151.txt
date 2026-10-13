@@ -1,0 +1,5 @@
+Mides i estil de text coherents als botons d’acció.
+Espaiat més equilibrat a la configuració inicial.
+Controls del Programa centrats i llistes completes compactes.
+Menys desplaçaments innecessaris als taulers SBD.
+El calendari inclou la resta del cicle i un cicle següent provisional. La previsió s’adapta; els esdeveniments eliminats manualment continuen eliminats.

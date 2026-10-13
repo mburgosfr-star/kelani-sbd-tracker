@@ -1,0 +1,5 @@
+Consistent action button sizes and text styling.
+Balanced Onboarding spacing.
+Centred Program controls and compact full-cycle lists.
+Less unnecessary scrolling on SBD dashboards.
+Calendar planning now includes the remaining cycle and one provisional next cycle. Forecasts adapt to results and settings; manually deleted events stay deleted.

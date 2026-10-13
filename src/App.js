@@ -3813,10 +3813,11 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewWorkoutFocusItem,
-    t.whatsNewCompletionVisibilityItem,
-    t.whatsNewRecoveryPreviewItem,
-    t.whatsNewRenderingItem,
+    t.whatsNewActionButtonsItem,
+    t.whatsNewOnboardingSpacingItem,
+    t.whatsNewProgramListItem,
+    t.whatsNewDashboardSpacingItem,
+    t.whatsNewCalendarForecastItem,
   ];
 
   return (
