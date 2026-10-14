@@ -29,6 +29,7 @@ function normalizeEventMapping(mapping) {
     reminderMinutes: Math.max(0, Number(mapping.reminderMinutes) || 0),
     ...(mapping.provisional === true ? { provisional: true } : {}),
     ...(mapping.identityVerified === true ? { identityVerified: true } : {}),
+    ...(mapping.duplicateReconciliationVersion === 2 ? { duplicateReconciliationVersion: 2 } : {}),
   };
 }
 
@@ -177,7 +178,12 @@ export function buildCalendarEventSpecs({
 
 // Calendar-only forecast. Never append these workouts to the active program.
 export function buildCalendarPlanningEventSpecs({ nextCycleWorkouts = [], provisionalTitleTemplate, ...options } = {}) {
-  const currentEvents = buildCalendarEventSpecs(options);
+  const alternateTitle = (template, event) => template
+    ? String(template).replace('{cycle}', String(event.cycleId)).replace('{workout}', String(event.workoutId))
+    : undefined;
+  const currentEvents = buildCalendarEventSpecs(options).map(event => ({
+    ...event, ...(provisionalTitleTemplate ? { alternateTitle: alternateTitle(provisionalTitleTemplate, event) } : {}),
+  }));
   const todayKey = parseWorkoutDateKey(options.today || new Date());
   const cycleDates = (options.scheduleDateKeys || []).map(parseWorkoutDateKey).filter(Boolean);
   if (!todayKey || !cycleDates.length || !nextCycleWorkouts.length) return currentEvents;
@@ -190,6 +196,6 @@ export function buildCalendarPlanningEventSpecs({ nextCycleWorkouts = [], provis
     currentIndex: 0,
     currentCycle: Number(options.currentCycle) + 1,
     titleTemplate: provisionalTitleTemplate,
-  }).map(event => ({ ...event, provisional: true }));
+  }).map(event => ({ ...event, provisional: true, alternateTitle: alternateTitle(options.titleTemplate, event) }));
   return [...currentEvents, ...nextEvents];
 }

@@ -3,6 +3,14 @@ package com.kelani.sbdtracker;
 final class CalendarEventIdentity {
     private CalendarEventIdentity() {}
 
+    static boolean sameGeneratedTitle(String retained, String candidate, String expected, String alternate) {
+        if (retained == null || candidate == null) return false;
+        if (retained.equals(candidate)) return true;
+        return alternate != null && expected != null
+            && (retained.equals(expected) || retained.equals(alternate))
+            && (candidate.equals(expected) || candidate.equals(alternate));
+    }
+
     static int eventStatus(long actualCalendarId, long expectedCalendarId,
                            String description, String expectedMarker, boolean deleted) {
         if (deleted) return -1;

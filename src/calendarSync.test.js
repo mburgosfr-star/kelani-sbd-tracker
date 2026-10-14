@@ -308,3 +308,23 @@ test('reconciles legacy provisional identities once while preserving calendar ti
     desiredEvents: [provisional], today, upsertEvent, deleteEvent: vi.fn() });
   expect(upsertEvent).toHaveBeenCalledTimes(1);
 });
+
+test('rechecks an already verified linked event once for provisional-title duplicates without changing its manual title or timing', async () => {
+  const planned = { ...event, alternateTitle: 'Kelani workout (provisional) · C6W27' };
+  const mapping = { ...event, calendarId: '7', eventId: '42', syncedDate: event.dateKey,
+    reminderInitialized: true, identityVerified: true };
+  const upsertEvent = vi.fn().mockResolvedValue('42');
+  const ensureReminder = vi.fn();
+  const deleteEvent = vi.fn();
+  const result = await syncWorkoutCalendar({ settings: { ...settings, eventMappings: [mapping] },
+    desiredEvents: [planned], today, upsertEvent, ensureReminder, deleteEvent });
+  expect(upsertEvent).toHaveBeenCalledWith(expect.objectContaining({
+    eventId: '42', alternateTitle: planned.alternateTitle, preserveTiming: true, preserveTitle: true,
+  }));
+  expect(result.mappings[0].duplicateReconciliationVersion).toBe(2);
+  expect(ensureReminder).not.toHaveBeenCalled();
+  expect(deleteEvent).not.toHaveBeenCalled();
+  await syncWorkoutCalendar({ settings: { ...settings, eventMappings: result.mappings },
+    desiredEvents: [planned], today, upsertEvent, ensureReminder, deleteEvent });
+  expect(upsertEvent).toHaveBeenCalledTimes(1);
+});

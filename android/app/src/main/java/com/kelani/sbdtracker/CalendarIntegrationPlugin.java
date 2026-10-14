@@ -155,7 +155,21 @@ public class CalendarIntegrationPlugin extends Plugin {
                 }
             }
             ContentValues values = new ContentValues();
-            values.put(Events.TITLE, title);
+            boolean preserveTitle = Boolean.TRUE.equals(call.getBoolean("preserveTitle", false))
+                && eventIdText != null && !eventIdText.isEmpty();
+            if (preserveTitle) {
+                try (Cursor cursor = getContext().getContentResolver().query(
+                    ContentUris.withAppendedId(Events.CONTENT_URI, Long.parseLong(eventIdText)),
+                    new String[] { Events.TITLE }, null, null, null
+                )) {
+                    // Repair a stale generated provisional label, while leaving
+                    // a user's custom title intact during identity reconciliation.
+                    if (cursor == null) throw new IllegalStateException("Could not read workout title");
+                    if (cursor.moveToFirst()) preserveTitle = !CalendarEventIdentity.sameGeneratedTitle(
+                        cursor.getString(0), title, title, call.getString("alternateTitle"));
+                }
+            }
+            if (!preserveTitle) values.put(Events.TITLE, title);
             values.put(Events.DESCRIPTION, marker);
             // Removing a provisional label alone must preserve manually moved events.
             boolean preserveTiming = Boolean.TRUE.equals(call.getBoolean("preserveTiming", false))
@@ -204,7 +218,7 @@ public class CalendarIntegrationPlugin extends Plugin {
                 }
             }
 
-            removeIdenticalManagedDuplicates(eventId, calendarId, marker);
+            removeIdenticalManagedDuplicates(eventId, calendarId, marker, title, call.getString("alternateTitle"));
             JSObject result = new JSObject();
             result.put("eventId", String.valueOf(eventId));
             call.resolve(result);
@@ -228,7 +242,7 @@ public class CalendarIntegrationPlugin extends Plugin {
         return signature.toString();
     }
 
-    private void removeIdenticalManagedDuplicates(long retainedId, long calendarId, String marker) {
+    private void removeIdenticalManagedDuplicates(long retainedId, long calendarId, String marker, String expectedTitle, String alternateTitle) {
         String title;
         long start;
         long end;
@@ -244,16 +258,19 @@ public class CalendarIntegrationPlugin extends Plugin {
         String reminders = reminderSignature(retainedId);
         ArrayList<Long> duplicates = new ArrayList<>();
         try (Cursor cursor = getContext().getContentResolver().query(
-            Events.CONTENT_URI, new String[] { Events._ID },
+            Events.CONTENT_URI, new String[] { Events._ID, Events.TITLE },
             Events.CALENDAR_ID + "=? AND " + Events.DESCRIPTION + "=? AND " + Events.DELETED + "=0 AND " +
-                Events._ID + "<>? AND " + Events.TITLE + "=? AND " + Events.DTSTART + "=? AND " + Events.DTEND + "=?",
-            new String[] { String.valueOf(calendarId), marker, String.valueOf(retainedId), title,
+                Events._ID + "<>? AND " + Events.DTSTART + "=? AND " + Events.DTEND + "=?",
+            new String[] { String.valueOf(calendarId), marker, String.valueOf(retainedId),
                 String.valueOf(start), String.valueOf(end) }, null
         )) {
             if (cursor == null) throw new IllegalStateException("Could not check duplicate workout events");
-            while (cursor.moveToNext()) duplicates.add(cursor.getLong(0));
+            while (cursor.moveToNext()) {
+                if (CalendarEventIdentity.sameGeneratedTitle(title, cursor.getString(1), expectedTitle, alternateTitle))
+                    duplicates.add(cursor.getLong(0));
+            }
         }
-        // Preserve copies whose timing, title or reminders differ: they may
+        // Preserve copies whose timing, custom title or reminders differ: they may
         // contain deliberate manual changes. Delete only exact managed copies.
         for (long duplicateId : duplicates) {
             if (reminders.equals(reminderSignature(duplicateId))) {

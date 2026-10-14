@@ -9,6 +9,19 @@ public class CalendarEventIdentityTest {
     private static final String MARKER = "Kelani SBD Tracker event v1: 8:12";
 
     @Test
+    public void onlyGeneratedProvisionalAndCurrentTitlesAreEquivalent() {
+        String current = "Kelani workout · C6W27";
+        String provisional = "Kelani workout (provisional) · C6W27";
+        assertTrue(CalendarEventIdentity.sameGeneratedTitle(current, provisional, current, provisional));
+        assertTrue(CalendarEventIdentity.sameGeneratedTitle(provisional, current, current, provisional));
+        assertTrue(CalendarEventIdentity.sameGeneratedTitle(current, current, current, null));
+        assertFalse(CalendarEventIdentity.sameGeneratedTitle("My renamed meet", provisional, current, provisional));
+        assertFalse(CalendarEventIdentity.sameGeneratedTitle(current, "My renamed meet", current, provisional));
+        assertFalse(CalendarEventIdentity.sameGeneratedTitle(current, "Kelani workout · C6W28", current, provisional));
+        assertFalse(CalendarEventIdentity.sameGeneratedTitle(current, provisional, current, null));
+    }
+
+    @Test
     public void deletedProviderRowsAreMissingEvenWhenTheirMarkerStillMatches() {
         assertEquals(-1, CalendarEventIdentity.eventStatus(7, 7, MARKER + " ", MARKER, true));
         assertEquals(1, CalendarEventIdentity.eventStatus(7, 7, MARKER + " ", MARKER, false));
