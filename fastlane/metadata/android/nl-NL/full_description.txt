@@ -26,6 +26,7 @@ Functies:
 - Ervaren inspanning bijhouden per set en per voltooide workout
 - Oefeningalternatieven voor periodes met minder belasting
 - Lokale data-export en -import
+- Na een voltooide cyclus zie je de resultaten, vooruitgang sinds het begin en een grafiek van je beste geregistreerde 1RM-totaal
 - Optioneel toekomstige workouts synchroniseren met een gekozen Android-agenda nadat je toegang geeft en de eerste synchronisatie start
 - Agendaplanning omvat de resterende huidige cyclus en één voorlopige volgende cyclus; de verwachting kan veranderen
 - Optioneel Kelani-agenda-afspraken verwijderen wanneer workouts in de app zijn voltooid

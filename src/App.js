@@ -1,3 +1,4 @@
+import CycleCompletedScreen from './CycleCompletedScreen';
 import { getSmartIntensityRole, roundBarbellWeight } from './smartFrequencyPolicy';
 import { roundPercent } from './smartPrescriptionEngine';
 import {
@@ -3819,6 +3820,8 @@ export function WhatsNewModal({
     t.whatsNewProgramListItem,
     t.whatsNewDashboardSpacingItem,
     t.whatsNewCalendarForecastItem,
+    t.whatsNewCycleReviewItem,
+    t.whatsNewNavigationItem,
   ];
 
   return (
@@ -13046,10 +13049,7 @@ function App() {
     }
   }, []);
 
-  useEffect(() => {
-    if (!hasLoadedData || !prs.Squat || !prs.Bench || !prs.Deadlift) return;
-
-    const storedData = {
+  const storedData = useMemo(() => ({
       version: 1,
       history,
       prs,
@@ -13084,7 +13084,12 @@ function App() {
         selectedIndex,
         workouts,
       },
-    };
+  }), [history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, workoutSetup, trainingFocus, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, showWhatsNewAfterUpdates, checkForUpdatesAutomatically, calendarIntegration, selectedIndex, workouts]);
+
+  // Screen navigation changes no training data. Keep serialization and the
+  // synchronous storage write separate from completion-triggered backups.
+  useEffect(() => {
+    if (!hasLoadedData || !storedData.prs.Squat || !storedData.prs.Bench || !storedData.prs.Deadlift) return;
 
     // Older web builds duplicated the complete backup in localStorage. That
     // mirror can consume several megabytes alongside the canonical record
@@ -13093,6 +13098,10 @@ function App() {
     // automatic backup files are a native-only feature.
     removeLegacyBrowserAutomaticBackup(localStorage);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(storedData));
+  }, [hasLoadedData, storedData]);
+
+  useEffect(() => {
+    if (!hasLoadedData || !storedData.prs.Squat || !storedData.prs.Bench || !storedData.prs.Deadlift) return;
 
     if (Capacitor.isNativePlatform() && !automaticBackupStartupAttemptedRef.current) {
       automaticBackupStartupAttemptedRef.current = true;
@@ -13145,7 +13154,7 @@ function App() {
         });
       }
     }
-  }, [hasLoadedData, history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, workoutSetup, trainingFocus, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, showWhatsNewAfterUpdates, checkForUpdatesAutomatically, calendarIntegration, selectedIndex, workouts, screen, completedWorkout, completedWorkoutIndex]);
+  }, [hasLoadedData, storedData, currentCycle, currentIndex, history.length, screen, completedWorkout, completedWorkoutIndex]);
 
   useEffect(() => {
     if (!hasLoadedData || showLaunchSplash || showWhatsNew) return;
@@ -13340,7 +13349,8 @@ function App() {
   }, [hasLoadedData, trainingModel, selectedIndex, currentIndex]);
 
   useEffect(() => {
-    if (!hasLoadedData) return;
+    // Keep the finished cycle available for its review. Navigation starts the next one.
+    if (!hasLoadedData || screen === 'completed') return;
 
     const transition = buildAutomaticNextSmartCycle({
       trainingModel,
@@ -17215,7 +17225,22 @@ const screenAllowsContentScroll =
 
 </div>
       )}
-    {screen === 'completed' && (
+    {screen === 'completed' && completedWorkoutCanStartNewCycle && (
+      <CycleCompletedScreen
+        history={history}
+        currentCycle={currentCycle}
+        t={t}
+        weightUnit={weightUnit}
+        theme={THEME}
+        header={<CompletedScreenHeader title={t.cycleCompleted} message={t.cycleCompletedSaved} />}
+        containerStyle={completedWorkoutScreenStyle()}
+        contentStyle={scrollableScreenContentStyle()}
+        buttonStyle={compactModalActionButtonStyle}
+        onSupport={() => window.open('https://github.com/sponsors/mburgosfr-star', '_blank', 'noopener,noreferrer')}
+        onFeedback={() => window.open(buildCycleFeedbackEmailUrl({ t, language, appVersion: import.meta.env.VITE_APP_VERSION || 'dev' }), '_blank', 'noopener,noreferrer')}
+      />
+    )}
+    {screen === 'completed' && !completedWorkoutCanStartNewCycle && (
   <div style={completedWorkoutScreenStyle()}>
       {completedWorkout?.type !== 'rest' && (
         <CompletedScreenHeader

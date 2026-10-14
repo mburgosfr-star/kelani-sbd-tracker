@@ -26,6 +26,7 @@ Features:
 - Perceived effort tracking for sets and completed workouts
 - Exercise alternatives for lower-stress training periods
 - Local data export and import
+- Completed cycles include a results review, progress since the start and a chart of your best recorded 1RM total
 - Optional sync of future workouts to a selected Android calendar after you grant calendar access and start the first sync
 - Calendar planning includes the remaining current cycle and one provisional next cycle; the forecast can change
 - Optionally remove Kelani calendar events when workouts are completed in the app

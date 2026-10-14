@@ -86,3 +86,13 @@ body,
     50% { opacity: 0.85; }
   }
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  .kelani-cycle-review {
+    animation: kelaniCycleReveal 450ms ease-out both;
+  }
+  @keyframes kelaniCycleReveal {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
