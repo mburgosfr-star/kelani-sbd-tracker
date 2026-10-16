@@ -40,3 +40,10 @@ export async function ensureDeviceWorkoutEventReminder(mapping) {
   if (!isNativeCalendarAvailable()) throw new Error('Calendar unavailable');
   await CalendarIntegration.ensureWorkoutEventReminder(mapping);
 }
+
+export async function getManagedDeviceWorkoutEvents({ calendarId, fromMillis }) {
+  if (!isNativeCalendarAvailable()) throw new Error('Calendar unavailable');
+  const result = await CalendarIntegration.getManagedWorkoutEvents({ calendarId, fromMillis });
+  if (!Array.isArray(result?.events)) throw new Error('Could not read managed workout events');
+  return result.events;
+}

@@ -93,6 +93,55 @@ public class CalendarIntegrationPlugin extends Plugin {
         }
     }
 
+    @PluginMethod
+    public void getManagedWorkoutEvents(PluginCall call) {
+        if (getPermissionState("calendar") != PermissionState.GRANTED) {
+            call.reject("Calendar permission is required", "PERMISSION_DENIED");
+            return;
+        }
+        try {
+            String calendarIdText = call.getString("calendarId");
+            Double fromMillis = call.getDouble("fromMillis");
+            if (calendarIdText == null || fromMillis == null || !Double.isFinite(fromMillis)) {
+                call.reject("Invalid calendar lookup", "INVALID_EVENT");
+                return;
+            }
+            long calendarId = Long.parseLong(calendarIdText);
+            if (!isWritableCalendar(calendarId)) {
+                call.reject("Selected calendar is not writable", "CALENDAR_UNAVAILABLE");
+                return;
+            }
+            JSArray events = new JSArray();
+            try (Cursor cursor = getContext().getContentResolver().query(
+                Events.CONTENT_URI,
+                new String[] { Events._ID, Events.DESCRIPTION, Events.TITLE, Events.DTSTART },
+                Events.CALENDAR_ID + "=? AND " + Events.DELETED + "=0 AND " + Events.DTSTART + ">=? AND " + Events.DESCRIPTION + " LIKE ?",
+                new String[] { String.valueOf(calendarId), String.valueOf(fromMillis.longValue()), "%" + EVENT_MARKER_PREFIX + "%" }, null
+            )) {
+                if (cursor == null) throw new IllegalStateException("Could not read managed workout events");
+                while (cursor.moveToNext()) {
+                    int[] identity = CalendarEventIdentity.parseWorkoutMarker(cursor.getString(1));
+                    if (identity == null) continue;
+                    JSObject event = new JSObject();
+                    event.put("eventId", String.valueOf(cursor.getLong(0)));
+                    event.put("calendarId", String.valueOf(calendarId));
+                    event.put("cycleId", identity[0]);
+                    event.put("workoutId", identity[1]);
+                    event.put("title", cursor.getString(2));
+                    event.put("startMillis", cursor.getLong(3));
+                    events.put(event);
+                }
+            }
+            JSObject result = new JSObject();
+            result.put("events", events);
+            call.resolve(result);
+        } catch (SecurityException error) {
+            call.reject("Calendar permission is required", "PERMISSION_DENIED", error);
+        } catch (Exception error) {
+            call.reject("Could not read managed workout events", "READ_FAILED", error);
+        }
+    }
+
     private boolean isWritableCalendar(long calendarId) {
         String[] projection = new String[] { Calendars._ID };
         String selection = Calendars._ID + "=? AND " + Calendars.CALENDAR_ACCESS_LEVEL + ">=? AND " + Calendars.VISIBLE + "=1";

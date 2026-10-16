@@ -1,6 +1,7 @@
 import { projectNextSmartCalendarCycle } from './smartTrainingEngine';
 import {
   DEFAULT_CALENDAR_START_TIME,
+  getCalendarRestWorkoutKeys,
   buildCalendarEventSpecs,
   buildCalendarPlanningEventSpecs,
   countPlannedWorkoutSets,
@@ -176,4 +177,11 @@ test.each(['standard', 'practical'])('forecasts a complete next cycle using the 
   expect(specs.every(event => event.cycleId === 6 && event.provisional)).toBe(true);
   expect(specs[0].dateKey).toBe('2026-10-14');
   expect(specs.at(-1).workoutId).toBe(nextCycleWorkouts.find(workout => workout.type === 'meet').number);
+});
+
+test('rest identities cover only explicit rest days in the current and forecast cycles', () => {
+  expect([...getCalendarRestWorkoutKeys({ currentCycle: 8,
+    workouts: [{ number: 12, type: 'rest' }, { number: 13, type: 'meet' }],
+    nextCycleWorkouts: [{ number: 1, type: 'training' }, { number: 2, type: 'rest' }],
+  })]).toEqual(['8:12', '9:2']);
 });

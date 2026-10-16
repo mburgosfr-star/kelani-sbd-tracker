@@ -186,6 +186,7 @@ import {
 } from './workoutScheduleDates';
 import {
   buildCalendarPlanningEventSpecs,
+  getCalendarRestWorkoutKeys,
   getCompletedCalendarWorkoutKeys,
   createCalendarIntegrationSettings,
   normalizeCalendarIntegrationSettings,
@@ -196,6 +197,7 @@ import {
   ensureDeviceWorkoutEventReminder,
   getCalendarPermissionState,
   getWritableDeviceCalendars,
+  getManagedDeviceWorkoutEvents,
   isNativeCalendarAvailable,
   requestCalendarPermission,
   upsertDeviceWorkoutEvent,
@@ -12660,6 +12662,11 @@ function App() {
           upsertEvent: upsertDeviceWorkoutEvent,
           deleteEvent: deleteDeviceWorkoutEvent,
           ensureReminder: ensureDeviceWorkoutEventReminder,
+          readManagedEvents: getManagedDeviceWorkoutEvents,
+          restWorkoutKeys: getCalendarRestWorkoutKeys({ workouts, currentCycle, nextCycleWorkouts: nextCycleCalendarWorkouts }),
+          generatedTitleTemplates: Object.values(translations).flatMap(language => [
+            language.calendarEventTitle, language.calendarProvisionalEventTitle,
+          ]),
           onProgress: eventMappings => {
             calendarIntegrationRef.current = { ...calendarIntegrationRef.current, eventMappings };
             setCalendarIntegration(prev => ({ ...prev, eventMappings }));

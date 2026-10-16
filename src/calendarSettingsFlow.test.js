@@ -12,6 +12,7 @@ vi.mock('./calendarNative', () => ({
   isNativeCalendarAvailable: () => true,
   getCalendarPermissionState: calendarMocks.permission,
   requestCalendarPermission: async () => 'granted',
+  getManagedDeviceWorkoutEvents: async () => [],
   getWritableDeviceCalendars: async () => [
     { id: '7', name: 'Training', accountName: 'local' },
   ],

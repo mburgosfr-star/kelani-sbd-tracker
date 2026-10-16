@@ -328,3 +328,48 @@ test('rechecks an already verified linked event once for provisional-title dupli
     desiredEvents: [planned], today, upsertEvent, ensureReminder, deleteEvent });
   expect(upsertEvent).toHaveBeenCalledTimes(1);
 });
+
+test('removes an unmapped forecast event when its workout has become a rest day', async () => {
+  const orphan = { calendarId: '7', eventId: '90', cycleId: 8, workoutId: 12,
+    title: 'Kelani workout (provisional) · C8W12', startMillis: event.startMillis };
+  const readManagedEvents = vi.fn().mockResolvedValue([orphan]);
+  const deleteEvent = vi.fn().mockResolvedValue(undefined);
+  const options = { settings, today, desiredEvents: [event], readManagedEvents,
+    restWorkoutKeys: new Set(['8:12']),
+    generatedTitleTemplates: ['Kelani workout · C{cycle}W{workout}', 'Kelani workout (provisional) · C{cycle}W{workout}'],
+    upsertEvent: vi.fn().mockResolvedValue('42'), deleteEvent };
+  const first = await syncWorkoutCalendar(options);
+  expect(first.removed).toBe(1);
+  expect(deleteEvent).toHaveBeenCalledWith({ calendarId: '7', eventId: '90', cycleId: 8, workoutId: 12 });
+  readManagedEvents.mockResolvedValue([]);
+  const second = await syncWorkoutCalendar({ ...options, settings: { ...settings, eventMappings: first.mappings } });
+  expect(second.removed).toBe(0);
+  expect(deleteEvent).toHaveBeenCalledTimes(1);
+});
+
+test('orphan cleanup preserves past, custom, unknown, desired and other-calendar events', async () => {
+  const orphan = { calendarId: '7', eventId: '90', cycleId: 8, workoutId: 12,
+    title: 'Kelani workout · C8W12', startMillis: event.startMillis };
+  const deleteEvent = vi.fn();
+  await syncWorkoutCalendar({ settings, today, desiredEvents: [event],
+    restWorkoutKeys: new Set(['8:12', '5:18']),
+    generatedTitleTemplates: ['Kelani workout · C{cycle}W{workout}'],
+    readManagedEvents: async () => [
+      { ...orphan, startMillis: new Date(2026, 8, 30).getTime() },
+      { ...orphan, title: 'My own appointment' },
+      { ...orphan, cycleId: 9 },
+      { ...orphan, calendarId: '8' },
+      { ...orphan, cycleId: event.cycleId, workoutId: event.workoutId, title: event.title },
+    ], upsertEvent: async () => '42', deleteEvent });
+  expect(deleteEvent).not.toHaveBeenCalled();
+});
+
+test('provider failure during orphan discovery is reported without deleting or creating events', async () => {
+  const deleteEvent = vi.fn();
+  const upsertEvent = vi.fn();
+  await expect(syncWorkoutCalendar({ settings, today, desiredEvents: [event],
+    restWorkoutKeys: new Set(['8:12']), readManagedEvents: async () => { throw new Error('Provider unavailable'); },
+    deleteEvent, upsertEvent })).rejects.toThrow('Provider unavailable');
+  expect(deleteEvent).not.toHaveBeenCalled();
+  expect(upsertEvent).not.toHaveBeenCalled();
+});

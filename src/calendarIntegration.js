@@ -199,3 +199,12 @@ export function buildCalendarPlanningEventSpecs({ nextCycleWorkouts = [], provis
   }).map(event => ({ ...event, provisional: true, alternateTitle: alternateTitle(options.titleTemplate, event) }));
   return [...currentEvents, ...nextEvents];
 }
+
+// Include rest days explicitly: an old forecast can still contain a training
+// event for this identity after recovery changes the route.
+export function getCalendarRestWorkoutKeys({ workouts = [], currentCycle, nextCycleWorkouts = [] } = {}) {
+  return new Set([
+    ...workouts.filter(workout => workout?.type === 'rest').map(workout => `${Number(currentCycle)}:${Number(workout.number)}`),
+    ...nextCycleWorkouts.filter(workout => workout?.type === 'rest').map(workout => `${Number(currentCycle) + 1}:${Number(workout.number)}`),
+  ]);
+}

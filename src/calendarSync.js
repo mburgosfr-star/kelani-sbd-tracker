@@ -13,6 +13,9 @@ export async function syncWorkoutCalendar({
   upsertEvent,
   deleteEvent,
   ensureReminder,
+  readManagedEvents,
+  restWorkoutKeys = new Set(),
+  generatedTitleTemplates = [],
   onProgress = () => {},
 }) {
   const normalized = normalizeCalendarIntegrationSettings(settings);
@@ -34,6 +37,31 @@ export async function syncWorkoutCalendar({
   function recordProgress(nextMappings) {
     mappings = nextMappings;
     onProgress([...mappings]);
+  }
+
+  // A legacy forecast may have left events with no saved mapping. Only reclaim
+  // generated events for identities explicitly known to be rest days now.
+  if (normalized.enabled && readManagedEvents && restWorkoutKeys.size) {
+    const dayStart = new Date(`${todayKey}T00:00:00`).getTime();
+    const providerEvents = await readManagedEvents({ calendarId: normalized.calendarId, fromMillis: dayStart });
+    for (const event of providerEvents) {
+      const key = workoutKey(event.cycleId, event.workoutId);
+      if (String(event.calendarId) !== normalized.calendarId ||
+        !restWorkoutKeys.has(key) || desiredByKey.has(key) ||
+        !Number.isFinite(event.startMillis) || event.startMillis < dayStart ||
+        mappings.some(mapping => String(mapping.eventId) === String(event.eventId) &&
+          (mapping.calendarId || normalized.calendarId) === normalized.calendarId) ||
+        !generatedTitleTemplates.some(template => String(template)
+          .replace('{cycle}', String(event.cycleId))
+          .replace('{workout}', String(event.workoutId)) === event.title)) continue;
+      try {
+        await deleteEvent({ calendarId: normalized.calendarId, eventId: String(event.eventId),
+          cycleId: event.cycleId, workoutId: event.workoutId });
+        removed += 1;
+      } catch (error) {
+        if (error?.code !== 'EVENT_NOT_FOUND') throw error;
+      }
+    }
   }
 
   for (const mapping of [...mappings]) {

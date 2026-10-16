@@ -3,6 +3,18 @@ package com.kelani.sbdtracker;
 final class CalendarEventIdentity {
     private CalendarEventIdentity() {}
 
+    static int[] parseWorkoutMarker(String description) {
+        if (description == null) return null;
+        java.util.regex.Matcher match = java.util.regex.Pattern.compile(
+            "^Kelani SBD Tracker event v1: ([1-9][0-9]*):([1-9][0-9]*)$").matcher(description.trim());
+        if (!match.matches()) return null;
+        try {
+            return new int[] { Integer.parseInt(match.group(1)), Integer.parseInt(match.group(2)) };
+        } catch (NumberFormatException error) {
+            return null;
+        }
+    }
+
     static boolean sameGeneratedTitle(String retained, String candidate, String expected, String alternate) {
         if (retained == null || candidate == null) return false;
         if (retained.equals(candidate)) return true;

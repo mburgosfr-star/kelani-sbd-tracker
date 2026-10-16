@@ -9,6 +9,14 @@ public class CalendarEventIdentityTest {
     private static final String MARKER = "Kelani SBD Tracker event v1: 8:12";
 
     @Test
+    public void parsesOnlyExactManagedWorkoutMarkers() {
+        org.junit.Assert.assertArrayEquals(new int[] {8, 12}, CalendarEventIdentity.parseWorkoutMarker(MARKER + "\n "));
+        for (String value : new String[] { null, "", "Copied " + MARKER, MARKER + " extra", "Kelani SBD Tracker event v1: 0:12", "Kelani SBD Tracker event v1: 99999999999:1" }) {
+            org.junit.Assert.assertNull(CalendarEventIdentity.parseWorkoutMarker(value));
+        }
+    }
+
+    @Test
     public void onlyGeneratedProvisionalAndCurrentTitlesAreEquivalent() {
         String current = "Kelani workout · C6W27";
         String provisional = "Kelani workout (provisional) · C6W27";
