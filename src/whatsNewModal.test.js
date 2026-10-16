@@ -31,6 +31,10 @@ describe('WhatsNewModal', () => {
     expect(screen.getByText(translations.en.whatsNewCycleReviewItem)).toBeInTheDocument();
     expect(screen.getByText(translations.en.whatsNewNavigationItem)).toBeInTheDocument();
 
+    expect(screen.getByText(translations.en.whatsNewWorkoutGridItem)).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewWorkoutPreviewItem)).toBeInTheDocument();
+    expect(screen.getByText(translations.en.whatsNewWorkoutFeedbackItem)).toBeInTheDocument();
+
     const checkbox = screen.getByLabelText(
       translations.en.whatsNewShowAutomatically
     );
