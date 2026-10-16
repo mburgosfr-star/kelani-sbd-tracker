@@ -1,3 +1,4 @@
+import { WORKOUT_VOLUME_MIN_SETS, WORKOUT_VOLUME_MAX_SETS } from './workoutGridPolicy';
 import {
   SMART_PRIMARY_BACKOFF_MAX_PCT,
   MEET_ATTEMPT_PCTS,
@@ -326,7 +327,7 @@ function findSuccessfulVolumeBlock(sets = [], trainingMax = 0) {
       const isExplicitVolumeSet = VOLUME_LABEL_KEYS.has(labelKey);
       const isUnlabeledVolumeSet =
         !TOP_LABEL_KEYS.has(labelKey) &&
-        reps >= 4;
+        reps >= 3;
 
       if (
         !isExplicitVolumeSet &&
@@ -632,7 +633,7 @@ export function buildSmartLiftState({
       exposure.sets,
       trainingMax
     ))
-    .filter(block => block && Number(block.setCount) >= 4);
+    .filter(block => block && Number(block.setCount) >= 1);
 
   const highestRecentSuccessfulVolumePct = Math.max(
     0,
@@ -993,8 +994,8 @@ function getNormalVolumeSetCount(state = {}) {
 }
 
 function getPrimaryVolumeReps(topReps) {
-  if (topReps === 3) return 5;
-  return 4;
+  if (topReps === 3) return 4;
+  return 3;
 }
 
 function getSecondaryVolumePct(state = {}) {
@@ -1046,7 +1047,7 @@ export function buildSmartLiftPrescription({
   let volumeSetCount = getNormalVolumeSetCount(state);
 
   if (isSingleLiftWorkout) {
-    volumeSetCount = 6;
+    volumeSetCount = 5;
   } else if (isMixedLiftWorkout) {
     volumeSetCount = 3;
   }
@@ -1228,7 +1229,7 @@ export function buildSmartLiftPrescription({
 
     if (state.meetReadiness?.readinessPhase === 'ready') {
       volumePct = Math.min(volumePct, 0.70);
-      volumeReps = 4;
+      volumeReps = 3;
     }
 
     const singleLiftBenchVolume =
@@ -1238,15 +1239,13 @@ export function buildSmartLiftPrescription({
       Number(state.recentFailedOrSkippedSetCount) === 0;
 
     if (singleLiftBenchVolume) {
-      volumeSetCount = 6;
-      volumeReps = 6;
+      volumeSetCount = 5;
+      volumeReps = 5;
       volumePct = Math.min(volumePct, 0.70);
     }
 
     if (meetSpecificProgression && !isSingleLiftWorkout) {
-      // The heavier meet-specific top set already adds stimulus. On a
-      // mixed-lift day, three back-off sets preserve progression without
-      // leaving a visually incomplete four-item grid or overloading the day.
+      // The shared grid policy finalizes the volume count after warm-ups.
       volumeSetCount = 3;
     }
 
@@ -1266,8 +1265,8 @@ export function buildSmartLiftPrescription({
     const volumePct = getSecondaryVolumePct(state);
     plannedVolumePct = volumePct;
     const previousReps =
-      Number(state.lastSuccessfulVolume?.reps) || 5;
-    const volumeReps = clamp(previousReps, 4, 6);
+      Number(state.lastSuccessfulVolume?.reps) || 4;
+    const volumeReps = clamp(previousReps, 3, 5);
 
     for (let index = 0; index < volumeSetCount; index += 1) {
       sets.push(buildGeneratedSet({
@@ -1347,33 +1346,17 @@ export function validateSmartLiftPrescription(
     );
   }
 
-  const allowsThreeSetVolumeBlock = Boolean(
-    prescription.isMixedLiftWorkout ||
-    (
-      prescription.role === 'primary' &&
-      prescription.meetSpecificProgression
-    )
-  );
-
   volumeGroups.forEach(group => {
-    const validSetCount =
-      (group.length >= 4 && group.length <= 6) ||
-      (allowsThreeSetVolumeBlock && group.length === 3);
-
-    if (!validSetCount) {
-      errors.push(
-        allowsThreeSetVolumeBlock
-          ? 'Mixed or meet-specific volume blocks require 3–6 sets.'
-          : 'Back-off and work-set blocks require 4–6 sets.'
-      );
+    if (group.length < WORKOUT_VOLUME_MIN_SETS || group.length > WORKOUT_VOLUME_MAX_SETS) {
+      errors.push('Back-off and work-set blocks require 1–5 sets.');
     }
 
     group.forEach(set => {
       const reps = Number(set.reps) || 0;
 
-      if (reps < 4 || reps > 6) {
+      if (reps < 3 || reps > 5) {
         errors.push(
-          'Back-off and work-set blocks require 4–6 reps.'
+          'Back-off and work-set blocks require 3–5 reps.'
         );
       }
     });

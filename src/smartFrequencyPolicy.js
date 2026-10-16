@@ -755,7 +755,7 @@ function normalizeSupplementalHeavyLiftBlock(liftBlock, realTrainingMax = 0) {
         suffix: `${liftSlug}-volume-${index + 1}`,
         labelKey: 'backoff',
         groupKey: `${liftSlug}-frequency-backoff`,
-        reps: 5,
+        reps: 4,
         pct: volumePct,
         weight: volumeWeight,
       },

@@ -110,7 +110,7 @@ export function generateSquatHomeAlternativeSets(oneRMs = {}) {
   return Array.from({ length: 4 }, () => makeWorkoutSet({
     labelKey: 'squatAlternativeZercherSquat',
     groupKey: 'squatAlternativeZercherSquat',
-    reps: 6,
+    reps: 5,
     weight: zercherSquatWeight,
   }));
 }
@@ -148,7 +148,7 @@ export function generateBenchHomeAlternativeSets(oneRMs = {}) {
   return Array.from({ length: 4 }, () => makeWorkoutSet({
     labelKey: 'benchHomeAlternativeShoulderPress',
     groupKey: 'benchHomeAlternativeShoulderPress',
-    reps: 6,
+    reps: 5,
     weight: shoulderPressWeight,
   }));
 }

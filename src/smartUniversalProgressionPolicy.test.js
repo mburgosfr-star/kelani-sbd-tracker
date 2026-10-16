@@ -166,7 +166,7 @@ test('beginner Squat stimulus progresses beyond C1W11 even when C1W15 has anothe
   );
 
   expect(
-    (finalWarmups.length + completedSets.length) % 4
+    (finalWarmups.length + completedSets.length) % 5
   ).toBe(0);
 });
 
@@ -376,7 +376,7 @@ test('beginner Deadlift stimulus progresses beyond C1W9 at C1W14', () => {
   );
 
   expect(
-    (finalWarmups.length + completedSets.length) % 4
+    (finalWarmups.length + completedSets.length) % 5
   ).toBe(0);
 });
 

@@ -1,3 +1,4 @@
+import { WORKOUT_GRID_COLUMNS } from './workoutGridPolicy';
 import CycleCompletedScreen from './CycleCompletedScreen';
 import { getSmartIntensityRole, roundBarbellWeight } from './smartFrequencyPolicy';
 import { roundPercent } from './smartPrescriptionEngine';
@@ -1897,13 +1898,12 @@ export function programHeaderStyle() {
 export function programWorkoutCardSpacingStyle({ compact = false } = {}) {
   return {
     padding: compact
-      // Keep short viewports at the proven compact minimum, but let tall
-      // screens use their spare height instead of leaving the centered list
-      // visibly compressed between its two toggle buttons.
-      ? 'clamp(4px, calc(1.75dvh - 8.25px), 7px) clamp(12px, 3vw, 16px)'
+      // The list distributes spare height. Keep card padding independent
+      // of viewport height so it cannot consume the lower control's space.
+      ? '4px clamp(12px, 3vw, 16px)'
       : 'clamp(9px, 1.2dvh, 12px) clamp(12px, 3vw, 16px)',
     marginBottom: compact
-      ? 'clamp(1px, 0.25dvh, 3px)'
+      ? 0
       : 'clamp(6px, 0.8dvh, 9px)',
   };
 }
@@ -1936,7 +1936,9 @@ export function programWorkoutListContainerStyle({ showAll = false, marginTop = 
     borderBottom: 'none',
     boxSizing: 'border-box',
     overflowX: 'hidden',
-    overflowY: showAll ? 'auto' : 'hidden',
+    // A seven-workout window can still exceed the viewport with multi-lift
+    // summaries. Keep the final toggle reachable instead of clipping it.
+    overflowY: 'auto',
     overscrollBehaviorY: 'none',
   };
 }
@@ -2063,13 +2065,8 @@ export function meetWorkoutLiftBlockStyle() {
     border: 'none',
     borderRadius: 8,
     overflow: 'visible',
-    marginBottom: 'clamp(4px, 0.8dvh, 8px)',
+    marginBottom: 4,
   };
-}
-
-export function meetWorkoutGridSpan(itemCount) {
-  const count = Math.max(1, Math.min(12, Number(itemCount) || 1));
-  return Math.max(1, Math.floor(12 / count));
 }
 
 export function activeWorkoutLiftBlockStyle() {
@@ -2078,7 +2075,7 @@ export function activeWorkoutLiftBlockStyle() {
     border: 'none',
     borderRadius: 8,
     overflow: 'hidden',
-    marginBottom: 'clamp(4px, 0.8dvh, 8px)',
+    marginBottom: 4,
   };
 }
 
@@ -2298,8 +2295,8 @@ export function workoutCompletionButtonMargin({ isMeetDay = false } = {}) {
 
 
 const WORKOUT_WORK_ROW_PADDING_X = 12;
-const WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE = 'repeat(4, minmax(0, 1fr))';
-const WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE = 'repeat(4, minmax(0, 1fr))';
+const WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE = `repeat(${WORKOUT_GRID_COLUMNS}, minmax(0, 1fr))`;
+const WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE = `repeat(${WORKOUT_GRID_COLUMNS}, minmax(0, 1fr))`;
 const WORKOUT_ACTION_BUTTON_SIZE = 'clamp(50px, 12vw, 58px)';
 
 export function preparationGridStyle(rowGap = 6) {
@@ -2307,7 +2304,7 @@ export function preparationGridStyle(rowGap = 6) {
     display: 'grid',
     gridTemplateColumns: WORKOUT_CHECKLIST_ITEM_GRID_TEMPLATE,
     justifyContent: 'center',
-    columnGap: RESPONSIVE_WORKOUT_UI.circleGap,
+    columnGap: RESPONSIVE_WORKOUT_UI.circleColumnGap,
     rowGap,
     padding: `0 ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
   };
@@ -2380,9 +2377,10 @@ const RESPONSIVE_WORKOUT_UI = Object.freeze({
   infoIconSize: 'clamp(18px, 4.5vw, 22px)',
   infoIconFontSize: 'clamp(10px, 2.5vw, 12px)',
   circleGap: 'clamp(8px, 2vw, 10px)',
+  circleColumnGap: 'clamp(4px, 1vw, 8px)',
   labelCircleGap: 'clamp(6px, 0.8dvh, 9px)',
-  rowPaddingX: 'clamp(12px, 3vw, 16px)',
-  sectionGap: 'clamp(10px, 1.5dvh, 16px)',
+  rowPaddingX: 'clamp(4px, 1vw, 8px)',
+  sectionGap: 4,
 });
 
 
@@ -2980,7 +2978,7 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t, compact = false }) {
 export function WorkoutLiftGrid({
   children,
   testId = 'workout-lift-grid',
-  columnCount = 4,
+  columnCount = WORKOUT_GRID_COLUMNS,
 }) {
   return (
     <div
@@ -2989,7 +2987,7 @@ export function WorkoutLiftGrid({
         display: 'grid',
         gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
         justifyContent: 'start',
-        columnGap: RESPONSIVE_WORKOUT_UI.circleGap,
+        columnGap: RESPONSIVE_WORKOUT_UI.circleColumnGap,
         rowGap: RESPONSIVE_WORKOUT_UI.circleGap,
         padding: `12px ${RESPONSIVE_WORKOUT_UI.rowPaddingX} 0`,
         marginBottom: RESPONSIVE_WORKOUT_UI.sectionGap,
@@ -3015,7 +3013,8 @@ export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activ
         display: 'grid',
         gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
         justifyContent: 'start',
-        gap: RESPONSIVE_WORKOUT_UI.circleGap,
+        columnGap: RESPONSIVE_WORKOUT_UI.circleColumnGap,
+        rowGap: RESPONSIVE_WORKOUT_UI.circleGap,
         padding: `0 ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
       }}
     >
@@ -3433,7 +3432,8 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
         } : {
           display: 'grid',
           gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
-          gap: RESPONSIVE_WORKOUT_UI.circleGap,
+          columnGap: RESPONSIVE_WORKOUT_UI.circleColumnGap,
+          rowGap: RESPONSIVE_WORKOUT_UI.circleGap,
         }}
       >
         <WorkoutCircleItem
@@ -5912,6 +5912,14 @@ function getSkippedSetMessage(set, t, isLastSet = false) {
   return t.topSetSkipped;
 }
 
+function hasActionAfterMainLift(workout, liftIndex) {
+  const hasAction = set => set.done || set.failed || set.skipped;
+  return (workout.lifts || []).some((block, index) => index > liftIndex &&
+    [...(block.warmups || []), ...(block.sets || [])].some(hasAction)) ||
+    (workout.accessories || []).some(accessory =>
+      ['done', 'failed', 'skipped'].some(key => (accessory[key] || []).some(Boolean)));
+}
+
 export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = false, showPhaseTags = false, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator, isLastGroupOfWorkout = false, workoutCompleted = false, hasLaterSetAction = false }) {
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
@@ -6082,7 +6090,8 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
         } : {
           display: 'grid',
           gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
-          gap: RESPONSIVE_WORKOUT_UI.circleGap,
+          columnGap: RESPONSIVE_WORKOUT_UI.circleColumnGap,
+          rowGap: RESPONSIVE_WORKOUT_UI.circleGap,
           marginTop: 0,
         }}
       >
@@ -6264,7 +6273,8 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
           display: 'grid',
           gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
           justifyItems: 'center',
-          gap: RESPONSIVE_WORKOUT_UI.circleGap,
+          columnGap: RESPONSIVE_WORKOUT_UI.circleColumnGap,
+          rowGap: RESPONSIVE_WORKOUT_UI.circleGap,
           marginTop: RESPONSIVE_WORKOUT_UI.labelCircleGap,
         }}
       >
@@ -8242,7 +8252,7 @@ export function CurrentWorkout({
 
 
   function renderActivateWorkoutCard() {
-    if (!isReadOnly || workout.completed) return null;
+    if (!isReadOnly || workout.completed || !onActivateWorkout) return null;
 
     const workoutNumber = workout?.number || '-';
     const confirmText = t.activateWorkoutConfirmText
@@ -8628,12 +8638,7 @@ export function CurrentWorkout({
           const firstIncompleteWarmup = (liftBlock.warmups || []).findIndex(w => !w.done);
           const firstIncompleteSet = (liftBlock.sets || []).findIndex(s => !s.done);
           const allWarmupsDone = (liftBlock.warmups || []).every(w => w.done);
-          const hasActionInLaterLift = (workout.lifts || []).some((laterLiftBlock, laterLiftIndex) =>
-            laterLiftIndex > li &&
-            (laterLiftBlock.sets || []).some(laterSet =>
-              laterSet.done || laterSet.failed || laterSet.skipped
-            )
-          );
+          const hasActionInLaterLift = hasActionAfterMainLift(workout, li);
 
           return (
             <div
@@ -8711,15 +8716,13 @@ export function CurrentWorkout({
 
               <WorkoutLiftGrid
                 testId={`workout-lift-grid-${li}`}
-                columnCount={isMeetDay ? 12 : 4}
+                columnCount={WORKOUT_GRID_COLUMNS}
               >
                 <WarmupGrid
                   compactGrid
                   showPhaseTags
                   warmups={liftBlock.warmups || []}
-                  gridSpan={isMeetDay
-                    ? meetWorkoutGridSpan((liftBlock.warmups || []).length)
-                    : null}
+                  gridSpan={null}
                   referenceSets={liftBlock.sets || []}
                   onShowPlateCalculator={onShowPlateCalculator}
                 isReadOnly={isReadOnly}
@@ -8898,9 +8901,7 @@ export function CurrentWorkout({
                   <SetRow
                     compactGrid
                     phaseTag={getWorkoutSetPhaseTag(set, t)}
-                    gridSpan={isMeetDay
-                      ? meetWorkoutGridSpan((liftBlock.sets || []).length)
-                      : null}
+                    gridSpan={null}
                     set={set}
                     index={si}
                     label={set.labelKey ? t[set.labelKey] : `${t.set} ${si + 1}`}
@@ -9013,8 +9014,6 @@ export function CurrentWorkout({
         >
           {workout.completed ? t.workoutCompleted : isReadOnly
             ? t.previewNotCompletable
-            : allMeetDone
-            ? `${t.completeWorkout} ✓`
             : t.completeWorkout}
         </WorkoutCompletionButton>
         </div>
@@ -9192,7 +9191,7 @@ export function CurrentWorkout({
                     groupedSetEntries[groupedSetEntries.length - 1]?.index === workout.sets.length - 1
                   }
                   workoutCompleted={Boolean(workout.completed)}
-                  hasLaterSetAction={(workout.sets || []).some((laterSet, laterIndex) =>
+                  hasLaterSetAction={hasActionAfterMainLift(workout, 0) || (workout.sets || []).some((laterSet, laterIndex) =>
                     laterIndex > groupedSetEntries[groupedSetEntries.length - 1]?.index &&
                     (laterSet.done || laterSet.failed || laterSet.skipped)
                   )}
@@ -10895,6 +10894,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
           ),
           display: 'block',
           alignSelf: 'center',
+          flexShrink: 0,
           marginLeft: 'auto',
           marginRight: 'auto',
           padding: 'clamp(12px, 1.6dvh, 15px)',
@@ -11084,8 +11084,9 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
 {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
         const isFuture = smartModel && idx > currentIndex;
+        // Future plans can be inspected without activating their training slot.
         const isSelectable = !smartModel || (
-          idx <= currentIndex && workout.smartSelectable !== false
+          isFuture || workout.smartSelectable !== false
         );
         const isDone = completedWorkoutNumberSet.has(Number(workout.number)) || Boolean(workout.completed);
         const completedAtLabel = isDone ? formatCompletedAt(workout.completedAt, workout.completedDate || workout.date) : null;
@@ -11114,6 +11115,16 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
           <div
             key={workout.number}
             ref={isCurrent ? currentWorkoutRef : null}
+            data-testid={`program-workout-${workout.number}`}
+            role="button"
+            tabIndex={isSelectable ? 0 : -1}
+            aria-disabled={!isSelectable}
+            onKeyDown={event => {
+              if (!isSelectable || !['Enter', ' '].includes(event.key)) return;
+              event.preventDefault();
+              onSelect(idx);
+              window.scrollTo({ top: 0, behavior: 'auto' });
+            }}
             onClick={() => {
               if (!isSelectable) return;
               onSelect(idx);
@@ -13340,13 +13351,6 @@ function App() {
       ));
     });
   }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, workoutSetup, trainingFocus, athleteLevel, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, oneRMs.Squat, oneRMs.Bench, oneRMs.Deadlift, smartIdealRouteStartCycle, history, bodyWeights, currentIndex, currentCycle, meetPlannerAttempts]);
-
-  useEffect(() => {
-    if (!hasLoadedData || !isSmartTrainingModel(trainingModel)) return;
-    if (selectedIndex <= currentIndex) return;
-
-    setSelectedIndex(currentIndex);
-  }, [hasLoadedData, trainingModel, selectedIndex, currentIndex]);
 
   useEffect(() => {
     // Keep the finished cycle available for its review. Navigation starts the next one.
@@ -16498,7 +16502,7 @@ const screenAllowsContentScroll =
           onAccessoryWeightChange={changeAccessoryWeight}
           onComplete={completeWorkout}
           onViewAll={() => setScreen('all')}
-          onActivateWorkout={activateSelectedWorkout}
+          onActivateWorkout={isSmartTrainingModel(trainingModel) ? undefined : activateSelectedWorkout}
           onChooseReturnTraining={chooseReturnTraining}
           daysSinceLastWorkout={getDaysSinceLastCompletedWorkout(history)}
           canChangeReturnTraining={selectedIndex === currentIndex &&

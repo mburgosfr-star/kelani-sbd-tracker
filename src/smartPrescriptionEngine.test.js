@@ -160,7 +160,7 @@ test('progresses a successful good top double instead of moving backwards', () =
   backoffs.forEach(set => {
     expect(set).toMatchObject({
       labelKey: 'backoff',
-      reps: 4,
+      reps: 3,
       pct: 0.725,
     });
   });
@@ -238,7 +238,7 @@ test('a top single past the old flat 90% cap keeps climbing while backoffs stay 
   });
 });
 
-test('a meet-specific 95% Deadlift double never pulls its four-rep backoffs above 75%', () => {
+test('a meet-specific 95% Deadlift double never pulls its three-rep backoffs above 75%', () => {
   const history = makeLiftHistory({
     lift: 'Deadlift',
     trainingMax: 180,
@@ -278,7 +278,7 @@ test('a meet-specific 95% Deadlift double never pulls its four-rep backoffs abov
   prescription.sets.slice(1).forEach(set => {
     expect(set).toMatchObject({
       labelKey: 'backoff',
-      reps: 4,
+      reps: 3,
       pct: 0.75,
     });
   });
@@ -321,7 +321,7 @@ test('a top single clamps at the second-attempt target instead of repeating a fl
   });
 });
 
-test('uses six-set volume on a single-lift Squat workout', () => {
+test('uses at most five-set volume on a single-lift Squat workout', () => {
   const state = buildSmartLiftState({
     history: [],
     currentCycle: 1,
@@ -339,10 +339,10 @@ test('uses six-set volume on a single-lift Squat workout', () => {
     set => set.labelKey === 'backoff'
   );
 
-  expect(backoffs).toHaveLength(6);
+  expect(backoffs).toHaveLength(5);
 });
 
-test('adds six-by-six Bench volume to a safe single-lift workout', () => {
+test('adds five-by-five Bench volume to a safe single-lift workout', () => {
   const history = makeLiftHistory({
     lift: 'Bench',
     trainingMax: 100,
@@ -373,11 +373,11 @@ test('adds six-by-six Bench volume to a safe single-lift workout', () => {
 
   const backoffs = prescription.sets.slice(1);
 
-  expect(backoffs).toHaveLength(6);
+  expect(backoffs).toHaveLength(5);
   backoffs.forEach(set => {
     expect(set).toMatchObject({
       labelKey: 'backoff',
-      reps: 6,
+      reps: 5,
       pct: 0.70,
       weight: 70,
     });
@@ -469,11 +469,11 @@ test('keeps beginner C1W10 single-lift Bench back-offs below top work', () => {
   });
 
   const backoffs = prescription.sets.slice(1);
-  expect(backoffs).toHaveLength(6);
+  expect(backoffs).toHaveLength(5);
   backoffs.forEach(set => {
     expect(set).toMatchObject({
       labelKey: 'backoff',
-      reps: 6,
+      reps: 5,
       pct: 0.625,
       weight: 20,
     });
@@ -617,7 +617,7 @@ test('C3W36 failure causes recovery without regressing the successful lift or fa
   });
 });
 
-test('creates a normal secondary lift with four to six work sets and reps', () => {
+test('creates a normal secondary lift within the universal set and rep limits', () => {
   const history = makeLiftHistory({
     lift: 'Bench',
     trainingMax: 100,
@@ -654,7 +654,7 @@ test('creates a normal secondary lift with four to six work sets and reps', () =
   });
 });
 
-test('rejects an invalid low-volume normal training block', () => {
+test('accepts the universal two-set volume block', () => {
   const validation = validateSmartLiftPrescription({
     lift: 'Squat',
     role: 'secondary',
@@ -680,10 +680,8 @@ test('rejects an invalid low-volume normal training block', () => {
     ],
   });
 
-  expect(validation.valid).toBe(false);
-  expect(validation.errors).toContain(
-    'Back-off and work-set blocks require 4–6 sets.'
-  );
+  expect(validation.valid).toBe(true);
+  expect(validation.errors).toEqual([]);
 });
 
 test('rejects back-off work at the same intensity as top work', () => {
@@ -908,7 +906,7 @@ test.each(['good', 'easy', 'hard'])(
 
     backoffs.forEach(set => {
       expect(set).toMatchObject({
-        reps: 5,
+        reps: 4,
         pct: 0.7,
         weight: 22.5,
       });

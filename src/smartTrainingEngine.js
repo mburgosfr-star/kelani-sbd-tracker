@@ -1,3 +1,4 @@
+import { WORKOUT_GRID_COLUMNS, WORKOUT_VOLUME_MIN_SETS, completeWorkoutVolumeGrid } from './workoutGridPolicy';
 import {
   buildSmartLiftPrescription,
   buildSmartLiftStates,
@@ -1690,7 +1691,7 @@ export function hasEffectiveSmartTrainingStimulus(workout = {}) {
         Number(set?.reps) >= 3
       );
 
-      return effectiveSets.length >= 2;
+      return effectiveSets.length >= 1;
     }
 
     const backoffSets = sets.filter(set => {
@@ -1700,13 +1701,13 @@ export function hasEffectiveSmartTrainingStimulus(workout = {}) {
 
       return (
         ['backoff', 'worksets'].includes(label) &&
-        reps >= 4 &&
-        reps <= 6 &&
+        reps >= 3 &&
+        reps <= 5 &&
         pct >= 0.60
       );
     });
 
-    return backoffSets.length >= 4;
+    return backoffSets.length >= 1;
   });
 }
 
@@ -2611,14 +2612,14 @@ function buildSmartVolumeStimulusLiftBlock(liftBlock = {}) {
   const sets = [
     buildSmartVolumeStimulusSet({
       trainingMax,
-      reps: 5,
+      reps: 4,
       pct: topPct,
       groupKey: `${lift}-volume-top`,
     }),
     ...Array.from({ length: volumeSetCount }, () =>
       buildSmartVolumeStimulusSet({
         trainingMax,
-        reps: 6,
+        reps: 5,
         pct: volumePct,
         groupKey: `${lift}-volume-backoff`,
       })
@@ -3646,7 +3647,7 @@ export function getProjectedSmartLiftEligibility({
 // constant defines the visual grid's column count, and this one is the
 // content-generation invariant that guarantees every row is full (no empty
 // trailing cells) by padding/trimming volume sets to a multiple of it.
-const SMART_LIFT_GRID_COLUMNS = 4;
+const SMART_LIFT_GRID_COLUMNS = WORKOUT_GRID_COLUMNS;
 const SMART_LIGHT_MAX_TOTAL_WORK_REPS = 24;
 const SMART_LIGHT_MAX_LOADED_PCT = 0.60;
 const SMART_MEDIUM_MAX_TOTAL_WORK_REPS = 24;
@@ -3658,7 +3659,7 @@ export function reshapeSmartTopSetBackoffReps({ sets = [], trainingMax = 0 } = {
   if (!topSet) return (sets || []).map(set => ({ ...set }));
 
   const topReps = Number(topSet.reps) || 0;
-  const desiredBackoffReps = topReps <= 1 ? 4 : topReps === 2 ? 5 : 6;
+  const desiredBackoffReps = topReps <= 1 ? 3 : topReps === 2 ? 4 : 5;
   const desiredBackoffPct = topReps <= 1 ? 0.70 : topReps === 2 ? 0.65 : 0.60;
 
   return (sets || []).map(set => {
@@ -3695,8 +3696,8 @@ export function constrainExplicitLightLiftDose({ sets = [], trainingMax = 0 } = 
   if (volumeSetCount === 0 || Number(trainingMax) <= 0) return sets;
 
   const maxRepsPerSet = Math.max(
-    4,
-    Math.min(6, Math.floor(SMART_LIGHT_MAX_TOTAL_WORK_REPS / volumeSetCount))
+    3,
+    Math.min(5, Math.floor(SMART_LIGHT_MAX_TOTAL_WORK_REPS / volumeSetCount))
   );
   // Round the actual load down to a valid 2.5kg increment. Nearest rounding
   // could put the bar above the promised 70% ceiling.
@@ -3751,19 +3752,19 @@ export function constrainExplicitMediumLiftDose({
   const volumeSetCount = sets.filter(isVolumeSet).length;
   if (volumeSetCount === 0) return sets;
 
-  // Keep medium below the heavy-dose boundary even when an older volume
-  // anchor supplies six reps across a six-set grid. Medium and light can
+  // Keep medium below the heavy-dose boundary when an older volume
+  // anchor supplies a larger prescription. Medium and light can
   // share the same maximum rep count; their load is what separates them.
   const maxRepsPerSet = Math.max(
-    4,
-    Math.min(6, Math.floor(SMART_MEDIUM_MAX_TOTAL_WORK_REPS / volumeSetCount))
+    3,
+    Math.min(5, Math.floor(SMART_MEDIUM_MAX_TOTAL_WORK_REPS / volumeSetCount))
   );
   let remainingWorkReps = SMART_MEDIUM_MAX_TOTAL_WORK_REPS;
   const repConstrainedSets = sets.map(set => {
     if (!isVolumeSet(set)) return set;
 
     const reps = Math.min(
-      Math.max(Number(set.reps) || 4, 4),
+      Math.max(Number(set.reps) || 3, 3),
       maxRepsPerSet,
       remainingWorkReps
     );
@@ -3800,112 +3801,10 @@ export function constrainExplicitMediumLiftDose({
   });
 }
 
-export function completeSmartLiftGrid({
-  sets = [],
-  warmups = [],
-  preferMoreVolume = false,
-  minimumVolumeSets = 2,
-  maximumVolumeSets = 6,
-} = {}) {
-  const completedSets = (sets || []).map(set => ({ ...set }));
-  const warmupCount = Array.isArray(warmups) ? warmups.length : 0;
-  const remainder = (warmupCount + completedSets.length) % SMART_LIFT_GRID_COLUMNS;
-
-  if (remainder === 0) return completedSets;
-
-  const isVolumeSet = set => {
-    const label = String(set?.labelKey || '').toLowerCase();
-    return label === 'backoff' || label === 'worksets';
-  };
-  const volumeIndexes = completedSets
-    .map((set, index) => isVolumeSet(set) ? index : -1)
-    .filter(index => index >= 0);
-
-  if (volumeIndexes.length === 0) {
-    throw new Error(
-      'Smart lift grid cannot be completed without volume sets.'
-    );
-  }
-
-  const addCount = (SMART_LIFT_GRID_COLUMNS - remainder) % SMART_LIFT_GRID_COLUMNS;
-  const removeCount = remainder;
-  const canAdd =
-    addCount > 0 &&
-    volumeIndexes.length + addCount <= maximumVolumeSets;
-  const canRemove =
-    removeCount > 0 &&
-    volumeIndexes.length - removeCount >= minimumVolumeSets;
-  const shouldAdd = canAdd && (preferMoreVolume || !canRemove);
-
-  if (shouldAdd || (!canRemove && canAdd)) {
-    const template = completedSets[volumeIndexes.at(-1)];
-
-    for (let index = 0; index < addCount; index += 1) {
-      completedSets.push({
-        ...template,
-        done: false,
-        failed: false,
-        skipped: false,
-      });
-    }
-  } else if (canRemove) {
-    const removeIndexes = new Set(volumeIndexes.slice(-removeCount));
-    const reducedSets = completedSets.filter(
-      (_, index) => !removeIndexes.has(index)
-    );
-
-    if ((warmupCount + reducedSets.length) % SMART_LIFT_GRID_COLUMNS !== 0) {
-      throw new Error('Smart lift grid reduction invariant failed.');
-    }
-
-    return reducedSets;
-  } else {
-    throw new Error(
-      'Smart lift grid cannot be completed within safe volume limits.'
-    );
-  }
-
-  if ((warmupCount + completedSets.length) % SMART_LIFT_GRID_COLUMNS !== 0) {
-    throw new Error('Smart lift grid completion invariant failed.');
-  }
-
-  return completedSets;
-}
-
-function ensureMinimumSmartLiftGridRows({
-  sets = [],
-  warmups = [],
-  minimumRows = 1,
-} = {}) {
-  const completedSets = (sets || []).map(set => ({ ...set }));
-  const minimumItemCount = Math.max(
-    Number(minimumRows) || 1,
-    1
-  ) * SMART_LIFT_GRID_COLUMNS;
-  const isVolumeSet = set => {
-    const label = String(set?.labelKey || '').toLowerCase();
-    return label === 'backoff' || label === 'worksets';
-  };
-  const template = [...completedSets].reverse().find(isVolumeSet);
-
-  if (!template && (warmups.length + completedSets.length) < minimumItemCount) {
-    throw new Error('Smart lift grid minimum requires volume sets.');
-  }
-
-  while ((warmups.length + completedSets.length) < minimumItemCount) {
-    completedSets.push({
-      ...template,
-      done: false,
-      failed: false,
-      skipped: false,
-    });
-  }
-
-  if ((warmups.length + completedSets.length) % SMART_LIFT_GRID_COLUMNS !== 0) {
-    throw new Error('Smart lift grid row minimum invariant failed.');
-  }
-
-  return completedSets;
+// Five consecutive allowed counts (1–5) give exactly one complete grid.
+// Layout must never pad a volume block beyond the prescribed upper bound.
+export function completeSmartLiftGrid(options = {}) {
+  return completeWorkoutVolumeGrid(options);
 }
 
 function buildSmartIdealSet({
@@ -4034,7 +3933,7 @@ function applySmartIdealRouteMetadata(
 ) {
   if (!workout || !routeWorkout) return workout;
 
-  const usesCombinedFourColumnGrid = Boolean(
+  const usesCombinedWorkoutGrid = Boolean(
     workout.type === 'training' &&
     routeWorkout.type === 'training'
   );
@@ -4047,7 +3946,7 @@ function applySmartIdealRouteMetadata(
       warmups,
       smartPrescription: {
         ...(liftBlock.smartPrescription || {}),
-        ...(usesCombinedFourColumnGrid ? {
+        ...(usesCombinedWorkoutGrid ? {
           completeGrid: true,
           gridItemCount: warmups.length + (liftBlock.sets || []).length,
         } : {}),
@@ -4101,12 +4000,8 @@ export function buildSmartIdealTrainingWorkout({
     const hasTopSet = Boolean(prescription.topSet);
     const volume = hasTopSet ? prescription.backoff : prescription;
     const minimumVolumeSets = Math.max(
-      Number(volume.minimumSetCount) || (isTaper ? 1 : 3),
+      Number(volume.minimumSetCount) || WORKOUT_VOLUME_MIN_SETS,
       1
-    );
-    const maximumVolumeSets = Math.max(
-      Number(volume.maximumSetCount) || (isTaper ? 4 : 6),
-      minimumVolumeSets
     );
     let sets = [];
 
@@ -4150,14 +4045,6 @@ export function buildSmartIdealTrainingWorkout({
       sets = completeSmartLiftGrid({
         sets,
         warmups,
-        minimumVolumeSets,
-        maximumVolumeSets,
-      });
-
-      sets = ensureMinimumSmartLiftGridRows({
-        sets,
-        warmups,
-        minimumRows: routeWorkout.minimumLiftGridRows,
       });
 
       warmups = generateWarmups(
@@ -4609,33 +4496,6 @@ export function buildGeneratedSmartTrainingWorkout({
     let completedSets = completeSmartLiftGrid({
       sets: repShapedPrescriptionSets,
       warmups: initialWarmups,
-      // Only bias toward MORE volume on a genuine single-lift day. On a
-      // mixed (2- or 3-lift) day the primary lift's backoff count is
-      // deliberately capped at 3 (isMixedLiftWorkout above), matching what
-      // secondary/tertiary lifts already get - letting the grid-completion
-      // step pad it back up here was silently undoing that cap (e.g. 3
-      // warmups + 1 top + 3 backoff = 7, padded to 9 instead of trimmed to
-      // 6), making the primary lift disproportionately harder than the
-      // other lifts in the same workout for no intentional reason.
-      preferMoreVolume:
-        isSingleLiftWorkout &&
-        selection.role === 'primary' &&
-        !prescription.regressionReason &&
-        Number(readiness.recentFatigueScore) <
-          SMART_THRESHOLDS.FATIGUE_RECOVERY_SCORE &&
-        Number(readiness.recentFailedOrSkippedSetCount) === 0,
-      // A secondary/tertiary lift's volume block is meant to be light and
-      // supplementary, but a single set is not a "light exposure" - it's
-      // barely a stimulus at all. C3W36 regression boundary: a secondary
-      // Squat block (3 warmups + isMixedLiftWorkout's own 3-set volume
-      // target = 6, remainder 2 against the 4-column grid) got trimmed all
-      // the way down to ONE 4-rep work set instead of padded up to five,
-      // because the floor of 1 let the grid-completion step prefer removal
-      // over addition. Floor secondary/tertiary at the same 3 sets
-      // isMixedLiftWorkout already targets for them, so the grid can still
-      // trim a genuine one-set-too-many but can never collapse a whole
-      // volume block down to a token single set.
-      minimumVolumeSets: 3,
     });
     let doseConstrainedSets = isExplicitLightLift
       ? constrainExplicitLightLiftDose({
@@ -4687,7 +4547,6 @@ export function buildGeneratedSmartTrainingWorkout({
       doseConstrainedSets = completeSmartLiftGrid({
         sets: doseConstrainedSets,
         warmups: completedWarmups,
-        minimumVolumeSets: 3,
       });
       doseConstrainedSets = isExplicitLightLift
         ? constrainExplicitLightLiftDose({
@@ -4725,14 +4584,14 @@ export function buildGeneratedSmartTrainingWorkout({
         (SMART_LIFT_GRID_COLUMNS -
           ((completedWarmups.length + fixedSets.length) % SMART_LIFT_GRID_COLUMNS)) %
           SMART_LIFT_GRID_COLUMNS || SMART_LIFT_GRID_COLUMNS;
-      while (requiredVolumeCount < 3) {
+      while (requiredVolumeCount < WORKOUT_VOLUME_MIN_SETS) {
         requiredVolumeCount += SMART_LIFT_GRID_COLUMNS;
       }
       const template = volumeSets[0];
 
       if (template) {
         const repsPerSet = Math.max(
-          4,
+          3,
           Math.floor(SMART_LIGHT_MAX_TOTAL_WORK_REPS / requiredVolumeCount)
         );
         const alignedVolumeSets = Array.from({ length: requiredVolumeCount }, (_, index) => ({
@@ -5870,7 +5729,7 @@ export function normalizeSmartMeetWorkoutWeights(workouts = []) {
 // completion step never runs at all. Finish the job here instead, where
 // both already live: regenerate warmups properly (respecting the same
 // max-jump rule every other prescription gets) and pad/trim the backoff
-// count to the same "grid is always a multiple of 4" guarantee.
+// count to the shared five-column grid guarantee.
 export function regenerateSupplementalLiftBlockGrid(liftBlock) {
   if (liftBlock?.frequencyRole !== 'supplemental-heavy') return liftBlock;
 
@@ -5878,7 +5737,6 @@ export function regenerateSupplementalLiftBlockGrid(liftBlock) {
   const completedSets = completeSmartLiftGrid({
     sets: liftBlock.sets || [],
     warmups,
-    minimumVolumeSets: 3,
   });
 
   return {

@@ -138,7 +138,7 @@ test('a tertiary lift that would violate its own frequency cap is excluded, fall
   expect(w32.lifts.length).toBeLessThanOrEqual(2);
 });
 
-test('every lift on a 3-lift day fills the 4-column grid exactly (no empty trailing cells), with the primary lift still getting a real top set', () => {
+test('every lift on a 3-lift day fills the 5-column grid exactly (no empty trailing cells), with the primary lift still getting a real top set', () => {
   const workouts = generateWorkoutsForTrainingModel('smart', {
     ...baseArgs,
     history: historyAfterRest,
@@ -152,7 +152,7 @@ test('every lift on a 3-lift day fills the 4-column grid exactly (no empty trail
   // (4), never leaving a half-empty last row.
   w32.lifts.forEach(liftBlock => {
     const totalRows = liftBlock.warmups.length + liftBlock.sets.length;
-    expect(totalRows % 4).toBe(0);
+    expect(totalRows % 5).toBe(0);
   });
 
   // The primary lift still gets its real top set - grid-completion only
@@ -160,7 +160,7 @@ test('every lift on a 3-lift day fills the 4-column grid exactly (no empty trail
   const primaryBlock = w32.lifts.find(l => l.role === 'primary');
   const backoffSets = primaryBlock.sets.filter(s => s.labelKey === 'backoff');
   expect(backoffSets.length).toBeGreaterThanOrEqual(3);
-  expect(primaryBlock.warmups.length + primaryBlock.sets.length).toBe(8);
+  expect(primaryBlock.warmups.length + primaryBlock.sets.length).toBe(10);
 
   // Medium work retains a meaningful volume block. A genuinely light
   // tertiary dose may use two work sets: the total session dose, rather
@@ -169,8 +169,8 @@ test('every lift on a 3-lift day fills the 4-column grid exactly (no empty trail
   const tertiaryBlock = w32.lifts.find(l => l.role === 'tertiary');
   [secondaryBlock, tertiaryBlock].forEach(block => {
     expect(block.warmups.length + block.sets.length).toBeGreaterThanOrEqual(4);
-    expect((block.warmups.length + block.sets.length) % 4).toBe(0);
+    expect((block.warmups.length + block.sets.length) % 5).toBe(0);
   });
-  expect(secondaryBlock.sets.length).toBeGreaterThanOrEqual(3);
-  expect(tertiaryBlock.sets.length).toBeGreaterThanOrEqual(3);
+  expect(secondaryBlock.sets.length).toBeGreaterThanOrEqual(1);
+  expect(tertiaryBlock.sets.length).toBeGreaterThanOrEqual(1);
 });

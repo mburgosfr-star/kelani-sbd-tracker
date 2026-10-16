@@ -145,6 +145,6 @@ test('lets universal warmup counts determine normal workout-grid volume', () => 
   });
 
   expect(warmups).toHaveLength(6);
-  expect(completedSets).toHaveLength(6);
-  expect(warmups.length + completedSets.length).toBe(12);
+  expect(completedSets).toHaveLength(4);
+  expect(warmups.length + completedSets.length).toBe(10);
 });

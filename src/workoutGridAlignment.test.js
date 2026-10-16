@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react';
-import { BackoffGroup, SetRow, WarmupGrid, WorkoutLiftGrid, meetWorkoutGridSpan } from './App';
+import { BackoffGroup, SetRow, WarmupGrid, WorkoutLiftGrid } from './App';
 
 beforeAll(() => {
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
@@ -26,7 +26,7 @@ test('aligns weight labels above rep circles in the shared grid', () => {
     />
   );
   const warmupItem = warmupView.getByTestId('warmup-row-0');
-  const shared = 'repeat(4, minmax(0, 1fr))';
+  const shared = 'repeat(5, minmax(0, 1fr))';
   expect(warmupItem.parentElement.style.gridTemplateColumns).toBe(shared);
   expect(warmupItem.firstElementChild).toHaveTextContent('20 kg10%');
   expect(warmupItem.querySelector('[data-testid="workout-circle-reps"]')).toHaveTextContent('5');
@@ -66,12 +66,11 @@ test('aligns weight labels above rep circles in the shared grid', () => {
   });
 });
 
-test('meet grid keeps warmups on one row and attempts on the next row', () => {
+test('meet uses the same five-column flow without adding attempts', () => {
   const view = render(
-    <WorkoutLiftGrid columnCount={12} testId="meet-lift-grid">
+    <WorkoutLiftGrid columnCount={5} testId="meet-lift-grid">
       <WarmupGrid
         compactGrid
-        gridSpan={meetWorkoutGridSpan(2)}
         warmups={[
           { reps: 5, weight: 20, done: false },
           { reps: 3, weight: 70, done: false },
@@ -84,7 +83,6 @@ test('meet grid keeps warmups on one row and attempts on the next row', () => {
         <SetRow
           key={weight}
           compactGrid
-          gridSpan={meetWorkoutGridSpan(3)}
           set={{ reps: 1, weight, pct: [0.9, 0.975, 1.025][index], done: false }}
           index={index}
           label={`Attempt ${index + 1}`}
@@ -97,17 +95,17 @@ test('meet grid keeps warmups on one row and attempts on the next row', () => {
   );
 
   expect(view.getByTestId('meet-lift-grid').style.gridTemplateColumns)
-    .toBe('repeat(12, minmax(0, 1fr))');
+    .toBe('repeat(5, minmax(0, 1fr))');
   expect(view.getByTestId('meet-lift-grid').style.rowGap)
     .toBe('clamp(8px, 2vw, 10px)');
   expect(view.getByTestId('meet-lift-grid').style.marginBottom)
-    .toBe('clamp(10px, 1.5dvh, 16px)');
+    .toBe('4px');
   expect(view.getByTestId('meet-lift-grid').style.getPropertyValue('--workout-circle-item-row-gap'))
     .toBe('clamp(6px, 0.8dvh, 9px)');
   view.getAllByTestId(/warmup-row-/).forEach(item => {
-    expect(item.style.gridColumn).toBe('span 6');
+    expect(item.style.gridColumn).toBe('');
   });
   view.getAllByTestId('workout-set-circle-item').forEach(item => {
-    expect(item.style.gridColumn).toBe('span 4');
+    expect(item.style.gridColumn).toBe('');
   });
 });

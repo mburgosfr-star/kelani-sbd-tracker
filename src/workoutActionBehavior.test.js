@@ -253,6 +253,37 @@ test('clears missed-set feedback after the next set in another group is checked'
   expect(screen.queryByText(translations.en.topSetSkipped)).not.toBeInTheDocument();
 });
 
+test.each(['warmup', 'successful set', 'missed set'])(
+  'clears the previous lift failure after the next lift %s', action => {
+    const missed = { labelKey: 'backoff', weight: 60, pct: 0.7, reps: 4, done: true, failed: true, skipped: true };
+    const open = { labelKey: 'backoff', weight: 90, pct: 0.7, reps: 4, done: false };
+    const nextLift = { lift: 'Deadlift', warmups: [{ weight: 20, reps: 5, done: false }], sets: [open, { ...open }] };
+    const workout = { number: 1, type: 'training', prepItems: [], accessories: [],
+      lifts: [{ lift: 'Bench', warmups: [], sets: [missed, { ...missed }] }, nextLift] };
+    const view = renderCurrentWorkout(workout);
+    const previousGroup = screen.getAllByTestId('workout-set-group')[0];
+    expect(within(previousGroup).getByText(translations.en.topSetSkipped)).toBeInTheDocument();
+    const actedLift = action === 'warmup'
+      ? { ...nextLift, warmups: [{ ...nextLift.warmups[0], done: true }] }
+      : { ...nextLift, warmups: [{ ...nextLift.warmups[0], done: true }],
+          sets: [{ ...open, done: true, failed: action === 'missed set', skipped: action === 'missed set' }, open] };
+    view.rerenderWorkout({ ...workout, lifts: [workout.lifts[0], actedLift] });
+    expect(within(screen.getAllByTestId('workout-set-group')[0]).queryByText(translations.en.topSetSkipped)).not.toBeInTheDocument();
+    if (action === 'missed set') expect(screen.getAllByText(translations.en.topSetSkipped)).toHaveLength(1);
+  }
+);
+
+test.each([false, true])('clears main-set feedback after an accessory is completed (missed: %s)', failed => {
+  const missed = { labelKey: 'backoff', weight: 60, pct: 0.7, reps: 4, done: true, failed: true, skipped: true };
+  const accessory = { name: 'Row', sets: 2, reps: 10, weight: 20, done: [false, false] };
+  const workout = { number: 1, type: 'training', lift: 'Bench', sets: [missed, { ...missed }],
+    prepItems: [], warmups: [], accessories: [accessory] };
+  const view = renderCurrentWorkout(workout);
+  expect(screen.getByText(translations.en.lastSetSkipped)).toBeInTheDocument();
+  view.rerenderWorkout({ ...workout, accessories: [{ ...accessory, done: [true, false], failed: [failed, false], skipped: [failed, false] }] });
+  expect(screen.queryByText(translations.en.lastSetSkipped)).not.toBeInTheDocument();
+});
+
 test('meet day labels every warm-up and each attempt in the workout grid', () => {
   renderCurrentWorkout({
     type: 'meet',
@@ -352,7 +383,7 @@ test.each(preparationContexts)('preparation off adds no controls or completion s
     });
   });
   const completeButton = screen.getByRole('button', {
-    name: `${t.completeWorkout} ✓`, exact: true,
+    name: t.completeWorkout, exact: true,
   });
   expect(completeButton).toBeEnabled();
   expect(completeButton).toHaveAttribute('data-dynamic-focus', 'true');

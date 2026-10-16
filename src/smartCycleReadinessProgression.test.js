@@ -132,7 +132,7 @@ test.each([100, 200])(
     prescription.sets.slice(1).forEach(set => {
       expect(set).toMatchObject({
         labelKey: 'backoff',
-        reps: 5,
+        reps: 4,
         pct: 0.675,
       });
     });

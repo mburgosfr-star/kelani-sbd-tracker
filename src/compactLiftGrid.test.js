@@ -50,7 +50,7 @@ test('flows weight labels and rep circles through one compact lift grid', () => 
 
   const liftGrid = view.getByTestId('compact-lift-grid');
   const items = liftGrid.querySelectorAll('[data-workout-circle-item="true"]');
-  expect(liftGrid.style.gridTemplateColumns).toBe('repeat(4, minmax(0, 1fr))');
+  expect(liftGrid.style.gridTemplateColumns).toBe('repeat(5, minmax(0, 1fr))');
   expect(items).toHaveLength(6);
   const labels = Array.from(items).map(item => item.firstElementChild.textContent);
   expect(labels).toEqual([

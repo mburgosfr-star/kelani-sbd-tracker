@@ -287,19 +287,19 @@ test('the normal ideal route contains no single-lift gym days', () => {
 test('all normal intensity roles use the agreed phase loading', () => {
   const expected = [
     [1, 'triple', {
-      heavy: [1, 0.90, 4, 0.85],
-      medium: [2, 0.85, 5, 0.80],
-      light: [3, 0.80, 6, 0.75],
+      heavy: [1, 0.90, 3, 0.80],
+      medium: [2, 0.85, 4, 0.75],
+      light: [3, 0.80, 5, 0.70],
     }],
     [8, 'double', {
-      heavy: [1, 0.95, 4, 0.80],
-      medium: [2, 0.90, 5, 0.75],
-      light: [3, 0.85, 6, 0.70],
+      heavy: [1, 0.95, 3, 0.75],
+      medium: [2, 0.90, 4, 0.70],
+      light: [3, 0.85, 5, 0.65],
     }],
     [15, 'single', {
-      heavy: [1, 1.00, 4, 0.75],
-      medium: [2, 0.95, 5, 0.70],
-      light: [3, 0.90, 6, 0.65],
+      heavy: [1, 1.00, 3, 0.70],
+      medium: [2, 0.95, 4, 0.65],
+      light: [3, 0.90, 5, 0.60],
     }],
   ];
 
@@ -451,9 +451,9 @@ test('taper uses the agreed role-specific top sets and reduced grid volume', () 
   );
 
   const expected = {
-    heavy: [1, 0.90, 4, 0.75],
-    medium: [2, 0.85, 5, 0.70],
-    light: [3, 0.80, 6, 0.65],
+    heavy: [1, 0.90, 3, 0.70],
+    medium: [2, 0.85, 4, 0.65],
+    light: [3, 0.80, 5, 0.60],
   };
   const topSetCounts = {};
 
@@ -469,7 +469,7 @@ test('taper uses the agreed role-specific top sets and reduced grid volume', () 
           reps: volumeReps,
           pct: volumePct,
           minimumSetCount: 1,
-          maximumSetCount: 4,
+          maximumSetCount: 5,
         },
       });
     } else {
@@ -478,7 +478,7 @@ test('taper uses the agreed role-specific top sets and reduced grid volume', () 
         reps: volumeReps,
         pct: volumePct,
         minimumSetCount: 1,
-        maximumSetCount: 4,
+        maximumSetCount: 5,
       });
     }
     expect(item.prescription).toMatchObject({

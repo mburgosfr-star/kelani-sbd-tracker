@@ -1729,7 +1729,7 @@ test('the ready phase tapers to a submaximal triple instead of escalating furthe
   });
   expect(prescription.regressionReason).toBe('ready-taper');
   prescription.sets.slice(1).forEach(set => {
-    expect(set.reps).toBe(4);
+    expect(set.reps).toBe(3);
     expect(set.precisePct).toBeLessThanOrEqual(0.70);
   });
 });

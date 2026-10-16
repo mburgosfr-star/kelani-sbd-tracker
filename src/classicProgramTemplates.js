@@ -1,3 +1,4 @@
+import { reduceVolumeReps, completeWorkoutVolumeGrid, WORKOUT_VOLUME_MAX_SETS } from './workoutGridPolicy';
 import { roundBarbellWeight } from './smartFrequencyPolicy';
 import { LIFT_ORDER, isTopSetLabel, normalizeCooldownMode } from './workoutHistoryStats';
 import {
@@ -109,7 +110,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
     const isBenchGoodMorningAlternative =
       liftConfig.lift === 'Bench' && normalizedBenchPressVariant === 'goodMorning';
 
-    const sets = isSquatBeltAlternative
+    let sets = isSquatBeltAlternative
       ? generateSquatAlternativeSets(oneRMs)
       : isSquatHomeAlternative
         ? generateSquatHomeAlternativeSets(oneRMs)
@@ -140,13 +141,13 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
           labelKey = 'workSets';
         }
 
-        for (let i = 0; i < block.sets; i++) {
+        for (let i = 0; i < (['backoff', 'workSets'].includes(labelKey) ? Math.min(block.sets, WORKOUT_VOLUME_MAX_SETS) : block.sets); i++) {
           const weight = round25(oneRMs[liftConfig.lift] * block.pct);
 
           sets.push({
             labelKey,
             label: block.label || null,
-            reps: block.reps,
+            reps: ['backoff', 'workSets'].includes(labelKey) ? reduceVolumeReps(block.reps) : block.reps,
             pct: block.pct,
             weight,
             originalWeight: weight,
@@ -158,6 +159,9 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
     }
 
 
+    const warmups = generateWarmups(sets, liftConfig.lift);
+    sets = completeWorkoutVolumeGrid({ sets, warmups });
+
     const includePreparation =
       liftIndex === 0 ||
       normalizedPreparationMode === 'basicAll';
@@ -168,7 +172,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
       deadliftVariant: liftConfig.lift === 'Deadlift' ? normalizedDeadliftVariant : undefined,
       benchPressVariant: liftConfig.lift === 'Bench' ? normalizedBenchPressVariant : undefined,
       prepItems: includePreparation ? generatePrepItems(liftConfig.lift, normalizedPreparationMode) : [],
-      warmups: generateWarmups(sets, liftConfig.lift),
+      warmups,
       sets,
     };
   }

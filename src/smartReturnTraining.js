@@ -1,3 +1,4 @@
+import { WORKOUT_GRID_COLUMNS, completeWorkoutVolumeGrid } from './workoutGridPolicy';
 import { generateWarmups } from './warmupAndPrepGeneration';
 import { roundPercent } from './smartPrescriptionEngine';
 import { isTopSetLabel } from './workoutHistoryStats';
@@ -6,8 +7,8 @@ export const SMART_RETURN_TRAINING = Object.freeze({
   suggestedAfterDays: 7,
   loadFactor: 0.9,
   accessoryLoadFactor: 0.8,
-  minimumWorkSetsPerLift: 4,
-  version: 2,
+  minimumWorkSetsPerLift: 1,
+  version: 3,
 });
 
 function roundedLoad(weight, factor) {
@@ -79,7 +80,7 @@ export function buildSmartReturnTraining(workout) {
   const lifts = workout.lifts.map(block => {
     const trainingMax = trainingMaxForBlock(block);
     let topWeight = null;
-    const sets = block.sets.map(set => {
+    let sets = block.sets.map(set => {
       let weight = roundedLoad(set.weight, SMART_RETURN_TRAINING.loadFactor);
       if (isTopSetLabel(set.labelKey)) {
         topWeight = Number(weight);
@@ -101,22 +102,14 @@ export function buildSmartReturnTraining(workout) {
       };
     });
     const warmups = generateWarmups(sets, block.lift);
-    const volumeTemplate = [...sets].reverse().find(set =>
-      set.labelKey === 'backoff' || set.labelKey === 'workSets'
-    );
-    if (volumeTemplate) {
-      while (sets.length < SMART_RETURN_TRAINING.minimumWorkSetsPerLift ||
-        (sets.length + warmups.length) % 4 !== 0) {
-        sets.push({ ...volumeTemplate, done: false, failed: false, skipped: false });
-      }
-    }
+    sets = completeWorkoutVolumeGrid({ sets, warmups });
     return {
       ...block,
       sets,
       warmups,
       smartPrescription: {
         ...(block.smartPrescription || {}),
-        completeGrid: (warmups.length + sets.length) % 4 === 0,
+        completeGrid: (warmups.length + sets.length) % WORKOUT_GRID_COLUMNS === 0,
         gridItemCount: warmups.length + sets.length,
       },
     };

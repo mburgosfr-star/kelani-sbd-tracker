@@ -41,7 +41,7 @@ test('fixes an oversized warmup jump and completes the grid for a frequency-supp
   }
 
   const totalRows = fixed.warmups.length + fixed.sets.length;
-  expect(totalRows % 4).toBe(0);
+  expect(totalRows % 5).toBe(0);
   expect(fixed.smartPrescription.gridItemCount).toBe(totalRows);
 });
 
@@ -53,7 +53,7 @@ test('a C3W35 backoff close to the top weight still lands on a complete grid', (
   const fixed = regenerateSupplementalLiftBlockGrid(squatSupplementalBlock(0.75, 110));
 
   const totalRows = fixed.warmups.length + fixed.sets.length;
-  expect(totalRows % 4).toBe(0);
+  expect(totalRows % 5).toBe(0);
   expect(fixed.smartPrescription.gridItemCount).toBe(totalRows);
 });
 

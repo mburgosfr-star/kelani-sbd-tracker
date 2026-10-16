@@ -359,7 +359,7 @@ test('replaces a stale pre-generated next workout immediately after completion',
   ]);
   expect(
     refreshedWorkouts[10].smartGeneratedPrescriptionVersion
-  ).toBe(12);
+  ).toBe(13);
   const refreshedPrimaryLift = refreshedWorkouts[10].lifts[0];
   expect(
     (refreshedPrimaryLift.warmups || []).length +
@@ -369,7 +369,7 @@ test('replaces a stale pre-generated next workout immediately after completion',
     (
       (refreshedPrimaryLift.warmups || []).length +
       (refreshedPrimaryLift.sets || []).length
-    ) % 4
+    ) % 5
   ).toBe(0);
   const refreshedSecondaryLift = refreshedWorkouts[10].lifts[1];
   expect(
@@ -380,6 +380,6 @@ test('replaces a stale pre-generated next workout immediately after completion',
     (
       (refreshedSecondaryLift.warmups || []).length +
       (refreshedSecondaryLift.sets || []).length
-    ) % 4
+    ) % 5
   ).toBe(0);
 });

@@ -24,9 +24,9 @@ function volumeSet(labelKey = 'backoff', pct = 0.725, weight = 127.5) {
 }
 
 test.each([
-  ['topSingle', 1, 4, 0.70],
-  ['topDouble', 2, 5, 0.65],
-  ['topTriple', 3, 6, 0.60],
+  ['topSingle', 1, 3, 0.70],
+  ['topDouble', 2, 4, 0.65],
+  ['topTriple', 3, 5, 0.60],
 ])('%s uses the agreed %s-rep backoff prescription', (labelKey, topReps, expectedReps, expectedPct) => {
   const sets = [
     { labelKey, reps: topReps, pct: 0.9, weight: 90 },
@@ -59,7 +59,7 @@ test('a short medium block uses the stable 70% target without an aggressive jump
   const reshaped = constrainExplicitMediumLiftDose({ sets, trainingMax: 100 });
 
   expect(reshaped).toHaveLength(3);
-  expect(reshaped.every(set => set.reps === 6)).toBe(true);
+  expect(reshaped.every(set => set.reps === 5)).toBe(true);
   expect(reshaped.every(set => set.weight === 70)).toBe(true);
   expect(getSmartIntensityRole({ intensityRole: 'medium', sets: reshaped }))
     .toBe('medium');
@@ -89,7 +89,7 @@ test('an explicit failed-set recovery keeps its deliberately lower medium-slot d
   expect(getSmartIntensityRole({ sets: reshaped })).toBe('light');
 });
 
-test('fills a progressive primary grid with five back-off sets', () => {
+test('fits a primary grid with one back-off set', () => {
   const sets = [
     topDouble(),
     ...Array.from({ length: 3 }, () => volumeSet()),
@@ -100,9 +100,9 @@ test('fills a progressive primary grid with five back-off sets', () => {
     preferMoreVolume: true,
   });
 
-  expect(completed).toHaveLength(5);
-  expect(completed.filter(set => set.labelKey === 'backoff')).toHaveLength(4);
-  expect((3 + completed.length) % 4).toBe(0);
+  expect(completed).toHaveLength(2);
+  expect(completed.filter(set => set.labelKey === 'backoff')).toHaveLength(1);
+  expect((3 + completed.length) % 5).toBe(0);
 });
 
 test('uses the lower safe complete option when progression is blocked', () => {
@@ -110,19 +110,15 @@ test('uses the lower safe complete option when progression is blocked', () => {
     topDouble(),
     ...Array.from({ length: 4 }, () => volumeSet()),
   ];
-  // 1 warmup here (not the usual 3) so both add and remove are feasible
-  // (volumeIndexes at the max/min bound simultaneously) - the only way to
-  // actually exercise preferMoreVolume=false's tie-break toward removal
-  // under the 4-column grid; with the usual warmup count, removal would be
-  // infeasible outright and this test would no longer isolate that choice.
+  // One warmup and one top set leave three volume cells in the row.
   const completed = completeSmartLiftGrid({
     sets,
     warmups: Array.from({ length: 1 }, () => ({})),
     preferMoreVolume: false,
   });
 
-  expect(completed.filter(set => set.labelKey === 'backoff')).toHaveLength(2);
-  expect((1 + completed.length) % 4).toBe(0);
+  expect(completed.filter(set => set.labelKey === 'backoff')).toHaveLength(3);
+  expect((1 + completed.length) % 5).toBe(0);
 });
 
 test('fills a secondary grid without unnecessary overload', () => {
@@ -134,14 +130,14 @@ test('fills a secondary grid without unnecessary overload', () => {
     warmups: Array.from({ length: 4 }, () => ({})),
   });
 
-  expect(completed).toHaveLength(4);
-  expect((4 + completed.length) % 4).toBe(0);
+  expect(completed).toHaveLength(1);
+  expect((4 + completed.length) % 5).toBe(0);
 });
 
-test('leaves an already complete Smart lift grid unchanged', () => {
+test('leaves an already complete five-cell grid unchanged', () => {
   const sets = [
     topDouble(0.85, 150),
-    ...Array.from({ length: 4 }, () => volumeSet()),
+    ...Array.from({ length: 1 }, () => volumeSet()),
   ];
   const completed = completeSmartLiftGrid({
     sets,
@@ -254,9 +250,9 @@ test('progresses the repeated C3W24 Deadlift double to 85% and completes both gr
   const deadliftWarmups = generateWarmups(deadliftSets, 'Deadlift');
 
   expect(deadliftSets.filter(set => set.labelKey === 'backoff'))
-    .toHaveLength(3);
-  expect(deadliftWarmups.length + deadliftSets.length).toBe(8);
-  expect((deadliftWarmups.length + deadliftSets.length) % 4).toBe(0);
+    .toHaveLength(5);
+  expect(deadliftWarmups.length + deadliftSets.length).toBe(10);
+  expect((deadliftWarmups.length + deadliftSets.length) % 5).toBe(0);
 
   const benchInitialSets = Array.from({ length: 3 }, () => ({
     labelKey: 'workSets',
@@ -275,7 +271,7 @@ test('progresses the repeated C3W24 Deadlift double to 85% and completes both gr
   });
   const benchWarmups = generateWarmups(benchSets, 'Bench');
 
-  expect(benchSets).toHaveLength(2);
-  expect(benchWarmups.length + benchSets.length).toBe(4);
-  expect((benchWarmups.length + benchSets.length) % 4).toBe(0);
+  expect(benchSets).toHaveLength(3);
+  expect(benchWarmups.length + benchSets.length).toBe(5);
+  expect((benchWarmups.length + benchSets.length) % 5).toBe(0);
 });

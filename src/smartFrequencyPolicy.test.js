@@ -228,9 +228,9 @@ describe('Smart rolling seven-workout frequency policy', () => {
     expect(bench.sets.map(({ weight, reps }) => [weight, reps]))
       .toEqual([
         [90, 1],
-        [75, 5],
-        [75, 5],
-        [75, 5],
+        [75, 4],
+        [75, 4],
+        [75, 4],
       ]);
     expect(bench.smartPrescription).toMatchObject({
       role: 'primary',
@@ -381,9 +381,9 @@ describe('Smart rolling seven-workout frequency policy', () => {
     expect(bench.sets.map(({ weight, reps }) => [weight, reps]))
       .toEqual([
         [100, 1],
-        [82.5, 5],
-        [82.5, 5],
-        [82.5, 5],
+        [82.5, 4],
+        [82.5, 4],
+        [82.5, 4],
       ]);
   });
 

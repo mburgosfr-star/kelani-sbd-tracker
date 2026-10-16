@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsScrollableContentStyle, statsTabListStyle } from './StatsScreen';
-import App, { AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutGridSpan, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
+import App, { AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
 import { translations } from './translations';
 
 test.each(['nl', 'en', 'ca'])(
@@ -792,8 +792,8 @@ test('Workout scroll content starts below the fixed header divider', async () =>
 
 test('program workout cards tighten only when the compact list toggles are visible', () => {
   expect(programWorkoutCardSpacingStyle({ compact: true })).toEqual({
-    padding: 'clamp(4px, calc(1.75dvh - 8.25px), 7px) clamp(12px, 3vw, 16px)',
-    marginBottom: 'clamp(1px, 0.25dvh, 3px)',
+    padding: '4px clamp(12px, 3vw, 16px)',
+    marginBottom: 0,
   });
   expect(programWorkoutCardSpacingStyle()).toEqual({
     padding: 'clamp(9px, 1.2dvh, 12px) clamp(12px, 3vw, 16px)',
@@ -836,7 +836,7 @@ test('compact program list distributes spare height without large divider gaps',
       paddingBottom: 8,
       borderTop: 'none',
       borderBottom: 'none',
-      overflowY: 'hidden',
+      overflowY: 'auto',
       minHeight: 0,
     });
   expect(programWorkoutListContainerStyle({ showAll: true, marginTop: 8 }))
@@ -855,7 +855,7 @@ test('compact program list distributes spare height without large divider gaps',
 test('activeWorkoutLiftBlockStyle uses normal margins', () => {
   expect(activeWorkoutLiftBlockStyle()).toMatchObject({
     background: 'transparent',
-    marginBottom: 'clamp(4px, 0.8dvh, 8px)',
+    marginBottom: 4,
   });
 });
 
@@ -868,7 +868,7 @@ test('meet workout keeps the standard top and lift spacing', () => {
   expect(meetWorkoutScreenStyle().paddingTop).toBeUndefined();
   expect(meetWorkoutLiftBlockStyle()).toMatchObject({
     overflow: 'visible',
-    marginBottom: 'clamp(4px, 0.8dvh, 8px)',
+    marginBottom: 4,
   });
   expect(meetWorkoutLiftBlockStyle().marginTop).toBeUndefined();
   expect(workoutCompletionButtonMargin({ isMeetDay: true })).toBe('8px auto 18px');
@@ -881,12 +881,6 @@ test('meet workout uses spare height between lift blocks instead of below comple
     display: 'grid',
     alignContent: 'space-evenly',
   });
-});
-
-test('meet warmups and attempts each consume one complete 12-column row', () => {
-  expect(meetWorkoutGridSpan(2) * 2).toBe(12);
-  expect(meetWorkoutGridSpan(3) * 3).toBe(12);
-  expect(meetWorkoutGridSpan(4) * 4).toBe(12);
 });
 
 test('the shared viewport never scrolls behind fixed screen chrome', () => {
@@ -1191,10 +1185,10 @@ test('modals use the available dynamic viewport before enabling internal scrolli
   });
 });
 
-test('preparation uses one compact four-column grid row', () => {
+test('preparation uses one compact five-column grid row', () => {
   expect(preparationGridStyle()).toMatchObject({
     display: 'grid',
-    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+    gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
   });
 });
 
@@ -2494,7 +2488,7 @@ test('finishing the compact setup creates a Smart user with body weight and star
   });
 });
 
-test('every Smart set has a phase label without breaking the four-column grid', async () => {
+test('every Smart set has a phase label without breaking the five-column grid', async () => {
   localStorage.clear();
   render(<App />);
 
@@ -2509,15 +2503,15 @@ test('every Smart set has a phase label without breaking the four-column grid', 
   fireEvent.click(await screen.findByRole('button', { name: 'Workout' }));
 
   const squatGrid = await screen.findByTestId('workout-lift-grid-0');
-  expect(squatGrid).toHaveStyle({ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' });
-  expect(squatGrid.querySelectorAll('[data-workout-circle-item="true"]')).toHaveLength(8);
+  expect(squatGrid).toHaveStyle({ gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' });
+  expect(squatGrid.querySelectorAll('[data-workout-circle-item="true"]')).toHaveLength(5);
   expect(squatGrid.children[0]).toHaveStyle({ display: 'contents' });
   expect(squatGrid.children[1]).toHaveAttribute('data-testid', 'workout-set-group');
   expect(Array.from(squatGrid.querySelectorAll('[data-testid="workout-phase-tag"]')).map(tag => tag.textContent))
-    .toEqual(['WU', 'TOP', 'BO', 'BO', 'BO', 'BO', 'BO', 'BO']);
+    .toEqual(['WU', 'TOP', 'BO', 'BO', 'BO']);
   const benchGrid = screen.getByTestId('workout-lift-grid-1');
   expect(Array.from(benchGrid.querySelectorAll('[data-testid="workout-phase-tag"]')).map(tag => tag.textContent))
-    .toEqual(['TOP', 'BO', 'BO', 'BO']);
+    .toEqual(['TOP', 'BO', 'BO', 'BO', 'BO']);
   expect(screen.queryByTestId('workout-warmup-label-0')).not.toBeInTheDocument();
   expect(screen.queryByTestId('workout-work-sets-label-0')).not.toBeInTheDocument();
 });
@@ -2886,3 +2880,50 @@ test('settings combines About and Updates in one modal', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Close' }));
   expect(screen.queryByText(/com\.kelani\.sbdtracker/)).not.toBeInTheDocument();
 });
+
+
+test.each(['training', 'rest', 'meet'])(
+  'future Smart %s opens read-only from Program without advancing or changing training',
+  async type => {
+    localStorage.clear();
+    localStorage.setItem('language', 'en');
+    localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+      version: 1, trainingModel: 'smart', currentCycle: 1,
+      prs: { Squat: 150, Bench: 100, Deadlift: 180 }, history: [],
+    }));
+    const view = render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Program' }, { timeout: 3000 }));
+    const before = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    const index = before.inProgress.workouts.findIndex((workout, i) =>
+      i > before.inProgress.currentIndex && workout.type === type && workout.smartVisible !== false
+    );
+    expect(index).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole('button', { name: translations.en.showAllWorkouts })[0]);
+    const card = screen.getByTestId(`program-workout-${before.inProgress.workouts[index].number}`);
+    expect(card).toHaveAttribute('aria-disabled', 'false');
+    if (type === 'rest') fireEvent.keyDown(card, { key: 'Enter' });
+    else fireEvent.click(card);
+
+    expect(await screen.findAllByText(translations.en.preview)).toHaveLength(1);
+    const completion = screen.getByRole('button', { name: translations.en.previewNotCompletable });
+    expect(completion).toBeDisabled();
+    expect(screen.queryByRole('button', { name: translations.en.activateWorkout })).not.toBeInTheDocument();
+    screen.queryAllByTestId('workout-circle-reps').forEach(reps => {
+      expect(reps.closest('button')).toBeDisabled();
+      fireEvent.click(reps.closest('button'));
+    });
+    fireEvent.click(completion);
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+      expect(saved.inProgress.selectedIndex).toBe(index);
+      expect(saved.inProgress.currentIndex).toBe(before.inProgress.currentIndex);
+      expect(saved.inProgress.workouts).toEqual(before.inProgress.workouts);
+      expect(saved.history).toEqual(before.history);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Workout', exact: true }));
+    await waitFor(() => expect(screen.queryAllByText(translations.en.preview)).toHaveLength(0));
+    expect(JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1')).inProgress.selectedIndex)
+      .toBe(before.inProgress.currentIndex);
+    view.unmount();
+  }
+);

@@ -56,7 +56,7 @@ test('return choice lightens only the current Smart training and can be restored
     smartDayType: 'deload',
     smartReturnTraining: true,
     smartIdealRoute: regular.smartIdealRoute,
-    smartReturnTrainingVersion: 2,
+    smartReturnTrainingVersion: 3,
   });
   expect(lighter.lifts.map(block => block.lift)).toEqual(regular.lifts.map(block => block.lift));
   expect(lighter.accessories.map(accessory => accessory.key))
@@ -68,10 +68,10 @@ test('return choice lightens only the current Smart training and can be restored
     });
   });
   lighter.lifts.forEach((block, index) => {
-    expect(block.sets.length).toBeGreaterThanOrEqual(4);
-    expect(block.sets.length).toBeGreaterThanOrEqual(regular.lifts[index].sets.length);
-    expect((block.sets.length + block.warmups.length) % 4).toBe(0);
-    block.sets.slice(0, regular.lifts[index].sets.length).forEach((set, setIndex) => {
+    expect(block.sets.length).toBeGreaterThanOrEqual(1);
+    expect(block.sets.filter(set => ['backoff', 'workSets'].includes(set.labelKey)).length).toBeLessThanOrEqual(5);
+    expect((block.sets.length + block.warmups.length) % 5).toBe(0);
+    block.sets.slice(0, Math.min(block.sets.length, regular.lifts[index].sets.length)).forEach((set, setIndex) => {
       expect(set.weight).toBeLessThanOrEqual(regular.lifts[index].sets[setIndex].weight);
       expect(set.weight % 2.5).toBe(0);
     });
@@ -111,8 +111,8 @@ test('the reported low-load collisions keep a real top/back-off difference', () 
   expect(lighter.lifts[1].sets[0].weight).toBe(25);
   expect(lighter.lifts[1].sets[1].weight).toBe(22.5);
   lighter.lifts.forEach(block => {
-    expect(block.sets.length).toBeGreaterThanOrEqual(4);
-    expect((block.warmups.length + block.sets.length) % 4).toBe(0);
+    expect(block.sets.length).toBeGreaterThanOrEqual(1);
+    expect((block.warmups.length + block.sets.length) % 5).toBe(0);
     expect(block.sets[1].pct).toBeLessThan(block.sets[0].pct);
   });
   expect(lighter.accessories[0].weights).toEqual([12.5, 12.5, 12.5, 12.5]);
@@ -181,7 +181,7 @@ test('an untouched older return workout upgrades on reload without changing a st
   const prepUpgraded = mergeGeneratedWorkoutStructure(
     [prepStarted, ...generated.slice(1)], generated, [], 1
   )[0];
-  expect(prepUpgraded.smartReturnTrainingVersion).toBe(2);
+  expect(prepUpgraded.smartReturnTrainingVersion).toBe(3);
   expect(prepUpgraded.prepItems[0].done).toBe(true);
   expect(prepUpgraded.accessories).toEqual(current.accessories);
 

@@ -8,7 +8,7 @@ const t = {
   perSideSuffix: '/ side',
 };
 
-test('centers three accessory actions independently from the four-column set grid', () => {
+test('centers three accessory actions independently from the five-column set grid', () => {
   const view = render(
     <AccessoryGroup
       acc={{
@@ -36,7 +36,7 @@ test('centers three accessory actions independently from the four-column set gri
   const setGrid = view.getByTestId('workout-accessory-group-grid');
   const actionGrid = view.getByTestId('workout-accessory-action-grid');
 
-  expect(setGrid.style.gridTemplateColumns).toBe('repeat(4, minmax(0, 1fr))');
+  expect(setGrid.style.gridTemplateColumns).toBe('repeat(5, minmax(0, 1fr))');
   expect(actionGrid.style.gridTemplateColumns)
     .toBe('repeat(3, clamp(50px, 12vw, 58px))');
   expect(actionGrid.style.columnGap).toBe('0px');

@@ -1,3 +1,4 @@
+import { WORKOUT_VOLUME_MIN_SETS, WORKOUT_VOLUME_MAX_SETS } from './workoutGridPolicy';
 import {
   SMART_INTENSITY_POINTS,
   SMART_THRESHOLDS,
@@ -164,15 +165,15 @@ export const SMART_IDEAL_NORMAL_PHASES = Object.freeze([
     prescriptions: Object.freeze({
       [H]: Object.freeze({
         topSet: Object.freeze({ reps: 1, pct: 0.90 }),
-        volume: Object.freeze({ reps: 4, pct: 0.85 }),
+        volume: Object.freeze({ reps: 3, pct: 0.80 }),
       }),
       [M]: Object.freeze({
         topSet: Object.freeze({ reps: 2, pct: 0.85 }),
-        volume: Object.freeze({ reps: 5, pct: 0.80 }),
+        volume: Object.freeze({ reps: 4, pct: 0.75 }),
       }),
       [L]: Object.freeze({
         topSet: Object.freeze({ reps: 3, pct: 0.80 }),
-        volume: Object.freeze({ reps: 6, pct: 0.75 }),
+        volume: Object.freeze({ reps: 5, pct: 0.70 }),
       }),
     }),
   }),
@@ -183,15 +184,15 @@ export const SMART_IDEAL_NORMAL_PHASES = Object.freeze([
     prescriptions: Object.freeze({
       [H]: Object.freeze({
         topSet: Object.freeze({ reps: 1, pct: 0.95 }),
-        volume: Object.freeze({ reps: 4, pct: 0.80 }),
+        volume: Object.freeze({ reps: 3, pct: 0.75 }),
       }),
       [M]: Object.freeze({
         topSet: Object.freeze({ reps: 2, pct: 0.90 }),
-        volume: Object.freeze({ reps: 5, pct: 0.75 }),
+        volume: Object.freeze({ reps: 4, pct: 0.70 }),
       }),
       [L]: Object.freeze({
         topSet: Object.freeze({ reps: 3, pct: 0.85 }),
-        volume: Object.freeze({ reps: 6, pct: 0.70 }),
+        volume: Object.freeze({ reps: 5, pct: 0.65 }),
       }),
     }),
   }),
@@ -202,15 +203,15 @@ export const SMART_IDEAL_NORMAL_PHASES = Object.freeze([
     prescriptions: Object.freeze({
       [H]: Object.freeze({
         topSet: Object.freeze({ reps: 1, pct: 1.00 }),
-        volume: Object.freeze({ reps: 4, pct: 0.75 }),
+        volume: Object.freeze({ reps: 3, pct: 0.70 }),
       }),
       [M]: Object.freeze({
         topSet: Object.freeze({ reps: 2, pct: 0.95 }),
-        volume: Object.freeze({ reps: 5, pct: 0.70 }),
+        volume: Object.freeze({ reps: 4, pct: 0.65 }),
       }),
       [L]: Object.freeze({
         topSet: Object.freeze({ reps: 3, pct: 0.90 }),
-        volume: Object.freeze({ reps: 6, pct: 0.65 }),
+        volume: Object.freeze({ reps: 5, pct: 0.60 }),
       }),
     }),
   }),
@@ -219,15 +220,15 @@ export const SMART_IDEAL_NORMAL_PHASES = Object.freeze([
 const SMART_IDEAL_TAPER_PRESCRIPTIONS = Object.freeze({
   [H]: Object.freeze({
     topSet: Object.freeze({ reps: 1, pct: 0.90 }),
-    volume: Object.freeze({ reps: 4, pct: 0.75 }),
+    volume: Object.freeze({ reps: 3, pct: 0.70 }),
   }),
   [M]: Object.freeze({
     topSet: Object.freeze({ reps: 2, pct: 0.85 }),
-    volume: Object.freeze({ reps: 5, pct: 0.70 }),
+    volume: Object.freeze({ reps: 4, pct: 0.65 }),
   }),
   [L]: Object.freeze({
     topSet: Object.freeze({ reps: 3, pct: 0.80 }),
-    volume: Object.freeze({ reps: 6, pct: 0.65 }),
+    volume: Object.freeze({ reps: 5, pct: 0.60 }),
   }),
 });
 
@@ -334,8 +335,8 @@ function buildGridPrescription({ definition, includeTopSet, taper = false }) {
   const volume = {
     ...definition.volume,
     setCount: 'grid-dependent',
-    minimumSetCount: taper ? 1 : 3,
-    maximumSetCount: taper ? 4 : 6,
+    minimumSetCount: WORKOUT_VOLUME_MIN_SETS,
+    maximumSetCount: WORKOUT_VOLUME_MAX_SETS,
   };
 
   if (includeTopSet) {
@@ -411,7 +412,6 @@ function buildTrainingWorkout({
     // Regular accessories stop during taper; the workout accessory policy
     // retains only a light Row on days containing Bench.
     accessoriesAllowed: stage !== 'taper',
-    minimumLiftGridRows: stage === 'taper' ? 1 : (lifts.length === 1 ? 3 : 1),
     lifts: lifts.map(item => {
       const includeTopSet = !hasEarlierMatchingExposure({
         routeTable,

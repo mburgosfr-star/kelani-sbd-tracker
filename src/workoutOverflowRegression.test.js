@@ -153,7 +153,7 @@ test('Smart C1W1 keeps preparation, all accessories and completion reachable', (
   };
   view.rerender(<CurrentWorkout {...props} workout={finishedMainSets} />);
   const complete = screen.getByRole('button', {
-    name: `${translations.en.completeWorkout} ✓`,
+    name: translations.en.completeWorkout,
   });
   expect(complete).toBeEnabled();
   fireEvent.click(complete);

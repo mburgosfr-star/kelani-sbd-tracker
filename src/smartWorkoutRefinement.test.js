@@ -148,7 +148,7 @@ test('generates a beginner Deadlift 80/70 prescription consistently from a 60 kg
   deadlift.sets.slice(1).forEach(set => {
     expect(set).toMatchObject({
       labelKey: 'backoff',
-      reps: 4,
+      reps: 3,
       pct: 0.7,
       weight: 42.5,
       originalPct: 0.7,
@@ -342,12 +342,12 @@ test('preserves a begun accessory plan when the active workout regenerates', () 
 });
 
 
-test('gives Ultra Bench Strength three Deadlift work sets', () => {
+test('gives Ultra Bench Strength two Deadlift work sets', () => {
   const workouts = generateUltraProgram(145, 100, 180);
   const workout = workouts.find(item => item.label === 'Ultra Bench Strength');
   const deadlift = workout.lifts.find(item => item.lift === 'Deadlift');
 
-  expect(deadlift.sets).toHaveLength(3);
+  expect(deadlift.sets).toHaveLength(2);
 
   deadlift.sets.forEach(set => {
     expect(set).toMatchObject({
@@ -359,7 +359,7 @@ test('gives Ultra Bench Strength three Deadlift work sets', () => {
   });
 });
 
-test('uses four-rep volume work at 70% after the Deadlift top double', () => {
+test('uses three-rep volume work at 70% after the Deadlift top double', () => {
   const workouts = generateUltraProgram(145, 100, 180);
   const workout = workouts.find(
     item => item.label === 'Ultra Deadlift + Bench Volume'
@@ -370,34 +370,34 @@ test('uses four-rep volume work at 70% after the Deadlift top double', () => {
   const deadlift = workout.lifts.find(item => item.lift === 'Deadlift');
   const bench = workout.lifts.find(item => item.lift === 'Bench');
 
-  expect(deadlift.sets).toHaveLength(5);
+  expect(deadlift.sets).toHaveLength(6);
   expect(deadlift.sets[0]).toMatchObject({
     labelKey: 'topDouble',
     reps: 2,
     pct: 0.8,
   });
 
-  expect(deadlift.sets.slice(1)).toHaveLength(4);
+  expect(deadlift.sets.slice(1)).toHaveLength(5);
   deadlift.sets.slice(1).forEach(set => {
     expect(set).toMatchObject({
       labelKey: 'backoff',
-      reps: 4,
+      reps: 3,
       pct: 0.7,
     });
   });
 
-  expect(bench.sets).toHaveLength(4);
+  expect(bench.sets).toHaveLength(3);
   bench.sets.forEach(set => {
     expect(set).toMatchObject({
       labelKey: 'workSets',
-      reps: 4,
+      reps: 3,
       pct: 0.7,
     });
   });
 });
 
 
-test('gives the Ultra Squat Opener a full four-by-four backoff block', () => {
+test('gives the Ultra Squat Opener a five-column backoff block', () => {
   const workouts = generateUltraProgram(145, 100, 180);
   const workout = workouts.find(item => item.label === 'Ultra Squat Opener');
 
@@ -405,7 +405,7 @@ test('gives the Ultra Squat Opener a full four-by-four backoff block', () => {
 
   const squat = workout.lifts.find(item => item.lift === 'Squat');
 
-  expect(squat.sets).toHaveLength(5);
+  expect(squat.sets).toHaveLength(2);
   expect(squat.sets[0]).toMatchObject({
     labelKey: 'topSingle',
     reps: 1,
@@ -415,7 +415,7 @@ test('gives the Ultra Squat Opener a full four-by-four backoff block', () => {
   squat.sets.slice(1).forEach(set => {
     expect(set).toMatchObject({
       labelKey: 'backoff',
-      reps: 4,
+      reps: 3,
       pct: 0.7,
     });
   });
@@ -1488,7 +1488,7 @@ test('generates progressive C3W18 training without template prescriptions', () =
     expect(volumeSets.length).toBeGreaterThanOrEqual(2);
     expect(volumeSets.length).toBeLessThanOrEqual(6);
     expect(
-      ((liftBlock.warmups || []).length + (liftBlock.sets || []).length) % 4
+      ((liftBlock.warmups || []).length + (liftBlock.sets || []).length) % 5
     ).toBe(0);
     volumeSets.forEach(set => {
       expect(set.reps).toBeGreaterThanOrEqual(2);

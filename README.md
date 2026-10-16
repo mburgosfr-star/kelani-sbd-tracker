@@ -6,7 +6,7 @@
 
 Kelani is an offline-first Squat, Bench Press and Deadlift tracker for lifters who train independently but do not want to train blindly. It requires no account, subscription or cloud service.
 
-Smart Training follows a level-specific 28-workout ideal route: W1-W21 build strength, W22-W26 taper, W27 is SBD Meet Day and W28 is the planned post-meet recovery day. The Program screen shows the route ahead, while your confirmed strength determines the prescribed weights. **Too easy** shortens the route unless Meet Day is already next, while **Too hard** or failed work can add recovery without ever scheduling more than two consecutive rest days. Readiness information explains your progress without silently replacing planned workouts or postponing the meet.
+Smart Training follows a level-specific 28-workout ideal route: W1-W21 build strength, W22-W26 taper, W27 is SBD Meet Day and W28 is the planned post-meet recovery day. The Program screen shows the route ahead, while your confirmed strength determines the prescribed weights. Select a future workout to inspect its full content in view-only mode. It cannot be completed or edited; choosing Workout in the navigation returns to your current session. **Too easy** shortens the route unless Meet Day is already next, while **Too hard** or failed work can add recovery without ever scheduling more than two consecutive rest days. Readiness information explains your progress without silently replacing planned workouts or postponing the meet.
 
 ## What Kelani does
 
@@ -19,6 +19,8 @@ Smart Training follows a level-specific 28-workout ideal route: W1-W21 build str
 - Reviews each completed cycle with workout and rest-day counts, successful lift results, progress since the start, and a chart of the best recorded 1RM total. Support and feedback actions are available in the review. Navigating to another screen starts the next cycle.
 - Can optionally add future workouts to a selected Android calendar after you grant calendar access and start the first sync. Planning includes the remaining current cycle and one provisional next cycle, which can change with training results and settings. Events receive a reminder at their start time, which you can adjust in your calendar. Workout events you manually delete stay deleted during later syncs. You can also choose to remove Kelani's calendar events for completed workouts. The selected calendar provider may sync those events to your account.
 - Can check GitHub for newer releases and link directly to GitHub or IzzyOnDroid without downloading or installing anything automatically.
+
+Workout set controls use a shared five-column grid. Newly generated back-off and work-set blocks contain 1–5 sets. Back-off and work-set prescriptions use 3–4–5 repetitions for heavy, medium and light work. Their target percentages decrease across the three normal phases: 80–75–70%, 75–70–65% and 70–65–60%, respectively. During taper they are 70%, 65% and 60%. Top-set prescriptions are unchanged. Completed and already-started workouts retain their saved prescriptions.
 
 During training you can complete or fail sets, adjust and restore weights, use a rest timer and open the plate calculator. Failed sets automatically make the workout **Too hard**; optional work left unchecked is not treated as failure.
 
