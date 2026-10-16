@@ -31,3 +31,16 @@ test('registers the Android calendar bridge and declares permissions', () => {
   expect(plugin).toContain('public void deleteWorkoutEvent(PluginCall call)');
   expect(plugin).toContain('managedEventStatus(eventId, calendarId, marker)');
 });
+
+// Capacitor's getDouble rejects JSON Long values. Every millisecond parameter
+// must use the same integer bridge contract, including discovery-only calls.
+test('reads epoch milliseconds with the integer bridge API used by event creation', () => {
+  const plugin = fs.readFileSync(
+    path.join(root, 'android/app/src/main/java/com/kelani/sbdtracker/CalendarIntegrationPlugin.java'), 'utf8'
+  );
+  const readers = [...plugin.matchAll(/call\.(get\w+)\("(\w+Millis)"\)/g)]
+    .map(([, reader, parameter]) => [parameter, reader]);
+  expect(readers).toEqual([
+    ['fromMillis', 'getLong'], ['startMillis', 'getLong'], ['endMillis', 'getLong'],
+  ]);
+});

@@ -101,8 +101,9 @@ public class CalendarIntegrationPlugin extends Plugin {
         }
         try {
             String calendarIdText = call.getString("calendarId");
-            Double fromMillis = call.getDouble("fromMillis");
-            if (calendarIdText == null || fromMillis == null || !Double.isFinite(fromMillis)) {
+            // JSON epoch milliseconds arrive as Long, which Capacitor getDouble does not accept.
+            Long fromMillis = call.getLong("fromMillis");
+            if (calendarIdText == null || fromMillis == null || fromMillis < 0) {
                 call.reject("Invalid calendar lookup", "INVALID_EVENT");
                 return;
             }

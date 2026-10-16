@@ -1,0 +1,1 @@
+Graelles de cinc columnes amb 1–5 sèries de descàrrega/treball i menys repeticions de volum. Percentatges de volum Smart més baixos. Consulta entrenaments futurs sense canviar el progrés. Avís de sèrie fallada corregit. Botons i espaiat coherents, resum del cicle, navegació més àgil i calendari amb un cicle següent provisional i correccions de sincronització i duplicats.

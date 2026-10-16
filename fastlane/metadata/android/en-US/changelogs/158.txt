@@ -1,0 +1,1 @@
+Five-column workout grids with 1–5 back-off/work sets and fewer volume reps. Lower Smart volume percentages. Preview future workouts without changing progress. Fix missed-set feedback. Consistent buttons and spacing, cycle results review, faster navigation, and calendar planning through one provisional next cycle with sync and duplicate fixes.
