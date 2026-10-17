@@ -4,7 +4,7 @@ T'ajuda a planificar, registrar i completar entrenaments SBD sense comptes, anun
 
 Smart Training:
 
-Smart Training segueix una ruta ideal de 28 entrenaments adaptada al nivell fins al SBD Meet Day. La ruta es manté visible per endavant, mentre que la teva força confirmada determina els pesos prescrits.
+Smart Training segueix una ruta ideal de 28 entrenaments adaptada al nivell, incloent-hi el SBD Meet Day i la recuperació posterior. La ruta es manté visible per endavant, mentre que la teva força confirmada determina els pesos prescrits.
 
 - Planifica treball pesant, mitjà i lleuger de Squat, Bench Press i Deadlift per al teu nivell actual
 - Prescriu escalfaments, treball principal, sèries de descens i accessoris

@@ -4,7 +4,7 @@ It helps you plan, track and complete SBD workouts without accounts, ads, subscr
 
 Smart Training:
 
-Smart Training follows a level-specific 28-workout ideal route through SBD Meet Day. The route remains visible in advance, while confirmed strength determines the prescribed weights.
+Smart Training follows a level-specific 28-workout ideal route including SBD Meet Day and post-meet recovery. The route remains visible in advance, while confirmed strength determines the prescribed weights.
 
 - Plans heavy, medium and light Squat, Bench Press and Deadlift work for your current level
 - Prescribes warm-ups, top work, back-off work and accessories
