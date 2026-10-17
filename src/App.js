@@ -1,3 +1,4 @@
+import { BOTTOM_NAV_SPACE, APP_HEADER_SPACE } from './appChromeLayout';
 import { WORKOUT_GRID_COLUMNS } from './workoutGridPolicy';
 import CycleCompletedScreen from './CycleCompletedScreen';
 import { getSmartIntensityRole, roundBarbellWeight } from './smartFrequencyPolicy';
@@ -1555,7 +1556,8 @@ const COMPACT_CONTENT_ROW_GAP = 'clamp(6px, 0.8dvh, 9px)';
 export const FAILED_SET_COLOR = THEME.meet;
 const FAILED_SET_BACKGROUND = 'rgba(198, 40, 40, 0.22)';
 
-export const BOTTOM_NAV_SPACE = 78;
+export { BOTTOM_NAV_SPACE } from './appChromeLayout';
+
 export const BOTTOM_NAV_ICON_SIZE = 39;
 export const SCREEN_OVERFLOW_TOLERANCE_PX = 2;
 
@@ -1631,7 +1633,7 @@ function getActiveScreenFlowRoot(viewport) {
   return Array.from(viewport.children).find(child => {
     const style = window.getComputedStyle(child);
     const rect = child.getBoundingClientRect();
-    return style.display !== 'none' &&
+    return !child.hasAttribute('data-kelani-app-header') && style.display !== 'none' &&
       style.visibility !== 'hidden' &&
       style.position !== 'fixed' &&
       rect.width > 0 &&
@@ -1687,6 +1689,8 @@ export function appViewportStyle({
   allowContentScroll = true,
 } = {}) {
   return {
+    paddingTop: APP_HEADER_SPACE,
+    '--kelani-header-space': `${APP_HEADER_SPACE}px`,
     paddingBottom: screen === 'current' && !workoutNeedsNavClearance
       ? 0
       : BOTTOM_NAV_SPACE,
@@ -1754,7 +1758,7 @@ const RESPONSIVE_CONTENT_UI = Object.freeze({
 
 const RESPONSIVE_SETTINGS_UI = Object.freeze({
   rowGap: 'clamp(8px, 2vw, 12px)',
-  rowPadding: 'clamp(3px, 0.55dvh, 6px) 0',
+  rowPadding: 'var(--kelani-settings-row-padding, clamp(3px, 0.55dvh, 6px) 0)',
   labelFontSize: 'clamp(16px, 4vw, 20px)',
   descriptionFontSize: 'clamp(13px, 3.2vw, 16px)',
   valueFontSize: 'clamp(15px, 3.7vw, 18px)',
@@ -1781,7 +1785,7 @@ export function fixedChromeScreenStyle(baseStyle = {}) {
   return {
     ...baseStyle,
     minHeight: 0,
-    height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
+    height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px - var(--kelani-header-space, 0px))`,
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
@@ -1824,10 +1828,9 @@ export function regularDashboardContentStyle({ spreadContent = false, compact = 
     ...scrollableScreenContentStyle(),
     minHeight: 0,
     display: 'grid',
-    // Share spare height between the dashboard sections on every regular day.
-    // Distributed alignment already uses safe centre alignment as its fallback.
-    // Do not prefix space-evenly with safe: that combination is invalid CSS.
-    alignContent: 'space-evenly',
+    // Put spare height between sections. The screen padding owns the outer
+    // clearance, matching the inset above the content title.
+    alignContent: 'space-between',
     rowGap: `var(--kelani-content-row-gap, ${defaultRowGap})`,
   };
 }
@@ -1874,17 +1877,12 @@ export function shouldUseCompactDashboardLayout({ workout, meetState, recentPrEv
 }
 
 export function programScreenStyle() {
-  return {
+  // Reset the old viewport-sized minimum as well as the height. Otherwise the
+  // inherited minimum pushes the last rows beneath the fixed navigation.
+  return fixedChromeScreenStyle({
     ...responsiveContentScreenStyle(),
-    // The fixed screen height already ends above the reserved navigation
-    // space. Do not reserve that clearance twice: compact routes need these
-    // final pixels to keep the lower list toggle fully inside its viewport.
-    paddingBottom: 0,
-    height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-  };
+    paddingBottom: 12,
+  });
 }
 
 export function programHeaderStyle() {
@@ -1910,36 +1908,26 @@ export function programWorkoutCardSpacingStyle({ compact = false } = {}) {
   };
 }
 
-export function programWorkoutListVerticalSpacing({ compact = false } = {}) {
-  return {
-    listMarginTop: HEADER_CONTENT_GAP,
-    topToggleMargin: compact
-      ? '0 0 clamp(8px, 1.2dvh, 12px)'
-      : '0 0 clamp(10px, 1.5dvh, 16px)',
-    bottomToggleMargin: compact
-      ? 'clamp(8px, 1.2dvh, 12px) 0 0'
-      : 'clamp(10px, 1.5dvh, 16px) 0 0',
-  };
+export function programWorkoutListVerticalSpacing() {
+  return { listMarginTop: 0, topToggleMargin: 0, bottomToggleMargin: 0 };
 }
 
-export function programWorkoutListContainerStyle({ showAll = false, marginTop = 0 } = {}) {
+export function programWorkoutListContainerStyle({ showAll = false, marginTop = 0, expandedGap = 4 } = {}) {
   return {
-    flex: 1,
+    flex: '1 1 auto',
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    // Anchor the first and last controls at the content edges. Only the
-    // spaces between cards expand when the short list fits the viewport.
     justifyContent: showAll ? 'flex-start' : 'space-between',
+    // Retain the short window's actual distributed gap when adding rows.
+    rowGap: showAll ? expandedGap : 4,
     marginTop: 0,
     paddingTop: marginTop,
-    paddingBottom: marginTop,
+    paddingBottom: Math.max(8, marginTop),
     borderTop: 'none',
     borderBottom: 'none',
     boxSizing: 'border-box',
     overflowX: 'hidden',
-    // A seven-workout window can still exceed the viewport with multi-lift
-    // summaries. Keep the final toggle reachable instead of clipping it.
     overflowY: 'auto',
     overscrollBehaviorY: 'none',
   };
@@ -2004,6 +1992,7 @@ export function MeetDayDashboardPlan({
       }}
     >
       <div style={{ textAlign: 'center' }}>
+        <ScreenTitle title={t.dashboard} />
         <h3 style={{
           color: THEME.meet,
           fontSize: 'clamp(24px, 6vw, 30px)',
@@ -2084,7 +2073,7 @@ export function activeWorkoutLiftBlockStyle() {
 export function restWorkoutScreenStyle() {
   return fixedChromeScreenStyle({
     ...responsiveContentScreenStyle(),
-    paddingBottom: 32,
+    paddingBottom: 'clamp(10px, 1.8dvh, 18px)',
   });
 }
 
@@ -2093,10 +2082,6 @@ export function restWorkoutContentStyle() {
     minHeight: 0,
     display: 'grid',
     alignContent: 'center',
-    // Optical centring: the header has more visual weight than the action
-    // below, so the recovery message reads as centred slightly above the
-    // mathematical midpoint.
-    transform: 'translateY(clamp(-28px, -3dvh, -18px))',
   };
 }
 
@@ -3576,8 +3561,8 @@ export function settingsModalPanelStyle() {
 export function regularSettingsClusterStyle() {
   return {
     display: 'grid',
-    gap: 'clamp(1px, 0.3dvh, 4px)',
-    alignContent: 'space-evenly',
+    gap: 4,
+    alignContent: 'space-between',
     minHeight: 0,
   };
 }
@@ -3589,13 +3574,14 @@ export function settingsContentLayoutStyle() {
     border: 'none',
     borderRadius: 8,
     padding: '0 clamp(2px, 1.5vw, 8px)',
-    marginTop: HEADER_CONTENT_GAP,
+    '--kelani-settings-row-padding': '3px 0',
+    marginTop: 0,
     marginBottom: 0,
     flex: 1,
     minHeight: 0,
     display: 'grid',
-    gridTemplateRows: 'minmax(0, 1fr) auto',
-    rowGap: 'var(--kelani-content-row-gap, clamp(5px, 0.8dvh, 10px))',
+    gridTemplateRows: 'auto minmax(min-content, 1fr)',
+    rowGap: 0,
     alignContent: 'stretch',
   };
 }
@@ -7561,6 +7547,7 @@ export function getSmartModalDetailRows(
 }
 
 export function SmartDayTypeInline({
+  contentTitle = null,
   workout,
   t,
   weightUnit = WEIGHT_UNITS.KG,
@@ -7572,7 +7559,9 @@ export function SmartDayTypeInline({
 }) {
   const [showSmartInfo, setShowSmartInfo] = useState(false);
   const [smartCopyStatus, setSmartCopyStatus] = useState(null);
-  const label = getSmartDayTypeDisplayLabel(workout?.smartDayType, t);
+  const label = getSmartDayTypeDisplayLabel(workout?.smartDayType, t) || (contentTitle
+    ? workout?.type === 'rest' ? t.restAndRecovery : t.training
+    : null);
   if (!label) return null;
 
   function formatSmartInfoText(value) {
@@ -7734,7 +7723,7 @@ export function SmartDayTypeInline({
       }}>
         <button
           type="button"
-          aria-label={`Smart: ${label}. ${t.smartWorkoutInfo}`}
+          aria-label={`${label}. ${t.smartWorkoutInfo}`}
           data-kelani-button-size="contextual"
           aria-expanded={showSmartInfo}
           onClick={() => {
@@ -7756,7 +7745,7 @@ export function SmartDayTypeInline({
             borderRadius: 8,
             background: 'transparent',
             color: THEME.meet,
-            fontSize: RESPONSIVE_WORKOUT_UI.smartHeaderFontSize,
+            fontSize: 'clamp(22px, 5.8vw, 26px)',
             fontWeight: 900,
             lineHeight: 1.2,
             cursor: 'pointer',
@@ -7764,7 +7753,7 @@ export function SmartDayTypeInline({
             textDecoration: 'none',
           }}
         >
-          <span>{t.smartLabel}: {label}</span>
+          <span role="heading" aria-level={1}>{contentTitle || label}</span>
           <span
             aria-hidden="true"
             style={{
@@ -8379,46 +8368,21 @@ export function CurrentWorkout({
   if (workout.type === 'rest') {
     return (
       <div style={restWorkoutScreenStyle()}>
-        <AppHeader
-          t={t}
-          title={t.restAndRecovery || t.deload}
-          subtitle={(
-            <>
-              {formatCycleWorkoutSubtitle({
-                t,
-                currentCycle,
-                workoutNumber: Math.min(Number(workout.number) || 1, totalWorkouts),
-                totalWorkouts,
-                smartModel,
-              })}
-              {smartModel && (
-                <AthleteLevelBadge
-                  athleteLevel={athleteLevel}
-                  eStrengthRatio={eStrengthRatio}
-                  eStrengthMax={eStrengthMax}
-                  latestBodyWeight={latestBodyWeight}
-                  t={t}
-                />
-              )}
-            </>
-          )}
-          titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
-          subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
-        />
+
 
         <div
           data-testid="screen-scroll-content"
           style={scrollableScreenContentStyle({
             display: 'grid',
-            gridTemplateRows: smartModel
-              ? 'auto minmax(0, 1fr) auto'
-              : 'minmax(0, 1fr) auto',
+            gridTemplateRows: 'auto minmax(0, 1fr) auto',
             alignContent: 'stretch',
           })}
         >
+        {!smartModel && <ScreenTitle title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />} />}
         {smartModel && (
           <div data-testid="workout-header-secondary" style={appHeaderSecondaryStyle()}>
             <SmartDayTypeInline
+              contentTitle={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
               workout={workout}
               t={t}
               weightUnit={weightUnit}
@@ -8438,14 +8402,6 @@ export function CurrentWorkout({
             color: THEME.text,
             textAlign: 'center'
           }}>
-            <div style={{
-              fontSize: 'clamp(42px, 10vw, 52px)',
-              lineHeight: 1,
-              marginBottom: 14
-            }}>
-              ✓
-            </div>
-
             <h2 style={{
               margin: '0 0 8px',
               color: THEME.text,
@@ -8463,7 +8419,7 @@ export function CurrentWorkout({
                   marginLeft: 8,
                   verticalAlign: 'middle'
                 }}>
-                  {t.now}
+                  {t.programNext}
                 </span>
               )}
             </h2>
@@ -8487,6 +8443,7 @@ export function CurrentWorkout({
             onComplete('easy');
           }}
           data-testid="complete-rest-day-button"
+          style={{ margin: '14px auto 8px' }}
           disabled={isReadOnly}
           enabled={!isReadOnly}
           active={shouldFocusWorkoutCompletion({
@@ -8539,35 +8496,7 @@ export function CurrentWorkout({
           />
         )}
 
-        <AppHeader
-          t={t}
-          title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
-          subtitle={(
-            <>
-              {formatCycleWorkoutSubtitle({
-                t,
-                currentCycle,
-                workoutNumber: workout.number,
-                totalWorkouts,
-                smartModel,
-              })}
-              {smartModel && (
-                <AthleteLevelBadge
-                  athleteLevel={athleteLevel}
-                  eStrengthRatio={eStrengthRatio}
-                  eStrengthMax={eStrengthMax}
-                  latestBodyWeight={latestBodyWeight}
-                  t={t}
-                />
-              )}
-            </>
-          )}
-          titleStyle={{
-            fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize,
-            color: isMeetDay ? THEME.meet : THEME.text
-          }}
-          subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
-        />
+
 
         <div
           data-testid="screen-scroll-content"
@@ -8583,9 +8512,11 @@ export function CurrentWorkout({
             alignContent: 'space-between',
           })}
         >
+        {!smartModel && <ScreenTitle title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />} />}
         {smartModel && (
           <div data-testid="workout-header-secondary" style={appHeaderSecondaryStyle()}>
             <SmartDayTypeInline
+              contentTitle={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
               workout={workout}
               t={t}
               weightUnit={weightUnit}
@@ -9049,23 +8980,7 @@ export function CurrentWorkout({
 
   return (
     <div style={activeWorkoutScreenStyle()}>
-      <AppHeader
-        title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
-        subtitle={(
-          <>
-            {formatCycleWorkoutSubtitle({ t, currentCycle, workoutNumber: workout.number, totalWorkouts, smartModel })}
-            {smartModel && (
-              <AthleteLevelBadge
-                athleteLevel={athleteLevel}
-                eStrengthRatio={eStrengthRatio}
-                eStrengthMax={eStrengthMax}
-                latestBodyWeight={latestBodyWeight}
-                t={t}
-              />
-            )}
-          </>
-        )}
-      />
+
 
       <div
         data-testid="screen-scroll-content"
@@ -9075,9 +8990,11 @@ export function CurrentWorkout({
           alignContent: 'space-between',
         })}
       >
+      {!smartModel && <ScreenTitle title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />} />}
       {smartModel && (
         <div data-testid="workout-header-secondary" style={appHeaderSecondaryStyle()}>
           <SmartDayTypeInline
+              contentTitle={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
             workout={workout}
             t={t}
             weightUnit={weightUnit}
@@ -10419,10 +10336,6 @@ export function getDashboardPrimaryBlockerLift(meetReadiness) {
   return meetReadiness.meetPlanWeakestLift || null;
 }
 
-function AppTopBar() {
-  return null;
-}
-
 export function appHeaderDividerStyle() {
   return {
     width: '100%',
@@ -10435,7 +10348,7 @@ export function appHeaderDividerStyle() {
 
 export function appHeaderSecondaryStyle() {
   return {
-    marginTop: HEADER_CONTENT_GAP,
+    marginTop: 0,
   };
 }
 
@@ -10450,68 +10363,48 @@ export function fixedScreenHeaderStyle() {
   };
 }
 
-export function AppHeader({ title, subtitle, titleStyle = {}, subtitleStyle = {}, containerStyle = {} }) {
+export function ScreenTitle({ title }) {
+  return <h1 data-testid="screen-title" style={{
+    margin: '0 0 12px', padding: '4px 0', textAlign: 'center',
+    color: THEME.meet, fontSize: 'clamp(22px, 5.8vw, 26px)',
+    fontWeight: 900, lineHeight: 1.25, flex: '0 0 auto', overflowWrap: 'anywhere',
+  }}>{title}</h1>;
+}
+
+export function AppHeader({ t = translations.en, currentCycle = 1, workoutNumber = 1,
+  athleteLevel = 'beginner', eStrengthRatio, eStrengthMax, recentBodyRatioEvent }) {
   const versionLabel = import.meta.env.VITE_APP_VERSION ? `v${import.meta.env.VITE_APP_VERSION}` : 'dev';
-
-  return (
-    <div
-      style={{
-        ...fixedScreenHeaderStyle(),
-        textAlign: 'center',
-        marginTop: 0,
-        marginBottom: 0,
-        ...containerStyle,
-      }}
-    >
-      <AppTopBar />
-
-      <h2
-        style={{
-          margin: '4px 0 0',
-          color: THEME.meet,
-          textShadow: '0 0 10px rgba(255,45,45,0.45)',
-          fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize,
-          fontWeight: 900,
-          lineHeight: 1.1,
-          letterSpacing: -0.4,
-          ...titleStyle,
-        }}
-      >
-        {title}
-      </h2>
-
-      <div
-        style={{
-          color: THEME.muted,
-          fontSize: 10,
-          fontWeight: 800,
-          lineHeight: 1,
-          marginTop: 3,
-        }}
-      >
-        {versionLabel}
-      </div>
-
-      {subtitle && (
-        <>
-          <div
-            style={{
-              color: THEME.text,
-              fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize,
-              fontWeight: 700,
-              lineHeight: 1.35,
-              marginTop: 16,
-              ...subtitleStyle,
-            }}
-          >
-            {subtitle}
-          </div>
-          <div data-testid="app-header-divider" style={appHeaderDividerStyle()} />
-        </>
-      )}
-
+  return <header data-kelani-app-header data-testid="app-header" style={{
+    position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
+    height: APP_HEADER_SPACE, boxSizing: 'border-box', background: THEME.bg,
+    width: '100%', maxWidth: 500, margin: '0 auto',
+    padding: '4px clamp(14px, 4vw, 20px)', display: 'flex',
+    alignItems: 'center', justifyContent: 'space-between', gap: 12,
+    borderBottom: SUBTLE_DIVIDER,
+  }}>
+    <div style={{ flex: '0 0 auto', textAlign: 'center', lineHeight: 1 }}>
+      <svg role="img" aria-label={t.appName} viewBox="0 0 112 46" style={{display: 'block', width: 84, height: 38}}>
+        <g fill="#fff4e6">
+          <rect x="1" y="20" width="4" height="6" rx="1" />
+          <rect x="7" y="12" width="5" height="22" rx="1" />
+          <rect x="14" y="8" width="5" height="30" rx="1" />
+          <rect x="21" y="21" width="20" height="4" />
+          <rect x="71" y="21" width="20" height="4" />
+          <rect x="93" y="8" width="5" height="30" rx="1" />
+          <rect x="100" y="12" width="5" height="22" rx="1" />
+          <rect x="107" y="20" width="4" height="6" rx="1" />
+        </g>
+        <path fill="#ffd600" d="M45 6h12l-4 15L68 6h15L62 25l12 15H59L50 28l-3 12H35z" />
+      </svg>
+      <span style={{ fontSize: 9, fontWeight: 700, color: THEME.muted }}>{versionLabel}</span>
     </div>
-  );
+    <AthleteLevelBadge athleteLevel={athleteLevel} eStrengthRatio={eStrengthRatio}
+      eStrengthMax={eStrengthMax} recentBodyRatioEvent={recentBodyRatioEvent} t={t}
+      headerDetails={<>
+        <span>{t.cycle} {currentCycle}</span>
+        <span>{t.workout} {workoutNumber}</span>
+      </>} />
+  </header>;
 }
 
 export function DashboardCycleWorkoutLabel({
@@ -10594,6 +10487,7 @@ function TapInfoIcon({ color = THEME.primary, size = 13 }) {
 }
 
 function AthleteLevelBadge({
+  headerDetails = null,
   athleteLevel,
   eStrengthRatio,
   eStrengthMax,
@@ -10654,20 +10548,35 @@ function AthleteLevelBadge({
         aria-label={`${t.athleteLevelBadgeLabel}: ${levelLabel}`}
         style={{
           appearance: 'none',
-          display: 'inline',
-          marginLeft: 6,
+          display: headerDetails ? 'inline-flex' : 'inline',
+          alignItems: headerDetails ? 'center' : undefined,
+          justifyContent: headerDetails ? 'flex-end' : undefined,
+          gap: headerDetails ? 8 : undefined,
+          textAlign: headerDetails ? 'right' : undefined,
+          minHeight: headerDetails ? 60 : undefined,
+          maxWidth: headerDetails ? 'calc(100% - 96px)' : undefined,
+          alignContent: headerDetails ? 'center' : undefined,
+          marginLeft: headerDetails ? 0 : 6,
           padding: 0,
           border: 'none',
           background: 'transparent',
           color: THEME.primary,
-          fontSize: 'inherit',
-          fontWeight: 'inherit',
+          fontSize: headerDetails ? 12 : 'inherit',
+          fontWeight: headerDetails ? 700 : 'inherit',
           fontFamily: 'inherit',
-          lineHeight: 'inherit',
+          lineHeight: headerDetails ? 1.35 : 'inherit',
           cursor: 'pointer',
         }}
       >
-        · {levelLabel} <TapInfoIcon color={THEME.primary} />
+        {headerDetails ? <>
+          <span data-testid="header-context-lines" style={{ display: 'grid', textAlign: 'right' }}>
+            <span>{formatTranslatedText(t.headerLevel, { level: levelLabel })}</span>
+            {headerDetails}
+          </span>
+          <span data-testid="header-context-info" style={{ display: 'inline-flex', flex: '0 0 auto' }}>
+            <TapInfoIcon color={THEME.primary} />
+          </span>
+        </> : <span>· {levelLabel} <TapInfoIcon color={THEME.primary} /></span>}
       </button>
 
       {showModal && (
@@ -10813,7 +10722,9 @@ export function getSmartProgramTitle(trainingFocus, t) {
 
 function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], currentCycle, onSelect, onStartNewCycle, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, trainingFocus = SMART_TRAINING_FOCUSES.STANDARD, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, language = 'en', scheduleDateKeys = [], scheduleToday = new Date(), weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
   const currentWorkoutRef = useRef(null);
+  const programListRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
+  const [expandedProgramGap, setExpandedProgramGap] = useState(4);
   const [showProgramInfo, setShowProgramInfo] = useState(false);
   const smartModel = isSmartTrainingModel(trainingModel);
   const completedWorkoutNumberSet = new Set(completedWorkoutNumbers.map(Number));
@@ -10846,14 +10757,6 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
   const workoutListVerticalSpacing = programWorkoutListVerticalSpacing({
     compact: useCompactWorkoutCardSpacing,
   });
-  const headerWorkoutNumber = Math.max(Number(currentIndex) + 1 || 1, 1);
-  const headerSubtitle = formatCycleWorkoutSubtitle({
-    t,
-    currentCycle,
-    workoutNumber: headerWorkoutNumber,
-    totalWorkouts: workouts.length,
-    smartModel,
-  });
 
   function formatCompletedAt(value, fallbackDate = null) {
     if (!value && fallbackDate) return fallbackDate;
@@ -10870,26 +10773,35 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
     });
   }
 
-  useEffect(() => {
-    if (!currentWorkoutRef.current) return;
-
-    const id = window.setTimeout(() => {
-      if (typeof currentWorkoutRef.current?.scrollIntoView !== 'function') return;
-      currentWorkoutRef.current.scrollIntoView({
-        behavior: 'auto',
-        block: 'center',
-      });
-    }, 0);
-
-    return () => window.clearTimeout(id);
-  }, [currentIndex, workouts.length, showAllWorkouts]);
+  useLayoutEffect(() => {
+    const region = programListRef.current;
+    const card = currentWorkoutRef.current;
+    if (!region || !card || !region.clientHeight) return;
+    const regionRect = region.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    if (cardRect.top >= regionRect.top && cardRect.bottom <= regionRect.bottom) return;
+    // Scroll only the list. scrollIntoView can also move overflow-hidden
+    // ancestors, hiding the content title or pushing actions below navigation.
+    region.scrollTop = Math.max(0, region.scrollTop + cardRect.top - regionRect.top
+      - (region.clientHeight - cardRect.height) / 2);
+  }, [currentIndex, workouts.length]);
 
   function renderWorkoutListToggleButton(position = 'top') {
     if (!hasHiddenWorkouts) return null;
     return (
       <button
         type="button"
-        onClick={() => setShowAllWorkouts(value => !value)}
+        onClick={() => {
+          if (!showAllWorkouts) {
+            const region = programListRef.current;
+            const [first, second] = region?.children || [];
+            if (region?.clientHeight && first && second) {
+              const gap = second.getBoundingClientRect().top - first.getBoundingClientRect().bottom;
+              setExpandedProgramGap(Math.max(4, gap));
+            }
+          }
+          setShowAllWorkouts(value => !value);
+        }}
         style={{
           ...programActionButtonStyle(
             THEME.primary,
@@ -10913,67 +10825,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
 
   return (
     <div style={programScreenStyle()}>
-      <AppHeader
-        t={t}
-        containerStyle={programHeaderStyle()}
-        title={
-          smartModel
-            ? getSmartProgramTitle(trainingFocus, t)
-            : (
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                flexWrap: 'wrap'
-              }}>
-                <span>{getProgramProfileTitle(programProfile, t)}</span>
-                <button
-                  type="button"
-                  aria-label={t.programTrainingFactors}
-                  data-kelani-button-size="contextual"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setShowProgramInfo(true);
-                  }}
-                  style={{
-                    width: 14,
-                    height: 14,
-                    minWidth: 14,
-                    padding: 0,
-                    borderRadius: 999,
-                    border: `1px solid ${THEME.primary}`,
-                    background: 'transparent',
-                    color: THEME.primary,
-                    fontSize: 9,
-                    fontWeight: 900,
-                    lineHeight: '12px',
-                    cursor: 'pointer',
-                    transform: 'translateY(-6px)'
-                  }}
-                >
-                  i
-                </button>
-              </span>
-            )
-        }
-        subtitle={(
-          <>
-            {headerSubtitle}
-            {smartModel && (
-              <AthleteLevelBadge
-                athleteLevel={athleteLevel}
-                eStrengthRatio={eStrengthRatio}
-                eStrengthMax={eStrengthMax}
-                latestBodyWeight={latestBodyWeight}
-                t={t}
-              />
-            )}
-          </>
-        )}
-        titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
-        subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
-      />
+
 
       {!smartModel && showProgramInfo && (
         <SettingsModal
@@ -11080,10 +10932,54 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
         </SettingsModal>
       )}
 
-      <div data-kelani-program-list-spacer style={programWorkoutListContainerStyle({
+      <ScreenTitle title={
+          smartModel
+            ? getSmartProgramTitle(trainingFocus, t)
+            : (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                flexWrap: 'wrap'
+              }}>
+                <span>{getProgramProfileTitle(programProfile, t)}</span>
+                <button
+                  type="button"
+                  aria-label={t.programTrainingFactors}
+                  data-kelani-button-size="contextual"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setShowProgramInfo(true);
+                  }}
+                  style={{
+                    width: 14,
+                    height: 14,
+                    minWidth: 14,
+                    padding: 0,
+                    borderRadius: 999,
+                    border: `1px solid ${THEME.primary}`,
+                    background: 'transparent',
+                    color: THEME.primary,
+                    fontSize: 9,
+                    fontWeight: 900,
+                    lineHeight: '12px',
+                    cursor: 'pointer',
+                    transform: 'translateY(-6px)'
+                  }}
+                >
+                  i
+                </button>
+              </span>
+            )
+        } />
+
+      <div ref={programListRef} data-testid="screen-scroll-content" data-kelani-program-list-spacer style={programWorkoutListContainerStyle({
         showAll: showAllWorkouts,
+        expandedGap: expandedProgramGap,
         marginTop: workoutListVerticalSpacing.listMarginTop,
       })}>
+
       {renderWorkoutListToggleButton('top')}
 
 {visibleWorkoutEntries.map(({ workout, idx }) => {
@@ -12347,7 +12243,7 @@ function App() {
     }
 
     const viewport = appViewportRef.current;
-    const workoutContent = viewport?.firstElementChild;
+    const workoutContent = viewport && getActiveScreenFlowRoot(viewport);
     if (!viewport || !workoutContent) return undefined;
 
     const measure = () => {
@@ -16492,6 +16388,13 @@ const screenAllowsContentScroll =
       }),
     })}
   >
+      <AppHeader t={t} currentCycle={currentCycle}
+        workoutNumber={screen === 'current'
+          ? (workouts[selectedIndex]?.number || currentIndex + 1)
+          : screen === 'completed' ? (completedWorkout?.number || currentIndex + 1)
+          : (workouts[currentIndex]?.number || currentIndex + 1)}
+        athleteLevel={athleteLevel} eStrengthRatio={eStrengthRatio} eStrengthMax={eStrengthMax}
+        recentBodyRatioEvent={dashboardRecentPrEvents.ratioEvent} />
       {screen === 'current' && (
         <CurrentWorkout
           workout={workouts[selectedIndex]}
@@ -16552,26 +16455,7 @@ const screenAllowsContentScroll =
         : regularDashboardScreenStyle({ compact: dashboardUsesCompactLayout })),
     }}
   >
-    <AppHeader
-      t={t}
-      title={t.appName}
-      subtitle={(
-        <DashboardCycleWorkoutLabel
-          t={t}
-          currentCycle={currentCycle}
-          workoutNumber={Math.min(currentIndex + 1, workouts.length)}
-          totalWorkouts={workouts.length}
-          smartModel={isSmartTrainingModel(trainingModel)}
-          athleteLevel={athleteLevel}
-          eStrengthRatio={eStrengthRatio}
-          eStrengthMax={eStrengthMax}
-          latestBodyWeight={latestBodyWeight}
-          recentBodyRatioEvent={dashboardRecentPrEvents.ratioEvent}
-        />
-      )}
-      titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
-      subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
-    />
+
 
     {dashboardMeetState.isMeetDay && (
       <MeetDayDashboardPlan
@@ -16587,11 +16471,12 @@ const screenAllowsContentScroll =
     {!dashboardMeetState.isMeetDay && (
     <div
       data-testid="screen-scroll-content"
-      style={regularDashboardContentStyle({
-        spreadContent: dashboardUsesExpandedLayout,
-        compact: dashboardUsesCompactLayout,
-      })}
+      style={scrollableScreenContentStyle({ display: 'flex', flexDirection: 'column' })}
     >
+
+    <ScreenTitle title={t.dashboard} />
+    <div style={{ ...regularDashboardContentStyle({ spreadContent: dashboardUsesExpandedLayout,
+      compact: dashboardUsesCompactLayout }), overflow: 'visible', flex: '1 0 auto' }}>
 
     {!dashboardMeetState.isMeetDay && workouts[currentIndex] && (() => {
       const nextWorkout = workouts[currentIndex];
@@ -17055,6 +16940,7 @@ const screenAllowsContentScroll =
       );
     })()}
     </div>
+    </div>
     )}
   </div>
 )}
@@ -17113,34 +16999,17 @@ const screenAllowsContentScroll =
           latestBodyWeight={latestBodyWeight}
           activescreen={statsTab}
           onChangeTab={setStatsTab}
-          HeaderComponent={AppHeader}
+          HeaderComponent={ScreenTitle}
           LevelBadgeComponent={AthleteLevelBadge}
         />
       )}
 
       {screen === 'settings' && (
        <div style={fixedChromeScreenStyle(responsiveContentScreenStyle())}>
-  <AppHeader
-    t={t}
-    title={t.settings}
-    subtitle={(
-      <DashboardCycleWorkoutLabel
-        t={t}
-        currentCycle={currentCycle}
-        workoutNumber={Math.min(currentIndex + 1, workouts.length)}
-        totalWorkouts={workouts.length}
-        smartModel={isSmartTrainingModel(trainingModel)}
-        athleteLevel={athleteLevel}
-        eStrengthRatio={eStrengthRatio}
-        eStrengthMax={eStrengthMax}
-        latestBodyWeight={latestBodyWeight}
-      />
-    )}
-    titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
-    subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
-  />
+
 
   <div data-testid="screen-scroll-content" style={settingsContentLayoutStyle()}>
+    <ScreenTitle title={t.settings} />
     <div
       data-testid="regular-settings-cluster"
       style={regularSettingsClusterStyle()}
@@ -17224,8 +17093,6 @@ const screenAllowsContentScroll =
         onProjectOpen={() => setShowProjectVerification(true)}
         onProjectBack={() => setShowProjectVerification(false)}
       />
-    </div>
-
     <div data-testid="start-over-settings-row">
       <SettingsListRow
         label={t.restart}
@@ -17233,6 +17100,7 @@ const screenAllowsContentScroll =
         onAction={() => setShowResetConfirm(true)}
         danger={true}
       />
+    </div>
     </div>
 
   </div>
@@ -17256,6 +17124,12 @@ const screenAllowsContentScroll =
     )}
     {screen === 'completed' && !completedWorkoutCanStartNewCycle && (
   <div style={completedWorkoutScreenStyle()}>
+      <div
+        data-testid="screen-scroll-content"
+        style={scrollableScreenContentStyle(completedWorkout?.type === 'rest'
+          ? restDayCompletedScreenStyle()
+          : { background: 'transparent', border: 'none', borderRadius: 12, padding: '4px 0', boxSizing: 'border-box', textAlign: 'center' })}
+      >
       {completedWorkout?.type !== 'rest' && (
         <CompletedScreenHeader
           title={completedWorkoutIsMeet ? t.meetCompleted
@@ -17267,12 +17141,6 @@ const screenAllowsContentScroll =
         />
       )}
 
-      <div
-        data-testid="screen-scroll-content"
-        style={scrollableScreenContentStyle(completedWorkout?.type === 'rest'
-          ? restDayCompletedScreenStyle()
-          : { background: 'transparent', border: 'none', borderRadius: 12, padding: '4px 0', boxSizing: 'border-box', textAlign: 'center' })}
-      >
         <div style={completedWorkout?.type === 'rest'
           ? restDayCompletedContentStyle()
           : {

@@ -10,6 +10,8 @@ Smart Training follows a level-specific 28-workout ideal route: W1-W21 build str
 
 ## What Kelani does
 
+Main screens share a compact header with the Kelani mark, app version, experience level, cycle and workout. The header and bottom navigation reserve equal height; each screen has its own title in the content area.
+
 - Prescribes heavy, medium and light SBD training with barbell-loadable weights.
 - Uses real 1RM values for meet planning and tracks estimated 1RM progress from successful sets.
 - Responds predictably to workout feedback: **Too easy** shortens the route to the meet, while **Too hard** or failed work adds recovery.

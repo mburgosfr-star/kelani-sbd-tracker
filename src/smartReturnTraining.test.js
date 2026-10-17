@@ -254,7 +254,7 @@ test('the Smart modal offers a voluntary return choice without adding a workout-
   const view = render(<CurrentWorkout {...props} />);
   expect(screen.queryByText('Je laatste training was 7 dagen geleden. Wil je rustig hervatten?'))
     .not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /Smart: Training/i }));
+  fireEvent.click(screen.getByRole('button', { name: `${translations.nl.training}. ${translations.nl.smartWorkoutInfo}` }));
   const dialog = screen.getByRole('dialog', { name: translations.nl.smartWorkoutDialogLabel });
   expect(dialog).toBeInTheDocument();
   expect(dialog.querySelector('section[aria-label="Hervattraining"]')).not.toBeNull();

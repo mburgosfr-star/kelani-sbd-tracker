@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { BOTTOM_NAV_SPACE } from './appChromeLayout';
 import StatsLineChart from './StatsLineChart';
 import { TRAINING_MODELS } from './smartTrainingConstants';
 import {
@@ -16,7 +17,6 @@ import {
   getEntryWorkoutNumber,
   getAbsoluteWorkoutIndex,
   getWorkoutLabel,
-  formatCycleWorkoutSubtitle,
 } from './workoutHistoryStats';
 import { isSmartTrainingModel } from './programProfiles';
 
@@ -32,7 +32,6 @@ const THEME = {
   brown: '#a67c52',
 };
 
-const BOTTOM_NAV_SPACE = 78;
 const RESPONSIVE_SCREEN_PADDING = 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px';
 const RESPONSIVE_CONTENT_UI = Object.freeze({
   screenPadding: `var(--kelani-screen-padding, ${RESPONSIVE_SCREEN_PADDING})`,
@@ -66,10 +65,11 @@ export function statsScreenStyle() {
     minHeight: 0,
     width: '100%',
     maxWidth: 500,
-    height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px)`,
+    height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px - var(--kelani-header-space, 0px))`,
     margin: '0 auto',
     padding: RESPONSIVE_CONTENT_UI.screenPadding,
-    paddingBottom: 'var(--kelani-content-bottom-padding, 32px)',
+    // Match the top inset. The chart grid shares the recovered height.
+    paddingBottom: 'clamp(10px, 1.8dvh, 18px)',
     boxSizing: 'border-box',
     color: THEME.text,
     fontFamily: 'sans-serif',
@@ -99,7 +99,7 @@ export function statsTabListStyle(tabCount = 4) {
     display: 'grid',
     gridTemplateColumns: `repeat(${Math.max(1, Number(tabCount) || 1)}, minmax(0, 1fr))`,
     gap: `var(--kelani-stats-tab-gap, ${RESPONSIVE_STATS_UI.tabGap})`,
-    marginTop: 'clamp(9px, 1.2dvh, 12px)',
+    marginTop: 0,
     marginBottom: `var(--kelani-stats-card-gap, ${RESPONSIVE_STATS_UI.cardGap})`,
   };
 }
@@ -572,34 +572,9 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
 
   return (
     <div data-testid="stats-screen" style={statsScreenStyle()}>
-      <HeaderComponent
-        t={t}
-        title={t.stats}
-        subtitle={(
-          <>
-            {formatCycleWorkoutSubtitle({
-              t,
-              currentCycle,
-              workoutNumber: Math.min(currentIndex + 1, totalWorkouts),
-              totalWorkouts,
-              smartModel: isSmartTrainingModel(trainingModel),
-            })}
-            {isSmartTrainingModel(trainingModel) && (
-              <LevelBadgeComponent
-                athleteLevel={athleteLevel}
-                eStrengthRatio={eStrengthRatio}
-                eStrengthMax={eStrengthMax}
-                latestBodyWeight={latestBodyWeight}
-                t={t}
-              />
-            )}
-          </>
-        )}
-        titleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerTitleFontSize }}
-        subtitleStyle={{ fontSize: RESPONSIVE_CONTENT_UI.headerSubtitleFontSize }}
-      />
 
       <div data-testid="screen-scroll-content" style={statsScrollableContentStyle()}>
+      <HeaderComponent title={t.stats} />
       <div style={statsTabListStyle(statsTabs.length)}>
         {statsTabs.map(tab => (
           <button

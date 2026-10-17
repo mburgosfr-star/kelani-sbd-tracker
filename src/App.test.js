@@ -645,7 +645,7 @@ test('active completion button uses the same visible pulse concept as active set
 test('active workout screen bounds scrolling between the fixed chrome', () => {
   expect(activeWorkoutScreenStyle()).toMatchObject({
     minHeight: 0,
-    height: 'calc(100dvh - 78px)',
+    height: 'calc(100dvh - 78px - var(--kelani-header-space, 0px))',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
@@ -658,7 +658,7 @@ test('active workout screen bounds scrolling between the fixed chrome', () => {
     overscrollBehaviorY: 'none',
   });
   expect(fixedChromeScreenStyle()).toMatchObject({
-    height: 'calc(100dvh - 78px)',
+    height: 'calc(100dvh - 78px - var(--kelani-header-space, 0px))',
     overflow: 'hidden',
   });
 });
@@ -669,9 +669,10 @@ test('program screen uses the same responsive header alignment as other content 
     maxWidth: 500,
     margin: '0 auto',
     padding: 'var(--kelani-screen-padding, clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px)',
-    paddingBottom: 0,
+    paddingBottom: 12,
+    minHeight: 0,
     boxSizing: 'border-box',
-    height: 'calc(100dvh - 78px)',
+    height: 'calc(100dvh - 78px - var(--kelani-header-space, 0px))',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
@@ -721,48 +722,16 @@ test('screen measurements skip timer digits but retain timer layout and other co
   expect(shouldMeasureScreenMutations([characterData, removedTimer])).toBe(true);
 });
 
-test('fixed main headers end at the divider before scrolling screen content', () => {
-  expect(fixedScreenHeaderStyle()).toEqual({
-    position: 'relative',
-    zIndex: 20,
-    flex: '0 0 auto',
-    background: '#000000',
-  });
-  expect(appHeaderDividerStyle()).toMatchObject({
-    width: '100%',
-    height: 0,
-    flex: '0 0 auto',
-    borderTop: '1px solid rgba(255, 244, 230, 0.34)',
-    marginTop: 'clamp(9px, 1.2dvh, 12px)',
-  });
-  expect(appHeaderSecondaryStyle()).toMatchObject({
-    marginTop: 'clamp(9px, 1.2dvh, 12px)',
-  });
-  expect(regularDashboardScreenStyle().rowGap).toBe(appHeaderDividerStyle().marginTop);
-  expect(programWorkoutListVerticalSpacing().listMarginTop).toBe(appHeaderDividerStyle().marginTop);
-  expect(appHeaderSecondaryStyle().marginTop).toBe(appHeaderDividerStyle().marginTop);
-  expect(settingsContentLayoutStyle().marginTop).toBe(appHeaderDividerStyle().marginTop);
-  expect(statsTabListStyle(4).marginTop).toBe(appHeaderDividerStyle().marginTop);
-
-  render(
-    <AppHeader
-      title="Workout"
-      subtitle="Cycle 1 · Workout 1 · Beginner"
-    />
-  );
-
-  const divider = screen.getByTestId('app-header-divider');
-  expect(screen.getByRole('heading', { name: 'Workout' }).style.fontSize)
-    .toBe('clamp(30px, 7vw, 36px)');
-  expect(divider.previousSibling.style.fontSize)
-    .toBe('clamp(15px, 3.4vw, 17px)');
-  expect(divider.parentElement).toHaveStyle({
-    position: 'relative',
-    zIndex: '20',
-    background: '#000000',
-  });
-  expect(divider.previousSibling).toHaveTextContent('Cycle 1 · Workout 1 · Beginner');
-  expect(divider.nextSibling).toBeNull();
+test('compact app header matches navigation height and separates branding from screen titles', () => {
+  render(<AppHeader t={translations.en} currentCycle={6} workoutNumber={4} athleteLevel="intermediate" />);
+  expect(screen.getByTestId('app-header')).toHaveStyle({ position: 'fixed', height: `${BOTTOM_NAV_SPACE}px` });
+  expect(screen.getByRole('img', { name: translations.en.appName })).toBeInTheDocument();
+  expect(screen.getByText('Intermediate level')).toBeInTheDocument();
+  expect(screen.getByText('Cycle 6')).toBeInTheDocument();
+  expect(screen.getByText('Workout 4')).toBeInTheDocument();
+  expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Experience level: Intermediate' }));
+  expect(screen.getByText(translations.en.athleteLevelModalTitle)).toBeInTheDocument();
 });
 
 test('Workout scroll content starts below the fixed header divider', async () => {
@@ -778,11 +747,12 @@ test('Workout scroll content starts below the fixed header divider', async () =>
   render(<App />);
   fireEvent.click(await screen.findByRole('button', { name: 'Workout' }, { timeout: 3000 }));
 
-  const divider = await screen.findByTestId('app-header-divider');
+  const header = await screen.findByTestId('app-header');
   const scrollContent = screen.getByTestId('screen-scroll-content');
   const smartStatus = screen.getByTestId('workout-header-secondary');
 
-  expect(divider.parentElement.nextElementSibling).toBe(scrollContent);
+  expect(header).not.toContainElement(scrollContent);
+  expect(header).toHaveStyle({ height: `${BOTTOM_NAV_SPACE}px`, position: 'fixed' });
   expect(scrollContent).toContainElement(smartStatus);
   expect(scrollContent).toHaveStyle({
     minHeight: '0',
@@ -801,17 +771,11 @@ test('program workout cards tighten only when the compact list toggles are visib
   });
 });
 
-test('compact program lists pull both toggles closer to the workout cards', () => {
+test('program list spacing is owned by the list rather than stacked toggle margins', () => {
   expect(programWorkoutListVerticalSpacing({ compact: true })).toEqual({
-    listMarginTop: 'clamp(9px, 1.2dvh, 12px)',
-    topToggleMargin: '0 0 clamp(8px, 1.2dvh, 12px)',
-    bottomToggleMargin: 'clamp(8px, 1.2dvh, 12px) 0 0',
+    listMarginTop: 0, topToggleMargin: 0, bottomToggleMargin: 0,
   });
-  expect(programWorkoutListVerticalSpacing()).toEqual({
-    listMarginTop: 'clamp(9px, 1.2dvh, 12px)',
-    topToggleMargin: '0 0 clamp(10px, 1.5dvh, 16px)',
-    bottomToggleMargin: 'clamp(10px, 1.5dvh, 16px) 0 0',
-  });
+  expect(programWorkoutListVerticalSpacing()).toEqual(programWorkoutListVerticalSpacing({ compact: true }));
 });
 
 test('program workout window keeps the current workout centered among at most seven cards', () => {
@@ -831,6 +795,7 @@ test('compact program list distributes spare height without large divider gaps',
   expect(programWorkoutListContainerStyle({ showAll: false, marginTop: 8 }))
     .toMatchObject({
       justifyContent: 'space-between',
+      rowGap: 4,
       marginTop: 0,
       paddingTop: 8,
       paddingBottom: 8,
@@ -839,9 +804,10 @@ test('compact program list distributes spare height without large divider gaps',
       overflowY: 'auto',
       minHeight: 0,
     });
-  expect(programWorkoutListContainerStyle({ showAll: true, marginTop: 8 }))
+  expect(programWorkoutListContainerStyle({ showAll: true, marginTop: 8, expandedGap: 9 }))
     .toMatchObject({
       justifyContent: 'flex-start',
+      rowGap: 9,
       marginTop: 0,
       paddingTop: 8,
       paddingBottom: 8,
@@ -928,15 +894,14 @@ test('rest information sits optically above centre with its completion action be
   expect(restWorkoutScreenStyle()).toMatchObject({
     display: 'flex',
     flexDirection: 'column',
-    height: 'calc(100dvh - 78px)',
+    height: 'calc(100dvh - 78px - var(--kelani-header-space, 0px))',
     overflow: 'hidden',
-    paddingBottom: 32,
+    paddingBottom: 'clamp(10px, 1.8dvh, 18px)',
   });
 
   expect(restWorkoutContentStyle()).toMatchObject({
     display: 'grid',
     alignContent: 'center',
-    transform: 'translateY(clamp(-28px, -3dvh, -18px))',
   });
 });
 
@@ -981,7 +946,7 @@ test('compact completion content stays together without a header divider', () =>
 test('completed workout content uses fixed chrome with internal scrolling', () => {
   expect(completedWorkoutScreenStyle()).toMatchObject({
     minHeight: 0,
-    height: 'calc(100dvh - 78px)',
+    height: 'calc(100dvh - 78px - var(--kelani-header-space, 0px))',
     overflowX: 'hidden',
     overflow: 'hidden',
     padding: 'var(--kelani-completed-screen-padding, 12px clamp(10px, 3vw, 16px) 8px)',
@@ -1074,13 +1039,13 @@ test.each(['nl', 'en', 'ca'])('meet completion feedback is translated in %s', la
   });
 });
 
-test('stats charts reserve extra clearance above the bottom navigation', () => {
+test('stats charts share available height with matching outer insets', () => {
   expect(statsScreenStyle()).toMatchObject({
     minHeight: 0,
-    height: 'calc(100dvh - 78px)',
+    height: 'calc(100dvh - 78px - var(--kelani-header-space, 0px))',
     display: 'flex',
     flexDirection: 'column',
-    paddingBottom: 'var(--kelani-content-bottom-padding, 32px)',
+    paddingBottom: 'clamp(10px, 1.8dvh, 18px)',
     overflow: 'hidden',
   });
   expect(statsScrollableContentStyle()).toMatchObject({
@@ -1136,8 +1101,8 @@ test('bottom navigation visibly names every screen', () => {
 test('settings distribute regular actions and keep Start over at the bottom', () => {
   expect(regularSettingsClusterStyle()).toMatchObject({
     display: 'grid',
-    gap: 'clamp(1px, 0.3dvh, 4px)',
-    alignContent: 'space-evenly',
+    gap: 4,
+    alignContent: 'space-between',
     minHeight: 0,
   });
   expect(regularSettingsClusterStyle().transform).toBeUndefined();
@@ -1145,9 +1110,9 @@ test('settings distribute regular actions and keep Start over at the bottom', ()
     flex: 1,
     minHeight: 0,
     overflowY: 'var(--kelani-screen-overflow-y, auto)',
-    gridTemplateRows: 'minmax(0, 1fr) auto',
-    marginTop: 'clamp(9px, 1.2dvh, 12px)',
-    rowGap: 'var(--kelani-content-row-gap, clamp(5px, 0.8dvh, 10px))',
+    gridTemplateRows: 'auto minmax(min-content, 1fr)',
+    marginTop: 0,
+    rowGap: 0,
     alignContent: 'stretch',
   });
 });
@@ -1155,7 +1120,7 @@ test('settings distribute regular actions and keep Start over at the bottom', ()
 test('stats tabs keep a small gap below the shared header divider', () => {
   expect(statsTabListStyle(4)).toMatchObject({
     gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-    marginTop: 'clamp(9px, 1.2dvh, 12px)',
+    marginTop: 0,
   });
 });
 
@@ -1798,7 +1763,7 @@ test('meet-day dashboard spreads the plan across the available vertical space', 
   expect(meetDayDashboardScreenStyle()).toMatchObject({
     display: 'flex',
     flexDirection: 'column',
-    height: 'calc(100dvh - 78px)',
+    height: 'calc(100dvh - 78px - var(--kelani-header-space, 0px))',
     overflow: 'hidden',
     rowGap: 'clamp(9px, 1.2dvh, 12px)',
   });
@@ -1822,26 +1787,26 @@ test('post-meet recovery restores the dashboard but keeps route to meet hidden',
   });
 });
 
-test('regular dashboards distribute spare height between and around their sections', () => {
+test('regular dashboards distribute spare height between their sections without extra outer gaps', () => {
   expect(regularDashboardScreenStyle()).toMatchObject({
     display: 'flex',
     flexDirection: 'column',
-    height: 'calc(100dvh - 78px)',
+    height: 'calc(100dvh - 78px - var(--kelani-header-space, 0px))',
     overflow: 'hidden',
     rowGap: 'clamp(9px, 1.2dvh, 12px)',
   });
   expect(regularDashboardContentStyle({ spreadContent: true })).toMatchObject({
     display: 'grid',
     overflowY: 'var(--kelani-screen-overflow-y, auto)',
-    alignContent: 'space-evenly',
+    alignContent: 'space-between',
     rowGap: 'var(--kelani-content-row-gap, clamp(10px, 1.4dvh, 16px))',
   });
   expect(regularDashboardContentStyle()).toMatchObject({
-    alignContent: 'space-evenly',
+    alignContent: 'space-between',
     rowGap: 'var(--kelani-content-row-gap, clamp(14px, 2.2dvh, 24px))',
   });
   expect(regularDashboardContentStyle({ compact: true }).alignContent)
-    .toBe('space-evenly');
+    .toBe('space-between');
 });
 
 test('three-lift and PR-rich training dashboards use tighter spacing without changing sparse dashboards', () => {
@@ -2121,7 +2086,7 @@ test('planned Ideal Route recovery omits the tautological Reason row in the Smar
   );
 
   fireEvent.click(screen.getByRole('button', {
-    name: /Smart: Rest & recovery/i,
+    name: /Rest & recovery/i,
   }));
 
   expect(screen.queryByText(translations.en.smartReason)).not.toBeInTheDocument();
@@ -2149,7 +2114,7 @@ test('Smart modal shows the projected meet date beside its workout projection', 
     />
   );
 
-  fireEvent.click(screen.getByRole('button', { name: /Smart:/i }));
+  fireEvent.click(screen.getByRole('button', { name: /Training\. Open workout information/i }));
 
   expect(screen.getByText('C4W29 · October 12')).toBeInTheDocument();
 });
@@ -2197,7 +2162,7 @@ test('Smart recovery status stays above the shifted recovery content and opens i
   );
 
   const button = screen.getByRole('button', {
-    name: /Smart: Rest & recovery/i,
+    name: /Rest & recovery/i,
   });
   expect(button).toHaveStyle({
     position: 'relative',
@@ -2649,9 +2614,10 @@ test('Smart squat priority is opt-in, persists, and changes the planned beginner
   render(<App />);
 
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 }));
-  expect(screen.getByText(/Cycle 1 · Workout 1/)).toBeInTheDocument();
+  expect(screen.getByText('Cycle 1')).toBeInTheDocument();
+  expect(screen.getByText('Workout 1')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Experience level: Beginner' })).toBeInTheDocument();
-  expect(screen.getByTestId('app-header-divider')).toBeInTheDocument();
+  expect(screen.getByTestId('app-header')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Balanced SBD Route' }));
   expect(screen.getByText('The standard route trains Squat, Bench and Deadlift in balance toward Meet Day.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Squat Priority' }));
@@ -2927,3 +2893,93 @@ test.each(['training', 'rest', 'meet'])(
     view.unmount();
   }
 );
+
+test.each(['en', 'nl', 'ca'])('compact header keeps localized context and opens level information (%s)', language => {
+  const t = translations[language];
+  render(<AppHeader t={t} currentCycle={12} workoutNumber={30} athleteLevel="intermediate" />);
+  const header = screen.getByTestId('app-header');
+  expect(header).toHaveStyle({ height: `${BOTTOM_NAV_SPACE}px`, boxSizing: 'border-box' });
+  expect(header).toHaveTextContent(t.headerLevel.replace('{level}', t.athleteLevelIntermediate));
+  expect(header).toHaveTextContent(`${t.cycle} 12`);
+  expect(header).toHaveTextContent(`${t.workout} 30`);
+  expect(screen.getByRole('img', { name: t.appName })).toBeInTheDocument();
+  const info = screen.getByRole('button', { name: `${t.athleteLevelBadgeLabel}: ${t.athleteLevelIntermediate}` });
+  expect(info).toHaveStyle({ minHeight: '60px' });
+  fireEvent.click(info);
+  expect(screen.getByText(t.athleteLevelModalTitle)).toBeInTheDocument();
+});
+
+test('all main screens share one compact header while titles belong to their content', async () => {
+  localStorage.clear();
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1, trainingModel: 'smart', currentCycle: 1,
+    prs: { Squat: 100, Bench: 75, Deadlift: 125 }, history: [],
+    showWhatsNewAfterUpdates: false,
+  }));
+  render(<App />);
+  await screen.findByRole('button', { name: 'Workout' }, { timeout: 3000 });
+  for (const label of ['Dashboard', 'Program', 'Workout', 'Statistics', 'Settings']) {
+    fireEvent.click(screen.getByRole('button', { name: label }));
+    expect(screen.getAllByTestId('app-header')).toHaveLength(1);
+    const header = screen.getByTestId('app-header');
+    expect(header).toHaveStyle({ height: `${BOTTOM_NAV_SPACE}px` });
+    expect(header.querySelector('[role="heading"], h1, h2')).toBeNull();
+    expect(screen.getByTestId('app-viewport')).toHaveStyle({ paddingTop: `${BOTTOM_NAV_SPACE}px` });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  }
+});
+
+test('Program keeps its title outside the bounded list and retains both end controls', async () => {
+  localStorage.clear();
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1, trainingModel: 'smart', currentCycle: 1, trainingFocus: 'practical',
+    prs: { Squat: 100, Bench: 75, Deadlift: 125 }, history: [], showWhatsNewAfterUpdates: false,
+  }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Program' }, { timeout: 3000 }));
+  const title = screen.getByRole('heading', { level: 1 });
+  const list = screen.getByTestId('screen-scroll-content');
+  expect(list.previousElementSibling).toBe(title);
+  expect(list).not.toContainElement(title);
+  expect(list.parentElement).toHaveStyle({ minHeight: '0' });
+  expect(list.lastElementChild).toHaveTextContent('Show all workouts');
+  // CSS space-between can produce a fractional gap larger than its minimum.
+  // Expanding must keep that actual compact geometry, rather than a new gap.
+  Object.defineProperty(list, 'clientHeight', { configurable: true, value: 600 });
+  list.children[0].getBoundingClientRect = () => ({ top: 0, bottom: 52, height: 52 });
+  list.children[1].getBoundingClientRect = () => ({ top: 61.5, bottom: 161.5, height: 100 });
+  fireEvent.click(screen.getAllByRole('button', { name: 'Show all workouts' })[0]);
+  expect(screen.getAllByRole('button', { name: 'Show fewer workouts' })).toHaveLength(2);
+  expect(list.lastElementChild).toHaveTextContent('Show fewer workouts');
+  expect(list).toHaveStyle({ overflowY: 'auto', rowGap: '9.5px', paddingBottom: '8px' });
+  expect(list.previousElementSibling).toBe(title);
+  fireEvent.click(screen.getAllByRole('button', { name: 'Show fewer workouts' })[1]);
+  expect(list.previousElementSibling).toBe(title);
+  expect(list.lastElementChild).toHaveTextContent('Show all workouts');
+});
+
+test('Settings places every action including Start over in the same evenly spaced group', async () => {
+  localStorage.clear();
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1, trainingModel: 'smart', currentCycle: 1,
+    prs: { Squat: 100, Bench: 75, Deadlift: 125 }, history: [], showWhatsNewAfterUpdates: false,
+  }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 }));
+  const cluster = screen.getByTestId('regular-settings-cluster');
+  const restart = screen.getByTestId('start-over-settings-row');
+  expect(restart.parentElement).toBe(cluster);
+  expect(cluster.lastElementChild).toBe(restart);
+  expect(screen.getByTestId('screen-scroll-content')).toHaveStyle({ '--kelani-settings-row-padding': '3px 0' });
+});
+
+test('header information icon belongs to the whole context block', () => {
+  render(<AppHeader t={translations.en} currentCycle={6} workoutNumber={4} athleteLevel="intermediate" />);
+  const info = screen.getByTestId('header-context-info');
+  const lines = screen.getByTestId('header-context-lines');
+  expect(lines.nextElementSibling).toBe(info);
+  expect(lines).toHaveTextContent('Intermediate level');
+  expect(lines).toHaveTextContent('Cycle 6');
+  expect(lines).toHaveTextContent('Workout 4');
+  expect(info.parentElement).toHaveStyle({ alignItems: 'center', minHeight: '60px' });
+});
