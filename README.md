@@ -44,11 +44,11 @@ The optional anonymous usage summary is generated locally and shown in full befo
 
 ## Screenshots
 
-These screenshots illustrate core features from an earlier version. Current layouts and labels may differ.
+Kelani SBD Tracker 2.0.59, shown with fictional demo training data.
 
-| Dashboard | Smart Training |
+| Dashboard | Program |
 |---|---|
-| ![Kelani dashboard](docs/assets/screenshots/dashboard.png) | ![Kelani Smart Training](docs/assets/screenshots/smart-training.png) |
+| ![Kelani dashboard](docs/assets/screenshots/dashboard.png) | ![Kelani Program screen](docs/assets/screenshots/smart-training.png) |
 
 | Workout | Statistics |
 |---|---|
