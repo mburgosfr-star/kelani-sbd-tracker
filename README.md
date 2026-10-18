@@ -2,13 +2,38 @@
 
 [![Latest release](https://img.shields.io/github/v/release/mburgosfr-star/kelani-sbd-tracker?label=Latest%20release)](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases/latest)
 
-**Adaptive, private powerlifting training on Android.**
+**Offline-first Android powerlifting app for Squat, Bench Press and Deadlift.**
 
-Kelani is an offline-first Squat, Bench Press and Deadlift tracker for lifters who train independently but do not want to train blindly. It requires no account, subscription or cloud service.
+Kelani helps independent lifters plan adaptive SBD training, log workouts and follow strength progress. The app is free and open source, with no Kelani account, ads or subscription.
 
-Smart Training follows a level-specific 28-workout ideal route: W1-W21 build strength, W22-W26 taper, W27 is SBD Meet Day and W28 is the planned post-meet recovery day. The Program screen shows the route ahead, while your confirmed strength determines the prescribed weights. Select a future workout to inspect its full content in view-only mode. It cannot be completed or edited; choosing Workout in the navigation returns to your current session. **Too easy** shortens the route unless Meet Day is already next, while **Too hard** or failed work can add recovery without ever scheduling more than two consecutive rest days. Readiness information explains your progress without silently replacing planned workouts or postponing the meet.
+**Official project website and source:** [mburgosfr-star/kelani-sbd-tracker](https://github.com/mburgosfr-star/kelani-sbd-tracker).
 
-## What Kelani does
+[Download and get started](#download) · [Screenshots](#screenshots) · [How Smart Training works](#how-smart-training-works) · [Support development](https://github.com/sponsors/mburgosfr-star)
+
+## Download
+
+Available for **Android 7.0 or later**:
+
+- [Download the latest APK from official GitHub Releases](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases/latest). Open **Assets** and choose the `.apk` file.
+- [Get Kelani from IzzyOnDroid](https://apt.izzysoft.de/packages/com.kelani.sbdtracker), also available through compatible F-Droid clients such as Neo Store.
+
+Open the APK and follow Android's installation prompts, or install it through your F-Droid client. Then enter your starting lift maxes, choose your workout setup and start Smart Training. No Kelani sign-up is needed.
+
+Official Android downloads use package `com.kelani.sbdtracker`. See [VERIFY.md](VERIFY.md) for official download sources, checksums and signing-certificate verification.
+
+## Screenshots
+
+Kelani SBD Tracker 2.0.59, shown with fictional demo training data.
+
+| Dashboard | Program |
+|---|---|
+| ![Kelani dashboard](docs/assets/screenshots/dashboard.png) | ![Kelani Program screen](docs/assets/screenshots/smart-training.png) |
+
+| Workout | Statistics |
+|---|---|
+| ![Kelani workout](docs/assets/screenshots/workout.png) | ![Kelani statistics](docs/assets/screenshots/stats.png) |
+
+## What Kelani Does
 
 Main screens share a compact header with the Kelani mark, app version, experience level, cycle and workout. The header and bottom navigation reserve equal height; each screen has its own title in the content area.
 
@@ -26,7 +51,11 @@ Workout set controls use a shared five-column grid. Newly generated back-off and
 
 During training you can complete or fail sets, adjust and restore weights, use a rest timer and open the plate calculator. Failed sets automatically make the workout **Too hard**; optional work left unchecked is not treated as failure.
 
-## Your workout setup
+## How Smart Training Works
+
+Smart Training follows a level-specific 28-workout ideal route: W1-W21 build strength, W22-W26 taper, W27 is SBD Meet Day and W28 is the planned post-meet recovery day. The Program screen shows the route ahead, while your confirmed strength determines the prescribed weights. Select a future workout to inspect its full content in view-only mode. It cannot be completed or edited; choosing Workout in the navigation returns to your current session. **Too easy** shortens the route unless Meet Day is already next, while **Too hard** or failed work can add recovery without ever scheduling more than two consecutive rest days. Readiness information explains your progress without silently replacing planned workouts or postponing the meet.
+
+## Your Workout Setup
 
 Preparation and accessories are personal. In **Settings → Workout setup**, you decide:
 
@@ -36,38 +65,25 @@ Preparation and accessories are personal. In **Settings → Workout setup**, you
 
 Kelani places your selected exercises into relevant workouts and chooses their training intensity. Optional preparation, accessories and cooldown work can be left undone without becoming failed work. Meet Day contains only the competition lifts.
 
-## Private by default
+## Private by Default
 
 Kelani has no accounts, ads, telemetry, automatic analytics or Kelani-operated cloud synchronization. Training calculations and saved app data stay on your device unless you explicitly export or share them. If you enable the optional Android calendar integration, Kelani asks for calendar read and write access, stores the selected calendar and event links locally, and writes brief workout events to that calendar. Your chosen calendar provider may sync those events through its own service. Optional release checks request only public version metadata and can be enabled in Settings.
 
 The optional anonymous usage summary is generated locally and shown in full before you choose to copy or email it. See the [privacy policy](docs/privacy-policy.md) for details.
 
-## Screenshots
+## Support and Feedback
 
-Kelani SBD Tracker 2.0.59, shown with fictional demo training data.
+If Kelani is useful to you, you can [support its development through GitHub Sponsors](https://github.com/sponsors/mburgosfr-star). Support helps maintain and improve the app. Sponsorship is optional; the app available from GitHub and IzzyOnDroid does not require payment.
 
-| Dashboard | Program |
-|---|---|
-| ![Kelani dashboard](docs/assets/screenshots/dashboard.png) | ![Kelani Program screen](docs/assets/screenshots/smart-training.png) |
+Report bugs or suggest improvements through [GitHub Issues](https://github.com/mburgosfr-star/kelani-sbd-tracker/issues).
 
-| Workout | Statistics |
-|---|---|
-| ![Kelani workout](docs/assets/screenshots/workout.png) | ![Kelani statistics](docs/assets/screenshots/stats.png) |
-
-## Download
-
-- [Latest APK from GitHub Releases](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases/latest)
-- [Kelani on IzzyOnDroid](https://apt.izzysoft.de/packages/com.kelani.sbdtracker)
-
-The official Android package is `com.kelani.sbdtracker`. Checksums, the signing-certificate fingerprint and provenance instructions are documented in [VERIFY.md](VERIFY.md).
-
-### Moving from Kelani 1.x
-
-Kelani 2.x uses a new Android identity, so Android can keep 1.x and 2.x installed side by side. Export a JSON backup from 1.x, import it into 2.x and verify your data before removing the legacy app. Existing 2.x users update normally.
-
-## Languages and training models
+## Languages and Training Models
 
 Kelani is available in English, Catalan and Dutch. New users start with Smart Training. The earlier fixed Classic programs remain available to existing Classic users in maintenance mode; they can continue or switch permanently to Smart using their existing history.
+
+## Moving from Kelani 1.x
+
+Kelani 2.x uses a new Android identity, so Android can keep 1.x and 2.x installed side by side. Export a JSON backup from 1.x, import it into 2.x and verify your data before removing the legacy app. Existing 2.x users update normally.
 
 ## Development
 
@@ -82,8 +98,6 @@ npm run build
 
 Public Android releases use the repository's guarded release automation.
 
-## Feedback, support and license
-
-Report bugs or suggest improvements through [GitHub Issues](https://github.com/mburgosfr-star/kelani-sbd-tracker/issues). You can support development through [GitHub Sponsors](https://github.com/sponsors/mburgosfr-star).
+## License and Project Identity
 
 Kelani is maintained by [Kel](https://github.com/mburgosfr-star) and released under the [MIT License](LICENSE). See [BRANDING.md](BRANDING.md) for official project-identity guidance.
