@@ -8,7 +8,7 @@ Kelani helps independent lifters plan adaptive SBD training, log workouts and fo
 
 **Official project website and source:** [mburgosfr-star/kelani-sbd-tracker](https://github.com/mburgosfr-star/kelani-sbd-tracker).
 
-[Download and get started](#download) · [Screenshots](#screenshots) · [How Smart Training works](#how-smart-training-works) · [Support development](https://github.com/sponsors/mburgosfr-star)
+[Download and get started](#download) · [Screenshots](#screenshots) · [How Smart Training works](#how-smart-training-works) · [Support development ($5 once)](https://github.com/sponsors/mburgosfr-star/sponsorships?amount=5&frequency=one-time)
 
 ## Download
 
@@ -73,7 +73,7 @@ The optional anonymous usage summary is generated locally and shown in full befo
 
 ## Support and Feedback
 
-If Kelani is useful to you, you can [support its development through GitHub Sponsors](https://github.com/sponsors/mburgosfr-star). Support helps maintain and improve the app. Sponsorship is optional; the app available from GitHub and IzzyOnDroid does not require payment.
+If Kelani is useful to you, you can [support its development with a one-time US$5 contribution through GitHub Sponsors](https://github.com/sponsors/mburgosfr-star/sponsorships?amount=5&frequency=one-time). Support helps maintain and improve the app. There is no subscription. GitHub requires you to sign in before contributing. Sponsorship is optional; the app available from GitHub and IzzyOnDroid does not require payment.
 
 Report bugs or suggest improvements through [GitHub Issues](https://github.com/mburgosfr-star/kelani-sbd-tracker/issues).
 

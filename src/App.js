@@ -4879,7 +4879,7 @@ export function MilestoneCelebrationModal({
   const actions = [
     {
       label: t.supportKelani,
-      onClick: () => openLink('https://github.com/sponsors/mburgosfr-star'),
+      onClick: () => openLink('https://github.com/sponsors/mburgosfr-star/sponsorships?amount=5&frequency=one-time'),
     },
     {
       label: t.usageShareAction,
@@ -5002,7 +5002,7 @@ function AboutSupportSection({
   const actions = [
     {
       label: t.supportKelani,
-      onClick: () => openLink('https://github.com/sponsors/mburgosfr-star'),
+      onClick: () => openLink('https://github.com/sponsors/mburgosfr-star/sponsorships?amount=5&frequency=one-time'),
     },
     {
       label: t.usageShareAction,
@@ -17118,7 +17118,7 @@ const screenAllowsContentScroll =
         containerStyle={completedWorkoutScreenStyle()}
         contentStyle={scrollableScreenContentStyle()}
         buttonStyle={compactModalActionButtonStyle}
-        onSupport={() => window.open('https://github.com/sponsors/mburgosfr-star', '_blank', 'noopener,noreferrer')}
+        onSupport={() => window.open('https://github.com/sponsors/mburgosfr-star/sponsorships?amount=5&frequency=one-time', '_blank', 'noopener,noreferrer')}
         onFeedback={() => window.open(buildCycleFeedbackEmailUrl({ t, language, appVersion: import.meta.env.VITE_APP_VERSION || 'dev' }), '_blank', 'noopener,noreferrer')}
       />
     )}
