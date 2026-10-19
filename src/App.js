@@ -1,3 +1,4 @@
+import { getDesktopBridge, isDesktopRuntime, DESKTOP_AUTOMATIC_BACKUP_PATH } from './desktopRuntime';
 import { BOTTOM_NAV_SPACE, APP_HEADER_SPACE } from './appChromeLayout';
 import { WORKOUT_GRID_COLUMNS } from './workoutGridPolicy';
 import CycleCompletedScreen from './CycleCompletedScreen';
@@ -709,14 +710,14 @@ export function buildDashboardRecentPrEvents(
 }
 
 export function shouldShowAutomaticBackupStatus(isNativePlatform) {
-  return Boolean(isNativePlatform);
+  return Boolean(isNativePlatform || isDesktopRuntime());
 }
 
 export function removeLegacyBrowserAutomaticBackup(
   storage,
   isNativePlatform = Capacitor.isNativePlatform()
 ) {
-  if (isNativePlatform || !storage) return false;
+  if (isNativePlatform || isDesktopRuntime() || !storage) return false;
   const hasMirror = storage.getItem(LEGACY_BROWSER_AUTO_BACKUP_KEY) !== null;
   const hasObsoleteStatus = storage.getItem(AUTO_BACKUP_STATUS_KEY) !== null;
   if (!hasMirror && !hasObsoleteStatus) return false;
@@ -771,6 +772,11 @@ export function buildBackupPayload(data, {
 }
 
 async function cancelRestTimerNotification() {
+  if (isDesktopRuntime()) {
+    try { await getDesktopBridge().cancelTimer(); }
+    catch (error) { console.error('Could not cancel desktop rest timer', error); }
+    return;
+  }
   if (!Capacitor.isNativePlatform()) return;
 
   try {
@@ -1000,6 +1006,16 @@ async function scheduleRestTimerNotification(
   doneTitle,
   doneText
 ) {
+  if (isDesktopRuntime()) {
+    if (!endTime || Number(endTime) <= Date.now()) return false;
+    try {
+      const result = await getDesktopBridge().scheduleTimer({ id: REST_TIMER_NOTIFICATION_ID, at: Number(endTime), title: doneTitle, body: doneText });
+      return result?.scheduled === true;
+    } catch (error) {
+      recordRestTimerNotificationStatus('failed', { reason: error?.message || 'desktop-alarm-failed', endTime });
+      return false;
+    }
+  }
   if (!Capacitor.isNativePlatform() || !endTime || Number(endTime) <= Date.now()) {
     return false;
   }
@@ -1053,6 +1069,19 @@ async function ensurePendingRestTimerNotification(
   doneTitle,
   doneText
 ) {
+  if (isDesktopRuntime()) {
+    const active = normalizePersistedRestTimerState(timer);
+    if (!active) return false;
+    try {
+      const pending = await getDesktopBridge().getPendingTimer();
+      if (hasPendingNativeRestTimerAlarm(pending, active.endTime)) return true;
+      return scheduleRestTimerNotification(active.endTime, doneTitle, doneText);
+    } catch (error) {
+      console.error('Could not verify desktop rest timer', error);
+      recordRestTimerNotificationStatus('failed', { reason: error?.message || 'desktop-alarm-failed', endTime: active.endTime });
+      return false;
+    }
+  }
   if (!Capacitor.isNativePlatform()) return false;
 
   const activeTimer = normalizePersistedRestTimerState(timer);
@@ -1105,7 +1134,7 @@ export function shouldPlayRestTimerInAppAlert({
   // while the WebView is visible. Playing Web Audio at the same deadline
   // races that notification and intermittently produces two different
   // sounds. Keep Web Audio as the browser-only alert source.
-  return !isNativePlatform && !isDocumentHidden;
+  return !isNativePlatform && !isDesktopRuntime() && !isDocumentHidden;
 }
 
 export function shouldTriggerRestTimerWebAlert({
@@ -1480,7 +1509,11 @@ async function writeAutomaticBackup(data) {
     let storedJson = null;
     let uri = null;
 
-    if (Capacitor.isNativePlatform()) {
+    if (isDesktopRuntime()) {
+      const result = await getDesktopBridge().writeBackup(json);
+      storedJson = result.data;
+      uri = result.path;
+    } else if (Capacitor.isNativePlatform()) {
       const writeResult = await Filesystem.writeFile({
         path: AUTO_BACKUP_PATH,
         data: json,
@@ -1516,7 +1549,7 @@ async function writeAutomaticBackup(data) {
       source: 'automatic',
       verified: true,
       exportedAt: verifiedBackup.exportedAt,
-      path: AUTO_BACKUP_PATH,
+      path: isDesktopRuntime() ? DESKTOP_AUTOMATIC_BACKUP_PATH : AUTO_BACKUP_PATH,
       uri,
       summary: verifiedBackup.summary,
     }));
@@ -3882,6 +3915,18 @@ export function UpdatesSettingsModal({
   onClose,
   inactive = false,
 }) {
+  if (isDesktopRuntime()) {
+    return (
+      <SettingsModal title={t.desktopPrototypeTitle} onClose={onClose} inactive={inactive}>
+        <p style={{ textAlign: 'center', lineHeight: 1.4 }}>{t.desktopPrototypeInfo}</p>
+        <p style={{ textAlign: 'center', lineHeight: 1.4 }}>{t.desktopNoSync}</p>
+        <button type="button" style={compactModalActionButtonStyle()} onClick={() => onOpenLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/docs/windows-prototype.md')}>
+          {t.desktopOpenGuide}
+        </button>
+        <button type="button" style={compactModalActionButtonStyle('secondary')} onClick={onClose}>{t.close}</button>
+      </SettingsModal>
+    );
+  }
   const statusText = checkStatus === 'checking'
     ? t.updateChecking
     : checkStatus === 'available'
@@ -4196,7 +4241,10 @@ export function DataSection({ t, importOnly = false, triggerOnly = false }) {
         throw new Error('Manual backup verification failed');
       }
 
-      if (Capacitor.isNativePlatform()) {
+      if (isDesktopRuntime()) {
+        const result = await getDesktopBridge().exportBackup({ filename, json, title: t.exportData });
+        if (!result.saved) return;
+      } else if (Capacitor.isNativePlatform()) {
         const result = await Filesystem.writeFile({
           path: filename,
           data: json,
@@ -5382,6 +5430,34 @@ export function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS
 }
 
 function RestTimeSection({ t }) {
+  return isDesktopRuntime() ? <DesktopRestTimeSection t={t} /> : <MobileRestTimeSection t={t} />;
+}
+
+export function DesktopRestTimeSection({ t }) {
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState('');
+  async function testAlert() {
+    try {
+      await getDesktopBridge().testNotification({ title: t.restTimerDone, body: t.restTimerDoneMessage });
+      setStatus(t.desktopNotificationSent);
+    } catch {
+      setStatus(t.restTimerTestFailedToSchedule);
+    }
+  }
+  return (
+    <>
+      <SettingsListRow label={t.restTimerAlerts} actionLabel={t.check} onAction={() => setOpen(true)} />
+      {open && <SettingsModal title={t.restTimerAlerts} onClose={() => setOpen(false)}>
+        <p style={{ textAlign: 'center', lineHeight: 1.4 }}>{t.desktopTimerHelp}</p>
+        <p role="status" style={{ textAlign: 'center' }}>{status}</p>
+        <button type="button" style={compactModalActionButtonStyle()} onClick={testAlert}>{t.desktopTestNotification}</button>
+        <button type="button" style={compactModalActionButtonStyle('secondary')} onClick={() => setOpen(false)}>{t.close}</button>
+      </SettingsModal>}
+    </>
+  );
+}
+
+function MobileRestTimeSection({ t }) {
   const [showAlertHelp, setShowAlertHelp] = useState(false);
   const [alertStatus, setAlertStatus] = useState(null);
   const [alertTestStatus, setAlertTestStatus] = useState(null);
@@ -10373,7 +10449,7 @@ export function ScreenTitle({ title }) {
 
 export function AppHeader({ t = translations.en, currentCycle = 1, workoutNumber = 1,
   athleteLevel = 'beginner', eStrengthRatio, eStrengthMax, recentBodyRatioEvent }) {
-  const versionLabel = import.meta.env.VITE_APP_VERSION ? `v${import.meta.env.VITE_APP_VERSION}` : 'dev';
+  const versionLabel = isDesktopRuntime() ? t.desktopPrototypeShort : import.meta.env.VITE_APP_VERSION ? `v${import.meta.env.VITE_APP_VERSION}` : 'dev';
   return <header data-kelani-app-header data-testid="app-header" style={{
     position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
     height: APP_HEADER_SPACE, boxSizing: 'border-box', background: THEME.bg,
@@ -11892,7 +11968,7 @@ function App() {
         return;
       }
 
-      if (Capacitor.isNativePlatform()) {
+      if (Capacitor.isNativePlatform() || isDesktopRuntime()) {
         restTimerAlertedIdRef.current = timer.id;
         clearPersistedRestTimerState();
         return;
@@ -12189,7 +12265,7 @@ function App() {
 
 
   useEffect(() => {
-    if (!hasLoadedData || !Capacitor.isNativePlatform()) return undefined;
+    if (!hasLoadedData || (!Capacitor.isNativePlatform() && !isDesktopRuntime())) return undefined;
 
     const currentTranslations = translations[language] || translations.en || {};
     const doneTitle = currentTranslations.restTimerDone;
@@ -12213,6 +12289,10 @@ function App() {
     };
 
     reconcileNativeTimer();
+    if (isDesktopRuntime()) {
+      window.addEventListener('focus', reconcileNativeTimer);
+      return () => window.removeEventListener('focus', reconcileNativeTimer);
+    }
 
     let listener;
     let disposed = false;
@@ -12433,11 +12513,14 @@ function App() {
   const currentIndex = Math.max(completedWorkoutCount, currentWorkoutIndex);
 
   useEffect(() => {
-    if (!hasLoadedData || !Capacitor.isNativePlatform()) return undefined;
+    if (!hasLoadedData || (!Capacitor.isNativePlatform() && !isDesktopRuntime())) return undefined;
 
     let listener;
     let disposed = false;
-    RestTimerAlarm.addListener('notificationTapped', ({ id }) => {
+    const subscribe = isDesktopRuntime()
+      ? handler => Promise.resolve({ remove: getDesktopBridge().onTimerClick(handler) })
+      : handler => RestTimerAlarm.addListener('notificationTapped', handler);
+    subscribe(({ id }) => {
       if (disposed || id !== REST_TIMER_NOTIFICATION_ID) return;
       closeCalendarSettings();
       setShowAboutUpdates(false);
@@ -13020,7 +13103,7 @@ function App() {
   useEffect(() => {
     if (!hasLoadedData || !storedData.prs.Squat || !storedData.prs.Bench || !storedData.prs.Deadlift) return;
 
-    if (Capacitor.isNativePlatform() && !automaticBackupStartupAttemptedRef.current) {
+    if ((Capacitor.isNativePlatform() || isDesktopRuntime()) && !automaticBackupStartupAttemptedRef.current) {
       automaticBackupStartupAttemptedRef.current = true;
 
       let savedAutomaticBackupStatus = null;
@@ -13033,7 +13116,7 @@ function App() {
 
       if (shouldRetryAutomaticBackup(
         savedAutomaticBackupStatus,
-        AUTO_BACKUP_PATH,
+        isDesktopRuntime() ? DESKTOP_AUTOMATIC_BACKUP_PATH : AUTO_BACKUP_PATH,
         buildBackupSummary(storedData)
       )) {
         writeAutomaticBackup(storedData).catch(error => {
@@ -13042,7 +13125,7 @@ function App() {
       }
     }
 
-    if (Capacitor.isNativePlatform() && pendingBodyDataBackupRef.current) {
+    if ((Capacitor.isNativePlatform() || isDesktopRuntime()) && pendingBodyDataBackupRef.current) {
       const bodyDataBackupKey = pendingBodyDataBackupRef.current;
       pendingBodyDataBackupRef.current = null;
 
@@ -13055,7 +13138,7 @@ function App() {
       });
     }
 
-    if (Capacitor.isNativePlatform() && screen === 'completed' && completedWorkout) {
+    if ((Capacitor.isNativePlatform() || isDesktopRuntime()) && screen === 'completed' && completedWorkout) {
       const backupKey = completedWorkout.completedAt ||
         `${currentCycle}:${completedWorkout.number || completedWorkoutIndex || currentIndex}:${history.length}`;
 
@@ -13074,7 +13157,7 @@ function App() {
   }, [hasLoadedData, storedData, currentCycle, currentIndex, history.length, screen, completedWorkout, completedWorkoutIndex]);
 
   useEffect(() => {
-    if (!hasLoadedData || showLaunchSplash || showWhatsNew) return;
+    if (isDesktopRuntime() || !hasLoadedData || showLaunchSplash || showWhatsNew) return;
 
     const currentVersion = import.meta.env.VITE_APP_VERSION || 'dev';
     const lastSeenVersion = localStorage.getItem(WHATS_NEW_LAST_SEEN_KEY);
@@ -13124,6 +13207,7 @@ function App() {
   }, [installedUpdateVersion]);
 
   const performUpdateCheck = useCallback(async ({ automatic = false } = {}) => {
+    if (isDesktopRuntime()) return;
     if (!automatic) setUpdateCheckStatus('checking');
 
     try {
@@ -13148,6 +13232,7 @@ function App() {
       lastSeenVersion: localStorage.getItem(WHATS_NEW_LAST_SEEN_KEY),
     });
     if (
+      isDesktopRuntime() ||
       !hasLoadedData ||
       !hasExistingProfile ||
       showLaunchSplash ||

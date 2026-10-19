@@ -63,3 +63,10 @@ A successful verification confirms the APK was published by this repository's re
 The repository also runs an automated distribution-integrity check that compares the public GitHub and IzzyOnDroid APKs for the current release. It checks their SHA-256 hash, Android package/version metadata and signing certificate.
 
 If a download is presented as Kelani but points somewhere other than the official channels above, verify it before installing it. When in doubt, use the latest release directly from this repository or IzzyOnDroid.
+
+## Windows prototype
+
+The experimental Windows ZIP is separate from the Android APK release process.
+It is not signed with the Android release certificate and is not a stable Store
+release. Build it from source using the [prototype guide](docs/windows-prototype.md).
+Do not disable Windows security protections if a prototype is blocked.

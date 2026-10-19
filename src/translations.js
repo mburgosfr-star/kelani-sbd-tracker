@@ -1,5 +1,13 @@
 export const translations = {
   nl: {
+    desktopPrototypeTitle: "Windows-prototype",
+    desktopPrototypeShort: "Prototype",
+    desktopPrototypeInfo: "Dit is een testversie voor Windows. Agenda-integratie en automatische updates zijn nog niet beschikbaar.",
+    desktopNoSync: "Gegevens blijven op deze computer. Er is geen automatische synchronisatie met je telefoon.",
+    desktopOpenGuide: "Handleiding bekijken",
+    desktopTimerHelp: "Laat Kelani openstaan voor rusttimermeldingen, ook wanneer het venster geminimaliseerd is. Meldingen tijdens slaapstand zijn niet gegarandeerd; bij hervatten controleert Kelani de timer opnieuw. Sluiten stopt de meldingen.",
+    desktopTestNotification: "Testmelding versturen",
+    desktopNotificationSent: "Testmelding verstuurd. Controleer of Windows die toont en meldingen voor Kelani toestaat.",
     cycleCompletedSaved: "Deze cyclus is opgeslagen. Je bent klaar voor de volgende cyclus.",
     cycleReviewTrainingDays: "Trainingen",
     cycleReviewRestDays: "Rustdagen",
@@ -879,6 +887,14 @@ export const translations = {
   },
 
   en: {
+    desktopPrototypeTitle: "Windows Prototype",
+    desktopPrototypeShort: "Prototype",
+    desktopPrototypeInfo: "This is a Windows test version. Calendar integration and automatic updates are not available yet.",
+    desktopNoSync: "Data stays on this computer. There is no automatic synchronization with your phone.",
+    desktopOpenGuide: "View guide",
+    desktopTimerHelp: "Keep Kelani running for rest timer notifications, including when the window is minimized. Notifications during sleep are not guaranteed; Kelani checks the timer again on resume. Closing the app stops notifications.",
+    desktopTestNotification: "Send test notification",
+    desktopNotificationSent: "Test notification sent. Check that Windows displays it and allows notifications for Kelani.",
     cycleCompletedSaved: "This cycle has been saved. You are ready for the next cycle.",
     cycleReviewTrainingDays: "Workouts",
     cycleReviewRestDays: "Rest days",
@@ -1758,6 +1774,14 @@ export const translations = {
   },
 
   ca: {
+    desktopPrototypeTitle: "Prototip per a Windows",
+    desktopPrototypeShort: "Prototip",
+    desktopPrototypeInfo: "Aquesta és una versió de prova per a Windows. La integració amb el calendari i les actualitzacions automàtiques encara no estan disponibles.",
+    desktopNoSync: "Les dades es queden en aquest ordinador. No hi ha sincronització automàtica amb el telèfon.",
+    desktopOpenGuide: "Consulta la guia",
+    desktopTimerHelp: "Mantén Kelani obert per rebre notificacions del temporitzador, també amb la finestra minimitzada. No es garanteixen durant la suspensió; en reprendre, Kelani torna a comprovar el temporitzador. Tancar l’app atura les notificacions.",
+    desktopTestNotification: "Envia una notificació de prova",
+    desktopNotificationSent: "S’ha enviat la notificació de prova. Comprova que Windows la mostri i permeti les notificacions de Kelani.",
     cycleCompletedSaved: "S’ha desat aquest cicle. Ja pots començar el següent.",
     cycleReviewTrainingDays: "Entrenaments",
     cycleReviewRestDays: "Dies de descans",

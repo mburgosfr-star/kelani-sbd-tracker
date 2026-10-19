@@ -12,6 +12,10 @@ Kelani helps independent lifters plan adaptive SBD training, log workouts and fo
 
 ## Download
 
+An experimental [Windows desktop prototype](docs/windows-prototype.md) is also
+available to build from source for testing. It is not a stable Windows release
+and does not synchronize automatically with the Android app.
+
 Available for **Android 7.0 or later**:
 
 - [Download the latest APK from official GitHub Releases](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases/latest). Open **Assets** and choose the `.apk` file.

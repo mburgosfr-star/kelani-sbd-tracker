@@ -39,3 +39,6 @@ yarn-error.log*
 # local editor and IDE state
 /.vscode/
 /android/.idea/
+
+# local desktop prototype output
+/desktop-out/

@@ -1,5 +1,6 @@
 import { defineConfig, transformWithOxc } from 'vite';
 import react from '@vitejs/plugin-react';
+import { configDefaults } from 'vitest/config';
 
 function transformSourceJsAsJsx() {
   return {
@@ -44,6 +45,7 @@ export default defineConfig({
     sourcemap: false,
   },
   test: {
+    exclude: [...configDefaults.exclude, 'desktop/**', 'desktop-out/**'],
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/setupTests.js',

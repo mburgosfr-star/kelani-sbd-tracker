@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-10-14
+Last updated: 2026-10-19
 
 Kelani SBD Tracker is an offline-first powerlifting tracker for Squat, Bench Press and Deadlift training.
 
@@ -94,3 +94,14 @@ Kelani SBD Tracker stores data locally using the storage available on your devic
 For privacy questions, contact:
 
 mburgosfr@gmail.com
+
+## Windows Desktop Prototype
+
+The experimental Windows desktop app stores its profile and automatic JSON
+backups locally in the `Kelani SBD Tracker Desktop Prototype` folder inside the
+Windows application data directory. It has no Kelani account, backend or
+automatic phone-to-PC synchronization. Desktop notifications use the operating
+system. Manual exports go to a location you choose; a cloud-backed folder or
+sharing service you choose may synchronize them. External links open in your
+normal browser. See the [Windows prototype guide](windows-prototype.md) for
+storage locations, backup limitations and current platform differences.

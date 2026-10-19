@@ -24,7 +24,7 @@
   "scripts": {
     "security:check": "node scripts/check-dependency-security.js",
     "start": "vite",
-    "build": "VITE_APP_VERSION=$npm_package_version vite build",
+    "build": "node scripts/build-web.cjs",
     "test": "node scripts/run-tests.js",
     "privacy:check": "node scripts/check-public-repository-boundary.js",
     "android:release-apk": "node scripts/build-release-apk.js",
@@ -47,7 +47,11 @@
     "release:check": "node scripts/guarded-release.js --check",
     "release:publish": "node scripts/guarded-release.js --release",
     "release:finish": "npm run release:preflight && npm run release:publish",
-    "release:self-check": "node scripts/check-release-automation.js"
+    "release:self-check": "node scripts/check-release-automation.js",
+    "desktop:start": "electron desktop/main.cjs",
+    "desktop:test": "node desktop/runtime.test.cjs",
+    "desktop:package:windows": "npm run build && node scripts/package-desktop.cjs",
+    "desktop:check-package": "node scripts/check-desktop-package.cjs"
   },
   "browserslist": {
     "production": [
@@ -62,7 +66,9 @@
     ]
   },
   "devDependencies": {
+    "@electron/packager": "20.3.0",
     "@vitejs/plugin-react": "6.1.1",
+    "electron": "44.9.0",
     "jsdom": "30.0.1",
     "typescript": "5.9.3",
     "vite": "8.2.2",
