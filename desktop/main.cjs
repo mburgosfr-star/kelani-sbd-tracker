@@ -31,7 +31,7 @@ function revealWindow() {
 function showNotification(value, timer = false) {
   if (!Notification.isSupported()) throw new Error('Notifications unavailable');
   activeNotification?.close();
-  activeNotification = new Notification({ title: value.title, body: value.body, icon: path.join(assetRoot, 'logo192.png') });
+  activeNotification = new Notification({ title: value.title, body: value.body, icon: path.join(assetRoot, 'kelani-icon.png') });
   activeNotification.on('click', () => {
     revealWindow();
     if (timer) window?.webContents.send('kelani:timer-click', { id: value.id });
@@ -95,7 +95,7 @@ if (!app.requestSingleInstanceLock()) {
 
     window = new BrowserWindow({
       width: 460, height: 960, minWidth: 360, minHeight: 640,
-      backgroundColor: '#000000', icon: path.join(assetRoot, 'logo192.png'),
+      backgroundColor: '#000000', icon: path.join(assetRoot, 'kelani-icon.png'),
       title: 'Kelani SBD Tracker',
       webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false, backgroundThrottling: false },
     });

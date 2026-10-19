@@ -18,7 +18,7 @@ async function main() {
   const files = [
     ['desktop/ubuntu/kelani-desktop-prototype.apparmor', 'etc/apparmor.d/kelani-desktop-prototype'],
     ['desktop/ubuntu/kelani-desktop-prototype.desktop', 'usr/share/applications/kelani-desktop-prototype.desktop'],
-    ['public/logo192.png', 'usr/share/icons/hicolor/192x192/apps/kelani-desktop-prototype.png'],
+    ['public/icons/icon-192.webp', 'usr/share/icons/hicolor/192x192/apps/kelani-desktop-prototype.png'],
     ['docs/ubuntu-prototype.md', 'usr/share/doc/kelani-desktop-prototype/README.md'],
   ];
   for (const [input, output] of files) {

@@ -14,7 +14,7 @@ async function main() {
   await fs.rm(staging, { recursive: true, force: true });
   await fs.mkdir(staging, { recursive: true });
   // ICO can contain the existing PNG unchanged; no artwork is generated.
-  const png = await fs.readFile(path.join(root, 'public', 'logo192.png'));
+  const png = await fs.readFile(path.join(root, 'public', 'icons', 'icon-192.webp'));
   const width = png.readUInt32BE(16);
   const height = png.readUInt32BE(20);
   if (width > 256 || height > 256) throw new Error('Desktop icon must be at most 256 pixels');
@@ -29,8 +29,11 @@ async function main() {
   icoHeader.writeUInt32LE(22, 18);
   const icon = path.join(output, 'kelani.ico');
   await fs.writeFile(icon, Buffer.concat([icoHeader, png]));
+  const pngIcon = path.join(output, 'kelani-icon.png');
+  await fs.writeFile(pngIcon, png);
   // Explicit allowlist: no repository, exports, credentials or dependencies.
   await fs.cp(path.join(root, 'build'), path.join(staging, 'build'), { recursive: true });
+  await fs.copyFile(pngIcon, path.join(staging, 'build', 'kelani-icon.png'));
   await fs.cp(path.join(root, 'desktop'), path.join(staging, 'desktop'), { recursive: true, filter: source => !source.endsWith('.test.cjs') });
   await fs.copyFile(path.join(root, 'LICENSE'), path.join(staging, 'LICENSE'));
   await fs.copyFile(path.join(root, 'docs', 'windows-prototype.md'), path.join(staging, 'WINDOWS-PROTOTYPE.md'));
@@ -39,7 +42,7 @@ async function main() {
   const paths = await packager({
     dir: staging, out: output, name: 'Kelani SBD Tracker Desktop Prototype',
     platform, arch: 'x64', electronVersion: metadata.devDependencies.electron,
-    appVersion: metadata.version, icon: platform === 'win32' ? icon : path.join(root, 'public', 'logo192.png'),
+    appVersion: metadata.version, icon: platform === 'win32' ? icon : pngIcon,
     asar: true, prune: false, overwrite: true,
     executableName,
   });

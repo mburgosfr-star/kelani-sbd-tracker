@@ -18,6 +18,10 @@ async function main() {
   for (const required of ['/build/index.html', '/desktop/main.cjs', '/desktop/preload.cjs', '/desktop/runtime.cjs', '/LICENSE']) {
     assert(entries.includes(required), `Missing ${required}`);
   }
+  const expectedIcon = await fs.readFile(path.join(root, 'public', 'icons', 'icon-192.webp'));
+  assert.deepEqual(extractFile(archive, 'build/kelani-icon.png'), expectedIcon, 'Packaged icon must match the Kelani app icon');
+  const ico = await fs.readFile(path.join(root, 'desktop-out', 'kelani.ico'));
+  assert.deepEqual(ico.subarray(ico.readUInt32LE(18)), expectedIcon, 'Windows icon must contain the Kelani app icon');
   const metadata = JSON.parse(extractFile(archive, 'package.json').toString());
   assert.equal(metadata.name, 'kelani-desktop-prototype');
   assert.equal(metadata.main, 'desktop/main.cjs');
