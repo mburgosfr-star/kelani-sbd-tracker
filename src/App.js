@@ -12275,7 +12275,9 @@ function App() {
       const restoredTimer = readPersistedRestTimerState();
 
       if (!restoredTimer) {
-        if (timer && Number(timer.endTime) <= Date.now()) {
+        // Desktop notifications do not replace the workout's ready message.
+        // Keep an elapsed in-memory timer until the next set or dismissal.
+        if (!isDesktopRuntime() && timer && Number(timer.endTime) <= Date.now()) {
           setTimer(null);
         }
         return;

@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { DesktopRestTimeSection, UpdatesSettingsModal, shouldPlayRestTimerInAppAlert, shouldShowAutomaticBackupStatus } from './App';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import App, { DesktopRestTimeSection, UpdatesSettingsModal, shouldPlayRestTimerInAppAlert, shouldShowAutomaticBackupStatus } from './App';
 import { translations } from './translations';
 import { isDesktopRuntime } from './desktopRuntime';
 
@@ -38,3 +38,43 @@ test('desktop updates never offer the Android APK or Izzy store', () => {
   expect(screen.queryByText(t.updateDownloadIzzy)).not.toBeInTheDocument();
   expect(screen.queryByText(t.updateCheckAutomatically)).not.toBeInTheDocument();
 });
+
+test('returning to the desktop workout keeps the elapsed timer ready message without rescheduling it', async () => {
+  localStorage.clear();
+  localStorage.setItem('language', 'en');
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1, trainingModel: 'classic', currentCycle: 1,
+    prs: { Squat: 100, Bench: 75, Deadlift: 125 }, history: [],
+    showWhatsNewAfterUpdates: false,
+  }));
+  const start = Date.now();
+  const deadline = start + 60_000;
+  localStorage.setItem('kelani-sbd-tracker-active-rest-timer', JSON.stringify({
+    id: start, seconds: 60, endTime: deadline,
+    placement: { workoutNumber: 1, type: 'meetWarmup', liftIndex: 0, index: 0 },
+  }));
+  const scheduleTimer = jest.fn().mockResolvedValue({ scheduled: true });
+  window.kelaniDesktop = {
+    platform: 'desktop', scheduleTimer,
+    getPendingTimer: jest.fn().mockResolvedValue({ pending: true, id: 1208, at: deadline }),
+    onTimerClick: () => () => {},
+    writeBackup: jest.fn(async json => ({ data: json, path: 'Backups/test.json' })),
+  };
+  const view = render(<App />);
+  await screen.findByRole('button', { name: 'Workout' }, { timeout: 5000 });
+  await waitFor(() => expect(window.kelaniDesktop.getPendingTimer).toHaveBeenCalled());
+  const now = jest.spyOn(Date, 'now').mockReturnValue(deadline + 1000);
+  try {
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('focus'));
+    });
+    expect(await screen.findByText(translations.en.readyNextSet)).toBeInTheDocument();
+    expect(scheduleTimer).not.toHaveBeenCalled();
+    expect(localStorage.getItem('kelani-sbd-tracker-active-rest-timer')).toBeNull();
+  } finally {
+    view.unmount();
+    now.mockRestore();
+    localStorage.clear();
+  }
+}, 10000);
