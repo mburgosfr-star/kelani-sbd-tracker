@@ -47,6 +47,7 @@ async function main() {
     executableName,
   });
   for (const packaged of paths) {
+    await fs.copyFile(path.join(root, 'desktop', 'assets', 'rest-timer.wav'), path.join(packaged, 'resources', 'rest-timer.wav'));
     await fs.copyFile(path.join(root, 'docs', 'windows-prototype.md'), path.join(packaged, 'WINDOWS-PROTOTYPE.md'));
     await fs.copyFile(path.join(root, 'docs', 'ubuntu-prototype.md'), path.join(packaged, 'UBUNTU-PROTOTYPE.md'));
     const executable = path.join(packaged, executableName + (platform === 'win32' ? '.exe' : ''));

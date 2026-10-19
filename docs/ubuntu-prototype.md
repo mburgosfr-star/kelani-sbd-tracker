@@ -26,7 +26,7 @@ sudo apt install ./Kelani-Ubuntu-Prototype-amd64.deb
 ```
 
 The package manager asks for administrator authorization and preserves the
-desktop profile. Package revisions, such as `2.0.59~prototype.3`, distinguish
+desktop profile. Package revisions, such as `2.0.59~prototype.4`, distinguish
 desktop fixes without changing the Android app version. There is no automatic
 update service. Keep an independent JSON backup before updating.
 
@@ -44,6 +44,12 @@ Start with a disposable profile. Check the five screens, window resizing,
 unfinished sets after a restart, JSON export/import and a timer while the
 window is minimized. Send a test notification through Settings → Rest timer
 alerts. Your Ubuntu notification settings can suppress its sound or display.
+
+Each timer alert plays one short sound from the desktop process, including
+when the window is minimized. The Ubuntu banner is silent, and the in-app
+ready message adds no second sound. Sound uses the normal system audio output
+and volume; muted output remains silent. The DEB installs `paplay` through
+Ubuntu's `pulseaudio-utils` package for sound playback.
 
 Keep the app running for timer notifications. Closing its window quits it.
 Notifications during sleep are not guaranteed; the deadline is checked on

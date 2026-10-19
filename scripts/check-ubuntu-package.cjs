@@ -39,9 +39,11 @@ async function main() {
     const archive = path.join(temporary, 'opt/kelani-desktop-prototype/resources/app.asar');
     assert.deepEqual(extractFile(archive, 'build/kelani-icon.png'), icon);
     // Catch stale runtime files, not just a correctly named executable.
-    for (const file of ['main.cjs', 'preload.cjs', 'runtime.cjs']) {
+    for (const file of ['main.cjs', 'preload.cjs', 'runtime.cjs', 'notifications.cjs']) {
       assert.deepEqual(extractFile(archive, `desktop/${file}`), await fs.readFile(path.join(root, 'desktop', file)));
     }
+    assert.deepEqual(await fs.readFile(path.join(temporary, 'opt/kelani-desktop-prototype/resources/rest-timer.wav')),
+      await fs.readFile(path.join(root, 'desktop/assets/rest-timer.wav')));
     const sha = createHash('sha256').update(await fs.readFile(deb)).digest('hex');
     assert.equal((await fs.readFile(deb + '.sha256', 'utf8')).split(/\s+/)[0], sha);
     console.log(`Ubuntu ${version}: menu entry, icons, runtime, permissions, install scripts and checksum verified.`);

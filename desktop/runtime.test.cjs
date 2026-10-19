@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { EventEmitter } = require('node:events');
+const { createDesktopNotifier } = require('./notifications.cjs');
 const { isAppUrl, resolveAssetPath, isAllowedExternalUrl, writeVerifiedBackup, createTimerController } = require('./runtime.cjs');
 
 test('packaged assets cannot escape the application root or load foreign origins', () => {
@@ -70,4 +72,60 @@ test('invalid timer input cannot replace a valid pending timer', () => {
   timer.schedule({ id: 7, at: 3000, title: 'Valid', body: 'Test' });
   assert.throws(() => timer.schedule({ id: 7, at: Infinity, title: 'Invalid', body: 'Test' }));
   assert.equal(timer.getPending().at, 3000);
+});
+
+function notificationFixture(platform) {
+  const notifications = [];
+  const sounds = [];
+  const errors = [];
+  class Notification extends EventEmitter {
+    static isSupported() { return true; }
+    constructor(options) { super(); this.options = options; notifications.push(this); }
+    show() { this.emit('show'); }
+    close() { this.closed = true; }
+  }
+  const notifier = createDesktopNotifier({
+    Notification, platform, icon: 'kelani.png', soundPath: '/packaged/rest-timer.wav',
+    spawn(command, args, options) {
+      const child = new EventEmitter();
+      child.kill = () => { child.killed = true; child.emit('exit', null, 'SIGTERM'); };
+      sounds.push({ command, args, options, child });
+      return child;
+    },
+    onError: error => errors.push(error),
+  });
+  return { notifier, notifications, sounds, errors };
+}
+
+test('Linux timer delivery has exactly one audio owner even when notification show repeats', () => {
+  const { notifier, notifications, sounds } = notificationFixture('linux');
+  let clicked = false;
+  notifier.show({ title: 'Timer', body: 'Ready' }, () => { clicked = true; });
+  notifications[0].emit('show');
+  assert.equal(notifications[0].options.silent, true);
+  assert.equal(sounds.length, 1);
+  assert.equal(sounds[0].command, '/usr/bin/paplay');
+  assert.equal(sounds[0].args.at(-1), '/packaged/rest-timer.wav');
+  assert.equal(sounds[0].options.shell, false);
+  notifications[0].emit('click');
+  assert.equal(clicked, true);
+  notifier.close();
+  assert.equal(sounds[0].child.killed, true);
+  assert.equal(notifications[0].closed, true);
+});
+
+test('Windows leaves audio to its OS notification and never starts the Linux player', () => {
+  const { notifier, notifications, sounds } = notificationFixture('win32');
+  notifier.show({ title: 'Timer', body: 'Ready' }, () => {});
+  assert.equal(notifications[0].options.silent, false);
+  assert.equal(sounds.length, 0);
+});
+
+test('Linux sound errors are reported without triggering duplicate fallback audio', () => {
+  const { notifier, sounds, errors } = notificationFixture('linux');
+  notifier.show({ title: 'Timer', body: 'Ready' }, () => {});
+  sounds[0].child.emit('error', new Error('Audio unavailable'));
+  sounds[0].child.emit('exit', 1, null);
+  assert.equal(errors.length, 2);
+  assert.equal(sounds.length, 1);
 });

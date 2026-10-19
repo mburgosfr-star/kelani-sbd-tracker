@@ -19,6 +19,8 @@ async function main() {
     assert(entries.includes(required), `Missing ${required}`);
   }
   const expectedIcon = await fs.readFile(path.join(root, 'public', 'icons', 'icon-192.webp'));
+  assert.deepEqual(await fs.readFile(path.join(output, 'resources', 'rest-timer.wav')),
+    await fs.readFile(path.join(root, 'desktop', 'assets', 'rest-timer.wav')), 'Packaged timer sound must match the source');
   assert.deepEqual(extractFile(archive, 'build/kelani-icon.png'), expectedIcon, 'Packaged icon must match the Kelani app icon');
   const ico = await fs.readFile(path.join(root, 'desktop-out', 'kelani.ico'));
   assert.deepEqual(ico.subarray(ico.readUInt32LE(18)), expectedIcon, 'Windows icon must contain the Kelani app icon');

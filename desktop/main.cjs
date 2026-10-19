@@ -1,6 +1,8 @@
 const { app, BrowserWindow, protocol, net, ipcMain, shell, dialog, Notification, powerMonitor, Menu } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawn } = require('node:child_process');
+const { createDesktopNotifier } = require('./notifications.cjs');
 const { pathToFileURL } = require('node:url');
 const { APP_ORIGIN, isAppUrl, resolveAssetPath, isAllowedExternalUrl, writeVerifiedBackup, normalizeTimer, createTimerController } = require('./runtime.cjs');
 
@@ -15,11 +17,18 @@ if (process.platform === 'linux') app.setDesktopName('kelani-desktop-prototype.d
 protocol.registerSchemesAsPrivileged([{ scheme: 'kelani', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
 
 let window;
-let activeNotification;
 let backupQueue = Promise.resolve();
 const statePath = path.join(app.getPath('userData'), 'rest-timer.json');
 const backupPath = path.join(app.getPath('userData'), 'Backups', 'kelani-sbd-tracker-v2-autosave.json');
 const assetRoot = path.join(__dirname, '..', 'build');
+const notifier = createDesktopNotifier({
+  Notification, platform: process.platform, spawn,
+  icon: path.join(assetRoot, 'kelani-icon.png'),
+  soundPath: app.isPackaged
+    ? path.join(process.resourcesPath, 'rest-timer.wav')
+    : path.join(__dirname, 'assets', 'rest-timer.wav'),
+  onError: error => console.error('Desktop alert failed:', error),
+});
 
 function revealWindow() {
   if (!window || window.isDestroyed()) return;
@@ -29,17 +38,10 @@ function revealWindow() {
 }
 
 function showNotification(value, timer = false) {
-  if (!Notification.isSupported()) throw new Error('Notifications unavailable');
-  activeNotification?.close();
-  activeNotification = new Notification({ title: value.title, body: value.body, icon: path.join(assetRoot, 'kelani-icon.png') });
-  activeNotification.on('click', () => {
+  notifier.show(value, () => {
     revealWindow();
     if (timer) window?.webContents.send('kelani:timer-click', { id: value.id });
   });
-  activeNotification.on('failed', (_event, error) => {
-    console.error('Desktop notification failed:', error);
-  });
-  activeNotification.show();
 }
 
 const timer = createTimerController({
@@ -122,7 +124,7 @@ if (!app.requestSingleInstanceLock()) {
       if (!Notification.isSupported()) throw new Error('Notifications unavailable');
       return timer.schedule(value);
     });
-    handle('kelani:timer-cancel', () => { timer.cancel(); activeNotification?.close(); });
+    handle('kelani:timer-cancel', () => { timer.cancel(); notifier.close(); });
     handle('kelani:timer-pending', () => timer.getPending());
     handle('kelani:notification-test', value => {
       const request = normalizeTimer({ ...value, id: 0, at: Date.now() });
@@ -144,6 +146,7 @@ if (!app.requestSingleInstanceLock()) {
   }).catch(error => { console.error('Desktop startup failed:', error); app.quit(); });
   app.on('window-all-closed', () => app.quit());
   app.on('before-quit', () => {
+    notifier.close();
     if (window && !window.isDestroyed()) window.webContents.session.flushStorageData();
   });
 }
