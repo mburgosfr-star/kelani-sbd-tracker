@@ -10,7 +10,8 @@ const userData = path.join(app.getPath('appData'), 'Kelani SBD Tracker Desktop P
 fs.mkdirSync(userData, { recursive: true });
 app.setPath('userData', userData);
 const appUserModelId = 'com.kelani.sbdtracker.desktop.prototype';
-app.setAppUserModelId(appUserModelId);
+if (process.platform === 'win32') app.setAppUserModelId(appUserModelId);
+if (process.platform === 'linux') app.setDesktopName('kelani-desktop-prototype.desktop');
 protocol.registerSchemesAsPrivileged([{ scheme: 'kelani', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
 
 let window;

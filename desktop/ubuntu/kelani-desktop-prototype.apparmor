@@ -1,0 +1,9 @@
+# A fixed, root-owned application path. Allow Electron's user-namespace sandbox
+# for this prototype only; do not change system-wide namespace restrictions.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile kelani-desktop-prototype /opt/kelani-desktop-prototype/kelani-desktop-prototype flags=(unconfined) {
+  userns,
+  /opt/kelani-desktop-prototype/kelani-desktop-prototype mr,
+}

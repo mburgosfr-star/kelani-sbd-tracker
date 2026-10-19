@@ -95,13 +95,14 @@ For privacy questions, contact:
 
 mburgosfr@gmail.com
 
-## Windows Desktop Prototype
+## Desktop Prototypes
 
-The experimental Windows desktop app stores its profile and automatic JSON
-backups locally in the `Kelani SBD Tracker Desktop Prototype` folder inside the
-Windows application data directory. It has no Kelani account, backend or
+The experimental Windows and Ubuntu desktop apps store their profile and
+automatic JSON backups locally in the `Kelani SBD Tracker Desktop Prototype`
+folder inside the operating system's application data directory. They have no Kelani account, backend or
 automatic phone-to-PC synchronization. Desktop notifications use the operating
 system. Manual exports go to a location you choose; a cloud-backed folder or
 sharing service you choose may synchronize them. External links open in your
-normal browser. See the [Windows prototype guide](windows-prototype.md) for
+normal browser. See the [Windows prototype guide](windows-prototype.md) or
+[Ubuntu prototype guide](ubuntu-prototype.md) for
 storage locations, backup limitations and current platform differences.

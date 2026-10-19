@@ -5,10 +5,12 @@ const path = require('node:path');
 async function main() {
   const { listPackage, extractFile } = await import('@electron/asar');
   const root = path.resolve(__dirname, '..');
-  const output = path.join(root, 'desktop-out', 'Kelani SBD Tracker Desktop Prototype-win32-x64');
+  const platform = process.argv[2] || 'win32';
+  assert(['win32', 'linux'].includes(platform));
+  const output = path.join(root, 'desktop-out', `Kelani SBD Tracker Desktop Prototype-${platform}-x64`);
   const archive = path.join(output, 'resources', 'app.asar');
   const entries = listPackage(archive).map(value => value.replaceAll('\\', '/'));
-  const allowed = new Set(['build', 'desktop', 'package.json', 'LICENSE', 'WINDOWS-PROTOTYPE.md']);
+  const allowed = new Set(['build', 'desktop', 'package.json', 'LICENSE', 'WINDOWS-PROTOTYPE.md', 'UBUNTU-PROTOTYPE.md']);
   for (const entry of entries) {
     assert(allowed.has(entry.split('/').filter(Boolean)[0]), `Unexpected packaged entry: ${entry}`);
     assert(!/\.map$|\.test\.|\.private|\.keystore|\.jks|\.env/i.test(entry), `Unexpected packaged entry: ${entry}`);
@@ -20,10 +22,16 @@ async function main() {
   assert.equal(metadata.name, 'kelani-desktop-prototype');
   assert.equal(metadata.main, 'desktop/main.cjs');
   assert.equal(metadata.version, require('../package.json').version);
-  const executable = await fs.readFile(path.join(output, 'Kelani SBD Tracker Prototype.exe'));
-  assert.equal(executable.subarray(0, 2).toString(), 'MZ');
-  assert.equal(executable.subarray(executable.readUInt32LE(0x3c), executable.readUInt32LE(0x3c) + 4).toString(), 'PE\u0000\u0000');
+  const executable = await fs.readFile(path.join(output, platform === 'win32' ? 'Kelani SBD Tracker Prototype.exe' : 'kelani-desktop-prototype'));
+  if (platform === 'win32') {
+    assert.equal(executable.subarray(0, 2).toString(), 'MZ');
+    assert.equal(executable.subarray(executable.readUInt32LE(0x3c), executable.readUInt32LE(0x3c) + 4).toString(), 'PE\u0000\u0000');
+  } else {
+    assert.equal(executable.subarray(0, 4).toString(), '\u007fELF');
+    assert.equal(executable[4], 2); // ELF64
+    assert.equal(executable.readUInt16LE(18), 62); // x86-64
+  }
   assert(extractFile(archive, 'desktop/main.cjs').toString().includes('sandbox: true'));
-  console.log(`Windows executable and ${entries.length} archive entries verified. No application was launched.`);
+  console.log(`${platform} executable and ${entries.length} archive entries verified. No application was launched.`);
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

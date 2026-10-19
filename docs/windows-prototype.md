@@ -4,6 +4,10 @@ Kelani's Windows prototype runs the existing training app as a standalone,
 offline desktop program. It is an experimental test build, not a stable Windows
 release or a Microsoft Store product.
 
+You can also test the shared desktop app with the
+[Ubuntu test package](ubuntu-prototype.md). That does not replace the later
+Windows-specific test.
+
 ## Start
 
 1. Extract the **entire** ZIP into a folder on a Windows 10 or Windows 11 x64 PC.

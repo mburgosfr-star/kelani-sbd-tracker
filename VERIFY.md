@@ -70,3 +70,8 @@ The experimental Windows ZIP is separate from the Android APK release process.
 It is not signed with the Android release certificate and is not a stable Store
 release. Build it from source using the [prototype guide](docs/windows-prototype.md).
 Do not disable Windows security protections if a prototype is blocked.
+
+The [Ubuntu prototype](docs/ubuntu-prototype.md) is a separate local DEB test
+package. It installs a dedicated AppArmor profile for its fixed application
+path so Electron can use its sandbox. It does not disable global security
+settings and is not a stable app-store release.

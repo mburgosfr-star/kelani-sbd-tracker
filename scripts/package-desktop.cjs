@@ -6,6 +6,9 @@ async function main() {
   const { packager } = await import('@electron/packager');
   const root = path.resolve(__dirname, '..');
   const metadata = require('../package.json');
+  const platform = process.argv[2] || 'win32';
+  if (!['win32', 'linux'].includes(platform)) throw new Error('Unsupported desktop target');
+  const executableName = platform === 'win32' ? 'Kelani SBD Tracker Prototype' : 'kelani-desktop-prototype';
   const output = path.join(root, 'desktop-out');
   const staging = path.join(output, 'source');
   await fs.rm(staging, { recursive: true, force: true });
@@ -31,19 +34,21 @@ async function main() {
   await fs.cp(path.join(root, 'desktop'), path.join(staging, 'desktop'), { recursive: true, filter: source => !source.endsWith('.test.cjs') });
   await fs.copyFile(path.join(root, 'LICENSE'), path.join(staging, 'LICENSE'));
   await fs.copyFile(path.join(root, 'docs', 'windows-prototype.md'), path.join(staging, 'WINDOWS-PROTOTYPE.md'));
+  await fs.copyFile(path.join(root, 'docs', 'ubuntu-prototype.md'), path.join(staging, 'UBUNTU-PROTOTYPE.md'));
   await fs.writeFile(path.join(staging, 'package.json'), JSON.stringify({ name: 'kelani-desktop-prototype', productName: 'Kelani SBD Tracker Desktop Prototype', author: 'Kelani SBD Tracker contributors', version: metadata.version, main: 'desktop/main.cjs', license: metadata.license }, null, 2));
   const paths = await packager({
     dir: staging, out: output, name: 'Kelani SBD Tracker Desktop Prototype',
-    platform: 'win32', arch: 'x64', electronVersion: metadata.devDependencies.electron,
-    appVersion: metadata.version, icon,
+    platform, arch: 'x64', electronVersion: metadata.devDependencies.electron,
+    appVersion: metadata.version, icon: platform === 'win32' ? icon : path.join(root, 'public', 'logo192.png'),
     asar: true, prune: false, overwrite: true,
-    executableName: 'Kelani SBD Tracker Prototype',
+    executableName,
   });
   for (const packaged of paths) {
     await fs.copyFile(path.join(root, 'docs', 'windows-prototype.md'), path.join(packaged, 'WINDOWS-PROTOTYPE.md'));
-    const executable = path.join(packaged, 'Kelani SBD Tracker Prototype.exe');
+    await fs.copyFile(path.join(root, 'docs', 'ubuntu-prototype.md'), path.join(packaged, 'UBUNTU-PROTOTYPE.md'));
+    const executable = path.join(packaged, executableName + (platform === 'win32' ? '.exe' : ''));
     const sha = createHash('sha256').update(await fs.readFile(executable)).digest('hex');
-    console.log(`Windows prototype: ${packaged}\nExecutable SHA-256: ${sha}`);
+    console.log(`${platform} prototype: ${packaged}\nExecutable SHA-256: ${sha}`);
   }
 }
 

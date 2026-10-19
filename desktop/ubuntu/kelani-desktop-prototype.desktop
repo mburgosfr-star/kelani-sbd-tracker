@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Kelani SBD Tracker Prototype
+Comment=Offline powerlifting tracker (test version)
+Comment[nl]=Offline powerliftingtracker (testversie)
+Comment[ca]=Seguiment d’aixecament de potència sense connexió (versió de prova)
+Exec=/opt/kelani-desktop-prototype/kelani-desktop-prototype
+Icon=kelani-desktop-prototype
+Terminal=false
+Categories=Utility;
+StartupWMClass=kelani-desktop-prototype
