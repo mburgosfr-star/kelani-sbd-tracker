@@ -71,7 +71,12 @@ It is not signed with the Android release certificate and is not a stable Store
 release. Build it from source using the [prototype guide](docs/windows-prototype.md).
 Do not disable Windows security protections if a prototype is blocked.
 
+## Ubuntu Prototype
+
 The [Ubuntu prototype](docs/ubuntu-prototype.md) is a separate local DEB test
 package. It installs a dedicated AppArmor profile for its fixed application
 path so Electron can use its sandbox. It does not disable global security
 settings and is not a stable app-store release.
+Its accompanying `.deb.sha256` file verifies download integrity, not a digital
+publisher signature. Obtain both files from this official repository when a
+test package is published. See the Ubuntu guide for verification and updates.

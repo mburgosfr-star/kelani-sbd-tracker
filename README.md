@@ -15,8 +15,9 @@ Kelani helps independent lifters plan adaptive SBD training, log workouts and fo
 An experimental [Windows desktop prototype](docs/windows-prototype.md) is also
 available to build from source for testing. It is not a stable Windows release
 and does not synchronize automatically with the Android app.
-An [Ubuntu test package](docs/ubuntu-prototype.md) runs the same desktop app for
-testing without switching to Windows.
+An experimental [Ubuntu DEB package](docs/ubuntu-prototype.md) runs the same
+desktop app on Ubuntu 24.04 or newer (amd64). Its profile is separate from
+Android, with no automatic phone synchronization or desktop updates.
 
 Available for **Android 7.0 or later**:
 

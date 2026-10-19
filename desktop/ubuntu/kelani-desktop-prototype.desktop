@@ -8,4 +8,5 @@ Exec=/opt/kelani-desktop-prototype/kelani-desktop-prototype
 Icon=kelani-desktop-prototype
 Terminal=false
 Categories=Utility;
+Keywords=Kelani;SBD;Powerlifting;Squat;Bench;Deadlift;
 StartupWMClass=kelani-desktop-prototype

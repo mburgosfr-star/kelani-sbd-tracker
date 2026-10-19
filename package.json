@@ -52,7 +52,7 @@
     "desktop:test": "node desktop/runtime.test.cjs",
     "desktop:package:windows": "npm run build && node scripts/package-desktop.cjs",
     "desktop:check-package": "node scripts/check-desktop-package.cjs",
-    "desktop:package:ubuntu": "npm run build && node scripts/package-desktop.cjs linux && node scripts/check-desktop-package.cjs linux && node scripts/package-ubuntu.cjs"
+    "desktop:package:ubuntu": "npm run build && node scripts/package-desktop.cjs linux && node scripts/check-desktop-package.cjs linux && node scripts/package-ubuntu.cjs && node scripts/check-ubuntu-package.cjs"
   },
   "browserslist": {
     "production": [

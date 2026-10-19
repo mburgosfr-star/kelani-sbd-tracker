@@ -59,6 +59,17 @@ jobs:
       - name: Build production web assets
         run: npm run build
 
+      - name: Build and inspect Ubuntu prototype package
+        run: |
+          if ! command -v desktop-file-validate >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends desktop-file-utils
+          fi
+          node scripts/package-desktop.cjs linux
+          node scripts/check-desktop-package.cjs linux
+          node scripts/package-ubuntu.cjs
+          node scripts/check-ubuntu-package.cjs
+
       - name: Prepare Android unit tests
         run: npx cap sync android
 
