@@ -80,3 +80,9 @@ settings and is not a stable app-store release.
 Its accompanying `.deb.sha256` file verifies download integrity, not a digital
 publisher signature. Obtain both files from this official repository when a
 test package is published. See the Ubuntu guide for verification and updates.
+
+Ubuntu test releases use tags beginning with `ubuntu-v` and are marked as
+prereleases. They do not replace Android's stable **Latest** release or its
+existing assets. The Ubuntu publication gate requires an exact source commit,
+successful CI, package inspection, a matching user-tested desktop application,
+and a clean independent build with identical application bytes.

@@ -339,9 +339,19 @@ function main() {
   console.log(`✅ APK SHA-256: ${publicHash}`);
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(`\nERROR: ${error.message}`);
-  process.exitCode = 1;
+if (process.argv.includes('--ubuntu')) {
+  require('./ubuntu-release.cjs').guard({
+    publish: releaseMode,
+    confirmed: process.argv.includes('--confirm-publication'),
+  }).catch(error => {
+    console.error(`\nERROR: ${error.message}`);
+    process.exitCode = 1;
+  });
+} else {
+  try {
+    main();
+  } catch (error) {
+    console.error(`\nERROR: ${error.message}`);
+    process.exitCode = 1;
+  }
 }

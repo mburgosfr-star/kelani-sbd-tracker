@@ -633,6 +633,12 @@ function readReleaseNotes(version, base = root) {
 
 function releaseScriptHashes(base = root) {
   const paths = [
+    "scripts/ubuntu-release.cjs",
+    "scripts/package-ubuntu.cjs",
+    "scripts/package-desktop.cjs",
+    "scripts/check-ubuntu-package.cjs",
+    "scripts/check-desktop-package.cjs",
+    "desktop/ubuntu/package.json",
     "package.json",
     "package-lock.json",
     "index.html",

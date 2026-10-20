@@ -18,6 +18,7 @@ concurrency:
 
 jobs:
   attest-apk:
+    if: startsWith(github.event.release.tag_name || inputs.tag, 'v')
     name: Attest published release APK
     runs-on: ubuntu-24.04
     timeout-minutes: 10

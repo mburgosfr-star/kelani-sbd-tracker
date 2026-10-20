@@ -7,6 +7,13 @@ without switching to Windows. It does not prove Windows-specific behavior.
 
 ## Install and Open
 
+Ubuntu test downloads are published separately from Android, as GitHub
+prereleases titled **Kelani Ubuntu Test** on the
+[official releases page](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases).
+Look for an Ubuntu release and its `.deb` and `.deb.sha256` assets. If no Ubuntu
+test release is listed, use the source-build instructions below. The stable
+Android **Latest** release does not contain the Ubuntu package.
+
 Open `Kelani-Ubuntu-Prototype-amd64.deb` with your Ubuntu software installer and
 install it. Installing a local package requires your normal administrator
 authorization. Then open **Kelani SBD Tracker Prototype** from the applications

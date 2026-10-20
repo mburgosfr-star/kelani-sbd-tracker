@@ -6,6 +6,8 @@ const { createHash } = require('node:crypto');
 async function main() {
   const root = path.resolve(__dirname, '..');
   const { version } = require('../package.json');
+  const { revision } = require('../desktop/ubuntu/package.json');
+  if (!Number.isSafeInteger(revision) || revision < 1) throw new Error('Invalid Ubuntu revision');
   const stage = path.join(root, 'desktop-out', 'ubuntu-package');
   const application = path.join(stage, 'opt', 'kelani-desktop-prototype');
   const source = path.join(root, 'desktop-out', 'Kelani SBD Tracker Desktop Prototype-linux-x64');
@@ -29,7 +31,7 @@ async function main() {
   }
   const control = path.join(stage, 'DEBIAN');
   await fs.mkdir(control, { recursive: true });
-  await fs.writeFile(path.join(control, 'control'), `Package: kelani-desktop-prototype\nVersion: ${version}~prototype.4\nSection: utils\nPriority: optional\nArchitecture: amd64\nMaintainer: Kelani SBD Tracker contributors\nDepends: apparmor (>= 4.0), libgtk-3-0t64, libnotify4, pulseaudio-utils, libnss3, libasound2t64, libgbm1, libxss1, libatk-bridge2.0-0t64, libxkbcommon0, libdrm2, libcups2t64\nDescription: Offline powerlifting tracker desktop prototype\n Experimental desktop build for local testing. No automatic phone sync.\n`);
+  await fs.writeFile(path.join(control, 'control'), `Package: kelani-desktop-prototype\nVersion: ${version}~prototype.${revision}\nSection: utils\nPriority: optional\nArchitecture: amd64\nMaintainer: Kelani SBD Tracker contributors\nDepends: apparmor (>= 4.0), libgtk-3-0t64, libnotify4, pulseaudio-utils, libnss3, libasound2t64, libgbm1, libxss1, libatk-bridge2.0-0t64, libxkbcommon0, libdrm2, libcups2t64\nDescription: Offline powerlifting tracker desktop prototype\n Experimental desktop build for local testing. No automatic phone sync.\n`);
   await fs.writeFile(path.join(control, 'postinst'), '#!/bin/sh\nset -eu\nif [ "$1" = configure ]; then\n  apparmor_parser -r /etc/apparmor.d/kelani-desktop-prototype\n  if command -v gtk-update-icon-cache >/dev/null 2>&1; then\n    gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor\n  fi\nfi\n', { mode: 0o755 });
   await fs.writeFile(path.join(control, 'prerm'), '#!/bin/sh\nset -eu\nif [ "$1" = remove ] && [ -f /etc/apparmor.d/kelani-desktop-prototype ]; then\n  apparmor_parser -R /etc/apparmor.d/kelani-desktop-prototype\nfi\n', { mode: 0o755 });
   const output = path.join(root, 'desktop-out', 'Kelani-Ubuntu-Prototype-amd64.deb');

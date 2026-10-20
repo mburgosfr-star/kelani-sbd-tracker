@@ -23,6 +23,7 @@ function read(relativePath) {
 const pkg = JSON.parse(read('package.json'));
 
 const expectedScripts = {
+  'ubuntu:release': 'node scripts/ubuntu-release.cjs',
   'security:check': 'node scripts/check-dependency-security.js',
   'privacy:check':
     'node scripts/check-public-repository-boundary.js',
@@ -71,6 +72,7 @@ for (const [name, expected] of Object.entries(expectedScripts)) {
 }
 
 const requiredFiles = [
+  'scripts/ubuntu-release.cjs',
   'scripts/check-dependency-security.js',
   'scripts/check-public-repository-boundary.js',
   'scripts/release-common.js',
@@ -105,6 +107,16 @@ const stageRelease = read('scripts/stage-release.js');
 const buildRelease = read('scripts/build-release-apk.js');
 const preflight = read('scripts/release-preflight.js');
 const guarded = read('scripts/guarded-release.js');
+const ubuntu = read('scripts/ubuntu-release.cjs');
+if (!guarded.includes("require('./ubuntu-release.cjs').guard") || !guarded.includes('--confirm-publication')) {
+  fail('Canonical publication must dispatch Ubuntu through its approval gate.');
+}
+for (const signal of ['validatePreflight', 'assertVerifiedReleaseCommits', 'compareApplications', 'ciEvidence', '--no-local', '--prerelease', '--latest=false', 'existing tags are never replaced', 'confirmedByUser', 'checksumSha256', 'sourceHash']) {
+  if (!ubuntu.includes(signal)) fail(`Ubuntu release guard is missing: ${signal}`);
+}
+if (Object.keys(pkg.scripts).some(name => name.includes('ubuntu') && name.includes('publish'))) {
+  fail('Ubuntu publication must use the canonical release:publish entry point.');
+}
 const izzy = read('scripts/test-izzy-build.js');
 const installApk = read('scripts/install-apk.js');
 const releaseCommon = read('scripts/release-common.js');

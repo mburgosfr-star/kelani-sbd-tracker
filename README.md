@@ -18,6 +18,9 @@ and does not synchronize automatically with the Android app.
 An experimental [Ubuntu DEB package](docs/ubuntu-prototype.md) runs the same
 desktop app on Ubuntu 24.04 or newer (amd64). Its profile is separate from
 Android, with no automatic phone synchronization or desktop updates.
+Ubuntu downloads, when published, appear as **Kelani Ubuntu Test** prereleases
+on the [releases page](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases).
+Follow the [Ubuntu installation and verification guide](docs/ubuntu-prototype.md).
 
 Available for **Android 7.0 or later**:
 

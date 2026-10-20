@@ -56,6 +56,9 @@ jobs:
       - name: Run desktop runtime tests
         run: npm run desktop:test
 
+      - name: Run Ubuntu release guard tests
+        run: node desktop/release-guards.test.cjs
+
       - name: Build production web assets
         run: npm run build
 
