@@ -919,7 +919,7 @@ test('completed rest day content uses only the bounded middle region', () => {
   });
 });
 
-test('compact completion content stays together without a header divider', () => {
+test('completion headers use the shared app divider without adding another line', () => {
   const { rerender } = render(
     <CompletedScreenHeader
       compact
@@ -940,7 +940,7 @@ test('compact completion content stays together without a header divider', () =>
     />
   );
 
-  expect(screen.getByTestId('app-header-divider')).toBeInTheDocument();
+  expect(screen.queryByTestId('app-header-divider')).not.toBeInTheDocument();
 });
 
 test('completed workout content uses fixed chrome with internal scrolling', () => {

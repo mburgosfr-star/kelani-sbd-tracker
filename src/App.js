@@ -2164,7 +2164,6 @@ export function CompletedScreenHeader({ title, message, compact = false }) {
         {message}
       </p>
 
-      {!compact && <div data-testid="app-header-divider" style={appHeaderDividerStyle()} />}
     </div>
   );
 }
@@ -17232,10 +17231,9 @@ const screenAllowsContentScroll =
           ? restDayCompletedContentStyle()
           : {
             display: 'grid',
-            minHeight: '100%',
             boxSizing: 'border-box',
-            alignContent: 'space-evenly',
-            rowGap: 4,
+            alignContent: 'start',
+            rowGap: 8,
           }}>
 
         {completedWorkout?.type === 'rest' && (
