@@ -14,6 +14,13 @@ Look for an Ubuntu release and its `.deb` and `.deb.sha256` assets. If no Ubuntu
 test release is listed, use the source-build instructions below. The stable
 Android **Latest** release does not contain the Ubuntu package.
 
+The official [itch.io page](https://kelburgos.itch.io/kelani-sbd-tracker-ubuntu)
+also offers the Ubuntu test package and checksum. Downloading is free; an
+optional contribution supports development and unlocks no additional features.
+Choose **No thanks, just take me to the downloads** in the download dialog to
+skip payment. Check the package version against the matching GitHub prerelease
+and compare its SHA-256 with the value published there.
+
 Open `Kelani-Ubuntu-Prototype-amd64.deb` with your Ubuntu software installer and
 install it. Installing a local package requires your normal administrator
 authorization. Then open **Kelani SBD Tracker Prototype** from the applications
@@ -91,6 +98,9 @@ training backups to a public issue.
 If Kelani helps your training, you can optionally
 [support development ($5 once)](https://github.com/sponsors/mburgosfr-star/sponsorships?amount=5&frequency=one-time).
 Support is not required to use the app.
+You can also contribute through the optional pay-what-you-want download on
+itch.io. Its checkout is handled by itch.io and its payment providers under
+their own terms and privacy policies, separately from the app.
 
 ## Remove
 

@@ -8,6 +8,7 @@ Kelani is intentionally offline-first and does not use an account or online acti
 - Current Android package: `com.kelani.sbdtracker`
 - Official GitHub releases: `https://github.com/mburgosfr-star/kelani-sbd-tracker/releases`
 - Official IzzyOnDroid package: `https://apt.izzysoft.de/packages/com.kelani.sbdtracker`
+- Official Ubuntu test download on itch.io: `https://kelburgos.itch.io/kelani-sbd-tracker-ubuntu`
 
 A site, repository or binary using the Kelani name is not an official Kelani distribution merely because it uses the same name or is based on the open-source code.
 
@@ -31,7 +32,7 @@ Compare the reported `Signer #1 certificate SHA-256 digest` with the value above
 
 ## APK checksum
 
-Every GitHub release contains exactly two assets:
+Every Android GitHub release contains exactly two assets:
 
 - `kelani-sbd-tracker-vX.Y.Z.apk`
 - `kelani-sbd-tracker-vX.Y.Z.apk.sha256`
@@ -48,7 +49,7 @@ A matching checksum proves that the downloaded APK is byte-for-byte identical to
 
 ## Build provenance attestation
 
-Every official GitHub release is additionally attested with a [GitHub build provenance attestation](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds). This cryptographically binds the published APK to this repository, the `attest-release` GitHub Actions workflow, and the exact commit it ran at - independently of the checksum and signing-certificate checks above.
+Every official Android GitHub release is additionally attested with a [GitHub build provenance attestation](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds). This cryptographically binds the published APK to this repository, the `attest-release` GitHub Actions workflow, and the exact commit it ran at - independently of the checksum and signing-certificate checks above.
 
 With the GitHub CLI installed:
 
@@ -78,8 +79,12 @@ package. It installs a dedicated AppArmor profile for its fixed application
 path so Electron can use its sandbox. It does not disable global security
 settings and is not a stable app-store release.
 Its accompanying `.deb.sha256` file verifies download integrity, not a digital
-publisher signature. Obtain both files from this official repository when a
-test package is published. See the Ubuntu guide for verification and updates.
+publisher signature. Obtain both files from this official repository or the
+official [itch.io page](https://kelburgos.itch.io/kelani-sbd-tracker-ubuntu).
+For an itch.io download, compare its package version and DEB SHA-256 with the
+matching Ubuntu prerelease published in this repository. Checking only the
+downloaded checksum file does not independently establish the publisher's
+identity. See the Ubuntu guide for verification and updates.
 
 Ubuntu test releases use tags beginning with `ubuntu-v` and are marked as
 prereleases. They do not replace Android's stable **Latest** release or its
