@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-10-21
+Last updated: 2026-10-22
 
 Kelani SBD Tracker is an offline-first powerlifting tracker for Squat, Bench Press and Deadlift training.
 
@@ -79,9 +79,9 @@ If you use the export, contact or sharing features, you choose what to send and 
 
 ## External downloads and optional payments
 
-GitHub, IzzyOnDroid and the official [Ubuntu test page on itch.io](https://kelburgos.itch.io/kelani-sbd-tracker-ubuntu) are external distribution services. Their websites may process connection information, cookies and download statistics under their own privacy policies. The app's absence of automatic analytics does not describe these external websites.
+GitHub, IzzyOnDroid and the official itch.io pages for [Android](https://kelburgos.itch.io/kelani-sbd-tracker-android) and the [Ubuntu test release](https://kelburgos.itch.io/kelani-sbd-tracker-ubuntu) are external distribution services. Their websites may process connection information, cookies and download statistics under their own privacy policies. The app's absence of automatic analytics does not describe these external websites.
 
-The itch.io Ubuntu download is free, with an optional pay-what-you-want contribution. Checkout is handled by itch.io and its payment providers, which may process contact, billing and transaction information under their own privacy policies. See the [itch.io privacy policy](https://itch.io/docs/legal/privacy-policy). Optional GitHub Sponsors contributions are likewise handled outside the app by GitHub and its payment providers.
+The Android and Ubuntu downloads on itch.io are free, with optional pay-what-you-want contributions. Checkout is handled by itch.io and its payment providers, which may process contact, billing and transaction information under their own privacy policies. See the [itch.io privacy policy](https://itch.io/docs/legal/privacy-policy). Optional GitHub Sponsors contributions are likewise handled outside the app by GitHub and its payment providers.
 
 The developer may receive purchase or supporter information made available by the chosen service to administer support and transactions. These external transactions do not send your local training records or body data from Kelani. There is no payment SDK, account activation or purchase verification inside the app.
 
