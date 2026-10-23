@@ -12274,11 +12274,9 @@ function App() {
       const restoredTimer = readPersistedRestTimerState();
 
       if (!restoredTimer) {
-        // Desktop notifications do not replace the workout's ready message.
-        // Keep an elapsed in-memory timer until the next set or dismissal.
-        if (!isDesktopRuntime() && timer && Number(timer.endTime) <= Date.now()) {
-          setTimer(null);
-        }
+        // Alarm persistence ends at the deadline, but the workout's ready
+        // message must survive Android background/resume and desktop focus.
+        // The next set or explicit dismissal clears the in-memory timer.
         return;
       }
 

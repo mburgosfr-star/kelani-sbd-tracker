@@ -1,9 +1,10 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, vi } from 'vitest';
+import { afterEach, beforeEach, vi } from 'vitest';
 import App from './App';
+import { translations } from './translations';
 
-const native = vi.hoisted(() => ({ callback: null, retained: null, remove: vi.fn() }));
+const native = vi.hoisted(() => ({ callback: null, appStateCallback: null, retained: null, remove: vi.fn() }));
 
 vi.mock('@capacitor/core', async importOriginal => {
   const actual = await importOriginal();
@@ -23,21 +24,30 @@ vi.mock('@capacitor/core', async importOriginal => {
       },
       ensureChannel: async () => {},
       getPending: async () => ({ pending: false }),
+      schedule: async () => ({ scheduled: true }),
       cancel: async () => {},
     } : actual.registerPlugin(name),
   };
 });
 vi.mock('@capacitor/app', () => ({ App: {
-  addListener: async () => ({ remove: vi.fn() }),
+  addListener: async (event, callback) => {
+    if (event === 'appStateChange') native.appStateCallback = callback;
+    return { remove: vi.fn() };
+  },
   getInfo: async () => ({ version: '2.0.47', build: '147' }),
 } }));
 vi.mock('./calendarNative', () => ({ isNativeCalendarAvailable: () => false }));
+vi.mock('@capacitor/filesystem', async importOriginal => ({
+  ...await importOriginal(),
+  Filesystem: { writeFile: async () => ({ uri: 'test-backup.json' }) },
+}));
 
 const navigationKey = 'kelani-sbd-tracker-navigation-state';
 const dataKey = 'kel-powerlifting-user-data-v1';
 
 beforeEach(() => {
   native.callback = null;
+  native.appStateCallback = null;
   native.retained = null;
   native.remove.mockClear();
   localStorage.clear();
@@ -47,6 +57,10 @@ beforeEach(() => {
     showWhatsNewAfterUpdates: false,
   }));
   localStorage.setItem(navigationKey, JSON.stringify({ screen: 'settings', selectedIndex: 5 }));
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 function expectCurrentWorkout() {
@@ -78,4 +92,37 @@ test('the diagnostic alert does not navigate away from Settings', async () => {
   await screen.findByRole('button', { name: 'Set up calendar' }, { timeout: 3000 });
   await act(async () => { native.callback({ id: 1209 }); });
   expect(JSON.parse(localStorage.getItem(navigationKey)).screen).toBe('settings');
+});
+
+test.each([true, false])('Android keeps the ready message when rest expires %s before backgrounding', async expiresBeforeBackground => {
+  let now = Date.now();
+  vi.spyOn(Date, 'now').mockImplementation(() => now);
+  const timerKey = 'kelani-sbd-tracker-active-rest-timer';
+  localStorage.setItem(timerKey, JSON.stringify({
+    id: now,
+    seconds: 60,
+    endTime: now + 60_000,
+    placement: { workoutNumber: 1, type: 'meetSet', liftIndex: 0, index: 0 },
+  }));
+  render(<App />);
+  await screen.findByRole('button', { name: 'Workout' }, { timeout: 3000 });
+  await waitFor(() => expect(native.appStateCallback).toBeTypeOf('function'));
+
+  if (expiresBeforeBackground) {
+    now += 61_000;
+    fireEvent(document, new Event('visibilitychange'));
+    expect(screen.getByText(translations.en.readyNextSet)).toBeInTheDocument();
+  }
+  await act(async () => native.appStateCallback({ isActive: false }));
+  if (!expiresBeforeBackground) now += 61_000;
+  await act(async () => {
+    native.appStateCallback({ isActive: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  expect(localStorage.getItem(timerKey)).toBeNull();
+  expect(screen.getByText(translations.en.readyNextSet)).toBeInTheDocument();
+
+  // Repeated resume events must not consume the ready message either.
+  await act(async () => native.appStateCallback({ isActive: true }));
+  expect(screen.getByText(translations.en.readyNextSet)).toBeInTheDocument();
 });
