@@ -118,14 +118,31 @@ async function channelVersion(target, channel) {
 
 async function verifyPublishedChannels(plan) {
   let lastError;
-  for (let attempt = 0; attempt < 18; attempt += 1) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
     try {
       const versions = await Promise.all([plan.channel, 'checksums'].map(channel => channelVersion(plan.target, channel)));
       if (versions.every(version => version === plan.version)) return;
     } catch (error) { lastError = error; }
-    if (attempt < 17) await new Promise(resolve => setTimeout(resolve, 10_000));
+    if (attempt < 59) await new Promise(resolve => setTimeout(resolve, 10_000));
   }
   throw new Error(`itch.io did not report the expected version for both channels. ${lastError?.message || 'Check the workflow before retrying.'}`);
+}
+
+async function pushChannel(butler, args, env, run = spawnSync, wait = () => new Promise(resolve => setTimeout(resolve, 10_000))) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const result = run(butler, args, { env, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
+    const output = `${result.stdout || ''}${result.stderr || ''}`;
+    if (result.status === 0) {
+      process.stdout.write(output);
+      return;
+    }
+    if (!output.includes('latest build is still processing') || attempt === 59) {
+      process.stderr.write(output);
+      throw new Error('itch.io upload failed. Inspect its processing status before retrying.');
+    }
+    if (attempt === 0) console.log('Waiting for itch.io to finish processing the previous upload.');
+    await wait();
+  }
 }
 
 async function waitForAttestation(filename) {
@@ -176,8 +193,8 @@ async function main() {
     // Each channel contains one original file so website downloads are not ZIP-wrapped.
     for (const [filename, channel] of [[plan.filename, plan.channel], [`${plan.filename}.sha256`, 'checksums']]) {
       assertLatest(plan);
-      execFileSync(butler, ['push', path.join(directory, filename), `${plan.target}:${channel}`,
-        '--userversion', plan.version, '--if-changed'], { env, stdio: 'inherit' });
+      await pushChannel(butler, ['push', path.join(directory, filename), `${plan.target}:${channel}`,
+        '--userversion', plan.version, '--if-changed'], env);
     }
     await verifyPublishedChannels(plan);
     for (const [index, channel] of [plan.channel, 'checksums'].entries()) {
@@ -191,5 +208,5 @@ async function main() {
   }
 }
 
-module.exports = { REPOSITORY, BUTLER_VERSION, BUTLER_ARCHIVE_SHA256, releaseIdentity, compareOrder, validateRelease, verifyFiles, assertLatestRelease };
+module.exports = { REPOSITORY, BUTLER_VERSION, BUTLER_ARCHIVE_SHA256, releaseIdentity, compareOrder, validateRelease, verifyFiles, assertLatestRelease, pushChannel };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });

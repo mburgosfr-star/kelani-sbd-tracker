@@ -44,6 +44,8 @@ If an upload fails, the GitHub release stays published. Inspect the failed
 workflow and rerun synchronization for the latest applicable release. Package
 and checksum uploads are separate operations; do not call synchronization
 complete until both public channel versions match.
+The workflow waits for server-side processing and retries a temporarily busy
+channel for up to ten minutes. Other upload errors stop synchronization.
 
 References: [Butler uploads](https://itch.io/docs/butler/pushing.html),
 [single-file downloads](https://itch.io/docs/butler/single-files.html),

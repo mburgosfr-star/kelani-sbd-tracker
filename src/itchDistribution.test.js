@@ -5,8 +5,31 @@ import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { REPOSITORY, releaseIdentity, validateRelease, verifyFiles, assertLatestRelease } = require('../scripts/sync-itch.cjs');
+const { REPOSITORY, releaseIdentity, validateRelease, verifyFiles, assertLatestRelease, pushChannel } = require('../scripts/sync-itch.cjs');
 const digest = bytes => `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
+
+test('waits for an existing upload to finish but does not retry unrelated upload errors', async () => {
+  let calls = 0;
+  let waits = 0;
+  const run = () => ++calls < 3
+    ? { status: 1, stderr: 'latest build is still processing' }
+    : { status: 0, stdout: '' };
+  await pushChannel('butler', [], {}, run, async () => { waits += 1; });
+  expect(calls).toBe(3);
+  expect(waits).toBe(2);
+  calls = 0;
+  await expect(pushChannel('butler', [], {}, () => {
+    calls += 1;
+    return { status: 1, stderr: '' };
+  }, async () => { throw new Error('Must not wait for unrelated errors'); })).rejects.toThrow(/upload failed/);
+  expect(calls).toBe(1);
+  calls = 0;
+  await expect(pushChannel('butler', [], {}, () => {
+    calls += 1;
+    return { status: 1, stderr: 'latest build is still processing' };
+  }, async () => {})).rejects.toThrow(/upload failed/);
+  expect(calls).toBe(60);
+});
 
 function fixture(tag) {
   const identity = releaseIdentity(tag);
