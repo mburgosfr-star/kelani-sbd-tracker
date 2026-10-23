@@ -53,6 +53,12 @@ may reference the original `release/` directory; the command above works when
 the APK is in your current directory. Downloads and updates from itch.io are
 manual, and its listed version may differ from the latest GitHub release.
 
+The [itch.io synchronization workflow](.github/workflows/itch-distribution.yml)
+copies published release assets to the official itch.io download channels.
+It verifies their GitHub digests and checksum contents before uploading;
+Android uploads also require the release's provenance attestation. See
+[itch.io distribution](docs/itch-distribution.md) for configuration and recovery.
+
 A matching checksum proves that the downloaded APK is byte-for-byte identical to the APK published in that GitHub release. The signing-certificate check independently confirms the Kelani 2.x signing identity.
 
 ## Build provenance attestation
