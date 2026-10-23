@@ -19,16 +19,13 @@ An experimental [Ubuntu DEB package](docs/ubuntu-prototype.md) runs the same
 desktop app on Ubuntu 24.04 or newer (amd64). Its profile is separate from
 Android, with no automatic phone synchronization or desktop updates.
 Download Ubuntu test packages from **Kelani Ubuntu Test** prereleases
-on the [releases page](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases)
-or from the official [itch.io page](https://kelburgos.itch.io/kelani-sbd-tracker-ubuntu).
-The itch.io download is free, with an optional pay-what-you-want contribution.
+on the [releases page](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases).
 Follow the [Ubuntu installation and verification guide](docs/ubuntu-prototype.md).
 
 Available for **Android 7.0 or later**:
 
 - [Download the latest APK from official GitHub Releases](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases/latest). Open **Assets** and choose the `.apk` file.
 - [Get Kelani from IzzyOnDroid](https://apt.izzysoft.de/packages/com.kelani.sbdtracker), also available through compatible F-Droid clients such as Neo Store.
-- [Download Android on itch.io](https://kelburgos.itch.io/kelani-sbd-tracker-android), free with an optional pay-what-you-want contribution. Check the version shown there against the latest GitHub release; updates are installed manually.
 
 Open the APK and follow Android's installation prompts, or install it through your F-Droid client. Then enter your starting lift maxes, choose your workout setup and start Smart Training. No Kelani sign-up is needed.
 
@@ -89,8 +86,6 @@ The optional anonymous usage summary is generated locally and shown in full befo
 ## Support and Feedback
 
 If Kelani is useful to you, you can [support its development with a one-time US$5 contribution through GitHub Sponsors](https://github.com/sponsors/mburgosfr-star/sponsorships?amount=5&frequency=one-time). Support helps maintain and improve the app. There is no subscription. GitHub requires you to sign in before contributing. Sponsorship is optional; the app available from GitHub and IzzyOnDroid does not require payment.
-
-You can also optionally contribute when downloading the [Android app](https://kelburgos.itch.io/kelani-sbd-tracker-android) or [Ubuntu test release](https://kelburgos.itch.io/kelani-sbd-tracker-ubuntu) on itch.io, with a suggested US$5 amount. Choose **No thanks, just take me to the downloads** to download for free. Contributions unlock no additional app features. itch.io and its payment providers handle checkout separately from the app; see the [privacy policy](docs/privacy-policy.md#external-downloads-and-optional-payments).
 
 Report bugs or suggest improvements through [GitHub Issues](https://github.com/mburgosfr-star/kelani-sbd-tracker/issues).
 
