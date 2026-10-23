@@ -3835,16 +3835,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewWorkoutGridItem,
-    t.whatsNewWorkoutPreviewItem,
-    t.whatsNewWorkoutFeedbackItem,
-    t.whatsNewActionButtonsItem,
-    t.whatsNewOnboardingSpacingItem,
-    t.whatsNewProgramListItem,
-    t.whatsNewDashboardSpacingItem,
-    t.whatsNewCalendarForecastItem,
-    t.whatsNewCycleReviewItem,
-    t.whatsNewNavigationItem,
+    t.whatsNewRestTimerItem,
+    t.whatsNewCompletionSpacingItem,
+    t.whatsNewSupportItem,
   ];
 
   return (

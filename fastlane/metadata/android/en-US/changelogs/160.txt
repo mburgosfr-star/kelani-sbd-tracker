@@ -1,0 +1,1 @@
+Keep the ready-for-next-set message visible on Android after returning from the background. Make the workout completion summary more compact and remove its duplicate divider. Support links open an optional one-time US$5 contribution through GitHub Sponsors. No features require payment.

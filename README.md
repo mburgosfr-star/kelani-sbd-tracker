@@ -64,6 +64,8 @@ Workout set controls use a shared five-column grid. Newly generated back-off and
 
 During training you can complete or fail sets, adjust and restore weights, use a rest timer and open the plate calculator. Failed sets automatically make the workout **Too hard**; optional work left unchecked is not treated as failure.
 
+On Android, the ready-for-next-set message stays visible when you return from the background after the rest timer ends. Completed workouts use a compact summary without a duplicate divider beneath the title.
+
 ## How Smart Training Works
 
 Smart Training follows a level-specific 28-workout ideal route: W1-W21 build strength, W22-W26 taper, W27 is SBD Meet Day and W28 is the planned post-meet recovery day. The Program screen shows the route ahead, while your confirmed strength determines the prescribed weights. Select a future workout to inspect its full content in view-only mode. It cannot be completed or edited; choosing Workout in the navigation returns to your current session. **Too easy** shortens the route unless Meet Day is already next, while **Too hard** or failed work can add recovery without ever scheduling more than two consecutive rest days. Readiness information explains your progress without silently replacing planned workouts or postponing the meet.
