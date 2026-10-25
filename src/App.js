@@ -3741,6 +3741,12 @@ export function CalendarSettingsModal({ t, settings, onChange, onSync, syncStatu
       <p style={{ color: THEME.text, fontSize: 13, lineHeight: 1.4, margin: '0 0 14px' }}>
         {t.calendarSettingsIntro}
       </p>
+      <p style={{ color: THEME.text, fontSize: 13, lineHeight: 1.4, margin: '0 0 14px' }}>
+        {t.calendarSyncPrivacy}
+      </p>
+      <p style={{ color: THEME.text, fontSize: 13, lineHeight: 1.4, margin: '0 0 14px' }}>
+        {t.calendarLocalPrivacy}
+      </p>
       {!nativeAvailable ? (
         <p style={{ color: THEME.muted, fontSize: 13 }}>{t.calendarAndroidOnly}</p>
       ) : (

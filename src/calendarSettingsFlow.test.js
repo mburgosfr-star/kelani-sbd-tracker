@@ -1,27 +1,56 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
-import App from './App';
+import App, { CalendarSettingsModal } from './App';
+import { translations } from './translations';
 
 const calendarMocks = vi.hoisted(() => ({
   deleteEvent: vi.fn().mockResolvedValue(undefined),
   permission: vi.fn().mockResolvedValue('granted'),
+  requestPermission: vi.fn().mockResolvedValue('granted'),
+  calendars: vi.fn().mockResolvedValue([
+    { id: '7', name: 'Training', accountName: 'local' },
+  ]),
 }));
 
 vi.mock('./calendarNative', () => ({
   isNativeCalendarAvailable: () => true,
   getCalendarPermissionState: calendarMocks.permission,
-  requestCalendarPermission: async () => 'granted',
+  requestCalendarPermission: calendarMocks.requestPermission,
   getManagedDeviceWorkoutEvents: async () => [],
-  getWritableDeviceCalendars: async () => [
-    { id: '7', name: 'Training', accountName: 'local' },
-  ],
+  getWritableDeviceCalendars: calendarMocks.calendars,
   upsertDeviceWorkoutEvent: async () => '42',
   ensureDeviceWorkoutEventReminder: async () => {},
   deleteDeviceWorkoutEvent: calendarMocks.deleteEvent,
 }));
 
 const storageKey = 'kel-powerlifting-user-data-v1';
+
+test.each(['nl', 'en', 'ca'])('calendar data disclosure precedes permission and calendar access in %s', async language => {
+  const t = translations[language];
+  calendarMocks.permission.mockResolvedValue('denied');
+  calendarMocks.requestPermission.mockClear();
+  calendarMocks.calendars.mockClear();
+  try {
+    render(<CalendarSettingsModal t={t} settings={{}} onChange={vi.fn()}
+      onSync={vi.fn()} onPickerOpenChange={vi.fn()} onClose={vi.fn()} />);
+    await waitFor(() => expect(calendarMocks.permission).toHaveReturned());
+    const allow = screen.getByRole('button', { name: t.calendarAllowAccess });
+    for (const text of [t.calendarSettingsIntro, t.calendarSyncPrivacy, t.calendarLocalPrivacy]) {
+      const explanation = screen.getByText(text);
+      expect(explanation).toBeVisible();
+      expect(explanation.compareDocumentPosition(allow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(calendarMocks.requestPermission).not.toHaveBeenCalled();
+    expect(calendarMocks.calendars).not.toHaveBeenCalled();
+    fireEvent.click(allow);
+    expect(calendarMocks.requestPermission).toHaveBeenCalledTimes(1);
+    await screen.findByRole('button', { name: t.calendarChoosePlaceholder });
+    expect(calendarMocks.calendars).toHaveBeenCalledTimes(1);
+  } finally {
+    calendarMocks.permission.mockResolvedValue('granted');
+  }
+});
 
 test('Calendar settings are available from Settings, persist and restore without a Program button', async () => {
   localStorage.clear();
