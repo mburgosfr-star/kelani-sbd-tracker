@@ -25,7 +25,7 @@ describe('WhatsNewModal', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
     expect(screen.getByText(t.whatsNewRestTimerItem)).toBeInTheDocument();
     expect(screen.getByText(t.whatsNewCompletionSpacingItem)).toBeInTheDocument();
-    expect(screen.getByText(t.whatsNewSupportItem)).toBeInTheDocument();
+    expect(screen.getByText(t.whatsNewSupportRemovalItem)).toBeInTheDocument();
 
     const checkbox = screen.getByLabelText(
       t.whatsNewShowAutomatically

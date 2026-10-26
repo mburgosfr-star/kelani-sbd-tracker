@@ -3843,7 +3843,7 @@ export function WhatsNewModal({
   const items = [
     t.whatsNewRestTimerItem,
     t.whatsNewCompletionSpacingItem,
-    t.whatsNewSupportItem,
+    t.whatsNewSupportRemovalItem,
   ];
 
   return (
@@ -4924,10 +4924,6 @@ export function MilestoneCelebrationModal({
 
   const actions = [
     {
-      label: t.supportKelani,
-      onClick: () => openLink('https://github.com/sponsors/mburgosfr-star/sponsorships?amount=5&frequency=one-time'),
-    },
-    {
       label: t.usageShareAction,
       onClick: () => setShowUsageSummary(true),
     },
@@ -5011,10 +5007,17 @@ export function MilestoneCelebrationModal({
         gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
         gap: 8,
       }}>
-        {actions.map(action => (
-          <SupportActionButton key={action.label} onClick={action.onClick}>
-            {action.label}
-          </SupportActionButton>
+        {actions.map((action, index) => (
+          <div key={action.label} style={index === actions.length - 1 && actions.length % 2 === 1 ? {
+            display: 'grid',
+            gridColumn: '1 / -1',
+            width: 'calc(50% - 4px)',
+            justifySelf: 'center',
+          } : { display: 'grid' }}>
+            <SupportActionButton onClick={action.onClick}>
+              {action.label}
+            </SupportActionButton>
+          </div>
         ))}
       </div>
     </SettingsModal>
@@ -5046,10 +5049,6 @@ function AboutSupportSection({
     [t.aboutSigningSha256, '15d23f2e5ee95ebc2a530b48be6f27dad7a568f722bc819f4571b3470a2ff39d'],
   ];
   const actions = [
-    {
-      label: t.supportKelani,
-      onClick: () => openLink('https://github.com/sponsors/mburgosfr-star/sponsorships?amount=5&frequency=one-time'),
-    },
     {
       label: t.usageShareAction,
       onClick: () => setShowUsageSummary(true),
@@ -5166,13 +5165,8 @@ function AboutSupportSection({
             gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
             gap: 8,
           }}>
-            {actions.map((item, index) => (
-              <div key={item.label} style={index === actions.length - 1 ? {
-                display: 'grid',
-                gridColumn: '1 / -1',
-                width: 'calc(50% - 4px)',
-                justifySelf: 'center',
-              } : { display: 'grid' }}>
+            {actions.map(item => (
+              <div key={item.label} style={{ display: 'grid' }}>
                 <SupportActionButton onClick={item.onClick}>
                   {item.label}
                 </SupportActionButton>
@@ -17201,7 +17195,6 @@ const screenAllowsContentScroll =
         containerStyle={completedWorkoutScreenStyle()}
         contentStyle={scrollableScreenContentStyle()}
         buttonStyle={compactModalActionButtonStyle}
-        onSupport={() => window.open('https://github.com/sponsors/mburgosfr-star/sponsorships?amount=5&frequency=one-time', '_blank', 'noopener,noreferrer')}
         onFeedback={() => window.open(buildCycleFeedbackEmailUrl({ t, language, appVersion: import.meta.env.VITE_APP_VERSION || 'dev' }), '_blank', 'noopener,noreferrer')}
       />
     )}

@@ -3,7 +3,7 @@ import { buildCycleReview } from './cycleReview';
 import { formatWeightFromKg, formatEstimatedWeightFromKg } from './workoutUnits';
 
 export default function CycleCompletedScreen({ history, currentCycle, t, weightUnit, theme, header,
-  containerStyle, contentStyle, buttonStyle, onSupport, onFeedback }) {
+  containerStyle, contentStyle, buttonStyle, onFeedback }) {
   const review = useMemo(() => buildCycleReview(history, currentCycle), [history, currentCycle]);
   const label = lift => ({ Squat: t.squat, Bench: t.bench, Deadlift: t.deadlift })[lift];
   const color = lift => ({ Squat: theme.red, Bench: theme.primary, Deadlift: theme.yellow })[lift];
@@ -61,7 +61,6 @@ export default function CycleCompletedScreen({ history, currentCycle, t, weightU
           </section>
           <section style={{ textAlign: 'center', display: 'grid', gap: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" onClick={onSupport} style={buttonStyle('secondary', '0')}>{t.supportKelani}</button>
               <button type="button" onClick={onFeedback} style={buttonStyle('secondary', '0')}>{t.shareCycleExperience}</button>
             </div>
           </section>

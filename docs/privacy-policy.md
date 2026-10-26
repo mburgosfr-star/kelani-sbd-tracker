@@ -81,7 +81,7 @@ If you use the export, contact or sharing features, you choose what to send and 
 
 GitHub and IzzyOnDroid are external distribution services. Their websites may process connection information, cookies and download statistics under their own privacy policies. The app's absence of automatic analytics does not describe these external websites.
 
-Optional GitHub Sponsors contributions are handled outside the app by GitHub and its payment providers, which may process contact, billing and transaction information under their own privacy policies. If you obtain the app or make a contribution through another external service, that service handles its website and transactions under its own terms and privacy policy.
+Optional GitHub Sponsors contributions are available through the project website, rather than through contribution links in Kelani. They are handled by GitHub and its payment providers, which may process contact, billing and transaction information under their own privacy policies. If you obtain the app or make a contribution through another external service, that service handles its website and transactions under its own terms and privacy policy.
 
 The developer may receive purchase or supporter information made available by the chosen service to administer support and transactions. These external transactions do not send your local training records or body data from Kelani. There is no payment SDK, account activation or purchase verification inside the app.
 

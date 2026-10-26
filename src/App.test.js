@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsScrollableContentStyle, statsTabListStyle } from './StatsScreen';
 import App, { AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
 import { translations } from './translations';
@@ -1579,9 +1579,12 @@ test('milestone celebration overlays the already-rendered completed screen and c
   expect(modalOverlay.style.position).toBe('fixed');
   expect(modalOverlay.style.zIndex).toBe('650');
 
-  expect(screen.getByRole('button', { name: 'Support' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Support' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Share usage data' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Contact' })).toBeInTheDocument();
+  const milestoneClose = within(modalOverlay).getByRole('button', { name: 'Close' });
+  expect(milestoneClose.parentElement.style.gridColumn).toBe('1 / -1');
+  expect(milestoneClose.parentElement.style.justifySelf).toBe('center');
 
   fireEvent.click(screen.getByRole('button', { name: 'Share usage data' }));
   expect(screen.getByRole('heading', { name: 'Anonymous usage summary' })).toBeInTheDocument();
@@ -2751,14 +2754,13 @@ test('settings combines About and Updates in one modal', async () => {
   expect(screen.getByRole('heading', { name: 'About & Updates' })).toBeInTheDocument();
   expect(screen.getByLabelText('Automatically check for updates')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Check now' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Support' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Support' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Share usage data' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Feedback' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Share your experience' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Report issue' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'GitHub repo' })).not.toBeInTheDocument();
   const mainActionButtons = [
-    'Support',
     'Share usage data',
     'Feedback',
     'Share your experience',
@@ -2766,6 +2768,12 @@ test('settings combines About and Updates in one modal', async () => {
   ].map(name => screen.getByRole('button', { name }));
   expect(new Set(mainActionButtons.map(button => button.style.minHeight)))
     .toEqual(new Set(['var(--kelani-button-height)']));
+
+  expect(mainActionButtons).toHaveLength(4);
+  mainActionButtons.forEach(button => {
+    expect(button.parentElement.style.gridColumn).toBe('');
+    expect(button.parentElement.style.width).toBe('');
+  });
 
   const openSpy = jest.spyOn(window, 'open').mockImplementation(() => {});
   fireEvent.click(screen.getByRole('button', { name: 'Feedback' }));
