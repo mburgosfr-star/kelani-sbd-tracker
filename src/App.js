@@ -3845,8 +3845,8 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewRestTimerItem,
-    t.whatsNewCompletionSpacingItem,
+    t.whatsNewCalendarPrivacyItem,
+    t.whatsNewUsagePrivacyItem,
     t.whatsNewSupportRemovalItem,
   ];
 

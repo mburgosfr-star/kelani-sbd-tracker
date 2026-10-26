@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 import { WhatsNewModal } from './App';
 import { translations } from './translations';
+import { LATEST_WHATS_NEW_VERSION } from './whatsNew';
 
 describe('WhatsNewModal', () => {
   test.each(['en', 'nl', 'ca'])('shows %s release highlights and exposes the automatic-display preference', language => {
@@ -13,7 +14,7 @@ describe('WhatsNewModal', () => {
     render(
       <WhatsNewModal
         t={t}
-        version="2.0.60"
+        version={LATEST_WHATS_NEW_VERSION}
         showAfterUpdates={true}
         onShowAfterUpdatesChange={onShowAfterUpdatesChange}
         onClose={onClose}
@@ -21,10 +22,10 @@ describe('WhatsNewModal', () => {
     );
 
     expect(screen.getByText(t.whatsNewTitle)).toBeInTheDocument();
-    expect(screen.getByText('v2.0.60')).toBeInTheDocument();
+    expect(screen.getByText(`v${LATEST_WHATS_NEW_VERSION}`)).toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
-    expect(screen.getByText(t.whatsNewRestTimerItem)).toBeInTheDocument();
-    expect(screen.getByText(t.whatsNewCompletionSpacingItem)).toBeInTheDocument();
+    expect(screen.getByText(t.whatsNewCalendarPrivacyItem)).toBeInTheDocument();
+    expect(screen.getByText(t.whatsNewUsagePrivacyItem)).toBeInTheDocument();
     expect(screen.getByText(t.whatsNewSupportRemovalItem)).toBeInTheDocument();
 
     const checkbox = screen.getByLabelText(

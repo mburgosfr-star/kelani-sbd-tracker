@@ -1,0 +1,1 @@
+Explicacions de privacitat del calendari més clares, amb els botons de sincronitzar i tancar de costat. El resum d’ús explica que el correu revela l’adreça del remitent i possiblement el nom. S’han eliminat les accions directes per fer aportacions i s’han realineat els altres botons. El suport voluntari continua disponible al web del projecte.

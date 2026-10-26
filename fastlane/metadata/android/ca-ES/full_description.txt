@@ -32,7 +32,7 @@ Funcions:
 - Eliminació opcional dels esdeveniments de Kelani del calendari quan es completen els entrenaments a l’aplicació
 - Els esdeveniments d’entrenament inclouen un recordatori a l’hora d’inici; es respecten els recordatoris que després canviïs o eliminis al calendari
 - Els esdeveniments d’entrenament que eliminis manualment del calendari continuen eliminats en les sincronitzacions posteriors
-- Resum d'ús anònim opcional, generat localment i mostrat completament abans que decideixis si el vols compartir
+- Resum d'ús opcional, generat localment i mostrat completament abans que decideixis si el vols compartir. En enviar-lo per correu es revela l’adreça del remitent i possiblement el nom
 - Interfície en anglès, català i neerlandès
 
 Privadesa i independència:

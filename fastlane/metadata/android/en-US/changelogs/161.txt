@@ -1,0 +1,1 @@
+Clearer calendar privacy explanations, with Sync now and Close side by side. Usage summaries explain that email reveals the sender address and possibly the name. Direct contribution actions removed from the app; remaining buttons realigned. Optional support remains available through the project website.

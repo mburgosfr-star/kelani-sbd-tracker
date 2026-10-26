@@ -32,7 +32,7 @@ Functies:
 - Optioneel Kelani-agenda-afspraken verwijderen wanneer workouts in de app zijn voltooid
 - Workoutafspraken krijgen een herinnering op de starttijd; herinneringen die je later in je agenda wijzigt of verwijdert blijven behouden
 - Workoutafspraken die je handmatig in je agenda verwijdert, blijven verwijderd bij latere synchronisaties
-- Optionele anonieme gebruikssamenvatting die lokaal wordt gemaakt en volledig wordt getoond voordat je kiest of je die deelt
+- Optioneel gebruiksoverzicht dat lokaal wordt gemaakt en volledig wordt getoond voordat je kiest of je het deelt. Bij e-mail zijn je afzenderadres en mogelijk je naam zichtbaar
 - Interface in het Engels, Catalaans en Nederlands
 
 Privacy en onafhankelijkheid:
