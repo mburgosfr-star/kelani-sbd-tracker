@@ -3809,16 +3809,6 @@ export function CalendarSettingsModal({ t, settings, onChange, onSync, syncStatu
               <p style={{ color: THEME.muted, fontSize: 12, lineHeight: 1.35, margin: '14px 0 8px' }}>
                 {t.calendarSyncHint}
               </p>
-              <button
-                type="button"
-                onClick={onSync}
-                disabled={syncing || (
-                  (!normalized.enabled || !selectedCalendarAvailable) && normalized.eventMappings.length === 0
-                )}
-                style={{ ...compactModalActionButtonStyle('primary', '0 auto 10px'), opacity: syncing ? 0.65 : 1 }}
-              >
-                {syncing ? t.calendarSyncing : t.calendarSyncNow}
-              </button>
               {syncStatus === 'success' && <p role="status" style={{ color: THEME.green, fontSize: 13, textAlign: 'center' }}>{t.calendarSyncSuccess}</p>}
               {syncStatus === 'error' && <p role="alert" style={{ color: THEME.red, fontSize: 13, textAlign: 'center' }}>{t.calendarSyncError}</p>}
             </>
@@ -3826,9 +3816,23 @@ export function CalendarSettingsModal({ t, settings, onChange, onSync, syncStatu
           {error && <p role="alert" style={{ color: THEME.red, fontSize: 13 }}>{t.calendarLoadError}</p>}
         </>
       )}
-      <button type="button" onClick={onClose} style={compactModalActionButtonStyle('secondary')}>
-        {t.close}
-      </button>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'stretch', gap: 8 }}>
+        {nativeAvailable && permission === 'granted' && (
+          <button
+            type="button"
+            onClick={onSync}
+            disabled={syncing || (
+              (!normalized.enabled || !selectedCalendarAvailable) && normalized.eventMappings.length === 0
+            )}
+            style={{ ...compactModalActionButtonStyle('primary', '0'), flex: '0 1 auto', minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere', opacity: syncing ? 0.65 : 1 }}
+          >
+            {syncing ? t.calendarSyncing : t.calendarSyncNow}
+          </button>
+        )}
+        <button type="button" onClick={onClose} style={{ ...compactModalActionButtonStyle('secondary', '0'), flex: '0 1 auto', minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+          {t.close}
+        </button>
+      </div>
     </SettingsModal>
   );
 }
