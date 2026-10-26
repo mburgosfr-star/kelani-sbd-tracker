@@ -4780,7 +4780,7 @@ export function getAnonymousUsagePreviewRows(metrics = {}, t = translations.en) 
 
 export function AnonymousUsageShareModal({ metrics, t, onClose }) {
   const [copyState, setCopyState] = useState('idle');
-  const report = buildAnonymousUsageReport(metrics);
+  const report = buildAnonymousUsageReport(metrics, t);
   const rows = getAnonymousUsagePreviewRows(metrics, t);
 
   async function copyReport() {
@@ -4788,7 +4788,7 @@ export function AnonymousUsageShareModal({ metrics, t, onClose }) {
       await copySmartDiagnosticText(report);
       setCopyState('copied');
     } catch (error) {
-      console.error('Could not copy anonymous usage summary', error);
+      console.error('Could not copy usage summary', error);
       setCopyState('error');
     }
   }
@@ -4850,6 +4850,10 @@ export function AnonymousUsageShareModal({ metrics, t, onClose }) {
           </div>
         ))}
       </div>
+
+      <p style={{ color: THEME.text, fontSize: 12, lineHeight: 1.4, margin: '0 0 12px' }}>
+        {t.usageEmailPrivacy}
+      </p>
 
       <div style={{
         display: 'grid',

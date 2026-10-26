@@ -1,3 +1,5 @@
+import { translations } from './translations';
+
 function sessionKey(entry = {}) {
   const cycle = Number(entry.cycle);
   const workoutNumber = Number(entry.workoutNumber);
@@ -158,10 +160,10 @@ export function buildAnonymousUsageMetrics({
   };
 }
 
-export function buildAnonymousUsageReport(metrics = {}) {
+export function buildAnonymousUsageReport(metrics = {}, t = translations[metrics.language] || translations.en) {
   const efforts = metrics.efforts || {};
   return [
-    'Kelani anonymous usage summary',
+    t.usageEmailSubject,
     `schema_version=${Number(metrics.schemaVersion) || 3}`,
     `app_version=${metrics.appVersion || 'dev'}`,
     `language=${metrics.language || 'en'}`,

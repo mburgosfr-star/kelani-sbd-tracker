@@ -22,9 +22,9 @@ The app stores your training data locally on your device. This may include:
 
 This app data stays on your device unless you choose to export or share it. The optional Android calendar integration described below also writes brief workout events to the calendar you select.
 
-## Optional anonymous usage summary
+## Optional usage summary
 
-Kelani can create an anonymous usage summary locally on your device. This is not automatic analytics or telemetry. The summary is generated only when you choose the sharing option, and the app shows the complete summary before you decide whether to copy or email it.
+Kelani can create a usage summary locally on your device. This is not automatic analytics or telemetry. The summary is generated only when you choose the sharing option, and the app shows the complete summary before you decide whether to copy or email it.
 
 The summary may contain:
 
@@ -43,7 +43,7 @@ The summary does not contain:
 - Device information or identifiers
 - Individual workouts or full training history
 
-The usage summary is not sent automatically. Copying keeps the decision and destination under your control. Choosing email opens your email app with the summary prepared for you; the message is sent only if you choose to send it. An email you send also gives the developer the sender information and other metadata normally included by your email provider.
+The usage summary is not sent automatically. Copying keeps the decision and destination under your control. Choosing email opens your email app with the summary prepared for you; the message is sent only if you choose to send it. An email you send also gives the developer your sender email address, possibly your name, and other metadata normally included by your email provider. Sending the summary by email is therefore not anonymous.
 
 ## Optional Android calendar integration
 

@@ -81,7 +81,7 @@ Kelani places your selected exercises into relevant workouts and chooses their t
 
 Kelani has no accounts, ads, telemetry, automatic analytics or Kelani-operated cloud synchronization. Training calculations and saved app data stay on your device unless you explicitly export or share them. If you enable the optional Android calendar integration, Kelani asks for calendar read and write access, stores the selected calendar and event links locally, and writes brief workout events to that calendar. Your chosen calendar provider may sync those events through its own service. Optional release checks request only public version metadata and can be enabled in Settings.
 
-The optional anonymous usage summary is generated locally and shown in full before you choose to copy or email it. See the [privacy policy](docs/privacy-policy.md) for details.
+The optional usage summary is generated locally and shown in full before you choose to copy or email it. Sending it by email reveals your sender address and possibly your name. See the [privacy policy](docs/privacy-policy.md) for details.
 
 ## Support and Feedback
 
