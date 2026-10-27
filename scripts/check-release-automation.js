@@ -28,6 +28,7 @@ const expectedScripts = {
   'privacy:check':
     'node scripts/check-public-repository-boundary.js',
   'release:build': 'node scripts/build-release-apk.js',
+  'android:play-bundle': 'node scripts/build-play-bundle.cjs',
   'release:install': 'node scripts/install-apk.js',
   'release:web-tested':
     'node scripts/mark-web-tested.js',

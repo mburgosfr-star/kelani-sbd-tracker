@@ -648,6 +648,7 @@ function releaseScriptHashes(base = root) {
     "scripts/check-public-repository-boundary.js",
     "scripts/check-dependency-security.js",
     "scripts/build-release-apk.js",
+    "scripts/build-play-bundle.cjs",
     "scripts/mark-web-tested.js",
     "scripts/prepare-release.js",
     "scripts/stage-release.js",

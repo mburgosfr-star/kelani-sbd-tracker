@@ -38,6 +38,7 @@
     "android:build-manifest": "node scripts/check-release-build-manifest.js",
     "distribution:check": "node scripts/check-distribution.js",
     "release:build": "node scripts/build-release-apk.js",
+    "android:play-bundle": "node scripts/build-play-bundle.cjs",
     "release:install": "node scripts/install-apk.js",
     "release:web-tested": "node scripts/mark-web-tested.js",
     "release:prepare": "node scripts/prepare-release.js",
