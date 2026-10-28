@@ -33,7 +33,7 @@ Official Android downloads use package `com.kelani.sbdtracker`. See [VERIFY.md](
 
 ## Screenshots
 
-Kelani SBD Tracker 2.0.59, shown with fictional demo training data.
+Kelani SBD Tracker 2.0.61, shown with fictional demo training data.
 
 | Dashboard | Program |
 |---|---|
