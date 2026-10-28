@@ -12,16 +12,6 @@ Kelani helps independent lifters plan adaptive SBD training, log workouts and fo
 
 ## Download
 
-An experimental [Windows desktop prototype](docs/windows-prototype.md) is also
-available to build from source for testing. It is not a stable Windows release
-and does not synchronize automatically with the Android app.
-An experimental [Ubuntu DEB package](docs/ubuntu-prototype.md) runs the same
-desktop app on Ubuntu 24.04 or newer (amd64). Its profile is separate from
-Android, with no automatic phone synchronization or desktop updates.
-Download Ubuntu test packages from **Kelani Ubuntu Test** prereleases
-on the [releases page](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases).
-Follow the [Ubuntu installation and verification guide](docs/ubuntu-prototype.md).
-
 Available for **Android 7.0 or later**:
 
 - [Download the latest APK from official GitHub Releases](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases/latest). Open **Assets** and choose the `.apk` file.
@@ -100,6 +90,18 @@ Kelani is available in English, Catalan and Dutch. New users start with Smart Tr
 ## Moving from Kelani 1.x
 
 Kelani 2.x uses a new Android identity, so Android can keep 1.x and 2.x installed side by side. Export a JSON backup from 1.x, import it into 2.x and verify your data before removing the legacy app. Existing 2.x users update normally.
+
+## Desktop Prototypes
+
+An experimental [Windows desktop prototype](docs/windows-prototype.md) is also
+available to build from source for testing. It is not a stable Windows release
+and does not synchronize automatically with the Android app.
+An experimental [Ubuntu DEB package](docs/ubuntu-prototype.md) runs the same
+desktop app on Ubuntu 24.04 or newer (amd64). Its profile is separate from
+Android, with no automatic phone synchronization or desktop updates.
+Download Ubuntu test packages from **Kelani Ubuntu Test** prereleases
+on the [releases page](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases).
+Follow the [Ubuntu installation and verification guide](docs/ubuntu-prototype.md).
 
 ## Development
 
