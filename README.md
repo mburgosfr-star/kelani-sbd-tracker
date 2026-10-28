@@ -31,6 +31,10 @@ Open the APK and follow Android's installation prompts, or install it through yo
 
 Official Android downloads use package `com.kelani.sbdtracker`. See [VERIFY.md](VERIFY.md) for official download sources, checksums and signing-certificate verification.
 
+### Help Test Kelani on Google Play
+
+Interested in joining the upcoming free Google Play closed test? [See the details and express your interest on Reddit](https://www.reddit.com/r/alphaandbetausers/comments/1xfunxi/android_looking_for_volunteer_testers_for_kelani/). The Play test is not open yet. Please don’t post your email address publicly.
+
 ## Screenshots
 
 Kelani SBD Tracker 2.0.61, shown with fictional demo training data.
