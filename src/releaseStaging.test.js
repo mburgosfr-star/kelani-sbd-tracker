@@ -120,3 +120,36 @@ describe('release staging CI evidence', () => {
     );
   });
 });
+
+describe('parallel release workflow gate', () => {
+  const workflow = fs.readFileSync(path.join(__dirname, '..', '.github/workflows/android-release-sanity.yml'), 'utf8');
+  const gate = workflow.split('\n  release-sanity:\n')[1];
+
+  test('retains the required check name and waits for both independent branches even after failure', () => {
+    expect(gate).toContain('name: Test app and isolated Android release build');
+    expect(gate).toContain('needs: [validation, isolated-build]');
+    expect(gate).toContain('if: ${{ always() }}');
+    expect(gate).toContain('VALIDATION_RESULT: ${{ needs.validation.result }}');
+    expect(gate).toContain('ISOLATED_BUILD_RESULT: ${{ needs.isolated-build.result }}');
+    for (const id of ['validation', 'isolated-build']) {
+      const branch = workflow.split(`\n  ${id}:\n`)[1].split(/\n  [a-z-]+:\n/)[0];
+      expect(branch).not.toMatch(/^    (needs|if|continue-on-error):/m);
+    }
+    expect(workflow).not.toContain('continue-on-error:');
+  });
+
+  test('the actual workflow shell rejects any failed, cancelled, skipped or missing branch result', () => {
+    const { spawnSync } = require('child_process');
+    const script = gate.split('        run: |\n')[1]
+      .split('\n').map(line => line.replace(/^          /, '')).join('\n');
+    for (const validation of ['success', 'failure', 'cancelled', 'skipped', '']) {
+      for (const isolatedBuild of ['success', 'failure', 'cancelled', 'skipped', '']) {
+        const result = spawnSync('bash', ['-e', '-c', script], {
+          env: { ...process.env, VALIDATION_RESULT: validation, ISOLATED_BUILD_RESULT: isolatedBuild },
+          encoding: 'utf8',
+        });
+        expect(result.status).toBe(validation === 'success' && isolatedBuild === 'success' ? 0 : 1);
+      }
+    }
+  });
+});

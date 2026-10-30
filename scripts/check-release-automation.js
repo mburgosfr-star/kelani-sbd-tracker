@@ -378,6 +378,10 @@ for (const signal of [
   'npm run build',
   'npm run android:izzy-test',
   'git status --porcelain --untracked-files=no',
+  'needs: [validation, isolated-build]',
+  'if: ${{ always() }}',
+  'VALIDATION_RESULT: ${{ needs.validation.result }}',
+  'ISOLATED_BUILD_RESULT: ${{ needs.isolated-build.result }}',
 ]) {
   if (!workflow.includes(signal)) {
     fail(`GitHub workflow is missing required step: ${signal}`);
