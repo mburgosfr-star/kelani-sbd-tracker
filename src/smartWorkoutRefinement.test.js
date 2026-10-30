@@ -19,6 +19,7 @@ import { generateUltraProgram } from './classicProgramTemplates';
 test('meet warm-ups prepare the opener with the requested SBD ladders', () => {
   expect(buildSmartMeetWarmups(37.5, 'Squat')).toEqual([
     { reps: 5, weight: 20, originalWeight: 20, done: false },
+    { reps: 1, weight: 30, originalWeight: 30, done: false },
   ]);
   expect(buildSmartMeetWarmups(30, 'Bench')).toEqual([
     { reps: 5, weight: 20, originalWeight: 20, done: false },
@@ -30,24 +31,24 @@ test('meet warm-ups prepare the opener with the requested SBD ladders', () => {
   expect(buildSmartMeetWarmups(135, 'Squat')).toEqual([
     { reps: 5, weight: 20, originalWeight: 20, done: false },
     { reps: 3, weight: 70, originalWeight: 70, done: false },
-    { reps: 1, weight: 120, originalWeight: 120, done: false },
+    { reps: 1, weight: 110, originalWeight: 110, done: false },
   ]);
   expect(buildSmartMeetWarmups(90, 'Bench')).toEqual([
     { reps: 5, weight: 20, originalWeight: 20, done: false },
-    { reps: 3, weight: 70, originalWeight: 70, done: false },
+    { reps: 1, weight: 70, originalWeight: 70, done: false },
     { reps: 1, weight: 80, originalWeight: 80, done: false },
   ]);
   expect(buildSmartMeetWarmups(165, 'Deadlift')).toEqual([
     { reps: 5, weight: 20, originalWeight: 20, done: false },
     { reps: 5, weight: 70, originalWeight: 70, done: false },
-    { reps: 3, weight: 120, originalWeight: 120, done: false },
-    { reps: 1, weight: 150, originalWeight: 150, done: false },
+    { reps: 3, weight: 110, originalWeight: 110, done: false },
+    { reps: 1, weight: 140, originalWeight: 140, done: false },
   ]);
   expect(buildSmartMeetWarmups(175, 'Deadlift')).toEqual([
     { reps: 5, weight: 20, originalWeight: 20, done: false },
     { reps: 5, weight: 70, originalWeight: 70, done: false },
     { reps: 3, weight: 120, originalWeight: 120, done: false },
-    { reps: 1, weight: 160, originalWeight: 160, done: false },
+    { reps: 1, weight: 150, originalWeight: 150, done: false },
   ]);
 });
 
@@ -370,14 +371,16 @@ test('uses three-rep volume work at 70% after the Deadlift top double', () => {
   const deadlift = workout.lifts.find(item => item.lift === 'Deadlift');
   const bench = workout.lifts.find(item => item.lift === 'Bench');
 
-  expect(deadlift.sets).toHaveLength(6);
+  expect(deadlift.warmups).toHaveLength(3);
+  expect(deadlift.sets).toHaveLength(2);
+  expect(deadlift.warmups.length + deadlift.sets.length).toBe(5);
   expect(deadlift.sets[0]).toMatchObject({
     labelKey: 'topDouble',
     reps: 2,
     pct: 0.8,
   });
 
-  expect(deadlift.sets.slice(1)).toHaveLength(5);
+  expect(deadlift.sets.slice(1)).toHaveLength(1);
   deadlift.sets.slice(1).forEach(set => {
     expect(set).toMatchObject({
       labelKey: 'backoff',

@@ -1,3 +1,4 @@
+import { generateWarmups } from './warmupAndPrepGeneration';
 import { hydrateWorkoutsWithHistory, mergeGeneratedWorkoutStructure } from './workoutStateMerge';
 import { applyAccessoryPlanToWorkouts, generateAccessoriesForWorkout } from './accessoryGeneration';
 
@@ -217,4 +218,22 @@ test('repairs duplicated meet warmup padding while preserving checked progress',
     { reps: 3, weight: 30, originalWeight: 30, done: false },
   ]);
   expect(result.lifts[0].sets).toEqual(restoredWorkout.lifts[0].sets);
+});
+
+test.each(['warmup', 'workSet', 'completed'])('warm-up regeneration preserves saved %s progress and the entire prescription', progress => {
+  const saved = multiLiftWorkout({ done: false });
+  // A saved ladder from before the 90% cap is deliberately left untouched.
+  saved.lifts[0].warmups = [20, 70, 80].map(weight => ({ weight, reps: 1, done: false }));
+  if (progress === 'warmup') saved.lifts[0].warmups[0].done = true;
+  if (progress === 'workSet') saved.lifts[0].sets[0].failed = true;
+  if (progress === 'completed') saved.completed = true;
+  const generated = multiLiftWorkout({ done: false });
+  generated.lifts[0].warmups = generateWarmups(generated.lifts[0].sets);
+  const history = progress === 'completed'
+    ? [{ cycle: 1, workoutNumber: saved.number, lift: 'Squat', workoutSnapshot: saved }]
+    : [];
+  const merged = mergeGeneratedWorkoutStructure([saved], [generated], history, 1);
+  expect(merged[0].lifts[0]).toEqual(saved.lifts[0]);
+  const reloaded = hydrateWorkoutsWithHistory(JSON.parse(JSON.stringify(merged)), history, 1);
+  expect(reloaded[0].lifts[0]).toEqual(saved.lifts[0]);
 });

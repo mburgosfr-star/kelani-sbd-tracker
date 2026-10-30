@@ -55,6 +55,10 @@ Workout set controls use a shared five-column grid. Newly generated back-off and
 
 During training you can complete or fail sets, adjust and restore weights, use a rest timer and open the plate calculator. Failed sets automatically make the workout **Too hard**; optional work left unchecked is not treated as failure.
 
+After the final warm-up, the rest timer gives five minutes before a top single, double or triple, including Classic heavy singles. Meet-day rest remains eight minutes. This applies across levels and platforms.
+
+Warm-up weights are multiples of 10 kg, with only 1, 3 or 5 repetitions, based on the first work set (or opening meet attempt). The final warm-up aims for about 85% of that weight and never exceeds 90%. Any warm-ups above that limit are removed, allowing a larger final jump at very high loads. Work-set and back-off counts continue to fill the five-column grid with 1–5 volume sets. Started workouts and completed history retain their saved prescriptions.
+
 On Android, the ready-for-next-set message stays visible when you return from the background after the rest timer ends. Completed workouts use a compact summary without a duplicate divider beneath the title.
 
 ## How Smart Training Works

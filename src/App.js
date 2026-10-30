@@ -5450,8 +5450,10 @@ export function DesktopRestTimeSection({ t }) {
       {open && <SettingsModal title={t.restTimerAlerts} onClose={() => setOpen(false)}>
         <p style={{ textAlign: 'center', lineHeight: 1.4 }}>{t.desktopTimerHelp}</p>
         <p role="status" style={{ textAlign: 'center' }}>{status}</p>
-        <button type="button" style={compactModalActionButtonStyle()} onClick={testAlert}>{t.desktopTestNotification}</button>
-        <button type="button" style={compactModalActionButtonStyle('secondary')} onClick={() => setOpen(false)}>{t.close}</button>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'stretch', gap: 8 }}>
+          <button type="button" style={{ ...compactModalActionButtonStyle('primary', '0'), flex: '0 1 auto', minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }} onClick={testAlert}>{t.desktopTestNotification}</button>
+          <button type="button" style={{ ...compactModalActionButtonStyle('secondary', '0'), flex: '0 1 auto', minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }} onClick={() => setOpen(false)}>{t.close}</button>
+        </div>
       </SettingsModal>}
     </>
   );
@@ -10860,7 +10862,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
     // ancestors, hiding the content title or pushing actions below navigation.
     region.scrollTop = Math.max(0, region.scrollTop + cardRect.top - regionRect.top
       - (region.clientHeight - cardRect.height) / 2);
-  }, [currentIndex, workouts.length]);
+  }, [currentIndex, workouts.length, showAllWorkouts]);
 
   function renderWorkoutListToggleButton(position = 'top') {
     if (!hasHiddenWorkouts) return null;

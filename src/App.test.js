@@ -2476,7 +2476,7 @@ test('every Smart set has a phase label without breaking the five-column grid', 
   expect(squatGrid.children[0]).toHaveStyle({ display: 'contents' });
   expect(squatGrid.children[1]).toHaveAttribute('data-testid', 'workout-set-group');
   expect(Array.from(squatGrid.querySelectorAll('[data-testid="workout-phase-tag"]')).map(tag => tag.textContent))
-    .toEqual(['WU', 'TOP', 'BO', 'BO', 'BO']);
+    .toEqual(['WU', 'WU', 'TOP', 'BO', 'BO']);
   const benchGrid = screen.getByTestId('workout-lift-grid-1');
   expect(Array.from(benchGrid.querySelectorAll('[data-testid="workout-phase-tag"]')).map(tag => tag.textContent))
     .toEqual(['TOP', 'BO', 'BO', 'BO', 'BO']);
@@ -2956,12 +2956,26 @@ test('Program keeps its title outside the bounded list and retains both end cont
   Object.defineProperty(list, 'clientHeight', { configurable: true, value: 600 });
   list.children[0].getBoundingClientRect = () => ({ top: 0, bottom: 52, height: 52 });
   list.children[1].getBoundingClientRect = () => ({ top: 61.5, bottom: 161.5, height: 100 });
+  list.getBoundingClientRect = () => ({ top: 0, bottom: 600, height: 600 });
+  const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+  const currentNumber = saved.inProgress.workouts[saved.inProgress.currentIndex].number;
+  const currentCard = screen.getByTestId(`program-workout-${currentNumber}`);
+  // Expanding inserts rows before the current workout. Simulate its new
+  // position; only the bounded list should scroll to reveal it again.
+  currentCard.getBoundingClientRect = () => list.firstElementChild.textContent === 'Show fewer workouts'
+    ? { top: 900, bottom: 1000, height: 100 }
+    : { top: 61.5, bottom: 161.5, height: 100 };
+  expect(list.scrollTop).toBe(0);
   fireEvent.click(screen.getAllByRole('button', { name: 'Show all workouts' })[0]);
+  expect(list.scrollTop).toBe(650);
+  expect(screen.getByTestId('app-viewport').scrollTop).toBe(0);
   expect(screen.getAllByRole('button', { name: 'Show fewer workouts' })).toHaveLength(2);
   expect(list.lastElementChild).toHaveTextContent('Show fewer workouts');
   expect(list).toHaveStyle({ overflowY: 'auto', rowGap: '9.5px', paddingBottom: '8px' });
   expect(list.previousElementSibling).toBe(title);
+  currentCard.getBoundingClientRect = () => ({ top: -50, bottom: 50, height: 100 });
   fireEvent.click(screen.getAllByRole('button', { name: 'Show fewer workouts' })[1]);
+  expect(list.scrollTop).toBe(350);
   expect(list.previousElementSibling).toBe(title);
   expect(list.lastElementChild).toHaveTextContent('Show all workouts');
 });

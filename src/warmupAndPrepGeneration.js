@@ -10,7 +10,7 @@ const DEPRECATED_PREP_LABEL_KEYS = new Set([
 const WARMUP_REBALANCE_STEP_KG = 10;
 const MIN_FINAL_WARMUP_GAP_KG = 7.5;
 
-export function warmupLoadJumpsNeverIncrease(warmupWeights = [], targetWeight = 0) {
+export function warmupLoadJumpsNeverIncrease(warmupWeights = [], targetWeight = 0, { allowLargerFinalJump = false } = {}) {
   const weights = (warmupWeights || [])
     .map(weight => Number(weight) || 0)
     .filter(weight => weight > 0)
@@ -22,6 +22,7 @@ export function warmupLoadJumpsNeverIncrease(warmupWeights = [], targetWeight = 
 
   const ladder = [...weights, target];
   for (let index = 2; index < ladder.length; index += 1) {
+    if (allowLargerFinalJump && index === ladder.length - 1) continue;
     const previousJump = ladder[index - 1] - ladder[index - 2];
     const nextJump = ladder[index] - ladder[index - 1];
     if (nextJump > previousJump + 0.0001) return false;
@@ -300,12 +301,14 @@ export function generateSmartWorkoutPrepItems(
 const UNIVERSAL_WARMUP_START_KG = 20;
 const UNIVERSAL_WARMUP_ANCHOR_STEP_KG = 50;
 const UNIVERSAL_WARMUP_MAX_JUMP_KG = 50;
+const UNIVERSAL_WARMUP_TARGET_RATIO = 0.85;
+const UNIVERSAL_WARMUP_MAX_RATIO = 0.90;
 
-function buildDesiredUniversalWarmupWeights(targetWeight = 0) {
+function buildDesiredUniversalWarmupWeights(targetWeight = 0, finalWeight = null) {
   const target = Number(targetWeight) || 0;
   if (target < 30) return [];
 
-  const finalWarmup = Math.floor(target / 10) * 10 - 10;
+  const finalWarmup = finalWeight ?? Math.floor(target / 10) * 10 - 10;
   const weights = [UNIVERSAL_WARMUP_START_KG];
 
   for (
@@ -345,9 +348,9 @@ function universalWarmupLadderIsValid(weights = [], targetWeight = 0) {
   return true;
 }
 
-export function generateUniversalWarmupWeights(targetWeight = 0) {
+function generateBalancedUniversalWarmupWeights(targetWeight, finalWeight = null) {
   const target = Number(targetWeight) || 0;
-  let desiredWeights = buildDesiredUniversalWarmupWeights(target);
+  let desiredWeights = buildDesiredUniversalWarmupWeights(target, finalWeight);
 
   while (desiredWeights.length) {
     const balancedWeights = rebalanceWarmupLoadJumps(
@@ -367,7 +370,28 @@ export function generateUniversalWarmupWeights(targetWeight = 0) {
   return [];
 }
 
-export function distributeUniversalWarmupReps(warmupCount = 0, targetReps = 1) {
+export function generateUniversalWarmupWeights(targetWeight = 0) {
+  const target = Number(targetWeight) || 0;
+  if (!Number.isFinite(target) || target < 30) return [];
+
+  const desiredFinal = Math.min(
+    Math.round(target * UNIVERSAL_WARMUP_TARGET_RATIO / 10) * 10,
+    Math.floor(target * UNIVERSAL_WARMUP_MAX_RATIO / 10) * 10
+  );
+  // First try the preferred 85% ladder with all normal jump constraints.
+  const preferred = target - desiredFinal <= UNIVERSAL_WARMUP_MAX_JUMP_KG
+    ? generateBalancedUniversalWarmupWeights(target, desiredFinal)
+    : [];
+  const weights = preferred.length
+    ? preferred
+    : generateBalancedUniversalWarmupWeights(target);
+
+  // Drop every excessive final rung. Do not fill the gap with another heavy
+  // warm-up: only the transition into the work set may then be larger.
+  return weights.filter(weight => weight <= target * UNIVERSAL_WARMUP_MAX_RATIO);
+}
+
+export function distributeUniversalWarmupReps(warmupCount = 0, targetReps = 1, warmupWeights = [], targetWeight = 0) {
   const count = Math.max(Math.floor(Number(warmupCount) || 0), 0);
   if (count === 0) return [];
 
@@ -376,6 +400,15 @@ export function distributeUniversalWarmupReps(warmupCount = 0, targetReps = 1) {
     5
   );
   const allowedReps = [5, 3, 1].filter(reps => reps >= repetitionFloor);
+  if (warmupWeights.length === count && Number(targetWeight) > 0) {
+    const minimumReps = allowedReps.at(-1);
+    return warmupWeights.map(weight => {
+      const ratio = Number(weight) / Number(targetWeight);
+      const zoneReps = Number(weight) === UNIVERSAL_WARMUP_START_KG || ratio < 0.50
+        ? 5 : ratio <= 0.75 ? 3 : 1;
+      return Math.max(minimumReps, zoneReps);
+    });
+  }
   const baseCount = Math.floor(count / allowedReps.length);
   const remainder = count % allowedReps.length;
 
@@ -408,7 +441,7 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
   const targetWeight = Number(targetSet?.weight) || 0;
   const targetReps = Math.max(Number(targetSet?.reps) || 1, 1);
   const weights = generateUniversalWarmupWeights(targetWeight);
-  const reps = distributeUniversalWarmupReps(weights.length, targetReps);
+  const reps = distributeUniversalWarmupReps(weights.length, targetReps, weights, targetWeight);
 
   return weights.map((weight, index) => ({
     reps: reps[index],

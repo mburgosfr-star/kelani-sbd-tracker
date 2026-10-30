@@ -103,6 +103,25 @@ export function getRecommendedRestTimeSeconds({ workouts = [], placement = null,
   // Accessories stay short, successful or failed.
   if (placement.type === 'accessory') return 90;
 
+  if (placement.type === 'warmup' || placement.type === 'meetWarmup') {
+    const block = placement.type === 'meetWarmup'
+      ? workout?.lifts?.[placement.liftIndex]
+      : workout;
+    const warmups = block?.warmups || [];
+    const currentWarmup = warmups[placement.index];
+    const hasLaterWarmup = warmups.some((warmup, index) =>
+      index > placement.index && !warmup.done
+    );
+    const nextSet = (block?.sets || []).find(item => !item.done && !item.skipped);
+
+    // Recovery before the first main effort belongs to that upcoming set,
+    // even though the timer is started by completing a warm-up.
+    if (currentWarmup && !hasLaterWarmup) {
+      if (isAttemptSetLabel(nextSet?.labelKey)) return 480;
+      if (isTopSetLabel(nextSet?.labelKey)) return 300;
+    }
+  }
+
   if (placement.type === 'warmup') return 90;
   if (placement.type === 'cooldown') return 90;
 

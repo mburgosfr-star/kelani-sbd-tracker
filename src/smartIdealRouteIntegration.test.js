@@ -1124,6 +1124,7 @@ test('a legacy beginner inserts one rest after HARD and then resumes the ideal r
   expect(meet.lifts.find(block => block.lift === 'Squat').warmups)
     .toEqual([
       { reps: 5, weight: 20, originalWeight: 20, done: false },
+      { reps: 1, weight: 30, originalWeight: 30, done: false },
     ]);
   expect(meet.lifts.find(block => block.lift === 'Bench').warmups)
     .toEqual([
@@ -1331,8 +1332,9 @@ test('beginner W22 keeps taper intensities and five-rep light work on a full gri
   expect(squat.warmups.map(({ weight, reps }) => ({ weight, reps })))
     .toEqual([
       { weight: 20, reps: 5 },
+      { weight: 30, reps: 1 },
     ]);
-  expect(squat.sets).toHaveLength(4);
+  expect(squat.sets).toHaveLength(3);
   expect(squat.sets[0]).toMatchObject({
     weight: 37.5,
     reps: 1,
@@ -1341,7 +1343,7 @@ test('beginner W22 keeps taper intensities and five-rep light work on a full gri
     prescribedPct: 0.9,
   });
   expect(squat.sets.slice(1)).toEqual(
-    expect.arrayContaining(Array.from({ length: 3 }, () => expect.objectContaining({
+    expect.arrayContaining(Array.from({ length: 2 }, () => expect.objectContaining({
       labelKey: 'backoff',
       weight: 30,
       reps: 3,
@@ -1429,7 +1431,7 @@ test('C4W22 preserves intermediate taper weights in five-column grids', () => {
     .toEqual([
       { weight: 20, reps: 5 },
       { weight: 70, reps: 3 },
-      { weight: 120, reps: 1 },
+      { weight: 110, reps: 1 },
     ]);
   expect(squat.sets[0]).toMatchObject({
     labelKey: 'topSingle',
@@ -1540,7 +1542,7 @@ test('every ideal-route taper day preserves its role dose and reduced grid volum
               ...diagnostic,
               warmupWeight: warmup.weight,
               isTenKgMultiple: Number(warmup.weight) % 10 === 0,
-              belowTarget: Number(warmup.weight) < Number(workSets[0]?.weight),
+              belowTarget: Number(warmup.weight) <= Number(workSets[0]?.weight) * 0.90,
             }).toMatchObject({
               isTenKgMultiple: true,
               belowTarget: true,
@@ -1550,7 +1552,8 @@ test('every ideal-route taper day preserves its role dose and reduced grid volum
             ...diagnostic,
             safeWarmupJumps: warmupLoadJumpsNeverIncrease(
               warmups.map(warmup => warmup.weight),
-              Number(workSets[0]?.weight) || 0
+              Number(workSets[0]?.weight) || 0,
+          { allowLargerFinalJump: true }
             ),
           }).toMatchObject({ safeWarmupJumps: true });
 
@@ -1670,7 +1673,8 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
         });
         expect(warmupLoadJumpsNeverIncrease(
           (liftBlock.warmups || []).map(warmup => warmup.weight),
-          Number(workSets[0]?.weight) || 0
+          Number(workSets[0]?.weight) || 0,
+          { allowLargerFinalJump: true }
         )).toBe(true);
 
         if (workout.smartIdealRoute?.stage === 'normal') {
