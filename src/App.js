@@ -10203,7 +10203,7 @@ function ensureProgramPlanLineLift(line, workout, t, benchPressVariant = 'standa
   const lift = liftBlocks[0]?.lift;
   if (!lift) return text;
 
-  return `${workoutLiftBlockLabel(liftBlocks[0], t, benchPressVariant)} · ${text}`;
+  return `${workoutLiftBlockLabel(liftBlocks[0], t, benchPressVariant)}: ${text}`;
 }
 
 export function getHistoricalSmartIntensityRole(liftBlock = {}) {
@@ -10303,6 +10303,51 @@ function compactWorkoutPlanLines(planLines = []) {
   return (planLines || [])
     .map(compactProgramPlanLine)
     .filter(Boolean);
+}
+
+export function ProgramCompletedSetSummary({ workout, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard' }) {
+  if (!workout || workout.type === 'rest') return null;
+  const blocks = workout.lifts?.length
+    ? workout.lifts
+    : [{ lift: workout.lift, sets: workout.sets || [] }];
+  const rows = blocks.flatMap((block, blockIndex) => {
+    const groups = [];
+    (block.sets || []).forEach(set => {
+      const status = set.failed || set.skipped ? 'missed' : set.done ? 'done' : 'unrecorded';
+      const weightText = `${formatWorkoutWeightFromKg(
+        set.weight, weightUnit, t, block.lift,
+        workout.type === 'meet' ? 'standard' : block.benchPressVariant || benchPressVariant
+      )}${set.perSide ? ` ${t.perSideSuffix}` : ''}`;
+      const pctText = formatSetPercentDisplay(Number(set.pct) || 0);
+      const key = JSON.stringify([status, set.reps, weightText, pctText]);
+      const previous = groups[groups.length - 1];
+      if (previous?.key === key) previous.count += 1;
+      else groups.push({ key, status, reps: set.reps, weightText, pctText, count: 1 });
+    });
+    return groups.map((group, index) => {
+      const label = group.status === 'done' ? t.programSetsSucceeded
+        : group.status === 'missed' ? t.programSetsMissed : t.programSetsUnrecorded;
+      return (
+        <div key={`${blockIndex}-${index}`} style={{ whiteSpace: 'nowrap' }}>
+          {block.lift && <>
+            <span style={{ color: getLiftThemeColor(block.lift) }}>
+              {workoutLiftBlockLabel(block, t, workout.type === 'meet' ? 'standard' : benchPressVariant)}
+            </span>
+            <span style={{ color: THEME.text }}>:{' '}</span>
+          </>}
+          <span aria-label={label} title={label} style={{ color: group.status === 'missed' ? FAILED_SET_COLOR : group.status === 'done' ? THEME.green : THEME.text }}>
+            <span style={{ display: 'inline-block', whiteSpace: 'nowrap' }}>
+              <span aria-hidden="true">{group.status === 'done' ? '✓' : group.status === 'missed' ? '✕' : '?'}</span>{' '}
+              {group.count}×{group.reps}×{group.weightText}
+            </span>
+            {group.pctText && <> <span style={{ display: 'inline-block', whiteSpace: 'nowrap' }}>({group.pctText}%)</span></>}
+          </span>
+        </div>
+      );
+    });
+  });
+  return rows.length ? <div data-testid={`program-workout-results-${workout.number}`} aria-label={t.programSetResults}
+    style={{ display: 'grid', gap: 'clamp(2px, 0.35dvh, 4px)', lineHeight: 1.2 }}>{rows}</div> : null;
 }
 
 function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard') {
@@ -10799,7 +10844,7 @@ export function getSmartProgramTitle(trainingFocus, t) {
   return t.trainingFocusBalanced;
 }
 
-function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], currentCycle, onSelect, onStartNewCycle, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, trainingFocus = SMART_TRAINING_FOCUSES.STANDARD, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, language = 'en', scheduleDateKeys = [], scheduleToday = new Date(), weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
+export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], currentCycle, onSelect, onStartNewCycle, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, trainingFocus = SMART_TRAINING_FOCUSES.STANDARD, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, language = 'en', scheduleDateKeys = [], scheduleToday = new Date(), weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
   const currentWorkoutRef = useRef(null);
   const programListRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
@@ -11085,7 +11130,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
             ? THEME.primary
             : getLiftThemeColor(workout.lift);
         const titleColor = workout.type === 'meet' ? THEME.meet : THEME.text;
-        const rawPlanLines = workout.type === 'meet'
+        const rawPlanLines = isDone || workout.type === 'meet'
           ? []
           : getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant)
             .map(line => ensureProgramPlanLineLift(line, workout, t, benchPressVariant));
@@ -11148,7 +11193,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
               {workout.number}
             </div>
 
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
                 fontWeight: isCurrent ? 800 : 700,
                 color: titleColor,
@@ -11206,7 +11251,7 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
               )}
             </div>
 
-            {planLines.length > 0 && (
+            {(isDone || planLines.length > 0) && (
               <div style={{
                 marginLeft: 'clamp(10px, 2.5vw, 14px)',
                 display: 'grid',
@@ -11216,9 +11261,12 @@ function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], cur
                 lineHeight: 1.2,
                 textAlign: 'right',
                 maxWidth: 'clamp(210px, 45vw, 240px)',
+                minWidth: 0,
                 flexShrink: 0
               }}>
-                {planLines.map((line, lineIndex) => {
+                {isDone ? <ProgramCompletedSetSummary
+                  workout={workout} t={t} weightUnit={weightUnit} benchPressVariant={benchPressVariant}
+                /> : planLines.map((line, lineIndex) => {
                   const text = String(line);
                   const match =
                     text.startsWith('Bench') ? { lift: 'Bench', label: 'Bench' } :

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsScrollableContentStyle, statsTabListStyle } from './StatsScreen';
-import App, { AnonymousUsageShareModal, AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
+import App, { AllWorkouts, ProgramCompletedSetSummary, AnonymousUsageShareModal, AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
 import { translations } from './translations';
 
 test.each(['nl', 'en', 'ca'])(
@@ -3024,4 +3024,83 @@ test.each(['nl', 'en', 'ca'])('usage email in %s explains sender identity before
   } finally {
     openSpy.mockRestore();
   }
+});
+
+
+test.each(['en', 'nl', 'ca'])('completed Program results group actual sets without mixing outcomes in %s', language => {
+  const t = translations[language];
+  const workout = { number: 1, lifts: [
+    { lift: 'Squat', warmups: [{ weight: 20, reps: 5, done: true }], sets: [
+      { weight: 100, reps: 3, done: true },
+      { weight: 100, reps: 3, done: true },
+      { weight: 100, reps: 3, done: true, failed: true },
+      { weight: 90, reps: 5, done: true },
+    ] },
+    { lift: 'Bench', sets: [
+      { weight: 70, reps: 1, skipped: true },
+      { weight: 60, reps: 3 },
+    ] },
+  ] };
+  const before = JSON.stringify(workout);
+  render(<ProgramCompletedSetSummary workout={workout} t={t} />);
+  const results = screen.getByTestId('program-workout-results-1');
+  expect(results).toHaveAccessibleName(t.programSetResults);
+  expect(results).toHaveTextContent('✓ 2×3×100 kg');
+  expect(results).toHaveTextContent('✕ 1×3×100 kg');
+  expect(results).toHaveTextContent('✓ 1×5×90 kg');
+  expect(results).toHaveTextContent('✕ 1×1×70 kg');
+  expect(results).toHaveTextContent('? 1×3×60 kg');
+  expect(within(results).getAllByLabelText(t.programSetsSucceeded)).toHaveLength(2);
+  expect(within(results).getAllByLabelText(t.programSetsMissed)).toHaveLength(2);
+  expect(results).not.toHaveTextContent('20 kg');
+  expect(results).not.toHaveTextContent('%');
+  expect(JSON.stringify(workout)).toBe(before);
+});
+
+test('completed Program results support legacy single lifts, pounds, Meet Day and rest days', () => {
+  const { rerender, container } = render(<ProgramCompletedSetSummary
+    workout={{ number: 2, lift: 'Deadlift', sets: [{ weight: 100, reps: 1, done: true }] }}
+    t={translations.en} weightUnit="lb" />);
+  expect(screen.getByTestId('program-workout-results-2')).toHaveTextContent('✓ 1×1×220 lb');
+  rerender(<ProgramCompletedSetSummary workout={{ number: 3, type: 'meet', lifts: [
+    { lift: 'Squat', sets: [{ weight: 150, reps: 1, done: true }, { weight: 160, reps: 1, failed: true }] },
+  ] }} t={translations.en} />);
+  expect(screen.getByTestId('program-workout-results-3')).toHaveTextContent('✕ 1×1×160 kg');
+  rerender(<ProgramCompletedSetSummary workout={{ type: 'rest', sets: [{ weight: 100, reps: 1 }] }} t={translations.en} />);
+  expect(container).toBeEmptyDOMElement();
+});
+
+test('Program replaces only completed cards with results and keeps the next prescription', () => {
+  const completed = { number: 1, type: 'training', lift: 'Squat', completed: true,
+    sets: [{ weight: 100, reps: 3, pct: 0.8, done: true }, { weight: 100, reps: 3, pct: 0.8, failed: true }] };
+  render(<AllWorkouts workouts={[completed,
+    { number: 2, type: 'training', lift: 'Bench', sets: [{ weight: 60, reps: 5, pct: 0.7 }] },
+  ]} currentIndex={1} currentCycle={1} trainingModel="smart" t={translations.en}
+    onSelect={() => {}} />);
+  const finished = screen.getByTestId('program-workout-1');
+  expect(within(finished).getByTestId('program-workout-results-1')).toHaveTextContent('✕ 1×3×100 kg');
+  expect(finished).toHaveTextContent('Squat: ✓ 1×3×100 kg (80%)');
+  expect(finished).toHaveTextContent('Squat: ✕ 1×3×100 kg (80%)');
+  expect(within(finished).getByLabelText(translations.en.programSetsSucceeded)).toHaveStyle({ color: '#2ecc71' });
+  expect(within(finished).getByLabelText(translations.en.programSetsMissed)).toHaveStyle({ color: FAILED_SET_COLOR });
+  const planned = screen.getByTestId('program-workout-2');
+  expect(planned).toHaveTextContent('Bench: 1×5×60 kg (70%)');
+  expect(planned).not.toHaveTextContent('Bench ·');
+  expect(within(planned).queryByTestId('program-workout-results-2')).not.toBeInTheDocument();
+});
+
+
+test('completed Program groups preserve different recorded percentages instead of recalculating them', () => {
+  localStorage.setItem('language', 'en');
+  render(<ProgramCompletedSetSummary workout={{ number: 1, lift: 'Bench', sets: [
+    { weight: 60, reps: 3, pct: 0.8, done: true },
+    { weight: 60, reps: 3, pct: 0.75, done: true },
+    { weight: 60, reps: 3, done: true },
+  ] }} t={translations.en} />);
+  const results = screen.getByTestId('program-workout-results-1');
+  expect(results).toHaveTextContent('Bench: ✓ 1×3×60 kg (80%)');
+  expect(results).toHaveTextContent('Bench: ✓ 1×3×60 kg (75%)');
+  expect(within(results).getAllByLabelText(translations.en.programSetsSucceeded)).toHaveLength(3);
+  expect(results).not.toHaveTextContent('undefined');
+  expect(results).not.toHaveTextContent('(0%)');
 });

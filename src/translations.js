@@ -66,6 +66,10 @@ export const translations = {
     calculateE1RM: 'e1RM berekenen',
     fillRequiredFields: 'Vul alle verplichte velden in.',
     done: 'Gedaan',
+    programSetResults: 'Setresultaten',
+    programSetsSucceeded: 'Gehaalde sets',
+    programSetsMissed: 'Niet gehaalde sets',
+    programSetsUnrecorded: 'Resultaat niet vastgelegd',
     optional: 'optioneel',
 
     squat: 'Squat',
@@ -948,6 +952,10 @@ export const translations = {
     calculateE1RM: 'Calculate e1RM',
     fillRequiredFields: 'Fill in all required fields.',
     done: 'Done',
+    programSetResults: 'Set results',
+    programSetsSucceeded: 'Successful sets',
+    programSetsMissed: 'Missed sets',
+    programSetsUnrecorded: 'Result not recorded',
     optional: 'optional',
 
     squat: 'Squat',
@@ -1829,6 +1837,10 @@ export const translations = {
     calculateE1RM: 'Calcula l’e1RM',
     fillRequiredFields: 'Omple tots els camps obligatoris.',
     done: 'Fet',
+    programSetResults: 'Resultats de les sèries',
+    programSetsSucceeded: 'Sèries completades',
+    programSetsMissed: 'Sèries no completades',
+    programSetsUnrecorded: 'Resultat no registrat',
     optional: 'opcional',
 
     squat: 'Squat',

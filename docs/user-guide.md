@@ -23,7 +23,7 @@ New users start with Smart Training. It follows a level-specific 28-workout idea
 | W27 | SBD Meet Day |
 | W28 | Planned post-meet recovery |
 
-The Program screen shows the route ahead. Confirmed strength determines the prescribed weights. Future workouts open in view-only mode; choosing **Workout** in the navigation returns to your current session.
+The Program screen shows the route ahead. Completed workouts show recorded work-set results on the right instead of the plan: green ✓ for successful sets and red ✕ for missed sets, grouped by repetitions, weight and recorded percentage. Warm-ups are omitted, as in the planning preview. A question mark means an older record has no saved outcome for that set. Confirmed strength determines the prescribed weights. Future workouts open in view-only mode; choosing **Workout** in the navigation returns to your current session.
 
 **Too easy** shortens the route unless Meet Day is already next. **Too hard** or failed work can add recovery without scheduling more than two consecutive rest days. Readiness information explains progress without silently replacing planned workouts or postponing the meet.
 
