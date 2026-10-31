@@ -76,5 +76,9 @@
     "typescript": "5.9.3",
     "vite": "8.2.4",
     "vitest": "4.1.12"
+  },
+  "overrides": {
+    "glob": "14.0.2",
+    "minimatch": "11.0.1"
   }
 }
