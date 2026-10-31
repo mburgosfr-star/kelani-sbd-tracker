@@ -15,13 +15,16 @@ async function main() {
     assert(allowed.has(entry.split('/').filter(Boolean)[0]), `Unexpected packaged entry: ${entry}`);
     assert(!/\.map$|\.test\.|\.private|\.keystore|\.jks|\.env/i.test(entry), `Unexpected packaged entry: ${entry}`);
   }
-  for (const required of ['/build/index.html', '/desktop/main.cjs', '/desktop/preload.cjs', '/desktop/runtime.cjs', '/LICENSE']) {
+  for (const required of ['/build/index.html', '/desktop/main.cjs', '/desktop/preload.cjs', '/desktop/runtime.cjs', '/desktop/snap-notifications.cjs', '/desktop/portal-notifications.py', '/LICENSE']) {
     assert(entries.includes(required), `Missing ${required}`);
   }
   const expectedIcon = await fs.readFile(path.join(root, 'public', 'icons', 'icon-192.webp'));
   assert.deepEqual(await fs.readFile(path.join(output, 'resources', 'rest-timer.wav')),
     await fs.readFile(path.join(root, 'desktop', 'assets', 'rest-timer.wav')), 'Packaged timer sound must match the source');
   assert.deepEqual(extractFile(archive, 'build/kelani-icon.png'), expectedIcon, 'Packaged icon must match the Kelani app icon');
+  assert.deepEqual(await fs.readFile(path.join(output, 'resources', 'kelani-icon.png')), expectedIcon);
+  assert.deepEqual(await fs.readFile(path.join(output, 'resources', 'app.asar.unpacked', 'desktop', 'portal-notifications.py')),
+    await fs.readFile(path.join(root, 'desktop', 'portal-notifications.py')), 'Portal helper must be accessible outside ASAR');
   const ico = await fs.readFile(path.join(root, 'desktop-out', 'kelani.ico'));
   assert.deepEqual(ico.subarray(ico.readUInt32LE(18)), expectedIcon, 'Windows icon must contain the Kelani app icon');
   const metadata = JSON.parse(extractFile(archive, 'package.json').toString());

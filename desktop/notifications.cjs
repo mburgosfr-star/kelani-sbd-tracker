@@ -1,4 +1,4 @@
-function createDesktopNotifier({ Notification, platform, icon, soundPath, spawn, onError }) {
+function createDesktopNotifier({ Notification, platform, icon, soundPath, spawn, onError, audioPlayerPath = '/usr/bin/paplay' }) {
   let active = null;
   let audio = null;
 
@@ -25,7 +25,7 @@ function createDesktopNotifier({ Notification, platform, icon, soundPath, spawn,
     notification.on('failed', (_event, error) => onError(new Error(`Desktop notification failed: ${error}`)));
     notification.show();
     if (platform === 'linux') {
-      const child = spawn('/usr/bin/paplay', [
+      const child = spawn(audioPlayerPath, [
         '--client-name=Kelani SBD Tracker', `--stream-name=${value.title}`,
         '--property=media.role=event', soundPath,
       ], { shell: false, stdio: 'ignore' });

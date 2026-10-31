@@ -3,6 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { createDesktopNotifier } = require('./notifications.cjs');
+const { getSnapAppId, createWindowActivator, createPortalNotificationClass, startPortalActivation } = require('./snap-notifications.cjs');
+const snapAppId = getSnapAppId(process.platform, process.env);
 const { pathToFileURL } = require('node:url');
 const { APP_ORIGIN, isAppUrl, resolveAssetPath, isAllowedExternalUrl, writeVerifiedBackup, normalizeTimer, createTimerController } = require('./runtime.cjs');
 
@@ -13,16 +15,20 @@ fs.mkdirSync(userData, { recursive: true });
 app.setPath('userData', userData);
 const appUserModelId = 'com.kelani.sbdtracker.desktop.prototype';
 if (process.platform === 'win32') app.setAppUserModelId(appUserModelId);
-if (process.platform === 'linux') app.setDesktopName('kelani-desktop-prototype.desktop');
+if (process.platform === 'linux') app.setDesktopName(snapAppId ? `${snapAppId}.desktop` : 'kelani-desktop-prototype.desktop');
 protocol.registerSchemesAsPrivileged([{ scheme: 'kelani', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
 
 let window;
+let portalActivation;
+const PortalNotification = createPortalNotificationClass(() => portalActivation);
+const DesktopNotification = snapAppId ? PortalNotification : Notification;
 let backupQueue = Promise.resolve();
 const statePath = path.join(app.getPath('userData'), 'rest-timer.json');
 const backupPath = path.join(app.getPath('userData'), 'Backups', 'kelani-sbd-tracker-v2-autosave.json');
 const assetRoot = path.join(__dirname, '..', 'build');
 const notifier = createDesktopNotifier({
-  Notification, platform: process.platform, spawn,
+  Notification: DesktopNotification, platform: process.platform, spawn,
+  audioPlayerPath: snapAppId ? path.join(process.env.SNAP, 'bin/paplay') : '/usr/bin/paplay',
   icon: path.join(assetRoot, 'kelani-icon.png'),
   soundPath: app.isPackaged
     ? path.join(process.resourcesPath, 'rest-timer.wav')
@@ -32,14 +38,19 @@ const notifier = createDesktopNotifier({
 
 function revealWindow() {
   if (!window || window.isDestroyed()) return;
-  if (window.isMinimized()) window.restore();
-  window.show();
-  window.focus();
+  if (snapAppId) {
+    // A single show consumes the portal token once, without a second GNOME alert.
+    window.show();
+  } else {
+    if (window.isMinimized()) window.restore();
+    window.show();
+    window.focus();
+  }
 }
 
 function showNotification(value, timer = false) {
   notifier.show(value, () => {
-    revealWindow();
+    if (!snapAppId) revealWindow();
     if (timer) window?.webContents.send('kelani:timer-click', { id: value.id });
   });
 }
@@ -70,11 +81,29 @@ function openExternal(value) {
   if (isAllowedExternalUrl(value)) shell.openExternal(value).catch(error => console.error('Could not open external link:', error));
 }
 
-if (!app.requestSingleInstanceLock()) {
+const activationOnly = process.argv.includes('--kelani-activate-existing');
+const hasInstanceLock = app.requestSingleInstanceLock();
+if (activationOnly) {
+  // An activation helper must never replace a closed app with a new window.
+  if (hasInstanceLock) app.releaseSingleInstanceLock();
+  app.exit(hasInstanceLock ? 2 : 0);
+} else if (!hasInstanceLock) {
   app.quit();
 } else {
   app.on('second-instance', revealWindow);
   app.whenReady().then(async () => {
+    if (snapAppId) {
+      const helperPath = path.join(__dirname, 'portal-notifications.py').replace(/app\.asar([/\\])/, 'app.asar.unpacked$1');
+      const activateWithToken = createWindowActivator({ app, spawn, execPath: process.execPath,
+        env: process.env, revealWindow, onError: error => console.error('Desktop activation failed:', error.message) });
+      portalActivation = startPortalActivation({ spawn, snapRoot: process.env.SNAP, appId: snapAppId,
+        helperPath, iconPath: path.join(process.resourcesPath, 'kelani-icon.png'), env: process.env,
+        activateWithToken, onNotification: value => PortalNotification.dispatch(value),
+        onStopped: () => PortalNotification.failAll(),
+        onError: error => console.error('Desktop notification portal failed:', error.message) });
+      // A broken notification service must not prevent offline training.
+      await portalActivation.ready.catch(() => {});
+    }
     // Unpackaged Windows toasts require a shortcut with matching identity.
     if (process.platform === 'win32' && app.isPackaged) {
       const programs = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs');
@@ -121,7 +150,7 @@ if (!app.requestSingleInstanceLock()) {
       return { saved: true };
     });
     handle('kelani:timer-schedule', value => {
-      if (!Notification.isSupported()) throw new Error('Notifications unavailable');
+      if (!DesktopNotification.isSupported()) throw new Error('Notifications unavailable');
       return timer.schedule(value);
     });
     handle('kelani:timer-cancel', () => { timer.cancel(); notifier.close(); });
@@ -147,6 +176,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => app.quit());
   app.on('before-quit', () => {
     notifier.close();
+    portalActivation?.stop();
     if (window && !window.isDestroyed()) window.webContents.session.flushStorageData();
   });
 }

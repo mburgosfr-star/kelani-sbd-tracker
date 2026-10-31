@@ -43,10 +43,11 @@ async function main() {
     dir: staging, out: output, name: 'Kelani SBD Tracker Desktop Prototype',
     platform, arch: 'x64', electronVersion: metadata.devDependencies.electron,
     appVersion: metadata.version, icon: platform === 'win32' ? icon : pngIcon,
-    asar: true, prune: false, overwrite: true,
+    asar: { unpack: '**/portal-notifications.py' }, prune: false, overwrite: true,
     executableName,
   });
   for (const packaged of paths) {
+    await fs.copyFile(pngIcon, path.join(packaged, 'resources', 'kelani-icon.png'));
     await fs.copyFile(path.join(root, 'desktop', 'assets', 'rest-timer.wav'), path.join(packaged, 'resources', 'rest-timer.wav'));
     await fs.copyFile(path.join(root, 'docs', 'windows-prototype.md'), path.join(packaged, 'WINDOWS-PROTOTYPE.md'));
     await fs.copyFile(path.join(root, 'docs', 'ubuntu-prototype.md'), path.join(packaged, 'UBUNTU-PROTOTYPE.md'));

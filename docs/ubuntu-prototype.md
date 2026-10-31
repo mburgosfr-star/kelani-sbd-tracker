@@ -82,6 +82,29 @@ are not implemented. The app has no Kelani account, backend or automatic
 analytics. Choosing a cloud-backed export folder may let that provider sync
 the exported file.
 
+## Snap Notification Integration
+
+The desktop source also supports notifications inside a strict Snap. This is
+not a published Snap Store download. The DEB installation above is unchanged.
+
+Snap builds send the translated alert title, body and icon to the local desktop
+notification portal. Clicking an alert passes a temporary activation token to
+Kelani so it can show its window. The token is not saved or logged. Sound uses
+the player bundled inside the Snap; no host audio executable is required.
+Closing Kelani stops the notification helper. Keep the app running for alerts.
+
+Snap data stays inside that package's own application-data directory, separate
+from the DEB and Android profiles. A Snap does not automatically import either
+profile. Use an independent JSON export if you later choose to migrate.
+
+For packaging, use a Snap name without hyphens or underscores. The desktop ID
+must be `snap.<snap-name>.desktop`, with a session D-Bus slot named
+`snap.<snap-name>` and that same ID declared in the desktop interface. The
+bundle needs the GNOME 46/core24 runtime, its Python/Gio bindings, and
+`bin/paplay`. The desktop packager leaves `portal-notifications.py` outside
+ASAR and provides a real icon file for Gio. Keep Electron's renderer sandbox
+enabled. A notification-service failure disables alerts, not offline training.
+
 ## Feedback and Support
 
 Report problems through the repository's GitHub Issues. Include the Ubuntu and

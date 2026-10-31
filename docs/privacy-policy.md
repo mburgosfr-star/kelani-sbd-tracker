@@ -109,7 +109,11 @@ The experimental Windows and Ubuntu desktop apps store their profile and
 automatic JSON backups locally in the `Kelani SBD Tracker Desktop Prototype`
 folder inside the operating system's application data directory. They have no Kelani account, backend or
 automatic phone-to-PC synchronization. Desktop notifications use the operating
-system. Manual exports go to a location you choose; a cloud-backed folder or
+system. In a Snap build, the translated alert title, body and icon are sent
+to the local desktop notification portal. A temporary token received after
+a notification click is passed locally between Kelani processes to bring the
+window forward; it is not stored or logged. This adds no remote service or
+training-data upload. Manual exports go to a location you choose; a cloud-backed folder or
 sharing service you choose may synchronize them. External links open in your
 normal browser. See the [Windows prototype guide](windows-prototype.md) or
 [Ubuntu prototype guide](ubuntu-prototype.md) for
