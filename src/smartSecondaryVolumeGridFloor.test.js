@@ -11,15 +11,15 @@ function volumeSet(index) {
   };
 }
 
-// The universal 1–5 range replaces the former secondary three-set floor.
-test('secondary volume uses the universal 1–5 set range to fill five columns', () => {
+// The universal 2–6 range replaces the former secondary three-set floor.
+test('secondary volume uses the universal 2–6 set range to fill five columns', () => {
   const warmups = [{ weight: 20 }, { weight: 70 }, { weight: 100 }];
   const sets = [volumeSet(1), volumeSet(2), volumeSet(3)];
 
   const completed = completeSmartLiftGrid({
     sets,
     warmups,
-    minimumVolumeSets: 1,
+    minimumVolumeSets: 2,
   });
 
   expect((warmups.length + completed.length) % 5).toBe(0);

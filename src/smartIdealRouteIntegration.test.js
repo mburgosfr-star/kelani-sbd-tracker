@@ -1440,14 +1440,14 @@ test('C4W22 preserves intermediate taper weights in five-column grids', () => {
     prescribedPct: 0.9,
   });
   expect(squat.sets.slice(1)).toEqual(
-    Array.from({ length: 1 }, () => expect.objectContaining({
+    Array.from({ length: 6 }, () => expect.objectContaining({
       labelKey: 'backoff',
       weight: 102.5,
       reps: 3,
       prescribedPct: 0.70,
     }))
   );
-  expect(squat.warmups.length + squat.sets.length).toBe(5);
+  expect(squat.warmups.length + squat.sets.length).toBe(10);
 
   expect(bench.warmups.map(({ weight, reps }) => ({ weight, reps })))
     .toEqual([
@@ -1562,8 +1562,8 @@ test('every ideal-route taper day preserves its role dose and reduced grid volum
           const volumeSets = workSets.filter(set => (
             set.labelKey === 'backoff' || set.labelKey === 'workSets'
           ));
-          expect(volumeSets.length).toBeGreaterThanOrEqual(1);
-          expect(volumeSets.length).toBeLessThanOrEqual(5);
+          expect(volumeSets.length).toBeGreaterThanOrEqual(2);
+          expect(volumeSets.length).toBeLessThanOrEqual(6);
           expect(topSets.length).toBeLessThanOrEqual(1);
           topSets.forEach(set => {
             expect(set).toMatchObject({
@@ -1604,8 +1604,8 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
     workouts.slice(0, 27).filter(workout => workout.type === 'training')
       .forEach(workout => {
         workout.lifts.forEach(liftBlock => {
-          const minimum = 1;
-          const maximum = 5;
+          const minimum = 2;
+          const maximum = 6;
           const topCount = liftBlock.sets.filter(set => (
             set.labelKey.startsWith('top')
           )).length;
@@ -1681,16 +1681,16 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
           const volumeSets = workSets.filter(set => (
             set.labelKey === 'backoff' || set.labelKey === 'workSets'
           ));
-          expect(volumeSets.length).toBeGreaterThanOrEqual(1);
-          expect(volumeSets.length).toBeLessThanOrEqual(5);
+          expect(volumeSets.length).toBeGreaterThanOrEqual(2);
+          expect(volumeSets.length).toBeLessThanOrEqual(6);
         }
 
         if (workout.smartIdealRoute?.stage === 'taper') {
           const volumeSets = workSets.filter(set => (
             set.labelKey === 'backoff' || set.labelKey === 'workSets'
           ));
-          expect(volumeSets.length).toBeGreaterThanOrEqual(1);
-          expect(volumeSets.length).toBeLessThanOrEqual(5);
+          expect(volumeSets.length).toBeGreaterThanOrEqual(2);
+          expect(volumeSets.length).toBeLessThanOrEqual(6);
         }
 
         if (

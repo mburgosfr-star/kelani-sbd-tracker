@@ -33,7 +33,7 @@ Meet planning uses demonstrated real 1RM values. Estimated 1RM tracks progress f
 
 Warm-ups prepare for the first work set or opening meet attempt. They use multiples of 10 kg and only 1, 3 or 5 repetitions. The final warm-up aims for about 85% of that weight and never exceeds 90%. Warm-ups above this limit are removed, allowing a larger final jump at very high loads.
 
-The five-column workout grid stays filled. Newly generated work-set and back-off blocks contain 1–5 volume sets, depending on the warm-up count. Started workouts and completed history keep their saved prescriptions.
+The five-column workout grid stays filled. Newly generated work-set and back-off blocks contain 2–6 volume sets, depending on the warm-up count. Started workouts and completed history keep their saved prescriptions.
 
 Smart volume work uses these target percentages:
 

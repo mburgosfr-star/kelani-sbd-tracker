@@ -1,7 +1,7 @@
 // Shared by workout rendering and prescription generation.
 export const WORKOUT_GRID_COLUMNS = 5;
-export const WORKOUT_VOLUME_MIN_SETS = 1;
-export const WORKOUT_VOLUME_MAX_SETS = 5;
+export const WORKOUT_VOLUME_MIN_SETS = 2;
+export const WORKOUT_VOLUME_MAX_SETS = 6;
 
 export function reduceVolumeReps(reps) {
   const value = Number(reps);
@@ -13,7 +13,9 @@ export function completeWorkoutVolumeGrid({ sets = [], warmups = [] } = {}) {
   const volume = sets.filter(isVolume);
   if (!volume.length) return sets.map(set => ({ ...set }));
   const fixedCount = sets.length - volume.length;
-  const count = WORKOUT_GRID_COLUMNS - ((warmups.length + fixedCount) % WORKOUT_GRID_COLUMNS);
+  let count = WORKOUT_GRID_COLUMNS - ((warmups.length + fixedCount) % WORKOUT_GRID_COLUMNS);
+  while (count < WORKOUT_VOLUME_MIN_SETS) count += WORKOUT_GRID_COLUMNS;
+  if (count > WORKOUT_VOLUME_MAX_SETS) throw new Error('Volume bounds cannot complete the workout grid.');
   let kept = 0;
   const result = sets.filter(set => !isVolume(set) || kept++ < count).map(set => ({ ...set }));
   while (kept < count) {

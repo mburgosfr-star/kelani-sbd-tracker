@@ -1348,7 +1348,7 @@ export function validateSmartLiftPrescription(
 
   volumeGroups.forEach(group => {
     if (group.length < WORKOUT_VOLUME_MIN_SETS || group.length > WORKOUT_VOLUME_MAX_SETS) {
-      errors.push('Back-off and work-set blocks require 1–5 sets.');
+      errors.push(`Back-off and work-set blocks require ${WORKOUT_VOLUME_MIN_SETS}–${WORKOUT_VOLUME_MAX_SETS} sets.`);
     }
 
     group.forEach(set => {

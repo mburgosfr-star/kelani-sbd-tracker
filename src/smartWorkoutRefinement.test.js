@@ -372,15 +372,15 @@ test('uses three-rep volume work at 70% after the Deadlift top double', () => {
   const bench = workout.lifts.find(item => item.lift === 'Bench');
 
   expect(deadlift.warmups).toHaveLength(3);
-  expect(deadlift.sets).toHaveLength(2);
-  expect(deadlift.warmups.length + deadlift.sets.length).toBe(5);
+  expect(deadlift.sets).toHaveLength(7);
+  expect(deadlift.warmups.length + deadlift.sets.length).toBe(10);
   expect(deadlift.sets[0]).toMatchObject({
     labelKey: 'topDouble',
     reps: 2,
     pct: 0.8,
   });
 
-  expect(deadlift.sets.slice(1)).toHaveLength(1);
+  expect(deadlift.sets.slice(1)).toHaveLength(6);
   deadlift.sets.slice(1).forEach(set => {
     expect(set).toMatchObject({
       labelKey: 'backoff',
@@ -408,7 +408,7 @@ test('gives the Ultra Squat Opener a five-column backoff block', () => {
 
   const squat = workout.lifts.find(item => item.lift === 'Squat');
 
-  expect(squat.sets).toHaveLength(2);
+  expect(squat.sets).toHaveLength(7);
   expect(squat.sets[0]).toMatchObject({
     labelKey: 'topSingle',
     reps: 1,

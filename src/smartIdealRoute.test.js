@@ -468,8 +468,8 @@ test('taper uses the agreed role-specific top sets and reduced grid volume', () 
         backoff: {
           reps: volumeReps,
           pct: volumePct,
-          minimumSetCount: 1,
-          maximumSetCount: 5,
+          minimumSetCount: 2,
+          maximumSetCount: 6,
         },
       });
     } else {
@@ -477,8 +477,8 @@ test('taper uses the agreed role-specific top sets and reduced grid volume', () 
         kind: 'taper-work-sets',
         reps: volumeReps,
         pct: volumePct,
-        minimumSetCount: 1,
-        maximumSetCount: 5,
+        minimumSetCount: 2,
+        maximumSetCount: 6,
       });
     }
     expect(item.prescription).toMatchObject({

@@ -913,3 +913,13 @@ test.each(['good', 'easy', 'hard'])(
     });
   }
 );
+
+
+test.each([1, 2, 3, 4, 5, 6, 7])('volume block validator enforces the universal 2–6 bound for %s sets', count => {
+  const sets = Array.from({ length: count }, () => ({
+    labelKey: 'workSets', groupKey: 'Bench-volume', reps: 5, weight: 60, pct: 0.6,
+  }));
+  const result = validateSmartLiftPrescription({ lift: 'Bench', sets });
+  expect(result.valid).toBe(count >= 2 && count <= 6);
+  if (!result.valid) expect(result.errors).toContain('Back-off and work-set blocks require 2–6 sets.');
+});

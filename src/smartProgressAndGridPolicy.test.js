@@ -89,7 +89,7 @@ test('an explicit failed-set recovery keeps its deliberately lower medium-slot d
   expect(getSmartIntensityRole({ sets: reshaped })).toBe('light');
 });
 
-test('fits a primary grid with one back-off set', () => {
+test('fills a primary grid with six back-offs when one is below the minimum', () => {
   const sets = [
     topDouble(),
     ...Array.from({ length: 3 }, () => volumeSet()),
@@ -100,8 +100,8 @@ test('fits a primary grid with one back-off set', () => {
     preferMoreVolume: true,
   });
 
-  expect(completed).toHaveLength(2);
-  expect(completed.filter(set => set.labelKey === 'backoff')).toHaveLength(1);
+  expect(completed).toHaveLength(7);
+  expect(completed.filter(set => set.labelKey === 'backoff')).toHaveLength(6);
   expect((3 + completed.length) % 5).toBe(0);
 });
 
@@ -121,7 +121,7 @@ test('uses the lower safe complete option when progression is blocked', () => {
   expect((1 + completed.length) % 5).toBe(0);
 });
 
-test('fills a secondary grid without unnecessary overload', () => {
+test('fills a secondary grid with six work sets when one is below the minimum', () => {
   const sets = Array.from({ length: 3 }, () =>
     volumeSet('workSets', 0.75, 75)
   );
@@ -130,11 +130,11 @@ test('fills a secondary grid without unnecessary overload', () => {
     warmups: Array.from({ length: 4 }, () => ({})),
   });
 
-  expect(completed).toHaveLength(1);
+  expect(completed).toHaveLength(6);
   expect((4 + completed.length) % 5).toBe(0);
 });
 
-test('leaves an already complete five-cell grid unchanged', () => {
+test('expands an old one-backoff five-cell grid to the new volume minimum', () => {
   const sets = [
     topDouble(0.85, 150),
     ...Array.from({ length: 1 }, () => volumeSet()),
@@ -145,7 +145,9 @@ test('leaves an already complete five-cell grid unchanged', () => {
     preferMoreVolume: true,
   });
 
-  expect(completed).toEqual(sets);
+  expect(completed[0]).toEqual(sets[0]);
+  expect(completed).toHaveLength(7);
+  expect((3 + completed.length) % 5).toBe(0);
 });
 
 test('treats equal primary stimulus with another set count as a repeat', () => {

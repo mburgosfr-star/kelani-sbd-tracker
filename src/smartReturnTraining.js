@@ -1,4 +1,4 @@
-import { WORKOUT_GRID_COLUMNS, completeWorkoutVolumeGrid } from './workoutGridPolicy';
+import { WORKOUT_GRID_COLUMNS, WORKOUT_VOLUME_MIN_SETS, completeWorkoutVolumeGrid } from './workoutGridPolicy';
 import { generateWarmups } from './warmupAndPrepGeneration';
 import { roundPercent } from './smartPrescriptionEngine';
 import { isTopSetLabel } from './workoutHistoryStats';
@@ -7,8 +7,8 @@ export const SMART_RETURN_TRAINING = Object.freeze({
   suggestedAfterDays: 7,
   loadFactor: 0.9,
   accessoryLoadFactor: 0.8,
-  minimumWorkSetsPerLift: 1,
-  version: 3,
+  minimumWorkSetsPerLift: WORKOUT_VOLUME_MIN_SETS,
+  version: 4,
 });
 
 function roundedLoad(weight, factor) {
