@@ -3845,10 +3845,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewWarmupsItem,
-    t.whatsNewTopSetRestItem,
-    t.whatsNewProgramFocusItem,
-    t.whatsNewDesktopButtonsItem,
+    t.whatsNewVolumeItem,
+    t.whatsNewProgramResultsItem,
+    t.whatsNewPreservedProgressItem,
   ];
 
   return (

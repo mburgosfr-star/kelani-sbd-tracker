@@ -1,0 +1,1 @@
+Els blocs nous de sèries de descàrrega i de treball contenen 2–6 sèries, amb graelles de cinc columnes sempre plenes. El programa mostra resultats i percentatges dels entrenaments completats: verd per a les sèries assolides i vermell per a les fallades. Els entrenaments iniciats i l’historial completat conserven la prescripció desada.

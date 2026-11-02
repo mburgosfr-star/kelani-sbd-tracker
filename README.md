@@ -31,7 +31,7 @@ See the [user guide](docs/user-guide.md) for training rules and settings.
 <details>
 <summary>View Dashboard, Program, Workout and Statistics</summary>
 
-Version 2.0.61, with fictional demo data.
+Version 2.0.63, with fictional demo data.
 
 | Dashboard | Program |
 |---|---|

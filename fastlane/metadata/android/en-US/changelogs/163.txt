@@ -1,0 +1,1 @@
+New back-off and work-set blocks contain 2–6 sets, with fully filled five-column grids. Program shows compact completed set results and percentages: green for successful sets and red for missed sets. Started workouts and completed history keep their saved prescriptions.

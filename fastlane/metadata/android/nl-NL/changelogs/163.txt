@@ -1,0 +1,1 @@
+Nieuwe blokken met back-off- en werksets bevatten 2–6 sets, met volledig gevulde rasters van vijf kolommen. Programma toont compacte setresultaten en percentages van afgeronde workouts: groen voor gehaald en rood voor gemist. Begonnen workouts en afgeronde historie behouden hun opgeslagen voorschrift.
