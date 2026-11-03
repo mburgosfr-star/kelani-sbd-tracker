@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsScrollableContentStyle, statsTabListStyle } from './StatsScreen';
-import App, { AllWorkouts, ProgramCompletedSetSummary, AnonymousUsageShareModal, AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
+import App, { StartNewCycleSection, AllWorkouts, ProgramCompletedSetSummary, AnonymousUsageShareModal, AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
 import { translations } from './translations';
 
 test.each(['nl', 'en', 'ca'])(
@@ -1603,9 +1603,9 @@ test('milestone celebration overlays the already-rendered completed screen and c
 });
 
 test('the destructive settings action stays concise in every language', () => {
-  expect(translations.nl.startFromScratch).toBe('Opnieuw');
-  expect(translations.en.startFromScratch).toBe('Start over');
-  expect(translations.ca.startFromScratch).toBe('Reinicia');
+  expect(translations.nl.deleteAllData).toBe('Alle gegevens wissen');
+  expect(translations.en.deleteAllData).toBe('Delete all data');
+  expect(translations.ca.deleteAllData).toBe('Esborra totes les dades');
 });
 
 test('automatic emergency-backup status is shown only in the native app', () => {
@@ -2980,7 +2980,7 @@ test('Program keeps its title outside the bounded list and retains both end cont
   expect(list.lastElementChild).toHaveTextContent('Show all workouts');
 });
 
-test('Settings places every action including Start over in the same evenly spaced group', async () => {
+test('Settings replaces the reset row with New cycle without adding rows', async () => {
   localStorage.clear();
   localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
     version: 1, trainingModel: 'smart', currentCycle: 1,
@@ -2989,9 +2989,12 @@ test('Settings places every action including Start over in the same evenly space
   render(<App />);
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 }));
   const cluster = screen.getByTestId('regular-settings-cluster');
-  const restart = screen.getByTestId('start-over-settings-row');
+  const restart = screen.getByTestId('new-cycle-settings-row');
   expect(restart.parentElement).toBe(cluster);
   expect(cluster.lastElementChild).toBe(restart);
+  expect(within(cluster).getAllByRole('button')).toHaveLength(10);
+  expect(screen.queryByTestId('start-over-settings-row')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: translations.en.deleteAllData })).not.toBeInTheDocument();
   expect(screen.getByTestId('screen-scroll-content')).toHaveStyle({ '--kelani-settings-row-padding': '3px 0' });
 });
 
@@ -3103,4 +3106,94 @@ test('completed Program groups preserve different recorded percentages instead o
   expect(within(results).getAllByLabelText(translations.en.programSetsSucceeded)).toHaveLength(3);
   expect(results).not.toHaveTextContent('undefined');
   expect(results).not.toHaveTextContent('(0%)');
+});
+
+
+test.each(['nl', 'en', 'ca'])('new-cycle confirmation explains unfinished progress and cancels safely in %s', language => {
+  const t = translations[language];
+  const start = jest.fn();
+  const close = jest.fn();
+  render(<StartNewCycleSection t={t} hasProgress isOpen onOpen={jest.fn()} onClose={close} onStartNewCycle={start} />);
+  const dialog = screen.getByRole('dialog', { name: t.startNewCycleConfirmTitle });
+  expect(within(dialog).getByText(t.startNewCycleConfirmText)).toBeVisible();
+  expect(within(dialog).getByText(t.startNewCycleProgressWarning)).toBeVisible();
+  expect(within(dialog).getByRole('button', { name: t.cancel })).toHaveFocus();
+  fireEvent.keyDown(dialog, { key: 'Escape' });
+  expect(close).toHaveBeenCalledTimes(1);
+  expect(start).not.toHaveBeenCalled();
+});
+
+test.each(['smart', 'classic'])('manual %s cycle start preserves saved data and restores Workout 1 after reload', async trainingModel => {
+  localStorage.clear();
+  localStorage.setItem('language', 'en');
+  const key = 'kel-powerlifting-user-data-v1';
+  localStorage.setItem(key, JSON.stringify({
+    version: 1, trainingModel, currentCycle: 4, showWhatsNewAfterUpdates: false,
+    prs: { Squat: 100, Bench: 75, Deadlift: 125 },
+    oneRMs: { Squat: 100, Bench: 75, Deadlift: 125 },
+    history: [{ cycle: 3, workoutNumber: 1, lift: 'Squat', topWeight: 100, topReps: 1, e1rm: 100,
+      workoutSnapshot: { number: 1, completed: true, type: 'training', lifts: [{ lift: 'Squat', sets: [{ reps: 1, weight: 100, done: true }] }] } }],
+    bodyWeights: [{ cycle: 3, workoutNumber: 1, bodyWeight: 80, date: '1-1-2030' }],
+    weightUnit: 'lb', preparationMode: 'basicFirst',
+    meetPlannerAttempts: { Squat: { opener: 95 } }, meetPrepChecklist: { packed: true },
+  }));
+  const view = render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 }));
+  const before = JSON.parse(localStorage.getItem(key));
+  fireEvent.click(within(screen.getByTestId('new-cycle-settings-row')).getByRole('button', { name: 'Start' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(JSON.parse(localStorage.getItem(key))).toEqual(before);
+  fireEvent.click(within(screen.getByTestId('new-cycle-settings-row')).getByRole('button', { name: 'Start' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Start new cycle' }));
+  await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).currentCycle).toBe(5));
+  const saved = JSON.parse(localStorage.getItem(key));
+  for (const field of ['history', 'prs', 'oneRMs', 'bodyWeights', 'trainingModel', 'weightUnit', 'workoutSetup', 'trainingFocus', 'programProfile']) {
+    expect(saved[field]).toEqual(before[field]);
+  }
+  expect(saved.meetPlannerAttempts).toEqual({});
+  expect(saved.meetPrepChecklist).toEqual({});
+  expect(saved.inProgress).toMatchObject({ currentCycle: 5, currentIndex: 0, selectedIndex: 0 });
+  expect(saved.inProgress.workouts[0].number).toBe(1);
+  view.unmount();
+  render(<App />);
+  await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 });
+  await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).inProgress.currentIndex).toBe(0));
+  const restored = JSON.parse(localStorage.getItem(key));
+  expect(restored.currentCycle).toBe(5);
+  expect(restored.history).toEqual(saved.history);
+  expect(restored.inProgress.workouts).toEqual(saved.inProgress.workouts);
+});
+
+test('full reset is available only through Data and still requires a separate destructive confirmation', async () => {
+  localStorage.clear();
+  localStorage.setItem('language', 'en');
+  const key = 'kel-powerlifting-user-data-v1';
+  localStorage.setItem(key, JSON.stringify({ version: 1, trainingModel: 'smart', currentCycle: 2,
+    prs: { Squat: 100, Bench: 75, Deadlift: 125 }, history: [], showWhatsNewAfterUpdates: false }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 }));
+  expect(screen.queryByRole('button', { name: 'Delete all data' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Manage' }));
+  const before = localStorage.getItem(key);
+  const deleteButton = screen.getByRole('button', { name: 'Delete all data' });
+  const closeButton = screen.getByRole('button', { name: 'Close' });
+  expect(deleteButton.parentElement).toBe(closeButton.parentElement);
+  expect(deleteButton.parentElement).toBe(screen.getByRole('button', { name: 'Export' }).parentElement);
+  expect(deleteButton.parentElement.style.gap).toBe('8px');
+  expect(deleteButton.parentElement.style.borderTop).toBe('');
+  expect(deleteButton.parentElement.style.paddingTop).toBe('');
+  expect(deleteButton.parentElement).toHaveStyle({ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' });
+  expect(deleteButton.style.width).toBe(closeButton.style.width);
+  expect(deleteButton.style.width).toBe(screen.getByRole('button', { name: 'Export' }).style.width);
+  fireEvent.click(deleteButton);
+  expect(screen.queryByTestId('data-backup-manager')).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Delete All Data?' })).toBeInTheDocument();
+  expect(localStorage.getItem(key)).toBe(before);
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(localStorage.getItem(key)).toBe(before);
+  fireEvent.click(screen.getByRole('button', { name: 'Manage' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete all data' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Yes, delete everything' }));
+  expect(localStorage.getItem(key)).toBeNull();
+  expect(await screen.findByText('Start with Smart Training')).toBeInTheDocument();
 });

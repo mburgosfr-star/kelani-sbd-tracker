@@ -29,6 +29,12 @@ The Program screen shows the route ahead. Completed workouts show recorded work-
 
 Meet planning uses demonstrated real 1RM values. Estimated 1RM tracks progress from successful sets. Existing Classic users can continue their fixed programs or switch permanently to Smart using their existing history. Classic remains in maintenance mode.
 
+### Starting a New Cycle Early
+
+In **Settings → New cycle → Start**, you can leave the current cycle and begin Workout 1 of the next cycle without doing the planned meet. Confirmation is required. Any unfinished progress in the current workout is discarded; remaining workouts are not recorded as failed, and no meet results or cycle-completion result are created. Your completed history, PRs, body data and settings stay saved. The Meet Planner and meet checklist reset for the new cycle. After a break, the existing lighter return-workout option remains available; starting a new cycle does not itself lower your training weights.
+
+To reset the app completely instead, open **Settings → Data & backups → Manage → Delete all data**. This requires a separate confirmation and removes local training data. Export a backup first if you want to keep it.
+
 ## Warm-ups and Work Sets
 
 Warm-ups prepare for the first work set or opening meet attempt. They use multiples of 10 kg and only 1, 3 or 5 repetitions. The final warm-up aims for about 85% of that weight and never exceeds 90%. Warm-ups above this limit are removed, allowing a larger final jump at very high loads.

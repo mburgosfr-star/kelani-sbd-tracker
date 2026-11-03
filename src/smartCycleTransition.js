@@ -26,7 +26,8 @@ export function shouldAutomaticallyStartNextSmartCycle({
   );
 }
 
-export function buildAutomaticNextSmartCycle({
+// Shared transition: history is read for prescription, never rewritten or completed.
+export function buildNextTrainingCycle({
   trainingModel,
   currentCycle = 1,
   history = [],
@@ -46,14 +47,6 @@ export function buildAutomaticNextSmartCycle({
   cooldownMode = 'off',
   smartIdealRouteStartCycle = 1,
 } = {}) {
-  if (!shouldAutomaticallyStartNextSmartCycle({
-    trainingModel,
-    history,
-    currentCycle,
-  })) {
-    return null;
-  }
-
   const nextCycle = Math.max(Number(currentCycle) || 1, 1) + 1;
   const loadMaxes = normalizeOneRMs(oneRMs, prs);
   const athleteLevel = getAthleteLevel({
@@ -64,9 +57,9 @@ export function buildAutomaticNextSmartCycle({
   });
   const workouts = generateWorkoutsForTrainingModel(trainingModel, {
     programProfile,
-    squat: loadMaxes.Squat,
-    bench: loadMaxes.Bench,
-    deadlift: loadMaxes.Deadlift,
+    squat: isSmartTrainingModel(trainingModel) ? loadMaxes.Squat : prs.Squat,
+    bench: isSmartTrainingModel(trainingModel) ? loadMaxes.Bench : prs.Bench,
+    deadlift: isSmartTrainingModel(trainingModel) ? loadMaxes.Deadlift : prs.Deadlift,
     accessoryMode,
     accessoryPRs,
     preparationMode,
@@ -94,4 +87,9 @@ export function buildAutomaticNextSmartCycle({
     currentIndex: 0,
     selectedIndex: 0,
   };
+}
+
+export function buildAutomaticNextSmartCycle(options = {}) {
+  if (!shouldAutomaticallyStartNextSmartCycle(options)) return null;
+  return buildNextTrainingCycle(options);
 }

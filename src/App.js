@@ -139,7 +139,7 @@ import {
   countFailedOrSkippedSetsFromSnapshot,
   hasAutomaticTooHardWorkoutOutcome,
 } from './smartTrainingEngine';
-import { buildAutomaticNextSmartCycle } from './smartCycleTransition';
+import { buildAutomaticNextSmartCycle, buildNextTrainingCycle } from './smartCycleTransition';
 import {
   getSmartIdealNormalTrainingDays,
   isSmartIdealRouteEnabled,
@@ -4181,7 +4181,7 @@ function Toast({ message }) {
 }
 
 
-export function DataSection({ t, importOnly = false, triggerOnly = false }) {
+export function DataSection({ t, importOnly = false, triggerOnly = false, onReset }) {
   const [notice, setNotice] = useState('');
   const [pendingImport, setPendingImport] = useState(null);
   const [showDataManager, setShowDataManager] = useState(false);
@@ -4537,23 +4537,6 @@ export function DataSection({ t, importOnly = false, triggerOnly = false }) {
               )}
             </div>
 
-            <div style={modalActionRowStyle()}>
-              <button
-                type="button"
-                onClick={exportData}
-                style={modalActionButtonStyle('primary')}
-              >
-                {t.exportDataShort || t.exportData}
-              </button>
-              <button
-                type="button"
-                onClick={() => importInputRef.current?.click()}
-                style={modalActionButtonStyle()}
-              >
-                {t.importDataShort || t.importData}
-              </button>
-            </div>
-
             {notice && (
               <div style={{
                 color: THEME.primary,
@@ -4565,13 +4548,35 @@ export function DataSection({ t, importOnly = false, triggerOnly = false }) {
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={() => setShowDataManager(false)}
-              style={compactModalActionButtonStyle()}
-            >
-              {t.close}
-            </button>
+            <div style={modalActionRowStyle()}>
+              <button type="button" onClick={exportData} style={modalActionButtonStyle('primary')}>
+                {t.exportDataShort || t.exportData}
+              </button>
+              <button type="button" onClick={() => importInputRef.current?.click()} style={modalActionButtonStyle()}>
+                {t.importDataShort || t.importData}
+              </button>
+              {onReset && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDataManager(false);
+                    onReset();
+                  }}
+                  style={{ ...modalActionButtonStyle(), color: THEME.red, borderColor: THEME.red }}
+                >
+                  {t.deleteAllData}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowDataManager(false)}
+                style={onReset ? modalActionButtonStyle() : {
+                  ...compactModalActionButtonStyle('secondary', '0 auto'), gridColumn: '1 / -1',
+                }}
+              >
+                {t.close}
+              </button>
+            </div>
           </div>
         </SettingsModal>
       )}
@@ -10035,85 +10040,55 @@ function ProgramProfileSection({
 }
 
 
-function StartNewCycleSection({ onStartNewCycle, t }) {
-  const [showStartCycleConfirm, setShowStartCycleConfirm] = useState(false);
-  const [notice, setNotice] = useState('');
-
-  useEffect(() => {
-    if (!notice) return;
-    const id = window.setTimeout(() => setNotice(''), 1800);
-    return () => window.clearTimeout(id);
-  }, [notice]);
+export function StartNewCycleSection({ onStartNewCycle, t, hasProgress = false, isOpen, onOpen, onClose }) {
+  const triggerRef = useRef(null);
+  const close = () => {
+    onClose();
+    triggerRef.current?.querySelector('button')?.focus();
+  };
 
   return (
     <>
-      <Toast message={notice} />
-      <button
-        onClick={() => setShowStartCycleConfirm(true)}
-        style={compactProgramActionButtonStyle(THEME.primary, '6px auto 0')}
-      >
-        {t.startNewCycle}
-      </button>
-
-      {showStartCycleConfirm && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.65)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 800,
-          padding: 16
-        }}>
-          <div style={{
-            background: THEME.card,
-            border: `1px solid ${THEME.border}`,
-            borderRadius: 12,
-            padding: 18,
-            maxWidth: 420,
-            width: '100%',
-            color: THEME.text
-          }}>
-            <h3 style={{ margin: '0 0 10px', textAlign: 'center', color: THEME.brown }}>
-              {t.startNewCycleConfirmTitle}
-            </h3>
-
-            <p style={{
-              color: THEME.muted,
-              fontSize: 14,
-              lineHeight: 1.4,
-              margin: '0 0 16px',
-              textAlign: 'center'
+      <div ref={triggerRef} data-testid="new-cycle-settings-row">
+        <SettingsListRow label={t.newCycleLabel} actionLabel={t.startCycleAction} onAction={onOpen} />
+      </div>
+      {isOpen && (
+        <SettingsModal title={t.startNewCycleConfirmTitle} onClose={close}>
+          <div role="dialog" aria-modal="true" aria-label={t.startNewCycleConfirmTitle}
+            onKeyDown={event => {
+              if (event.key === 'Escape') {
+                event.stopPropagation();
+                close();
+              } else if (event.key === 'Tab') {
+                const buttons = event.currentTarget.querySelectorAll('button');
+                const first = buttons[0];
+                const last = buttons[buttons.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                  event.preventDefault();
+                  last.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                  event.preventDefault();
+                  first.focus();
+                }
+              }
             }}>
+            <p style={{ color: THEME.muted, fontSize: 14, lineHeight: 1.4, margin: '0 0 16px', textAlign: 'center' }}>
               {t.startNewCycleConfirmText}
             </p>
-
+            {hasProgress && (
+              <p style={{ color: THEME.primary, fontSize: 14, lineHeight: 1.4, margin: '0 0 16px', textAlign: 'center' }}>
+                {t.startNewCycleProgressWarning}
+              </p>
+            )}
             <div style={modalActionRowStyle()}>
-              <button
-                onClick={() => setShowStartCycleConfirm(false)}
-                style={modalActionButtonStyle()}
-              >
-                {t.cancel}
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowStartCycleConfirm(false);
-                  setNotice(t.startNewCycleStarted);
-                  onStartNewCycle();
-
-                  window.setTimeout(() => {
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }, 0);
-                }}
-                style={modalActionButtonStyle('primary')}
-              >
-                {t.startNewCycle}
-              </button>
+              <button type="button" autoFocus onClick={close} style={modalActionButtonStyle()}>{t.cancel}</button>
+              <button type="button" onClick={() => {
+                onClose();
+                onStartNewCycle();
+              }} style={modalActionButtonStyle('primary')}>{t.startNewCycle}</button>
             </div>
           </div>
-        </div>
+        </SettingsModal>
       )}
     </>
   );
@@ -10843,7 +10818,7 @@ export function getSmartProgramTitle(trainingFocus, t) {
   return t.trainingFocusBalanced;
 }
 
-export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], currentCycle, onSelect, onStartNewCycle, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, trainingFocus = SMART_TRAINING_FOCUSES.STANDARD, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, language = 'en', scheduleDateKeys = [], scheduleToday = new Date(), weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
+export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], currentCycle, onSelect, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, trainingFocus = SMART_TRAINING_FOCUSES.STANDARD, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, language = 'en', scheduleDateKeys = [], scheduleToday = new Date(), weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
   const currentWorkoutRef = useRef(null);
   const programListRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
@@ -11307,11 +11282,6 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
 
       {!smartModel && (
         <>
-          <StartNewCycleSection
-            onStartNewCycle={onStartNewCycle}
-            t={t}
-          />
-
           <ProgramProfileSection
             programProfile={programProfile}
             preparationMode={preparationMode}
@@ -12294,6 +12264,7 @@ function App() {
   const [meetPlannerAttempts, setMeetPlannerAttempts] = useState({});
   const [meetPrepChecklist, setMeetPrepChecklist] = useState({});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showStartCycleConfirm, setShowStartCycleConfirm] = useState(false);
   const [plateCalcWeightKg, setPlateCalcWeightKg] = useState(null);
   const automaticBackupKeyRef = useRef(null);
   const automaticBackupStartupAttemptedRef = useRef(false);
@@ -12578,6 +12549,7 @@ function App() {
       setShowUpdateAvailable(false);
       setShowWhatsNew(false);
       setShowResetConfirm(false);
+      setShowStartCycleConfirm(false);
       setSelectedIndex(Math.max(0, Math.min(currentIndex, workouts.length - 1)));
       setScreen('current');
     }).then(nextListener => {
@@ -12786,6 +12758,16 @@ function App() {
   useEffect(() => {
     const setupBackButton = async () => {
       const listener = await CapacitorApp.addListener('backButton', () => {
+        if (showStartCycleConfirm) {
+          setShowStartCycleConfirm(false);
+          return;
+        }
+
+        if (showResetConfirm) {
+          setShowResetConfirm(false);
+          return;
+        }
+
         if (showUpdateAvailable) {
           closeUpdateAvailable();
           return;
@@ -12864,7 +12846,7 @@ function App() {
     return () => {
       if (listener) listener.remove();
     };
-  }, [screen, completedWorkoutIndex, activeMilestoneCelebration, showWhatsNew, showAboutUpdates, showProjectVerification, showUpdateAvailable, showCalendarSettings, showCalendarPicker, closeCalendarSettings]);
+  }, [screen, completedWorkoutIndex, activeMilestoneCelebration, showWhatsNew, showAboutUpdates, showProjectVerification, showUpdateAvailable, showCalendarSettings, showCalendarPicker, closeCalendarSettings, showStartCycleConfirm, showResetConfirm]);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -13629,6 +13611,7 @@ function switchClassicToSmart() {
 
 function handleResetApp() {
   setShowResetConfirm(false);
+  setShowStartCycleConfirm(false);
   stopTimer();
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(APP_NAVIGATION_STATE_KEY);
@@ -13692,40 +13675,22 @@ function handleStartNewCycle() {
     return;
   }
 
-  const nextCycle = currentCycle + 1;
-  const loadMaxes = normalizeOneRMs(oneRMs, prs);
-  const newWorkouts = generateWorkoutsForTrainingModel(trainingModel, {
-    programProfile,
-    squat: isSmartTrainingModel(trainingModel) ? loadMaxes.Squat : prs.Squat,
-    bench: isSmartTrainingModel(trainingModel) ? loadMaxes.Bench : prs.Bench,
-    deadlift: isSmartTrainingModel(trainingModel) ? loadMaxes.Deadlift : prs.Deadlift,
-    accessoryMode,
-    accessoryPRs,
-    preparationMode,
-    workoutSetup,
-    trainingFocus,
-    athleteLevel,
-    deadliftVariant,
-    benchPressVariant,
-    squatVariant,
-    cooldownMode,
-    history,
-    currentIndex: 0,
-    currentCycle: nextCycle,
-    meetPlannerAttempts: {},
-    oneRMs,
-    idealRouteEnabled: isSmartIdealRouteEnabled({
-      currentCycle: nextCycle,
-      startCycle: smartIdealRouteStartCycle,
-    }),
+  const transition = buildNextTrainingCycle({
+    trainingModel, currentCycle, history, prs, oneRMs, bodyWeights,
+    strengthRatioMaxes, programProfile, accessoryMode, accessoryPRs,
+    preparationMode, workoutSetup, trainingFocus, deadliftVariant,
+    benchPressVariant, squatVariant, cooldownMode, smartIdealRouteStartCycle,
   });
 
-  setCurrentCycle(nextCycle);
+  stopTimer();
+  setCurrentCycle(transition.currentCycle);
   setMeetPlannerAttempts({});
-  setWorkouts(newWorkouts);
-  setCurrentWorkoutIndex(0);
-  setSelectedIndex(0);
+  setMeetPrepChecklist({});
+  setWorkouts(transition.workouts);
+  setCurrentWorkoutIndex(transition.currentIndex);
+  setSelectedIndex(transition.selectedIndex);
   setCompletedWorkout(null);
+  setCompletedWorkoutIndex(null);
   setCompletedSummary(null);
   setActiveMilestoneCelebration(null);
   setShowNewCycle(false);
@@ -16234,6 +16199,7 @@ function saveBodyWeight(data) {
 }
 
 function changeScreen(nextScreen) {
+  setShowStartCycleConfirm(false);
   if (nextScreen === 'current') {
     const safeIndex = Math.min(currentIndex, workouts.length - 1);
     setSelectedIndex(Math.max(0, safeIndex));
@@ -17090,7 +17056,6 @@ const screenAllowsContentScroll =
             setSelectedIndex(idx);
             setScreen('current');
           }}
-          onStartNewCycle={handleStartNewCycle}
           programProfile={programProfile}
           trainingModel={trainingModel}
           trainingFocus={trainingFocus}
@@ -17194,6 +17159,7 @@ const screenAllowsContentScroll =
 
       <DataSection
         t={t}
+        onReset={() => setShowResetConfirm(true)}
       />
 
       <SettingsListRow
@@ -17228,14 +17194,14 @@ const screenAllowsContentScroll =
         onProjectOpen={() => setShowProjectVerification(true)}
         onProjectBack={() => setShowProjectVerification(false)}
       />
-    <div data-testid="start-over-settings-row">
-      <SettingsListRow
-        label={t.restart}
-        actionLabel={t.startFromScratch || t.restart}
-        onAction={() => setShowResetConfirm(true)}
-        danger={true}
+      <StartNewCycleSection
+        t={t}
+        onStartNewCycle={handleStartNewCycle}
+        hasProgress={Boolean(!workouts[currentIndex]?.completed && workoutHasUserProgress(workouts[currentIndex]))}
+        isOpen={showStartCycleConfirm}
+        onOpen={() => setShowStartCycleConfirm(true)}
+        onClose={() => setShowStartCycleConfirm(false)}
       />
-    </div>
     </div>
 
   </div>

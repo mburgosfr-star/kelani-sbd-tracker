@@ -4,7 +4,7 @@ import { afterEach, beforeEach, vi } from 'vitest';
 import App from './App';
 import { translations } from './translations';
 
-const native = vi.hoisted(() => ({ callback: null, appStateCallback: null, retained: null, remove: vi.fn() }));
+const native = vi.hoisted(() => ({ callback: null, backCallback: null, appStateCallback: null, retained: null, remove: vi.fn() }));
 
 vi.mock('@capacitor/core', async importOriginal => {
   const actual = await importOriginal();
@@ -31,6 +31,7 @@ vi.mock('@capacitor/core', async importOriginal => {
 });
 vi.mock('@capacitor/app', () => ({ App: {
   addListener: async (event, callback) => {
+    if (event === 'backButton') native.backCallback = callback;
     if (event === 'appStateChange') native.appStateCallback = callback;
     return { remove: vi.fn() };
   },
@@ -125,4 +126,23 @@ test.each([true, false])('Android keeps the ready message when rest expires %s b
   // Repeated resume events must not consume the ready message either.
   await act(async () => native.appStateCallback({ isActive: true }));
   expect(screen.getByText(translations.en.readyNextSet)).toBeInTheDocument();
+});
+
+
+test('Android back cancels both cycle and delete confirmations without navigating or changing training data', async () => {
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Start', exact: true }, { timeout: 3000 }));
+  expect(screen.getByRole('dialog', { name: translations.en.startNewCycleConfirmTitle })).toBeInTheDocument();
+  const saved = localStorage.getItem(dataKey);
+  await act(async () => { native.backCallback(); });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(JSON.parse(localStorage.getItem(navigationKey)).screen).toBe('settings');
+  expect(localStorage.getItem(dataKey)).toBe(saved);
+  fireEvent.click(screen.getByRole('button', { name: 'Manage' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete all data' }));
+  expect(screen.getByRole('heading', { name: translations.en.resetConfirmTitle })).toBeInTheDocument();
+  await act(async () => { native.backCallback(); });
+  expect(screen.queryByRole('heading', { name: translations.en.resetConfirmTitle })).not.toBeInTheDocument();
+  expect(JSON.parse(localStorage.getItem(navigationKey)).screen).toBe('settings');
+  expect(localStorage.getItem(dataKey)).toBe(saved);
 });

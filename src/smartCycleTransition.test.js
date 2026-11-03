@@ -1,5 +1,6 @@
 import {
   buildAutomaticNextSmartCycle,
+  buildNextTrainingCycle,
   shouldAutomaticallyStartNextSmartCycle,
 } from './smartCycleTransition';
 import { SMART_DAY_TYPES, TRAINING_MODELS } from './smartTrainingConstants';
@@ -174,4 +175,36 @@ test('a recorded level cannot regress when the next Smart cycle starts', () => {
 
   expect(transition).not.toBeNull();
   expect(transition.workouts[0].smartIdealRoute.athleteLevel).toBe('advanced');
+});
+
+
+test('manual restart leaves an unfinished cycle without adding meet results, failures or higher maxes', () => {
+  const history = completedMeetAndRecoveryHistory().slice(0, 1).map(entry => ({
+    ...entry, cycle: 4, workoutNumber: 3, smartDayType: SMART_DAY_TYPES.TRAINING,
+    workoutSnapshot: { ...entry.workoutSnapshot, number: 3, type: 'training', smartDayType: SMART_DAY_TYPES.TRAINING },
+  }));
+  const options = {
+    trainingModel: TRAINING_MODELS.SMART, currentCycle: 4, history,
+    prs: { Squat: 100, Bench: 75, Deadlift: 125 },
+    oneRMs: { Squat: 100, Bench: 75, Deadlift: 125 },
+    bodyWeights: [{ bodyWeight: 80 }], trainingFocus: 'practical',
+  };
+  const before = JSON.stringify(options);
+  expect(buildAutomaticNextSmartCycle(options)).toBeNull();
+  const next = buildNextTrainingCycle(options);
+  expect(next).toMatchObject({ currentCycle: 5, currentIndex: 0, selectedIndex: 0 });
+  expect(next.workouts[0]).toMatchObject({ number: 1, type: 'training', smartIdealRoute: { workoutNumber: 1 } });
+  expect(next.workouts.some(workout => workout.completed)).toBe(false);
+  expect(JSON.stringify(options)).toBe(before);
+  expect(shouldAutomaticallyStartNextSmartCycle({ ...options, currentCycle: next.currentCycle })).toBe(false);
+});
+
+test('manual and automatic starts use exactly the same new-cycle prescriptions', () => {
+  const options = {
+    trainingModel: TRAINING_MODELS.SMART, currentCycle: 1,
+    history: completedMeetAndRecoveryHistory(),
+    prs: { Squat: 45, Bench: 32.5, Deadlift: 60 },
+    oneRMs: { Squat: 45, Bench: 32.5, Deadlift: 60 },
+  };
+  expect(buildNextTrainingCycle(options)).toEqual(buildAutomaticNextSmartCycle(options));
 });
