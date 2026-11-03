@@ -1,0 +1,1 @@
+Je kunt vanuit Instellingen een nieuwe cyclus starten zonder de geplande wedstrijd te doen. Geschiedenis, PR’s, lichaamsgegevens en instellingen blijven bewaard. Je krijgt een waarschuwing als de huidige workout al ingevulde onderdelen heeft. De volledige appreset staat nu onder Data en back-ups, met een afzonderlijke bevestiging.

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-10-22
+Last updated: 2026-11-03
 
 Kelani SBD Tracker is an offline-first powerlifting tracker for Squat, Bench Press and Deadlift training.
 
@@ -89,7 +89,7 @@ The developer may receive purchase or supporter information made available by th
 
 Your app data is kept locally on your device. Events added to a selected calendar are kept by that calendar and may also be retained by its provider. Removing Kelani or its app data does not necessarily remove events already written to a calendar.
 
-You can delete your data by clearing the app data, uninstalling the app, or replacing it with an imported backup.
+You can delete your local training data through **Settings → Data & backups → Manage → Delete all data**, after a separate confirmation. You can also clear the app data, uninstall the app, or replace the local record with an imported backup. Resetting the app does not delete separate backup files or events already written to a calendar.
 
 Because Kelani SBD Tracker does not use accounts or an app server, the developer does not hold a server-side copy of your local app data. If you voluntarily send an email or other message, that message and its contents may remain in the developer's mailbox until deleted.
 

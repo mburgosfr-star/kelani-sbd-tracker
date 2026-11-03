@@ -1,0 +1,1 @@
+Pots començar un nou cicle des de Configuració sense fer la competició prevista. L’historial, els rècords personals, les dades corporals i la configuració es conserven. Apareix un avís si l’entrenament actual ja té progrés registrat. El restabliment complet de l’app és ara a Dades i còpies, amb una confirmació separada.

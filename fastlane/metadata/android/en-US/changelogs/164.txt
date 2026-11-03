@@ -1,0 +1,1 @@
+Start a new cycle from Settings without completing the planned meet. History, PRs, body data and settings stay saved. A warning appears if the current workout already has recorded progress. Full app reset is now under Data & backups, with a separate confirmation.
