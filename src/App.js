@@ -160,10 +160,6 @@ import {
   mergeAccessoryPrsFromWorkout,
 } from './completionState';
 import {
-  buildAnonymousUsageMetrics,
-  buildAnonymousUsageReport,
-} from './anonymousUsageSummary';
-import {
   LATEST_WHATS_NEW_VERSION,
   WHATS_NEW_LAST_SEEN_KEY,
   shouldAutoShowWhatsNew,
@@ -4708,8 +4704,8 @@ export function buildCycleFeedbackEmailUrl({
     '',
     `3. ${t.cycleFeedbackImprove}`,
     '',
-    `${t.usageAppVersion}: ${appVersion || 'dev'}`,
-    `${t.usageLanguage}: ${languageLabel}`,
+    `${t.feedbackAppVersion}: ${appVersion || 'dev'}`,
+    `${t.feedbackLanguage}: ${languageLabel}`,
   ].join('\n'));
 
   return `mailto:mburgosfr@gmail.com?subject=${subject}&body=${body}`;
@@ -4722,174 +4718,12 @@ export function shouldShowCycleFeedbackAction({
   return Boolean(completedWorkoutIsMeet || completedWorkoutCanStartNewCycle);
 }
 
-function usageModeLabel(mode, kind, t) {
-  if (!mode || mode === 'off') return t.programOptionOff;
-  if (kind === 'preparation') {
-    return mode === 'shoulderThoracic'
-      ? t.programPreparationUpperBackFriendly
-      : t.programPreparationGeneral;
-  }
-  if (kind === 'accessories') {
-    return mode === 'standard'
-      ? t.programAccessoriesGeneral
-      : t.programAccessoriesUpperBackFriendly;
-  }
-  return t.programCooldownUpperBackFriendly;
-}
-
-export function getAnonymousUsagePreviewRows(metrics = {}, t = translations.en) {
-  const efforts = metrics.efforts || {};
-  const languageLabels = {
-    nl: t.languageDutch,
-    en: t.languageEnglish,
-    ca: t.languageCatalan,
-  };
-  const modelLabels = {
-    smart: t.trainingModelSmart,
-    classic: t.trainingModelClassic,
-  };
-  const levelLabels = {
-    beginner: t.athleteLevelBeginner,
-    intermediate: t.athleteLevelIntermediate,
-    advanced: t.athleteLevelAdvanced,
-    elite: t.athleteLevelElite,
-  };
-
-  return [
-    [t.usageAppVersion, metrics.appVersion || 'dev'],
-    [t.usageLanguage, languageLabels[metrics.language] || metrics.language || '-'],
-    [t.usageWeightUnit, metrics.weightUnit || '-'],
-    [t.usageTrainingModel, modelLabels[metrics.trainingModel] || metrics.trainingModel || '-'],
-    [t.usageAthleteLevel, levelLabels[metrics.athleteLevel] || metrics.athleteLevel || '-'],
-    [t.usageCompletedSessions, Number(metrics.completedSessions) || 0],
-    [
-      t.usageSessionBreakdown,
-      `${t.usageTrainingShort} ${Number(metrics.trainingSessions) || 0}, ` +
-      `${t.usageRecoveryShort} ${Number(metrics.recoverySessions) || 0}, ` +
-      `${t.usageMeetShort} ${Number(metrics.meetSessions) || 0}`,
-    ],
-    [
-      t.usageWorkoutFeedback,
-      `${t.workoutEffortEasy} ${Number(efforts.easy) || 0}, ` +
-      `${t.workoutEffortGood} ${Number(efforts.good) || 0}, ` +
-      `${t.workoutEffortHard} ${Number(efforts.hard) || 0}, ` +
-      `${t.usageNotRecorded} ${Number(efforts.unrecorded) || 0}`,
-    ],
-    [t.usageFailedSets, Number(metrics.failedSets) || 0],
-    [t.usageMilestoneCelebrations, Number(metrics.milestoneCelebrations) || 0],
-    [t.usagePreparation, usageModeLabel(metrics.preparationMode, 'preparation', t)],
-    [t.usageAccessories, usageModeLabel(metrics.accessoryMode, 'accessories', t)],
-    [t.usageCooldown, usageModeLabel(metrics.cooldownMode, 'cooldown', t)],
-  ];
-}
-
-export function AnonymousUsageShareModal({ metrics, t, onClose }) {
-  const [copyState, setCopyState] = useState('idle');
-  const report = buildAnonymousUsageReport(metrics, t);
-  const rows = getAnonymousUsagePreviewRows(metrics, t);
-
-  async function copyReport() {
-    try {
-      await copySmartDiagnosticText(report);
-      setCopyState('copied');
-    } catch (error) {
-      console.error('Could not copy usage summary', error);
-      setCopyState('error');
-    }
-  }
-
-  function emailReport() {
-    const subject = encodeURIComponent(t.usageEmailSubject);
-    const body = encodeURIComponent(report);
-    window.open(
-      `mailto:mburgosfr@gmail.com?subject=${subject}&body=${body}`,
-      '_blank',
-      'noopener,noreferrer'
-    );
-  }
-
-  return (
-    <SettingsModal title={t.usageShareTitle} onClose={onClose}>
-      <p style={{
-        margin: '0 0 8px',
-        color: THEME.text,
-        fontSize: 13,
-        fontWeight: 700,
-        lineHeight: 1.4,
-        textAlign: 'center',
-      }}>
-        {t.usageShareIntro}
-      </p>
-
-      <p style={{
-        margin: '0 0 12px',
-        color: THEME.green,
-        fontSize: 12,
-        fontWeight: 800,
-        lineHeight: 1.35,
-        textAlign: 'center',
-      }}>
-        {t.usageSharePrivacy}
-      </p>
-
-      <div style={{
-        display: 'grid',
-        gap: 5,
-        marginBottom: 12,
-        fontSize: 12,
-      }}>
-        {rows.map(([label, value]) => (
-          <div
-            key={label}
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.1fr)',
-              gap: 10,
-              alignItems: 'start',
-            }}
-          >
-            <span style={{ color: THEME.muted, fontWeight: 700 }}>{label}</span>
-            <strong style={{ color: THEME.text, textAlign: 'right', overflowWrap: 'anywhere' }}>
-              {value}
-            </strong>
-          </div>
-        ))}
-      </div>
-
-      <p style={{ color: THEME.text, fontSize: 12, lineHeight: 1.4, margin: '0 0 12px' }}>
-        {t.usageEmailPrivacy}
-      </p>
-
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-        gap: 8,
-      }}>
-        <SupportActionButton onClick={copyReport}>
-          {copyState === 'copied'
-            ? t.usageCopied
-            : copyState === 'error'
-              ? t.usageCopyError
-              : t.usageCopy}
-        </SupportActionButton>
-        <SupportActionButton onClick={emailReport}>{t.usageEmail}</SupportActionButton>
-      </div>
-
-      <div style={{ marginTop: 8 }}>
-        <SupportActionButton compact onClick={onClose}>{t.close}</SupportActionButton>
-      </div>
-    </SettingsModal>
-  );
-}
-
 export function MilestoneCelebrationModal({
   celebration,
   t,
   weightUnit = WEIGHT_UNITS.KG,
-  usageMetrics,
   onClose,
 }) {
-  const [showUsageSummary, setShowUsageSummary] = useState(false);
   if (!celebration?.achievements?.length) return null;
 
   const hasLevelMilestone = celebration.achievements.some(item => item.type === 'level');
@@ -4937,10 +4771,6 @@ export function MilestoneCelebrationModal({
 
   const actions = [
     {
-      label: t.usageShareAction,
-      onClick: () => setShowUsageSummary(true),
-    },
-    {
       label: t.contactKelani,
       onClick: () => openLink('mailto:mburgosfr@gmail.com?subject=Kelani%20contact'),
     },
@@ -4951,7 +4781,6 @@ export function MilestoneCelebrationModal({
   ];
 
   return (
-    <>
     <SettingsModal
       title={hasLevelMilestone
         ? (t.milestoneLevelTitle)
@@ -5034,24 +4863,15 @@ export function MilestoneCelebrationModal({
         ))}
       </div>
     </SettingsModal>
-    {showUsageSummary && (
-      <AnonymousUsageShareModal
-        metrics={usageMetrics}
-        t={t}
-        onClose={() => setShowUsageSummary(false)}
-      />
-    )}
-    </>
   );
 }
 
 function AboutSupportSection({
-  t, language, usageMetrics, currentVersion, latestVersion, checkStatus,
+  t, language, currentVersion, latestVersion, checkStatus,
   checkAutomatically, onCheckAutomaticallyChange, onCheck, onOpenWhatsNew,
   onOpenUpdateLink, onPrepareUpdates, isOpen, onOpen, onClose,
   projectOpen, onProjectOpen, onProjectBack,
 }) {
-  const [showUsageSummary, setShowUsageSummary] = useState(false);
 
   function openLink(url) {
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -5062,10 +4882,6 @@ function AboutSupportSection({
     [t.aboutSigningSha256, '15d23f2e5ee95ebc2a530b48be6f27dad7a568f722bc819f4571b3470a2ff39d'],
   ];
   const actions = [
-    {
-      label: t.usageShareAction,
-      onClick: () => setShowUsageSummary(true),
-    },
     {
       label: t.feedbackViaGitHub,
       onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=feedback.md'),
@@ -5178,8 +4994,13 @@ function AboutSupportSection({
             gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
             gap: 8,
           }}>
-            {actions.map(item => (
-              <div key={item.label} style={{ display: 'grid' }}>
+            {actions.map((item, index) => (
+              <div key={item.label} style={index === actions.length - 1 && actions.length % 2 === 1 ? {
+                display: 'grid',
+                gridColumn: '1 / -1',
+                width: 'calc(50% - 4px)',
+                justifySelf: 'center',
+              } : { display: 'grid' }}>
                 <SupportActionButton onClick={item.onClick}>
                   {item.label}
                 </SupportActionButton>
@@ -5208,14 +5029,6 @@ function AboutSupportSection({
             </button>
 
         </UpdatesSettingsModal>
-      )}
-
-      {showUsageSummary && (
-        <AnonymousUsageShareModal
-          metrics={usageMetrics}
-          t={t}
-          onClose={() => setShowUsageSummary(false)}
-        />
       )}
     </>
   );
@@ -12214,29 +12027,6 @@ function App() {
       setTrainingFocus(SMART_TRAINING_FOCUSES.STANDARD);
     }
   }, [hasLoadedData, athleteLevel, trainingFocus]);
-  const anonymousUsageMetrics = useMemo(
-    () => buildAnonymousUsageMetrics({
-      history,
-      appVersion: import.meta.env.VITE_APP_VERSION || 'dev',
-      language,
-      weightUnit,
-      trainingModel,
-      athleteLevel,
-      preparationMode,
-      accessoryMode,
-      cooldownMode,
-    }),
-    [
-      history,
-      language,
-      weightUnit,
-      trainingModel,
-      athleteLevel,
-      preparationMode,
-      accessoryMode,
-      cooldownMode,
-    ]
-  );
   const bestMaxesFromHistory = useMemo(
     () => calculateBestMaxesFromHistory(history),
     [history]
@@ -17171,7 +16961,6 @@ const screenAllowsContentScroll =
       <AboutSupportSection
         t={t}
         language={language}
-        usageMetrics={anonymousUsageMetrics}
         currentVersion={installedUpdateVersion}
         latestVersion={latestAvailableVersion}
         checkStatus={updateCheckStatus}
@@ -17614,7 +17403,6 @@ const screenAllowsContentScroll =
     celebration={activeMilestoneCelebration}
     t={t}
     weightUnit={weightUnit}
-    usageMetrics={anonymousUsageMetrics}
     onClose={() => setActiveMilestoneCelebration(null)}
   />
 )}

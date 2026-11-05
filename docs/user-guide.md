@@ -68,7 +68,7 @@ After granting Android calendar access, select a calendar and start the first sy
 
 Events receive a reminder at their start time. Reminders you change are preserved, and events you manually delete stay deleted. You can choose to remove Kelani’s events for completed workouts. Your calendar provider may sync events through its own service.
 
-The optional usage summary is generated locally and shown in full before you choose to copy or email it. Sending email reveals your sender address and possibly your name. See the [privacy policy](privacy-policy.md) for the complete calendar, sharing and update-check details.
+Feedback and issue reporting remain available in About & Updates. You choose what to submit through GitHub or your email app. Email reveals your sender address and possibly your name. See the [privacy policy](privacy-policy.md) for the complete calendar, sharing and update-check details.
 
 ## Google Play Testing
 

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-11-03
+Last updated: 2026-11-05
 
 Kelani SBD Tracker is an offline-first powerlifting tracker for Squat, Bench Press and Deadlift training.
 
@@ -22,28 +22,11 @@ The app stores your training data locally on your device. This may include:
 
 This app data stays on your device unless you choose to export or share it. The optional Android calendar integration described below also writes brief workout events to the calendar you select.
 
-## Optional usage summary
+## Optional feedback and contact
 
-Kelani can create a usage summary locally on your device. This is not automatic analytics or telemetry. The summary is generated only when you choose the sharing option, and the app shows the complete summary before you decide whether to copy or email it.
+You can choose to contact Kelani or share feedback through your email app or GitHub. Kelani does not send messages automatically. The cycle-feedback email draft includes questions, the app version and interface language; you decide what to write and whether to send it. Sending email reveals your sender email address, possibly your name, and other metadata normally included by your email provider. GitHub handles information you submit there under its own privacy terms.
 
-The summary may contain:
-
-- App version, language and weight unit
-- Training model and experience level
-- Aggregate counts of completed training, recovery and meet sessions
-- Aggregate workout-feedback counts
-- Counts of sets explicitly marked as failed and milestone celebrations. Optional preparation, accessory or cool-down work left unchecked is not counted as failed
-- Selected preparation, accessory and cool-down modes
-
-The summary does not contain:
-
-- Training weights, PRs, 1RM or e1RM values
-- Bodyweight or body-composition data
-- Dates or timestamps
-- Device information or identifiers
-- Individual workouts or full training history
-
-The usage summary is not sent automatically. Copying keeps the decision and destination under your control. Choosing email opens your email app with the summary prepared for you; the message is sent only if you choose to send it. An email you send also gives the developer your sender email address, possibly your name, and other metadata normally included by your email provider. Sending the summary by email is therefore not anonymous.
+Versions through 2.0.64 include a locally generated usage summary with aggregate training counts and settings. Later versions no longer include this feature. Any summary previously sent by email may remain in the recipient's mailbox until deleted.
 
 ## Optional Android calendar integration
 
@@ -61,7 +44,7 @@ If you choose a calendar linked to an external account, that account is managed 
 
 ## Ads and tracking
 
-Kelani SBD Tracker contains no ads, analytics SDK, telemetry or tracking. The optional locally generated usage summary described above is a manual, user-controlled sharing feature.
+Kelani SBD Tracker contains no ads, analytics SDK, telemetry or tracking. Feedback and contact are voluntary actions through external services, as described above.
 
 ## Update checks
 

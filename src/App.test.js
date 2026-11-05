@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsScrollableContentStyle, statsTabListStyle } from './StatsScreen';
-import App, { StartNewCycleSection, AllWorkouts, ProgramCompletedSetSummary, AnonymousUsageShareModal, AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
+import App, { StartNewCycleSection, AllWorkouts, ProgramCompletedSetSummary, AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
 import { translations } from './translations';
 
 test.each(['nl', 'en', 'ca'])(
@@ -19,8 +19,8 @@ test.each(['nl', 'en', 'ca'])(
     expect(decodedUrl).toContain(`1. ${t.cycleFeedbackWorkedWell}`);
     expect(decodedUrl).toContain(`2. ${t.cycleFeedbackDidNotWork}`);
     expect(decodedUrl).toContain(`3. ${t.cycleFeedbackImprove}`);
-    expect(decodedUrl).toContain(`${t.usageAppVersion}: 2.0.35`);
-    expect(decodedUrl).toContain(`${t.usageLanguage}: ${t[`language${language === 'nl' ? 'Dutch' : language === 'ca' ? 'Catalan' : 'English'}`]}`);
+    expect(decodedUrl).toContain(`${t.feedbackAppVersion}: 2.0.35`);
+    expect(decodedUrl).toContain(`${t.feedbackLanguage}: ${t[`language${language === 'nl' ? 'Dutch' : language === 'ca' ? 'Catalan' : 'English'}`]}`);
     expect(decodedUrl).not.toContain('completed_sessions');
     expect(decodedUrl).not.toContain('failed_sets');
   }
@@ -1580,25 +1580,13 @@ test('milestone celebration overlays the already-rendered completed screen and c
   expect(modalOverlay.style.zIndex).toBe('650');
 
   expect(screen.queryByRole('button', { name: 'Support' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Share usage data' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Share usage data' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Contact' })).toBeInTheDocument();
   const milestoneClose = within(modalOverlay).getByRole('button', { name: 'Close' });
-  expect(milestoneClose.parentElement.style.gridColumn).toBe('1 / -1');
-  expect(milestoneClose.parentElement.style.justifySelf).toBe('center');
+  expect(milestoneClose.parentElement.style.gridColumn).toBe('');
+  expect(milestoneClose.parentElement.style.justifySelf).toBe('');
 
-  fireEvent.click(screen.getByRole('button', { name: 'Share usage data' }));
-  expect(screen.getByRole('heading', { name: 'Usage summary' })).toBeInTheDocument();
-  expect(screen.getByText(/No weights, PRs, body data, dates, device data or training history/))
-    .toBeInTheDocument();
-  const openSpy = jest.spyOn(window, 'open').mockImplementation(() => {});
-  fireEvent.click(screen.getByRole('button', { name: 'Email Kelani' }));
-  expect(openSpy.mock.calls.at(-1)[0]).toMatch(
-    /^mailto:mburgosfr@gmail\.com\?subject=Kelani%20usage%20summary&body=/
-  );
-  openSpy.mockRestore();
-
-  fireEvent.click(screen.getAllByRole('button', { name: 'Close' }).at(-1));
-  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  fireEvent.click(milestoneClose);
   expect(onClose).toHaveBeenCalledTimes(1);
 });
 
@@ -2755,13 +2743,12 @@ test('settings combines About and Updates in one modal', async () => {
   expect(screen.getByLabelText('Automatically check for updates')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Check now' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Support' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Share usage data' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Share usage data' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Feedback' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Share your experience' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Report issue' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'GitHub repo' })).not.toBeInTheDocument();
   const mainActionButtons = [
-    'Share usage data',
     'Feedback',
     'Share your experience',
     'Report issue',
@@ -2769,11 +2756,14 @@ test('settings combines About and Updates in one modal', async () => {
   expect(new Set(mainActionButtons.map(button => button.style.minHeight)))
     .toEqual(new Set(['var(--kelani-button-height)']));
 
-  expect(mainActionButtons).toHaveLength(4);
-  mainActionButtons.forEach(button => {
+  expect(mainActionButtons).toHaveLength(3);
+  mainActionButtons.slice(0, 2).forEach(button => {
     expect(button.parentElement.style.gridColumn).toBe('');
     expect(button.parentElement.style.width).toBe('');
   });
+  expect(mainActionButtons[2].parentElement.style.gridColumn).toBe('1 / -1');
+  expect(mainActionButtons[2].parentElement.style.width).toBe('calc(50% - 4px)');
+  expect(mainActionButtons[2].parentElement.style.justifySelf).toBe('center');
 
   const openSpy = jest.spyOn(window, 'open').mockImplementation(() => {});
   fireEvent.click(screen.getByRole('button', { name: 'Feedback' }));
@@ -3007,26 +2997,6 @@ test('header information icon belongs to the whole context block', () => {
   expect(lines).toHaveTextContent('Cycle 6');
   expect(lines).toHaveTextContent('Workout 4');
   expect(info.parentElement).toHaveStyle({ alignItems: 'center', minHeight: '60px' });
-});
-
-
-test.each(['nl', 'en', 'ca'])('usage email in %s explains sender identity before opening a localized draft', language => {
-  const t = translations[language];
-  const openSpy = jest.spyOn(window, 'open').mockImplementation(() => {});
-  try {
-    render(<AnonymousUsageShareModal metrics={{ language }} t={t} onClose={() => {}} />);
-    const emailButton = screen.getByRole('button', { name: t.usageEmail });
-    const explanation = screen.getByText(t.usageEmailPrivacy);
-    expect(explanation).toBeVisible();
-    expect(explanation.compareDocumentPosition(emailButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(openSpy).not.toHaveBeenCalled();
-    fireEvent.click(emailButton);
-    const url = new URL(openSpy.mock.calls[0][0]);
-    expect(url.searchParams.get('subject')).toBe(t.usageEmailSubject);
-    expect(url.searchParams.get('body').split('\n')[0]).toBe(t.usageEmailSubject);
-  } finally {
-    openSpy.mockRestore();
-  }
 });
 
 
