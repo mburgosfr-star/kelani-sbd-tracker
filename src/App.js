@@ -3843,9 +3843,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewCycleStartItem,
-    t.whatsNewCycleDataItem,
-    t.whatsNewResetLocationItem,
+    t.whatsNewSharingItem,
+    t.whatsNewAboutShortcutItem,
+    t.whatsNewContactItem,
   ];
 
   return (
