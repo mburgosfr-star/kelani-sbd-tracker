@@ -60,7 +60,7 @@ The timer provides sound and Android notifications. After the final warm-up befo
 
 In **Settings → Workout setup**, choose whether preparation and accessories are enabled, which exercises belong to each lift, and their sets and reps. Kelani places the selected exercises into relevant workouts and chooses their training intensity. Meet Day contains only the competition lifts.
 
-Statistics track 1RM, estimated 1RM, SBD totals, Strength, eStrength and body measurements. Completed cycles include a results review, progress since the start and a chart of the best recorded 1RM total. You can send feedback from the review. Navigating to another screen starts the next cycle.
+Statistics track 1RM, estimated 1RM, SBD totals, Strength, eStrength and body measurements. Completed cycles include a results review, progress since the start and a chart of the best recorded 1RM total. You can preview and share a cycle-results card from the review. Navigating to another screen starts the next cycle.
 
 ## Optional Calendar and Sharing
 
@@ -69,6 +69,16 @@ After granting Android calendar access, select a calendar and start the first sy
 Events receive a reminder at their start time. Reminders you change are preserved, and events you manually delete stay deleted. You can choose to remove Kelani’s events for completed workouts. Your calendar provider may sync events through its own service.
 
 Feedback and issue reporting remain available in About & Updates. You choose what to submit through GitHub or your email app. Email reveals your sender address and possibly your name. See the [privacy policy](privacy-policy.md) for the complete calendar, sharing and update-check details.
+
+## Sharing and Contact
+
+Tap the logo or the version with the information icon to open **Settings → About & Updates**. The logo and version form one button. This does not reset your training data.
+
+**Share Kelani** is available after completing a workout, rest day, meet or cycle, on strength-milestone dialogs, and in About & Updates. Review the image and download text before choosing **Share**. Result cards use successful recorded sets and achievements, not planned or failed weights. Estimated records remain labeled e1RM. Meet totals require a successful result for all three lifts. Cards follow your interface language and weight unit. They exclude names, body measurements, notes and full training backups.
+
+On Android, choose an app and recipient in the system share sheet. The image includes the Kelani download address; the accompanying text contains a clickable link. The receiving app decides how image and text appear. Canceling does not change your saved workout. In browsers that do not support image sharing, download the image and use **Copy download link** to include the text when you send it.
+
+About & Updates has one email action, one link to the GitHub project, and one link to IzzyOnDroid, also usable with clients such as NeoStore. Email opens a blank draft; GitHub provides downloads, feedback and issue reporting. **Support Kelani** remains a separate, optional GitHub Sponsors action. Completing training or reaching a milestone no longer prompts you to email feedback.
 
 ## Google Play Testing
 

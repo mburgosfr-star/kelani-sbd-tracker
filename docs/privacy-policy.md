@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-11-05
+Last updated: 2026-11-07
 
 Kelani SBD Tracker is an offline-first powerlifting tracker for Squat, Bench Press and Deadlift training.
 
@@ -24,9 +24,15 @@ This app data stays on your device unless you choose to export or share it. The 
 
 ## Optional feedback and contact
 
-You can choose to contact Kelani or share feedback through your email app or GitHub. Kelani does not send messages automatically. The cycle-feedback email draft includes questions, the app version and interface language; you decide what to write and whether to send it. Sending email reveals your sender email address, possibly your name, and other metadata normally included by your email provider. GitHub handles information you submit there under its own privacy terms.
+You can choose to contact Kelani or share feedback through your email app or GitHub. Kelani does not send messages automatically. The email action opens a blank message with a Kelani subject. You decide what to write and whether to send it; Kelani does not attach training data or app metadata. Sending email reveals your sender email address, possibly your name, and other metadata normally included by your email provider. GitHub handles information you submit there under its own privacy terms.
 
 Versions through 2.0.64 include a locally generated usage summary with aggregate training counts and settings. Later versions no longer include this feature. Any summary previously sent by email may remain in the recipient's mailbox until deleted.
+
+## Optional achievement sharing
+
+You can preview and share a Kelani image from a completed workout, rest day, meet, cycle or strength milestone, or share a general Kelani card from About & Updates. Images are generated on your device. A result card can contain successful work-set weights and repetitions, achieved meet results, cycle counts and strength records, estimated records or experience-level achievements. The card does not include your name, email address, body measurements, free-text notes or a full training backup. The preview shows the exact image and accompanying download text before you share.
+
+On Android, Kelani writes the image to its private cache and opens the system share sheet only after you choose Share. You choose the receiving app and recipient. The receiving app may transmit or store the image, text and its own account or connection information under its own privacy policy. Kelani does not send the image to the developer or a Kelani server. A cached image may remain on your device until replaced or the system clears the cache. Browsers that cannot share image files offer an image download and a separate action to copy the download link. Downloaded images and copies sent to others are not removed when you delete your local Kelani training data.
 
 ## Optional Android calendar integration
 
@@ -64,7 +70,7 @@ If you use the export, contact or sharing features, you choose what to send and 
 
 GitHub and IzzyOnDroid are external distribution services. Their websites may process connection information, cookies and download statistics under their own privacy policies. The app's absence of automatic analytics does not describe these external websites.
 
-Optional GitHub Sponsors contributions are available through the project website, rather than through contribution links in Kelani. They are handled by GitHub and its payment providers, which may process contact, billing and transaction information under their own privacy policies. If you obtain the app or make a contribution through another external service, that service handles its website and transactions under its own terms and privacy policy.
+Optional GitHub Sponsors contributions are available through the separate Support Kelani link in About & Updates and through the project website. They are handled by GitHub and its payment providers, which may process contact, billing and transaction information under their own privacy policies. If you obtain the app or make a contribution through another external service, that service handles its website and transactions under its own terms and privacy policy.
 
 The developer may receive purchase or supporter information made available by the chosen service to administer support and transactions. These external transactions do not send your local training records or body data from Kelani. There is no payment SDK, account activation or purchase verification inside the app.
 

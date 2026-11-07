@@ -1,40 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsScrollableContentStyle, statsTabListStyle } from './StatsScreen';
-import App, { StartNewCycleSection, AllWorkouts, ProgramCompletedSetSummary, AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildCycleFeedbackEmailUrl, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowCycleFeedbackAction, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
+import App, { StartNewCycleSection, AllWorkouts, ProgramCompletedSetSummary, AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
 import { translations } from './translations';
-
-test.each(['nl', 'en', 'ca'])(
-  'cycle feedback email is localized and contains only the three prompts plus app metadata in %s',
-  language => {
-    const t = translations[language];
-    const url = buildCycleFeedbackEmailUrl({
-      t,
-      language,
-      appVersion: '2.0.35',
-    });
-    const decodedUrl = decodeURIComponent(url);
-
-    expect(url).toMatch(/^mailto:mburgosfr@gmail\.com\?subject=/);
-    expect(decodedUrl).toContain(t.cycleFeedbackEmailSubject);
-    expect(decodedUrl).toContain(`1. ${t.cycleFeedbackWorkedWell}`);
-    expect(decodedUrl).toContain(`2. ${t.cycleFeedbackDidNotWork}`);
-    expect(decodedUrl).toContain(`3. ${t.cycleFeedbackImprove}`);
-    expect(decodedUrl).toContain(`${t.feedbackAppVersion}: 2.0.35`);
-    expect(decodedUrl).toContain(`${t.feedbackLanguage}: ${t[`language${language === 'nl' ? 'Dutch' : language === 'ca' ? 'Catalan' : 'English'}`]}`);
-    expect(decodedUrl).not.toContain('completed_sessions');
-    expect(decodedUrl).not.toContain('failed_sets');
-  }
-);
-
-test('cycle feedback is offered only after a completed meet or cycle boundary', () => {
-  expect(shouldShowCycleFeedbackAction()).toBe(false);
-  expect(shouldShowCycleFeedbackAction({ completedWorkoutIsMeet: true })).toBe(true);
-  expect(shouldShowCycleFeedbackAction({ completedWorkoutCanStartNewCycle: true })).toBe(true);
-  expect(shouldShowCycleFeedbackAction({
-    completedWorkoutIsMeet: false,
-    completedWorkoutCanStartNewCycle: false,
-  })).toBe(false);
-});
 
 test('a failed Squat set uses the darker SBD status color instead of the Squat lift color', () => {
   render(
@@ -1581,7 +1548,7 @@ test('milestone celebration overlays the already-rendered completed screen and c
 
   expect(screen.queryByRole('button', { name: 'Support' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Share usage data' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Contact' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Share Kelani' })).toBeInTheDocument();
   const milestoneClose = within(modalOverlay).getByRole('button', { name: 'Close' });
   expect(milestoneClose.parentElement.style.gridColumn).toBe('');
   expect(milestoneClose.parentElement.style.justifySelf).toBe('');
@@ -2744,44 +2711,22 @@ test('settings combines About and Updates in one modal', async () => {
   expect(screen.getByRole('button', { name: 'Check now' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Support' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Share usage data' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Feedback' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Share your experience' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Report issue' })).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'GitHub repo' })).not.toBeInTheDocument();
-  const mainActionButtons = [
-    'Feedback',
-    'Share your experience',
-    'Report issue',
-  ].map(name => screen.getByRole('button', { name }));
+  const mainActionButtons = ['Share Kelani', 'Email Kelani', 'GitHub repo', 'IzzyOnDroid (NeoStore)']
+    .map(name => screen.getByRole('button', { name }));
+  expect(screen.queryByRole('button', { name: 'Feedback' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Share your experience' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Support Kelani' })).toBeInTheDocument();
   expect(new Set(mainActionButtons.map(button => button.style.minHeight)))
     .toEqual(new Set(['var(--kelani-button-height)']));
-
-  expect(mainActionButtons).toHaveLength(3);
-  mainActionButtons.slice(0, 2).forEach(button => {
+  mainActionButtons.forEach(button => {
     expect(button.parentElement.style.gridColumn).toBe('');
     expect(button.parentElement.style.width).toBe('');
   });
-  expect(mainActionButtons[2].parentElement.style.gridColumn).toBe('1 / -1');
-  expect(mainActionButtons[2].parentElement.style.width).toBe('calc(50% - 4px)');
-  expect(mainActionButtons[2].parentElement.style.justifySelf).toBe('center');
-
   const openSpy = jest.spyOn(window, 'open').mockImplementation(() => {});
-  fireEvent.click(screen.getByRole('button', { name: 'Feedback' }));
-  expect(openSpy).toHaveBeenCalledWith(
-    'https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=feedback.md',
-    '_blank',
-    'noopener,noreferrer'
-  );
-  fireEvent.click(screen.getByRole('button', { name: 'Share your experience' }));
-  expect(openSpy).toHaveBeenCalledWith(
-    buildCycleFeedbackEmailUrl({
-      t: translations.en,
-      language: 'en',
-      appVersion: import.meta.env.VITE_APP_VERSION || 'dev',
-    }),
-    '_blank',
-    'noopener,noreferrer'
-  );
+  fireEvent.click(screen.getByRole('button', { name: 'Email Kelani' }));
+  expect(openSpy).toHaveBeenCalledWith('mailto:mburgosfr@gmail.com?subject=Kelani', '_blank', 'noopener,noreferrer');
+  fireEvent.click(screen.getByRole('button', { name: 'Support Kelani' }));
+  expect(openSpy).toHaveBeenCalledWith('https://github.com/sponsors/mburgosfr-star', '_blank', 'noopener,noreferrer');
 
   const projectButton = screen.getByRole('button', { name: 'Project & Verification' });
   expect(projectButton.querySelector('[aria-hidden="true"]')).toHaveTextContent('i');
@@ -2795,8 +2740,8 @@ test('settings combines About and Updates in one modal', async () => {
   expect(screen.getByRole('heading', { name: 'Project & Verification' })
     .parentElement.parentElement.style.zIndex).toBe('660');
   expect(screen.queryByRole('button', { name: 'Support' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'GitHub repo' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'IzzyOnDroid (NeoStore)' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'GitHub repo' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'IzzyOnDroid (NeoStore)' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Verify release' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
@@ -2810,19 +2755,11 @@ test('settings combines About and Updates in one modal', async () => {
   ).style.overflowWrap).toBe('anywhere');
 
   const projectActionButtons = [
-    'GitHub repo',
-    'IzzyOnDroid (NeoStore)',
     'Verify release',
     'Back',
   ].map(name => screen.getByRole('button', { name }));
   expect(new Set(projectActionButtons.map(button => button.style.minHeight)))
     .toEqual(new Set(['var(--kelani-button-height)']));
-  fireEvent.click(screen.getByRole('button', { name: 'IzzyOnDroid (NeoStore)' }));
-  expect(openSpy).toHaveBeenCalledWith(
-    'https://apt.izzysoft.de/packages/com.kelani.sbdtracker',
-    '_blank',
-    'noopener,noreferrer'
-  );
   fireEvent.click(screen.getByRole('button', { name: 'Verify release' }));
   expect(openSpy).toHaveBeenCalledWith(
     'https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/VERIFY.md',
@@ -2834,7 +2771,7 @@ test('settings combines About and Updates in one modal', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Back' }));
   expect(screen.getByRole('heading', { name: 'About & Updates' })).toBeInTheDocument();
   expect(screen.getByLabelText('Automatically check for updates')).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'GitHub repo' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'GitHub repo' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Close' }).style.width)
     .toBe(screen.getByRole('button', { name: 'Check now' }).style.width);
   expect(screen.getByRole('button', { name: 'View updates' }).style.width)
@@ -3166,4 +3103,23 @@ test('full reset is available only through Data and still requires a separate de
   fireEvent.click(screen.getByRole('button', { name: 'Yes, delete everything' }));
   expect(localStorage.getItem(key)).toBeNull();
   expect(await screen.findByText('Start with Smart Training')).toBeInTheDocument();
+});
+
+test('header logo and centered version open About without changing workout data', async () => {
+  localStorage.clear();
+  localStorage.setItem('language', 'en');
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({ version: 1, trainingModel: 'smart', currentCycle: 2, prs: { Squat: 100, Bench: 75, Deadlift: 125 }, history: [] }));
+  localStorage.setItem('kelani-whats-new-last-seen-version', import.meta.env.VITE_APP_VERSION || 'dev');
+  render(<App />);
+  const logo = await screen.findByRole('button', { name: translations.en.aboutAndUpdates }, { timeout: 3000 });
+  expect(logo).toHaveAttribute('data-kelani-button-size', 'contextual');
+  expect(logo).toHaveStyle({ width: '84px', minWidth: '0' });
+  const version = logo.querySelector('svg').nextElementSibling;
+  expect(version).toHaveStyle({ display: 'block', textAlign: 'center' });
+  expect(version.querySelector('[aria-hidden="true"]')).toHaveTextContent('i');
+  fireEvent.click(logo);
+  expect(screen.getByRole('heading', { name: translations.en.aboutAndUpdates })).toBeInTheDocument();
+  const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+  expect(saved.currentCycle).toBe(2);
+  expect(saved.prs).toEqual({ Squat: 100, Bench: 75, Deadlift: 125 });
 });

@@ -2,6 +2,8 @@ import { getDesktopBridge, isDesktopRuntime, DESKTOP_AUTOMATIC_BACKUP_PATH } fro
 import { BOTTOM_NAV_SPACE, APP_HEADER_SPACE } from './appChromeLayout';
 import { WORKOUT_GRID_COLUMNS } from './workoutGridPolicy';
 import CycleCompletedScreen from './CycleCompletedScreen';
+import AchievementShareModal from './AchievementShareModal';
+import { buildAchievementCard } from './achievementShare';
 import { getSmartIntensityRole, roundBarbellWeight } from './smartFrequencyPolicy';
 import { roundPercent } from './smartPrescriptionEngine';
 import {
@@ -4684,42 +4686,10 @@ function SupportActionButton({ children, onClick, compact = false }) {
   );
 }
 
-export function buildCycleFeedbackEmailUrl({
-  t,
-  language = 'en',
-  appVersion = 'dev',
-}) {
-  const languageLabel = {
-    nl: t.languageDutch,
-    en: t.languageEnglish,
-    ca: t.languageCatalan,
-  }[language] || language;
-  const subject = encodeURIComponent(t.cycleFeedbackEmailSubject);
-  const body = encodeURIComponent([
-    t.cycleFeedbackEmailIntro,
-    '',
-    `1. ${t.cycleFeedbackWorkedWell}`,
-    '',
-    `2. ${t.cycleFeedbackDidNotWork}`,
-    '',
-    `3. ${t.cycleFeedbackImprove}`,
-    '',
-    `${t.feedbackAppVersion}: ${appVersion || 'dev'}`,
-    `${t.feedbackLanguage}: ${languageLabel}`,
-  ].join('\n'));
-
-  return `mailto:mburgosfr@gmail.com?subject=${subject}&body=${body}`;
-}
-
-export function shouldShowCycleFeedbackAction({
-  completedWorkoutIsMeet = false,
-  completedWorkoutCanStartNewCycle = false,
-} = {}) {
-  return Boolean(completedWorkoutIsMeet || completedWorkoutCanStartNewCycle);
-}
-
 export function MilestoneCelebrationModal({
   celebration,
+  onShare,
+  shareOpen = false,
   t,
   weightUnit = WEIGHT_UNITS.KG,
   onClose,
@@ -4765,14 +4735,10 @@ export function MilestoneCelebrationModal({
     return `${formatAchievementWeight(achievement.value, weightUnit)} (+${formatAchievementWeight(achievement.gain, weightUnit)})`;
   }
 
-  function openLink(url) {
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
-
   const actions = [
     {
-      label: t.contactKelani,
-      onClick: () => openLink('mailto:mburgosfr@gmail.com?subject=Kelani%20contact'),
+      label: t.shareKelani,
+      onClick: onShare,
     },
     {
       label: t.close,
@@ -4785,6 +4751,7 @@ export function MilestoneCelebrationModal({
       title={hasLevelMilestone
         ? (t.milestoneLevelTitle)
         : (t.milestoneStrengthTitle)}
+      inactive={shareOpen}
       onClose={onClose}
     >
       <div style={{ fontSize: 38, textAlign: 'center', margin: '-4px 0 8px' }}>🎉</div>
@@ -4833,17 +4800,6 @@ export function MilestoneCelebrationModal({
         ))}
       </div>
 
-      <p style={{
-        margin: '0 0 14px',
-        color: THEME.text,
-        fontSize: 13,
-        fontWeight: 700,
-        lineHeight: 1.4,
-        textAlign: 'center',
-      }}>
-        {t.milestoneSupportText}
-      </p>
-
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
@@ -4867,7 +4823,7 @@ export function MilestoneCelebrationModal({
 }
 
 function AboutSupportSection({
-  t, language, currentVersion, latestVersion, checkStatus,
+  t, onShare, shareOpen = false, currentVersion, latestVersion, checkStatus,
   checkAutomatically, onCheckAutomaticallyChange, onCheck, onOpenWhatsNew,
   onOpenUpdateLink, onPrepareUpdates, isOpen, onOpen, onClose,
   projectOpen, onProjectOpen, onProjectBack,
@@ -4882,32 +4838,12 @@ function AboutSupportSection({
     [t.aboutSigningSha256, '15d23f2e5ee95ebc2a530b48be6f27dad7a568f722bc819f4571b3470a2ff39d'],
   ];
   const actions = [
-    {
-      label: t.feedbackViaGitHub,
-      onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=feedback.md'),
-    },
-    {
-      label: t.shareCycleExperience,
-      onClick: () => openLink(buildCycleFeedbackEmailUrl({
-        t,
-        language,
-        appVersion: import.meta.env.VITE_APP_VERSION || 'dev',
-      })),
-    },
-    {
-      label: t.reportIssueShort || t.reportBug,
-      onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/issues/new?template=bug_report.md'),
-    },
+    { label: t.shareKelani, onClick: onShare },
+    { label: t.emailKelani, onClick: () => openLink('mailto:mburgosfr@gmail.com?subject=Kelani') },
+    { label: t.githubRepository, onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker') },
+    { label: t.izzyOnDroid, onClick: () => openLink('https://apt.izzysoft.de/packages/com.kelani.sbdtracker') },
   ];
   const projectLinks = [
-    {
-      label: t.githubRepository,
-      onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker'),
-    },
-    {
-      label: t.izzyOnDroid,
-      onClick: () => openLink('https://apt.izzysoft.de/packages/com.kelani.sbdtracker'),
-    },
     {
       label: t.verifyRelease,
       onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/VERIFY.md'),
@@ -4976,7 +4912,7 @@ function AboutSupportSection({
           onOpenWhatsNew={onOpenWhatsNew}
           onOpenLink={onOpenUpdateLink}
           onClose={onClose}
-          inactive={projectOpen}
+          inactive={projectOpen || shareOpen}
         >
           <p style={{
             margin: '0 0 16px',
@@ -5006,6 +4942,12 @@ function AboutSupportSection({
                 </SupportActionButton>
               </div>
             ))}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
+            <SupportActionButton onClick={() => openLink('https://github.com/sponsors/mburgosfr-star')}>
+              {t.supportKelani}
+            </SupportActionButton>
           </div>
 
           <button data-kelani-button-layout="selection" type="button" onClick={onProjectOpen} style={{
@@ -10283,7 +10225,7 @@ export function ScreenTitle({ title }) {
 }
 
 export function AppHeader({ t = translations.en, currentCycle = 1, workoutNumber = 1,
-  athleteLevel = 'beginner', eStrengthRatio, eStrengthMax, recentBodyRatioEvent }) {
+  athleteLevel = 'beginner', eStrengthRatio, eStrengthMax, recentBodyRatioEvent, onOpenAbout }) {
   const versionLabel = isDesktopRuntime() ? t.desktopPrototypeShort : import.meta.env.VITE_APP_VERSION ? `v${import.meta.env.VITE_APP_VERSION}` : 'dev';
   return <header data-kelani-app-header data-testid="app-header" style={{
     position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
@@ -10293,7 +10235,8 @@ export function AppHeader({ t = translations.en, currentCycle = 1, workoutNumber
     alignItems: 'center', justifyContent: 'space-between', gap: 12,
     borderBottom: SUBTLE_DIVIDER,
   }}>
-    <div style={{ flex: '0 0 auto', textAlign: 'center', lineHeight: 1 }}>
+    <button type="button" data-kelani-button-size="contextual" aria-label={t.aboutAndUpdates} onClick={onOpenAbout}
+      style={{ flex: '0 0 84px', width: 84, minWidth: 0, textAlign: 'center', lineHeight: 1, background: 'transparent', border: 0, padding: '4px 0', minHeight: 48, color: THEME.text, cursor: 'pointer' }}>
       <svg role="img" aria-label={t.appName} viewBox="0 0 112 46" style={{display: 'block', width: 84, height: 38}}>
         <g fill="#fff4e6">
           <rect x="1" y="20" width="4" height="6" rx="1" />
@@ -10307,8 +10250,8 @@ export function AppHeader({ t = translations.en, currentCycle = 1, workoutNumber
         </g>
         <path fill="#ffd600" d="M45 6h12l-4 15L68 6h15L62 25l12 15H59L50 28l-3 12H35z" />
       </svg>
-      <span style={{ fontSize: 9, fontWeight: 700, color: THEME.muted }}>{versionLabel}</span>
-    </div>
+      <span style={{ display: 'block', textAlign: 'center', fontSize: 9, fontWeight: 700, color: THEME.muted }}><span style={{ position: 'relative' }}>{versionLabel}<span style={{ position: 'absolute', left: 'calc(100% + 4px)', top: '50%', transform: 'translateY(-50%)' }}><TapInfoIcon size={11} /></span></span></span>
+    </button>
     <AthleteLevelBadge athleteLevel={athleteLevel} eStrengthRatio={eStrengthRatio}
       eStrengthMax={eStrengthMax} recentBodyRatioEvent={recentBodyRatioEvent} t={t}
       headerDetails={<>
@@ -11882,6 +11825,7 @@ function App() {
     setShowCalendarSettings(false);
   }, []);
   const [showAboutUpdates, setShowAboutUpdates] = useState(false);
+  const [shareCard, setShareCard] = useState(null);
   const [showProjectVerification, setShowProjectVerification] = useState(false);
   const [showUpdateAvailable, setShowUpdateAvailable] = useState(false);
   const [latestAvailableVersion, setLatestAvailableVersion] = useState(null);
@@ -12548,6 +12492,11 @@ function App() {
   useEffect(() => {
     const setupBackButton = async () => {
       const listener = await CapacitorApp.addListener('backButton', () => {
+        if (shareCard) {
+          setShareCard(null);
+          return;
+        }
+
         if (showStartCycleConfirm) {
           setShowStartCycleConfirm(false);
           return;
@@ -12636,7 +12585,7 @@ function App() {
     return () => {
       if (listener) listener.remove();
     };
-  }, [screen, completedWorkoutIndex, activeMilestoneCelebration, showWhatsNew, showAboutUpdates, showProjectVerification, showUpdateAvailable, showCalendarSettings, showCalendarPicker, closeCalendarSettings, showStartCycleConfirm, showResetConfirm]);
+  }, [screen, shareCard, completedWorkoutIndex, activeMilestoneCelebration, showWhatsNew, showAboutUpdates, showProjectVerification, showUpdateAvailable, showCalendarSettings, showCalendarPicker, closeCalendarSettings, showStartCycleConfirm, showResetConfirm]);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -16280,6 +16229,12 @@ const screenAllowsContentScroll =
     })}
   >
       <AppHeader t={t} currentCycle={currentCycle}
+        onOpenAbout={() => {
+          setScreen('settings');
+          setShowProjectVerification(false);
+          prepareUpdatesSettings();
+          setShowAboutUpdates(true);
+        }}
         workoutNumber={screen === 'current'
           ? (workouts[selectedIndex]?.number || currentIndex + 1)
           : screen === 'completed' ? (completedWorkout?.number || currentIndex + 1)
@@ -16960,7 +16915,8 @@ const screenAllowsContentScroll =
 
       <AboutSupportSection
         t={t}
-        language={language}
+        onShare={() => setShareCard(buildAchievementCard({ t }))}
+        shareOpen={Boolean(shareCard)}
         currentVersion={installedUpdateVersion}
         latestVersion={latestAvailableVersion}
         checkStatus={updateCheckStatus}
@@ -17008,7 +16964,7 @@ const screenAllowsContentScroll =
         containerStyle={completedWorkoutScreenStyle()}
         contentStyle={scrollableScreenContentStyle()}
         buttonStyle={compactModalActionButtonStyle}
-        onFeedback={() => window.open(buildCycleFeedbackEmailUrl({ t, language, appVersion: import.meta.env.VITE_APP_VERSION || 'dev' }), '_blank', 'noopener,noreferrer')}
+        onShare={() => setShareCard(buildAchievementCard({ kind: 'cycle', history, cycle: currentCycle, t, weightUnit }))}
       />
     )}
     {screen === 'completed' && !completedWorkoutCanStartNewCycle && (
@@ -17371,27 +17327,14 @@ const screenAllowsContentScroll =
         )}
         {/* FORCE_MULTI_LIFT_COMPLETED_SETS_END */}
 
-        {shouldShowCycleFeedbackAction({
-          completedWorkoutIsMeet,
-          completedWorkoutCanStartNewCycle,
-        }) && (
-          <div style={{ marginTop: 8 }}>
-            <SupportActionButton
-              compact
-              onClick={() => window.open(
-                buildCycleFeedbackEmailUrl({
-                  t,
-                  language,
-                  appVersion: import.meta.env.VITE_APP_VERSION || 'dev',
-                }),
-                '_blank',
-                'noopener,noreferrer'
-              )}
-            >
-              {t.shareCycleExperience}
-            </SupportActionButton>
-          </div>
-        )}
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
+          <SupportActionButton onClick={() => setShareCard(buildAchievementCard({
+            kind: completedWorkout?.type === 'rest' ? 'rest' : completedWorkoutIsMeet ? 'meet' : 'workout',
+            workout: completedWorkout, t, weightUnit,
+          }))}>
+            {t.shareKelani}
+          </SupportActionButton>
+        </div>
         </div>
 
       </div>
@@ -17401,10 +17344,17 @@ const screenAllowsContentScroll =
 {screen === 'completed' && activeMilestoneCelebration && (
   <MilestoneCelebrationModal
     celebration={activeMilestoneCelebration}
+    shareOpen={Boolean(shareCard)}
+    onShare={() => setShareCard(buildAchievementCard({ kind: 'milestone', celebration: activeMilestoneCelebration, t, weightUnit }))}
     t={t}
     weightUnit={weightUnit}
     onClose={() => setActiveMilestoneCelebration(null)}
   />
+)}
+
+{shareCard && (
+  <AchievementShareModal card={shareCard} t={t} onClose={() => setShareCard(null)}
+    Modal={SettingsModal} buttonStyle={compactModalActionButtonStyle} />
 )}
 
 {showWhatsNew && (
