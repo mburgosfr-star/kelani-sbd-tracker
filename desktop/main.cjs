@@ -6,7 +6,7 @@ const { createDesktopNotifier } = require('./notifications.cjs');
 const { getSnapAppId, createWindowActivator, createPortalNotificationClass, startPortalActivation } = require('./snap-notifications.cjs');
 const snapAppId = getSnapAppId(process.platform, process.env);
 const { pathToFileURL } = require('node:url');
-const { APP_ORIGIN, isAppUrl, resolveAssetPath, isAllowedExternalUrl, writeVerifiedBackup, normalizeTimer, createTimerController } = require('./runtime.cjs');
+const { APP_ORIGIN, isAppUrl, resolveAssetPath, isAllowedExternalUrl, writeVerifiedBackup, createBackupHistoryStore, normalizeTimer, createTimerController } = require('./runtime.cjs');
 
 app.setName('Kelani SBD Tracker Desktop Prototype');
 // Keep the prototype separate from both Android and any later desktop release.
@@ -137,6 +137,12 @@ if (activationOnly) {
     window.webContents.on('will-navigate', (event, url) => { if (!isAppUrl(url)) { event.preventDefault(); openExternal(url); } });
     window.webContents.on('will-attach-webview', event => event.preventDefault());
 
+    const historyStore = createBackupHistoryStore(path.join(path.dirname(backupPath), 'History'), backupPath);
+    handle('kelani:backup-history', request => {
+      const next = backupQueue.catch(() => {}).then(() => historyStore(request));
+      backupQueue = next;
+      return next;
+    });
     handle('kelani:backup', json => {
       const next = backupQueue.catch(() => {}).then(() => writeVerifiedBackup(backupPath, json, { keepPrevious: true }));
       backupQueue = next;

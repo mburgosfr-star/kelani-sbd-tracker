@@ -278,7 +278,7 @@ export const SMART_IDEAL_POST_MEET = Object.freeze({
   elite: Object.freeze({ recoveryWorkouts: 1, nextCycleWorkout: 29 }),
 });
 
-export const SMART_IDEAL_ROUTE_VERSION = 3;
+export const SMART_IDEAL_ROUTE_VERSION = 4;
 export const SMART_IDEAL_MEET_WORKOUT_NUMBER = 27;
 
 export function resolveSmartIdealRouteStartCycle({
@@ -552,11 +552,15 @@ export function getSmartIdealRouteWorkout({
   };
 }
 
+export function getSmartIdealNormalPeriodDays({ athleteLevel = 'intermediate' } = {}) {
+  return athleteLevel === 'beginner' ? 6 : 7;
+}
+
 export function getSmartIdealNormalTrainingDays({
   athleteLevel = 'intermediate',
   trainingFocus = SMART_TRAINING_FOCUSES.STANDARD,
 } = {}) {
-  return Array.from({ length: 7 }, (_, index) => getSmartIdealRouteWorkout({
+  return Array.from({ length: getSmartIdealNormalPeriodDays({ athleteLevel }) }, (_, index) => getSmartIdealRouteWorkout({
     athleteLevel,
     trainingFocus,
     workoutNumber: index + 1,
@@ -753,6 +757,38 @@ function findOptionalRestIndex(plan) {
 }
 
 /**
+ * Calendar slots are separate from stable route coordinates. Keeping those
+ * coordinates lets saved cycles resume without moving completed prescriptions.
+ * Beginners alternate training and recovery, including during taper.
+ */
+function applyBeginnerCalendar(workouts, hasTrailingCompletedRest, preserveCurrentTraining) {
+  const calendar = [];
+  for (const workout of workouts) {
+    const previousIsRest = calendar.length
+      ? calendar.at(-1).type === 'rest'
+      : hasTrailingCompletedRest;
+    if ([7, 14, 21].includes(workout.workoutNumber) && workout.type === 'rest' && previousIsRest) {
+      continue;
+    }
+    if (workout.workoutNumber === 25 && workout.type === 'training' && !previousIsRest &&
+      !(preserveCurrentTraining && calendar.length === 0)) {
+      calendar.push({
+        workoutNumber: workout.workoutNumber,
+        type: 'rest',
+        stage: workout.stage,
+        phase: workout.phase,
+        accessoriesAllowed: false,
+        lifts: [],
+        transitionPending: true,
+        adjustmentReason: 'beginner-spacing',
+      });
+    }
+    calendar.push(workout);
+  }
+  return calendar;
+}
+
+/**
  * Spend one route-compression credit for every clean "too easy" workout.
  * Each applied action removes exactly one future calendar slot. Prefer an
  * earlier non-final rest so the final recovery buffer remains intact. The
@@ -765,6 +801,7 @@ export function buildAcceleratedSmartIdealRoutePlan({
   startWorkoutNumber = 1,
   accelerationCredits = 0,
   hasTrailingCompletedRest = false,
+  preserveCurrentTraining = false,
 } = {}) {
   const start = Math.max(Number(startWorkoutNumber) || 1, 1);
   const requestedCredits = Math.max(
@@ -793,6 +830,10 @@ export function buildAcceleratedSmartIdealRoutePlan({
       workoutNumber,
     });
     if (workout) workouts.push(workout);
+  }
+
+  if (athleteLevel === 'beginner') {
+    workouts = applyBeginnerCalendar(workouts, hasTrailingCompletedRest, preserveCurrentTraining);
   }
 
   let appliedCredits = 0;
@@ -873,6 +914,7 @@ export function buildAdjustedSmartIdealRoutePlan({
   accelerationCredits = 0,
   delayCredits = 0,
   hasTrailingCompletedRest = false,
+  preserveCurrentTraining = false,
 } = {}) {
   const acceleratedPlan = buildAcceleratedSmartIdealRoutePlan({
     athleteLevel,
@@ -880,6 +922,7 @@ export function buildAdjustedSmartIdealRoutePlan({
     startWorkoutNumber,
     accelerationCredits,
     hasTrailingCompletedRest,
+    preserveCurrentTraining,
   });
   const requestedDelayCredits = Math.max(
     Math.floor(Number(delayCredits) || 0),

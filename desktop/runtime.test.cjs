@@ -270,3 +270,24 @@ test('Snap notifier uses exactly one packaged sound and never the host player', 
   assert.equal(sound[0], '/snap/example/current/bin/paplay');
   assert.equal(sound[2].shell, false);
 });
+
+test('history file operations are confined to owned files and cannot delete safety or exports', async () => {
+  const { createBackupHistoryStore } = require('./runtime.cjs');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'kelani-history-test-'));
+  const latest = path.join(root, 'latest.json');
+  const history = createBackupHistoryStore(path.join(root, 'History'), latest);
+  const json = JSON.stringify({ backupVersion: 1, storageKey: 'kel-powerlifting-user-data-v1', exportedAt: '2030-01-01', data: {} });
+  try {
+    assert.deepEqual(await history({ action: 'list' }), []);
+    assert.equal(await history({ action: 'read', name: 'latest' }), null);
+    await history({ action: 'write', name: 'kelani-day-2030-01-01.json', json });
+    assert.equal(await history({ action: 'read', name: 'kelani-day-2030-01-01.json' }), json);
+    for (const name of ['../export.json', 'latest', 'manual.json']) await assert.rejects(history({ action: 'write', name, json }));
+    await history({ action: 'write', name: 'kelani-before-restore.json', json });
+    await assert.rejects(history({ action: 'remove', name: 'kelani-before-restore.json' }));
+    await history({ action: 'remove', name: 'kelani-day-2030-01-01.json' });
+    assert.deepEqual(await history({ action: 'list' }), ['kelani-before-restore.json']);
+    await fs.symlink(latest, path.join(root, 'History', 'kelani-day-2030-01-02.json'));
+    await assert.rejects(history({ action: 'write', name: 'kelani-day-2030-01-02.json', json }));
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});

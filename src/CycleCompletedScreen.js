@@ -1,3 +1,4 @@
+import { responsiveFontSize } from './responsiveTypography';
 import React, { useMemo } from 'react';
 import { buildCycleReview } from './cycleReview';
 import { formatWeightFromKg, formatEstimatedWeightFromKg } from './workoutUnits';
@@ -25,27 +26,27 @@ export default function CycleCompletedScreen({ history, currentCycle, t, weightU
         {header}
         <div className="kelani-cycle-review" style={{ display: 'grid', alignContent: 'space-evenly', minHeight: '100%', gap: 10 }}>
           <section style={{ display: 'flex', justifyContent: 'space-evenly', gap: 12, textAlign: 'center' }}>
-            <div><strong style={{ display: 'block', fontSize: 23, color: theme.primary }}>{review.trainingDays}</strong>{t.cycleReviewTrainingDays}</div>
-            <div><strong style={{ display: 'block', fontSize: 23, color: theme.primary }}>{review.restDays}</strong>{t.cycleReviewRestDays}</div>
+            <div><strong style={{ display: 'block', fontSize: responsiveFontSize(23), color: theme.primary }}>{review.trainingDays}</strong>{t.cycleReviewTrainingDays}</div>
+            <div><strong style={{ display: 'block', fontSize: responsiveFontSize(23), color: theme.primary }}>{review.restDays}</strong>{t.cycleReviewRestDays}</div>
           </section>
           <section style={panel}>
-            <h3 style={{ fontSize: 17, margin: '0 0 8px', textAlign: 'center', color: theme.primary }}>{t.cycleReviewResults}</h3>
-            <p style={{ fontSize: 12, color: theme.muted, margin: '0 0 10px', textAlign: 'center' }}>{t.cycleReviewComparison}</p>
+            <h3 style={{ fontSize: responsiveFontSize(17), margin: '0 0 8px', textAlign: 'center', color: theme.primary }}>{t.cycleReviewResults}</h3>
+            <p style={{ fontSize: responsiveFontSize(12), color: theme.muted, margin: '0 0 10px', textAlign: 'center' }}>{t.cycleReviewComparison}</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) repeat(2, minmax(0, 1.25fr))', gap: '10px 8px', alignItems: 'center' }}>
               <span /><strong style={{ textAlign: 'center' }}>{t.oneRM}</strong><strong style={{ textAlign: 'center' }}>{t.e1RM}</strong>
               {review.lifts.map(item => <React.Fragment key={item.lift}>
                 <strong style={{ color: color(item.lift), overflowWrap: 'anywhere' }}>{label(item.lift)}</strong>
                 {[['oneRM', 'oneRMGain'], ['e1rm', 'e1RMGain']].map(([key, gainKey]) => <div key={key} style={{ textAlign: 'center' }}>
                   <strong>{key === 'e1rm' && item[key] != null ? formatEstimatedWeightFromKg(item[key], weightUnit) : weight(item[key])}</strong>
-                  <div style={{ fontSize: 12, color: gainColor(item[gainKey]) }}>{gain(item[gainKey])}</div>
+                  <div style={{ fontSize: responsiveFontSize(12), color: gainColor(item[gainKey]) }}>{gain(item[gainKey])}</div>
                 </div>)}
               </React.Fragment>)}
             </div>
             {review.meetTotal !== null && <p style={{ margin: '12px 0 0', textAlign: 'center' }}>{t.cycleReviewMeetTotal}: <strong>{weight(review.meetTotal)}</strong></p>}
           </section>
           <section style={panel}>
-            <h3 style={{ fontSize: 17, margin: '0 0 6px', textAlign: 'center', color: theme.primary }}>{t.cycleReviewSinceStart}</h3>
-            <div style={{ display: 'flex', justifyContent: 'space-around', gap: 8, flexWrap: 'wrap', textAlign: 'center', fontSize: 13 }}>
+            <h3 style={{ fontSize: responsiveFontSize(17), margin: '0 0 6px', textAlign: 'center', color: theme.primary }}>{t.cycleReviewSinceStart}</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-around', gap: 8, flexWrap: 'wrap', textAlign: 'center', fontSize: responsiveFontSize(13) }}>
               {review.lifts.map(item => <div key={item.lift}><strong style={{ display: 'block', color: color(item.lift) }}>{label(item.lift)}</strong><span style={{ color: gainColor(item.sinceStartGain) }}>{gain(item.sinceStartGain)}</span></div>)}
             </div>
             {review.total !== null && <p style={{ textAlign: 'center', margin: '10px 0 0' }}><strong>{weight(review.total)}</strong> <span style={{ color: gainColor(review.totalGain) }}>({gain(review.totalGain)})</span></p>}
@@ -57,7 +58,7 @@ export default function CycleCompletedScreen({ history, currentCycle, t, weightU
                 <text x={point.x} y="137" textAnchor="middle" fill={theme.muted} fontSize="12">{point.cycle === 0 ? t.cycleReviewBaseline : point.cycle}</text>
               </g>)}
             </svg>}
-            <p style={{ fontSize: 12, color: theme.muted, margin: '0 0 4px', textAlign: 'center' }}>{t.cycleReviewChartExplanation}</p>
+            <p style={{ fontSize: responsiveFontSize(12), color: theme.muted, margin: '0 0 4px', textAlign: 'center' }}>{t.cycleReviewChartExplanation}</p>
           </section>
           <section style={{ textAlign: 'center', display: 'grid', gap: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>

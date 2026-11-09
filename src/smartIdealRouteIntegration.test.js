@@ -1,3 +1,4 @@
+import { mergeGeneratedWorkoutStructure } from './workoutStateMerge';
 import {
   buildSmartIdealTrainingWorkout,
   countFailedOrSkippedSetsFromSnapshot,
@@ -17,6 +18,8 @@ import {
 } from './smartTrainingConstants';
 import {
   SMART_IDEAL_LEVELS,
+  SMART_IDEAL_ROUTE_VERSION,
+  buildAdjustedSmartIdealRoutePlan,
   getSmartIdealRouteWorkout,
 } from './smartIdealRoute';
 import { warmupLoadJumpsNeverIncrease } from './warmupAndPrepGeneration';
@@ -58,18 +61,19 @@ test.each(SMART_IDEAL_LEVELS)(
       currentIndex: 0,
     });
 
-    for (let workoutNumber = 1; workoutNumber <= 28; workoutNumber += 1) {
-      const expected = getSmartIdealRouteWorkout({
-        athleteLevel,
-        workoutNumber,
-      });
+    const calendar = [
+      ...buildAdjustedSmartIdealRoutePlan({ athleteLevel }).workouts,
+      getSmartIdealRouteWorkout({ athleteLevel, workoutNumber: 28 }),
+    ];
+    for (let workoutNumber = 1; workoutNumber <= calendar.length; workoutNumber += 1) {
+      const expected = calendar[workoutNumber - 1];
       const actual = workouts[workoutNumber - 1];
 
       expect(actual).toMatchObject({
         number: workoutNumber,
         type: expected.type,
         smartIdealRoute: {
-          workoutNumber,
+          workoutNumber: expected.workoutNumber,
           stage: expected.stage,
         },
       });
@@ -106,7 +110,7 @@ test('beginner squat priority reaches generated training and taper workouts with
     athleteLevel: 'beginner',
   });
 
-  for (const number of [3, 10, 17, 24]) {
+  for (const number of [3, 9, 15, 21]) {
     expect(focused[number - 1].lifts.map(block => block.lift)).toEqual(['Deadlift', 'Squat']);
     expect(standard[number - 1].lifts.map(block => block.lift)).toEqual(['Deadlift', 'Bench']);
     expect(focused[number - 1].lifts[1].sets.length).toBeGreaterThanOrEqual(1);
@@ -470,7 +474,7 @@ test('the live ideal route starts with the exact intermediate W1 prescription', 
     },
   });
   expect(workout.smartIdealRoute).toMatchObject({
-    version: 3,
+    version: SMART_IDEAL_ROUTE_VERSION,
     workoutNumber: 1,
     athleteLevel: 'intermediate',
     stage: 'normal',
@@ -981,9 +985,9 @@ test('a beginner with only Squat evidence starts at the first unresolved Deadlif
       );
       expect(workout.smartDecisionSummary?.readiness?.meetProjection).toMatchObject({
         currentWorkoutNumber: 34,
-        minimumWorkoutNumber: 58,
-        maximumWorkoutNumber: 58,
-        minimumWorkoutsBeforeMeet: 24,
+        minimumWorkoutNumber: 56,
+        maximumWorkoutNumber: 56,
+        minimumWorkoutsBeforeMeet: 22,
         projectedByIdealRoute: true,
       });
       expect(
@@ -1004,9 +1008,9 @@ test('a beginner with only Squat evidence starts at the first unresolved Deadlif
     history = completeWorkout(history, workout, 'good');
   }
 
-  expect(new Set(projectedMeetLabels)).toEqual(new Set(['C1W58']));
+  expect(new Set(projectedMeetLabels)).toEqual(new Set(['C1W56']));
   expect(meet).toBeTruthy();
-  expect(meet.number).toBe(58);
+  expect(meet.number).toBe(56);
   expect(meet.smartIdealRoute).toMatchObject({
     workoutNumber: 27,
     stage: 'meet',
@@ -1109,11 +1113,11 @@ test('a legacy beginner inserts one rest after HARD and then resumes the ideal r
   }
 
   expect(deliveredRouteNumbers).toEqual([
-    15, 16, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+    15, 16, 16, 17, 18, 19, 20, 22, 23, 24, 25, 25, 26, 27,
   ]);
   expect(deliveredWorkoutTypes).toEqual([
     'training', 'rest', 'rest', 'training', 'rest', 'training',
-    'rest', 'rest', 'training', 'rest', 'training', 'training', 'rest', 'meet',
+    'rest', 'training', 'rest', 'training', 'rest', 'training', 'rest', 'meet',
   ]);
   expect(meet).toBeTruthy();
   expect(meet.number).toBe(48);
@@ -1800,4 +1804,81 @@ test('W27 remains the meet when readiness diagnostics are incomplete', () => {
     workoutNumber: 27,
     stage: 'meet',
   });
+});
+
+
+test.each(['standard', 'practical', 'beginnerSquat'])(
+  'beginner %s completes the new calendar across save/reload boundaries', trainingFocus => {
+    let history = [];
+    for (let currentIndex = 0; currentIndex < 26; currentIndex += 1) {
+      const workout = generateCurrent({ history: JSON.parse(JSON.stringify(history)), currentIndex,
+        athleteLevel: 'beginner', options: { trainingFocus } });
+      expect(workout.number).toBe(currentIndex + 1);
+      expect(workout.type).toBe(currentIndex === 24 ? 'meet' : currentIndex % 2 ? 'rest' : 'training');
+      if (workout.type === 'training') expectFullLiftGrids(workout);
+      history = completeWorkout(history, workout);
+      expect(isSmartCycleCompleteAfterHistory(history, 1)).toBe(currentIndex === 25);
+    }
+  }
+);
+
+function previousBeginnerPlan(trainingFocus) {
+  return Array.from({ length: 28 }, (_, index) => {
+    const number = index + 1;
+    const routeWorkout = getSmartIdealRouteWorkout({ athleteLevel: 'beginner', workoutNumber: number, trainingFocus });
+    const workout = routeWorkout.type === 'training'
+      ? buildSmartIdealTrainingWorkout({ ...baseOptions, sourceWorkout: { number }, routeWorkout, athleteLevel: 'beginner' })
+      : { number, type: routeWorkout.type, lifts: [], smartIdealRoute: { ...routeWorkout, athleteLevel: 'beginner' } };
+    return { ...workout, smartIdealRoute: { ...workout.smartIdealRoute, version: 3 } };
+  });
+}
+
+test.each(['standard', 'practical', 'beginnerSquat'])(
+  'an existing %s beginner at W15 keeps history and started work, then finishes the remaining route', trainingFocus => {
+    const saved = previousBeginnerPlan(trainingFocus);
+    let history = [];
+    saved.slice(0, 14).forEach(workout => { history = completeWorkout(history, workout); });
+    const historyBefore = JSON.stringify(history);
+    saved[14].lifts[0].sets[0].done = true;
+    saved[14].lifts[0].sets[0].weight += 2.5;
+    const generated = generateWorkoutsForTrainingModel('smart', { ...baseOptions, athleteLevel: 'beginner',
+      trainingFocus, history, currentIndex: 14 });
+    const merged = mergeGeneratedWorkoutStructure(saved, generated, history, 1);
+    expect(merged[14]).toEqual(saved[14]);
+    expect(JSON.stringify(history)).toBe(historyBefore);
+    expect(merged.slice(0, 14)).toEqual(history.filter(entry => entry.completionOnly || entry.lift === entry.workoutSnapshot.lifts[0]?.lift).map(entry => entry.workoutSnapshot));
+    history = completeWorkout(history, merged[14]);
+    for (let currentIndex = 15; currentIndex < 28; currentIndex += 1) {
+      const workout = generateCurrent({ history, currentIndex, athleteLevel: 'beginner', options: { trainingFocus } });
+      expect(workout.number).toBe(currentIndex + 1);
+      expect(workout.type).toBe(currentIndex === 26 ? 'meet' : currentIndex % 2 ? 'rest' : 'training');
+      history = completeWorkout(history, workout);
+    }
+    expect(isSmartCycleCompleteAfterHistory(history, 1)).toBe(true);
+  }
+);
+
+
+test('a started older beginner taper session is never duplicated by the new spacing day', () => {
+  const saved = previousBeginnerPlan('standard');
+  let history = [];
+  saved.slice(0, 24).forEach(workout => { history = completeWorkout(history, workout); });
+  saved[24].lifts[0].warmups[0].done = true;
+  const generated = generateWorkoutsForTrainingModel('smart', {
+    ...baseOptions, athleteLevel: 'beginner', history, currentIndex: 24, inProgressWorkout: saved[24],
+  });
+  const merged = mergeGeneratedWorkoutStructure(saved, generated, history, 1);
+  expect(merged[24]).toEqual(saved[24]);
+  expect(merged.slice(24, 28).map(workout => workout.type)).toEqual(['training', 'rest', 'meet', 'rest']);
+  expect(generated[24].smartDecisionSummary.readiness.meetProjection.label).toBe('C1W27');
+});
+
+
+test('the beginner calendar forecast uses the same alternating 26-day next cycle without changing history', () => {
+  const history = [];
+  const forecast = projectNextSmartCalendarCycle({ ...baseOptions, athleteLevel: 'beginner', history, currentIndex: 0 });
+  expect(forecast).toHaveLength(26);
+  expect(forecast[24]).toMatchObject({ number: 25, type: 'meet' });
+  expect(forecast[25]).toMatchObject({ number: 26, type: 'rest' });
+  expect(history).toEqual([]);
 });

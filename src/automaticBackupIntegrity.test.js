@@ -3,6 +3,7 @@ import path from 'node:path';
 import { normalizeCalendarIntegrationSettings } from './calendarIntegration';
 import {
   AUTO_BACKUP_PATH,
+  writeAutomaticBackup,
   buildBackupPayload,
   buildBackupSummary,
   buildManualBackupFilename,
@@ -469,4 +470,52 @@ test('refreshes a verified automatic backup when local body data is newer', () =
     currentPath,
     currentSummary
   )).toBe(false);
+});
+
+
+test('automatic backup archives an older latest copy and prunes only after the new latest is verified', async () => {
+  localStorage.clear();
+  const old = buildBackupPayload(makeStoredData(), { now: new Date(2020, 0, 1) });
+  const files = new Map([['latest', JSON.stringify(old)]]);
+  const events = [];
+  window.kelaniDesktop = { platform: 'desktop',
+    writeBackup: async json => { events.push('latest'); files.set('latest', json); return { data: json, path: 'Backups/latest.json' }; },
+    backupHistory: async request => {
+      events.push(`${request.action}:${request.name || ''}`);
+      if (request.action === 'read') return files.get(request.name) || null;
+      if (request.action === 'list') return [...files.keys()].filter(name => name !== 'latest');
+      if (request.action === 'write') files.set(request.name, request.json);
+      if (request.action === 'remove') files.delete(request.name);
+    },
+  };
+  try {
+    const current = makeStoredData({ currentCycle: 4 });
+    const result = await writeAutomaticBackup(current);
+    expect(result.data).toEqual(current);
+    expect(events.indexOf('write:kelani-day-2020-01-01.json')).toBeLessThan(events.indexOf('latest'));
+    expect(events.indexOf('remove:kelani-day-2020-01-01.json')).toBeGreaterThan(events.indexOf('latest'));
+    expect(JSON.parse(files.get('latest')).data).toEqual(current);
+    expect(JSON.parse(localStorage.getItem('kelani-sbd-tracker-auto-backup-status')).verified).toBe(true);
+  } finally { delete window.kelaniDesktop; localStorage.clear(); }
+});
+
+test('a failed latest backup keeps the earlier backup and prevents cleanup', async () => {
+  localStorage.clear();
+  const previous = JSON.stringify(buildBackupPayload(makeStoredData(), { now: new Date(2020, 0, 1) }));
+  const removals = [];
+  const files = new Map([['latest', previous]]);
+  window.kelaniDesktop = { platform: 'desktop', writeBackup: async () => { throw new Error('Disk full'); },
+    backupHistory: async request => {
+      if (request.action === 'read') return files.get(request.name) || null;
+      if (request.action === 'write') files.set(request.name, request.json);
+      if (request.action === 'remove') removals.push(request.name);
+      if (request.action === 'list') return [...files.keys()];
+    },
+  };
+  try {
+    await expect(writeAutomaticBackup(makeStoredData())).rejects.toThrow('Disk full');
+    expect(files.get('latest')).toBe(previous);
+    expect(removals).toEqual([]);
+    expect(JSON.parse(localStorage.getItem('kelani-sbd-tracker-auto-backup-status')).ok).toBe(false);
+  } finally { delete window.kelaniDesktop; localStorage.clear(); }
 });

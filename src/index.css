@@ -5,7 +5,7 @@
 :root {
   --kelani-button-height: 52px;
   --kelani-button-width: 160px;
-  --kelani-button-font-size: 14px;
+  --kelani-button-font-size: clamp(14px, 3.5623vw, 17.5px);
   --kelani-button-font-weight: 800;
   --kelani-button-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
 }
@@ -39,6 +39,7 @@ button[data-kelani-button-size='contextual'] {
 }
 
 body {
+  font-size: clamp(16px, 4.0712vw, 20px);
   margin: 0;
   overflow-x: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',

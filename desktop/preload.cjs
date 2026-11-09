@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('kelaniDesktop', {
   platform: 'desktop',
+  backupHistory: request => ipcRenderer.invoke('kelani:backup-history', request),
   writeBackup: json => ipcRenderer.invoke('kelani:backup', json),
   exportBackup: request => ipcRenderer.invoke('kelani:export', request),
   scheduleTimer: request => ipcRenderer.invoke('kelani:timer-schedule', request),

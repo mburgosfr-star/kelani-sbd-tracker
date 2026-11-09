@@ -1,3 +1,7 @@
+import { createBackupHistory, backupDay } from './backupHistory';
+import { getBackupHistoryIO, writeVerifiedNativeBackup } from './backupHistoryStorage';
+import BackupHistoryModal from './BackupHistoryModal';
+import { responsiveFontSize } from './responsiveTypography';
 import { getDesktopBridge, isDesktopRuntime, DESKTOP_AUTOMATIC_BACKUP_PATH } from './desktopRuntime';
 import { BOTTOM_NAV_SPACE, APP_HEADER_SPACE } from './appChromeLayout';
 import { WORKOUT_GRID_COLUMNS } from './workoutGridPolicy';
@@ -144,6 +148,7 @@ import {
 import { buildAutomaticNextSmartCycle, buildNextTrainingCycle } from './smartCycleTransition';
 import {
   getSmartIdealNormalTrainingDays,
+  getSmartIdealNormalPeriodDays,
   isSmartIdealRouteEnabled,
   resolveSmartIdealRouteStartCycle,
   SMART_TRAINING_FOCUSES,
@@ -1499,34 +1504,46 @@ function recordAutomaticBackupFailure(error) {
   }));
 }
 
-async function writeAutomaticBackup(data) {
+let automaticBackupQueue = Promise.resolve();
+function queueBackupOperation(action) {
+  const next = automaticBackupQueue.catch(() => {}).then(action);
+  automaticBackupQueue = next;
+  return next;
+}
+function getBackupHistory() {
+  const validate = backup => validateImportedBackup(backup) && validateBackupPayload(backup, backup.data) &&
+    typeof backup.exportedAt === 'string' && Number.isFinite(Date.parse(backup.exportedAt));
+  const io = getBackupHistoryIO(validate);
+  return io ? createBackupHistory({ io, storage: localStorage, validate }) : null;
+}
+
+export function writeAutomaticBackup(data) {
+  return queueBackupOperation(() => performAutomaticBackup(data));
+}
+async function performAutomaticBackup(data) {
   const backup = buildBackupPayload(data);
   const json = JSON.stringify(backup, null, 2);
 
   try {
     let storedJson = null;
     let uri = null;
+    const history = getBackupHistory();
+    if (history) {
+      // Preserve an older latest copy on upgrade before replacing it. Missing
+      // or invalid older data cannot become a trusted recovery point.
+      const previous = (await history.list({ latestOnly: true })).find(entry => entry.name === 'latest')?.backup;
+      if (previous && backupDay(previous.exportedAt) !== backupDay(backup.exportedAt)) {
+        await history.record(previous, { prune: false });
+      }
+    }
 
     if (isDesktopRuntime()) {
       const result = await getDesktopBridge().writeBackup(json);
       storedJson = result.data;
       uri = result.path;
     } else if (Capacitor.isNativePlatform()) {
-      const writeResult = await Filesystem.writeFile({
-        path: AUTO_BACKUP_PATH,
-        data: json,
-        directory: Directory.Documents,
-        encoding: Encoding.UTF8,
-        recursive: true,
-      });
-
-      uri = writeResult?.uri || null;
-
-      const readResult = await Filesystem.readFile({
-        path: AUTO_BACKUP_PATH,
-        directory: Directory.Documents,
-        encoding: Encoding.UTF8,
-      });
+      const readResult = await writeVerifiedNativeBackup(AUTO_BACKUP_PATH, json);
+      uri = (await Filesystem.getUri({ path: AUTO_BACKUP_PATH, directory: Directory.Documents })).uri;
 
       storedJson = typeof readResult?.data === 'string'
         ? readResult.data
@@ -1541,6 +1558,7 @@ async function writeAutomaticBackup(data) {
     if (!validateBackupPayload(verifiedBackup, data)) {
       throw new Error('Automatic backup verification failed');
     }
+    if (history) await history.record(verifiedBackup);
 
     localStorage.setItem(AUTO_BACKUP_STATUS_KEY, JSON.stringify({
       ok: true,
@@ -2146,7 +2164,7 @@ export function CompletedScreenHeader({ title, message, compact = false }) {
       data-testid="completed-screen-header"
       style={compact ? { textAlign: 'center' } : fixedScreenHeaderStyle()}
     >
-      <div style={{ fontSize: 40, marginBottom: 6, textAlign: 'center' }}>🎉</div>
+      <div style={{ fontSize: responsiveFontSize(40), marginBottom: 6, textAlign: 'center' }}>🎉</div>
 
       <h2 style={{ margin: '0 0 6px', color: THEME.brown, textAlign: 'center' }}>
         {title}
@@ -2176,6 +2194,7 @@ export function completedWorkoutScreenStyle() {
     background: THEME.bg,
     color: THEME.text,
     fontFamily: 'sans-serif',
+    fontSize: responsiveFontSize(16),
     overflowX: 'hidden',
   });
 }
@@ -2887,6 +2906,7 @@ function WorkoutCircleItem({
   fullWidth = false,
   gridSpan = null,
   autoScrollActive = false,
+  gridPosition = null,
 }) {
   const containerRef = useActiveWorkoutAutoScroll(autoScrollActive);
 
@@ -2907,6 +2927,7 @@ function WorkoutCircleItem({
           : gridSpan
             ? `span ${gridSpan}`
             : undefined,
+        ...gridPosition,
       }}
     >
       <div style={{
@@ -2992,6 +3013,15 @@ function PrepRow({ item, isActive, isReadOnly, onToggle, t, compact = false }) {
 }
 
 
+// Ten half-columns preserve the ordinary five-column item width while
+// centering both odd and even row counts on the same horizontal axis.
+export function centeredMeetItemStyle(count, index, firstRow = 1) {
+  const row = Math.floor(index / WORKOUT_GRID_COLUMNS);
+  const rowCount = Math.min(count - row * WORKOUT_GRID_COLUMNS, WORKOUT_GRID_COLUMNS);
+  const column = WORKOUT_GRID_COLUMNS + 1 - rowCount + (index % WORKOUT_GRID_COLUMNS) * 2;
+  return { gridColumn: `${column} / span 2`, gridRow: firstRow + row };
+}
+
 export function WorkoutLiftGrid({
   children,
   testId = 'workout-lift-grid',
@@ -3018,7 +3048,7 @@ export function WorkoutLiftGrid({
   );
 }
 
-export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, compactGrid = false, showPhaseTags = false, gridSpan = null, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard', onShowPlateCalculator }) {
+export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, compactGrid = false, showPhaseTags = false, gridSpan = null, centeredMeetRow = false, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard', onShowPlateCalculator }) {
   if (!warmups.length) return null;
 
   return (
@@ -3070,6 +3100,7 @@ export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activ
               autoScrollActive={isActive}
               label={warmupDescription}
               gridSpan={gridSpan}
+              gridPosition={centeredMeetRow ? centeredMeetItemStyle(warmups.length, index) : null}
             >
               <WorkoutCircle
                 done={isDone}
@@ -3275,7 +3306,7 @@ export function formatWorkoutSetPercentDisplay(set = {}) {
     : formatSetPercentDisplay(displayPct);
 }
 
-export function SetRow({ set, index, label, isWarmup = false, compactGrid = false, gridSpan = null, phaseTag = null, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator }) {
+export function SetRow({ set, index, label, isWarmup = false, compactGrid = false, gridSpan = null, gridPosition = null, phaseTag = null, onToggle, onWeightChange, onMarkFailed, onRestoreWeight, isActive, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator }) {
   const isAdjusted = Boolean(set.adjustedFromFailedSet || set.adjustedFromOriginal || set.failed);
   const displayPct = formatWorkoutSetPercentDisplay(set);
   const effortLabel = getSetEffortLabel(set.effort, t);
@@ -3459,6 +3490,7 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
           label={circleLabel}
           fullWidth={!compactGrid}
           gridSpan={gridSpan}
+          gridPosition={gridPosition}
           footer={meta ? (
             <div
               data-testid="workout-set-effort-label"
@@ -3585,6 +3617,7 @@ export function settingsModalPanelStyle() {
     overflowY: 'auto',
     overscrollBehavior: 'contain',
     color: THEME.text,
+    fontSize: responsiveFontSize(16),
   };
 }
 
@@ -4183,7 +4216,28 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
   const [notice, setNotice] = useState('');
   const [pendingImport, setPendingImport] = useState(null);
   const [showDataManager, setShowDataManager] = useState(false);
+  const [showBackupHistory, setShowBackupHistory] = useState(false);
+  const [restoringBackup, setRestoringBackup] = useState(false);
+  const [restoreError, setRestoreError] = useState('');
   const importInputRef = useRef(null);
+  useEffect(() => {
+    if (!showDataManager && !showBackupHistory && !pendingImport) return;
+    const dismiss = event => {
+      if (event.type === 'keydown' && event.key !== 'Escape') return;
+      event.preventDefault();
+      if (restoringBackup) return;
+      if (pendingImport) setPendingImport(null);
+      else if (showBackupHistory) setShowBackupHistory(false);
+      else setShowDataManager(false);
+    };
+    window.addEventListener('kelani-data-back', dismiss);
+    document.addEventListener('keydown', dismiss);
+    return () => {
+      window.removeEventListener('kelani-data-back', dismiss);
+      document.removeEventListener('keydown', dismiss);
+    };
+  }, [showDataManager, showBackupHistory, pendingImport, restoringBackup]);
+
 
   const downloadJson = (filename, json) => {
     const blob = new Blob([json], { type: 'application/json' });
@@ -4322,13 +4376,25 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
     }
   };
 
-  const confirmImport = () => {
-    if (!pendingImport) return;
-
-    storeImportedBackup(localStorage, pendingImport.data);
-    setNotice(t.importDataSuccess);
-    setPendingImport(null);
-    window.window.location.reload();
+  const confirmImport = async () => {
+    if (!pendingImport || restoringBackup) return;
+    setRestoringBackup(true);
+    setRestoreError('');
+    try {
+      if (pendingImport.fromHistory) {
+        await queueBackupOperation(async () => {
+          const current = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+          const history = getBackupHistory();
+          if (!history || !current) throw new Error('Safety backup unavailable');
+          await history.saveSafety(buildBackupPayload(current));
+        });
+      }
+      storeImportedBackup(localStorage, pendingImport.data);
+      setNotice(t.importDataSuccess);
+      setPendingImport(null);
+      window.window.location.reload();
+    } catch (error) { setRestoreError(t.backupHistoryRestoreError); }
+    finally { setRestoringBackup(false); }
   };
 
   const importSummary = pendingImport?.summary;
@@ -4462,6 +4528,7 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
       {showDataManager && !importOnly && !triggerOnly && (
         <SettingsModal
           title={t.dataManagement}
+          inactive={showBackupHistory || Boolean(pendingImport)}
           onClose={() => setShowDataManager(false)}
         >
           <div data-testid="data-backup-manager" style={{ display: 'grid', gap: 14 }}>
@@ -4546,6 +4613,9 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
               </div>
             )}
 
+            <button type="button" style={compactModalActionButtonStyle('secondary', '0 auto')}
+              onClick={() => setShowBackupHistory(true)}>{t.backupHistoryTitle}</button>
+
             <div style={modalActionRowStyle()}>
               <button type="button" onClick={exportData} style={modalActionButtonStyle('primary')}>
                 {t.exportDataShort || t.exportData}
@@ -4579,10 +4649,19 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
         </SettingsModal>
       )}
 
+      {showBackupHistory && <BackupHistoryModal t={t} Modal={SettingsModal}
+        buttonStyle={compactModalActionButtonStyle} getHistory={getBackupHistory}
+        onClose={() => setShowBackupHistory(false)}
+        onRestore={backup => {
+          setRestoreError('');
+          setShowBackupHistory(false);
+          setPendingImport({ data: backup.data, appVersion: backup.appVersion || '-',
+            exportedAt: backup.exportedAt, summary: buildDataSectionBackupSummary(backup.data), fromHistory: true });
+        }} />}
       {pendingImport && (
         <SettingsModal
-          title={t.importData}
-          onClose={() => setPendingImport(null)}
+          title={pendingImport.fromHistory ? t.backupHistoryRestore : t.importData}
+          onClose={() => { if (!restoringBackup) setPendingImport(null); }}
         >
           <p style={{
             margin: '0 0 16px',
@@ -4591,7 +4670,7 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
             lineHeight: 1.4,
             textAlign: 'center'
           }}>
-            {t.importDataConfirm}
+            {pendingImport.fromHistory ? t.backupHistoryRestoreWarning : t.importDataConfirm}
           </p>
 
           <div style={{
@@ -4633,16 +4712,19 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
             ))}
           </div>
 
+          {restoreError && <p role="alert">{restoreError}</p>}
           <div style={modalActionRowStyle()}>
             <button
               onClick={confirmImport}
+              disabled={restoringBackup}
               style={modalActionButtonStyle('primary')}
             >
-              {t.importData}
+              {pendingImport.fromHistory ? t.backupHistoryRestore : t.importData}
             </button>
 
             <button
               onClick={() => setPendingImport(null)}
+              disabled={restoringBackup}
               style={modalActionButtonStyle()}
             >
               {t.cancel}
@@ -4754,12 +4836,12 @@ export function MilestoneCelebrationModal({
       inactive={shareOpen}
       onClose={onClose}
     >
-      <div style={{ fontSize: 38, textAlign: 'center', margin: '-4px 0 8px' }}>🎉</div>
+      <div style={{ fontSize: responsiveFontSize(38), textAlign: 'center', margin: '-4px 0 8px' }}>🎉</div>
 
       <p style={{
         margin: '0 0 14px',
         color: THEME.text,
-        fontSize: 14,
+        fontSize: responsiveFontSize(14),
         fontWeight: 800,
         lineHeight: 1.4,
         textAlign: 'center',
@@ -4785,12 +4867,12 @@ export function MilestoneCelebrationModal({
               border: 'none',
             }}
           >
-            <span style={{ color: THEME.text, fontSize: 13, fontWeight: 800 }}>
+            <span style={{ color: THEME.text, fontSize: responsiveFontSize(13), fontWeight: 800 }}>
               {achievementLabel(achievement)}
             </span>
             <strong style={{
               color: achievement.type === 'level' ? THEME.yellow : THEME.green,
-              fontSize: 13,
+              fontSize: responsiveFontSize(13),
               textAlign: 'right',
               whiteSpace: 'nowrap',
             }}>
@@ -4822,10 +4904,10 @@ export function MilestoneCelebrationModal({
   );
 }
 
-function AboutSupportSection({
+function AboutSupportModals({
   t, onShare, shareOpen = false, currentVersion, latestVersion, checkStatus,
   checkAutomatically, onCheckAutomaticallyChange, onCheck, onOpenWhatsNew,
-  onOpenUpdateLink, onPrepareUpdates, isOpen, onOpen, onClose,
+  onOpenUpdateLink, isOpen, onClose,
   projectOpen, onProjectOpen, onProjectBack,
 }) {
 
@@ -4852,26 +4934,17 @@ function AboutSupportSection({
 
   return (
     <>
-      <SettingsListRow
-        label={t.aboutAndUpdates}
-        actionLabel={t.view}
-        onAction={() => {
-          onPrepareUpdates();
-          onOpen();
-        }}
-      />
-
       {isOpen && projectOpen && (
         <SettingsModal title={t.projectAndVerification} onClose={onProjectBack} zIndex={660} nested>
           <div style={{ display: 'grid', gap: 14 }}>
             {facts.map(([label, value]) => (
               <div key={label}>
-                <div style={{ color: THEME.muted, fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>
+                <div style={{ color: THEME.muted, fontSize: responsiveFontSize(11), fontWeight: 800, textTransform: 'uppercase' }}>
                   {label}
                 </div>
                 <div style={{
                   color: THEME.text,
-                  fontSize: 12,
+                  fontSize: responsiveFontSize(12),
                   fontWeight: 700,
                   lineHeight: 1.4,
                   overflowWrap: 'anywhere',
@@ -4917,7 +4990,7 @@ function AboutSupportSection({
           <p style={{
             margin: '0 0 16px',
             color: THEME.text,
-            fontSize: 14,
+            fontSize: responsiveFontSize(14),
             fontWeight: 700,
             lineHeight: 1.4,
             textAlign: 'center',
@@ -4961,7 +5034,7 @@ function AboutSupportSection({
               background: 'transparent',
               border: 'none',
               color: THEME.primary,
-              fontSize: 14,
+              fontSize: responsiveFontSize(14),
               fontWeight: 800,
               cursor: 'pointer',
               textAlign: 'center',
@@ -8490,12 +8563,13 @@ export function CurrentWorkout({
 
               <WorkoutLiftGrid
                 testId={`workout-lift-grid-${li}`}
-                columnCount={WORKOUT_GRID_COLUMNS}
+                columnCount={isMeetDay ? WORKOUT_GRID_COLUMNS * 2 : WORKOUT_GRID_COLUMNS}
               >
                 <WarmupGrid
                   compactGrid
                   showPhaseTags
                   warmups={liftBlock.warmups || []}
+                  centeredMeetRow={isMeetDay}
                   gridSpan={null}
                   referenceSets={liftBlock.sets || []}
                   onShowPlateCalculator={onShowPlateCalculator}
@@ -8676,6 +8750,10 @@ export function CurrentWorkout({
                     compactGrid
                     phaseTag={getWorkoutSetPhaseTag(set, t)}
                     gridSpan={null}
+                    gridPosition={isMeetDay ? centeredMeetItemStyle(
+                      liftBlock.sets.length, si,
+                      Math.ceil((liftBlock.warmups || []).length / WORKOUT_GRID_COLUMNS) + 1
+                    ) : null}
                     set={set}
                     index={si}
                     label={set.labelKey ? t[set.labelKey] : `${t.set} ${si + 1}`}
@@ -11110,7 +11188,8 @@ function Onboarding({ onStart, t }) {
       trainingFocus: selectedTrainingFocus,
     });
 
-    return { selectedWeightUnit, startingBodyWeight, s, b, d, athleteLevel, trainingDays };
+    return { selectedWeightUnit, startingBodyWeight, s, b, d, athleteLevel, trainingDays,
+      periodDays: getSmartIdealNormalPeriodDays({ athleteLevel }) };
   }
 
   function handleNext() {
@@ -11452,12 +11531,12 @@ function Onboarding({ onStart, t }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
               <dt style={{ color: THEME.muted, fontWeight: 700 }}>{t.onboardingPlannedDays}</dt>
               <dd style={{ margin: 0, color: THEME.primary, fontWeight: 900 }}>
-                {startingProfile.trainingDays} / 7
+                {startingProfile.trainingDays} / {startingProfile.periodDays}
               </dd>
             </div>
           </dl>
           <p style={{ color: THEME.muted, fontSize: 12, lineHeight: 1.35, margin: '12px 0 0' }}>
-            {t.onboardingDaysExplanation}
+            {t.onboardingDaysExplanation.replace('{days}', startingProfile.periodDays)}
           </p>
         </section>}
 
@@ -12492,6 +12571,7 @@ function App() {
   useEffect(() => {
     const setupBackButton = async () => {
       const listener = await CapacitorApp.addListener('backButton', () => {
+        if (!window.dispatchEvent(new Event('kelani-data-back', { cancelable: true }))) return;
         if (shareCard) {
           setShareCard(null);
           return;
@@ -12693,6 +12773,9 @@ function App() {
       );
       const completedWorkoutCount = getCompletedWorkoutCount(savedHistory, savedCycle);
       const generatedWorkouts = generateWorkoutsForTrainingModel(savedTrainingModel, {
+        inProgressWorkout: data.inProgress?.currentCycle === savedCycle &&
+          data.inProgress?.programVersion === PROGRAM_VERSION
+          ? data.inProgress.workouts?.[data.inProgress.currentIndex] : null,
         programProfile: savedProgramProfile,
         squat: generationMaxes.Squat,
         bench: generationMaxes.Bench,
@@ -12722,10 +12805,15 @@ function App() {
         savedInProgress.programVersion === PROGRAM_VERSION &&
         savedInProgress.currentCycle === savedCycle &&
         Array.isArray(savedInProgress.workouts) &&
-        savedInProgress.workouts.length === generatedWorkouts.length;
+        (isSmartTrainingModel(savedTrainingModel) ||
+          savedInProgress.workouts.length === generatedWorkouts.length);
 
+      // Smart calendars can shorten or grow. Restore saved slots against the
+      // new scaffold without discarding started work because its length changed.
       const restoredWorkouts = canRestoreInProgress
-        ? savedInProgress.workouts
+        ? (isSmartTrainingModel(savedTrainingModel)
+          ? generatedWorkouts.map((workout, index) => savedInProgress.workouts[index] || workout)
+          : savedInProgress.workouts)
         : hydrateWorkoutsWithHistory(generatedWorkouts, savedHistory, savedCycle);
 
       const normalizedWorkouts = mergeGeneratedWorkoutStructure(
@@ -13075,6 +13163,7 @@ function App() {
       ? normalizeOneRMs(oneRMs, prs)
       : prs;
     const generatedWorkouts = generateWorkoutsForTrainingModel(trainingModel, {
+      inProgressWorkout: workouts[currentIndex],
       programProfile,
       squat: generationMaxes.Squat,
       bench: generationMaxes.Bench,
@@ -16203,6 +16292,11 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
   Bench: { oneRM: best1RMs.Bench },
   Deadlift: { oneRM: best1RMs.Deadlift },
 });
+const displayedWorkoutNumber = screen === 'current'
+  ? (workouts[selectedIndex]?.number || currentIndex + 1)
+  : screen === 'completed' ? (completedWorkout?.number || currentIndex + 1)
+  : (workouts[currentIndex]?.number || currentIndex + 1);
+const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: displayedWorkoutNumber };
 const screenUsesCompactDensity =
   adaptiveScreenDensity.screen === screen && adaptiveScreenDensity.compact;
 const screenAllowsContentScroll =
@@ -16230,15 +16324,11 @@ const screenAllowsContentScroll =
   >
       <AppHeader t={t} currentCycle={currentCycle}
         onOpenAbout={() => {
-          setScreen('settings');
           setShowProjectVerification(false);
           prepareUpdatesSettings();
           setShowAboutUpdates(true);
         }}
-        workoutNumber={screen === 'current'
-          ? (workouts[selectedIndex]?.number || currentIndex + 1)
-          : screen === 'completed' ? (completedWorkout?.number || currentIndex + 1)
-          : (workouts[currentIndex]?.number || currentIndex + 1)}
+        workoutNumber={displayedWorkoutNumber}
         athleteLevel={athleteLevel} eStrengthRatio={eStrengthRatio} eStrengthMax={eStrengthMax}
         recentBodyRatioEvent={dashboardRecentPrEvents.ratioEvent} />
       {screen === 'current' && (
@@ -16913,32 +17003,11 @@ const screenAllowsContentScroll =
         onAction={openCalendarSettings}
       />
 
-      <AboutSupportSection
-        t={t}
-        onShare={() => setShareCard(buildAchievementCard({ t }))}
-        shareOpen={Boolean(shareCard)}
-        currentVersion={installedUpdateVersion}
-        latestVersion={latestAvailableVersion}
-        checkStatus={updateCheckStatus}
-        checkAutomatically={checkForUpdatesAutomatically}
-        onCheckAutomaticallyChange={setCheckForUpdatesAutomatically}
-        onCheck={() => performUpdateCheck({ automatic: false })}
-        onOpenWhatsNew={() => setShowWhatsNew(true)}
-        onOpenUpdateLink={openUpdateDownload}
-        onPrepareUpdates={prepareUpdatesSettings}
-        isOpen={showAboutUpdates}
-        onOpen={() => {
-          setShowProjectVerification(false);
-          setShowAboutUpdates(true);
-        }}
-        onClose={() => {
-          setShowProjectVerification(false);
-          setShowAboutUpdates(false);
-        }}
-        projectOpen={showProjectVerification}
-        onProjectOpen={() => setShowProjectVerification(true)}
-        onProjectBack={() => setShowProjectVerification(false)}
-      />
+      <SettingsListRow label={t.aboutAndUpdates} actionLabel={t.view} onAction={() => {
+        setShowProjectVerification(false);
+        prepareUpdatesSettings();
+        setShowAboutUpdates(true);
+      }} />
       <StartNewCycleSection
         t={t}
         onStartNewCycle={handleStartNewCycle}
@@ -16964,7 +17033,7 @@ const screenAllowsContentScroll =
         containerStyle={completedWorkoutScreenStyle()}
         contentStyle={scrollableScreenContentStyle()}
         buttonStyle={compactModalActionButtonStyle}
-        onShare={() => setShareCard(buildAchievementCard({ kind: 'cycle', history, cycle: currentCycle, t, weightUnit }))}
+        onShare={() => setShareCard(buildAchievementCard({ ...shareContext, kind: 'cycle', history, cycle: currentCycle, t, weightUnit }))}
       />
     )}
     {screen === 'completed' && !completedWorkoutCanStartNewCycle && (
@@ -17015,7 +17084,7 @@ const screenAllowsContentScroll =
           }}>
             <div style={{
               color: THEME.muted,
-              fontSize: 13,
+              fontSize: responsiveFontSize(13),
               fontWeight: 800,
               marginBottom: 3
             }}>
@@ -17023,7 +17092,7 @@ const screenAllowsContentScroll =
             </div>
             <div style={{
               color: THEME.primary,
-              fontSize: 28,
+              fontSize: responsiveFontSize(28),
               fontWeight: 900,
               lineHeight: 1,
               marginBottom: 8
@@ -17041,7 +17110,7 @@ const screenAllowsContentScroll =
                 <div key={`standard-achieved-${result.lift}`} style={{ padding: '3px 2px' }}>
                   <div style={{
                     color: THEME.muted,
-                    fontSize: 13,
+                    fontSize: responsiveFontSize(13),
                     fontWeight: 800,
                     marginBottom: 3
                   }}>
@@ -17097,7 +17166,7 @@ const screenAllowsContentScroll =
               {automaticTooHardSetCount > 0 && (
                 <p style={{
                   color: THEME.muted,
-                  fontSize: 12,
+                  fontSize: responsiveFontSize(12),
                   margin: '2px 0 0',
                   textAlign: 'left'
                 }}>
@@ -17122,7 +17191,7 @@ const screenAllowsContentScroll =
           }}>
             <div style={{
               color: THEME.muted,
-              fontSize: 12,
+              fontSize: responsiveFontSize(12),
               fontWeight: 800,
               marginBottom: 3
             }}>
@@ -17131,7 +17200,7 @@ const screenAllowsContentScroll =
 
             <div style={{
               color: THEME.primary,
-              fontSize: 18,
+              fontSize: responsiveFontSize(18),
               fontWeight: 900,
               lineHeight: 1.1
             }}>
@@ -17180,7 +17249,7 @@ const screenAllowsContentScroll =
                     Bench: THEME.primary,
                     Deadlift: THEME.yellow,
                   }[summary.lift] || THEME.primary),
-                  fontSize: 16,
+                  fontSize: responsiveFontSize(16),
                   fontWeight: 900,
                   marginBottom: 4,
                   textAlign: 'center'
@@ -17222,7 +17291,7 @@ const screenAllowsContentScroll =
                     Bench: THEME.primary,
                     Deadlift: THEME.yellow,
                   }[liftBlock.lift] || THEME.primary),
-                  fontSize: 16,
+                  fontSize: responsiveFontSize(16),
                   fontWeight: 900,
                   marginBottom: 4
                 }}>
@@ -17299,7 +17368,7 @@ const screenAllowsContentScroll =
                         {group.effortLabel && (
                           <div style={{
                             color: THEME.muted,
-                            fontSize: 12,
+                            fontSize: responsiveFontSize(12),
                             fontWeight: 700,
                             marginTop: 2
                           }}>
@@ -17329,7 +17398,7 @@ const screenAllowsContentScroll =
 
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
           <SupportActionButton onClick={() => setShareCard(buildAchievementCard({
-            kind: completedWorkout?.type === 'rest' ? 'rest' : completedWorkoutIsMeet ? 'meet' : 'workout',
+            ...shareContext, kind: completedWorkout?.type === 'rest' ? 'rest' : completedWorkoutIsMeet ? 'meet' : 'workout',
             workout: completedWorkout, t, weightUnit,
           }))}>
             {t.shareKelani}
@@ -17345,12 +17414,34 @@ const screenAllowsContentScroll =
   <MilestoneCelebrationModal
     celebration={activeMilestoneCelebration}
     shareOpen={Boolean(shareCard)}
-    onShare={() => setShareCard(buildAchievementCard({ kind: 'milestone', celebration: activeMilestoneCelebration, t, weightUnit }))}
+    onShare={() => setShareCard(buildAchievementCard({ ...shareContext, kind: 'milestone', celebration: activeMilestoneCelebration, t, weightUnit }))}
     t={t}
     weightUnit={weightUnit}
     onClose={() => setActiveMilestoneCelebration(null)}
   />
 )}
+
+      <AboutSupportModals
+        t={t}
+        onShare={() => setShareCard(buildAchievementCard({ ...shareContext, t }))}
+        shareOpen={Boolean(shareCard)}
+        currentVersion={installedUpdateVersion}
+        latestVersion={latestAvailableVersion}
+        checkStatus={updateCheckStatus}
+        checkAutomatically={checkForUpdatesAutomatically}
+        onCheckAutomaticallyChange={setCheckForUpdatesAutomatically}
+        onCheck={() => performUpdateCheck({ automatic: false })}
+        onOpenWhatsNew={() => setShowWhatsNew(true)}
+        onOpenUpdateLink={openUpdateDownload}
+        isOpen={showAboutUpdates}
+        onClose={() => {
+          setShowProjectVerification(false);
+          setShowAboutUpdates(false);
+        }}
+        projectOpen={showProjectVerification}
+        onProjectOpen={() => setShowProjectVerification(true)}
+        onProjectBack={() => setShowProjectVerification(false)}
+      />
 
 {shareCard && (
   <AchievementShareModal card={shareCard} t={t} onClose={() => setShareCard(null)}

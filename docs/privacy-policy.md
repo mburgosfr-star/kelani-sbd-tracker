@@ -22,6 +22,12 @@ The app stores your training data locally on your device. This may include:
 
 This app data stays on your device unless you choose to export or share it. The optional Android calendar integration described below also writes brief workout events to the calendar you select.
 
+## Local automatic backup history
+
+Android and desktop can retain daily local copies of the same full app data as a manual backup, including training history, records, body data, settings and in-progress workouts. The default retention is 30 calendar days, with options for 7 or 90 days, or the latest backup only. There is at most one daily recovery point per local day and a maximum of 90 daily files. Older daily files are removed only after a new automatic backup is written and verified. Manual exports and the latest backup are excluded from this cleanup. Reserved previous copies of the latest backup or safety copy may also remain locally to recover interrupted file replacement.
+
+When you confirm restoration from Backup History, Kelani first writes and verifies a separate safety copy of your current data. It remains until another restoration replaces it with a new safety copy. The installation's retention preference is stored locally, separately from exported training data. No backup data is sent to a Kelani service. Browsers do not create automatic backup files. These local files do not protect against device loss; keep an independent export outside the app and device. Resetting local training data does not remove separate backup files, which can be managed through the device's file manager.
+
 ## Optional feedback and contact
 
 You can choose to contact Kelani or share feedback through your email app or GitHub. Kelani does not send messages automatically. The email action opens a blank message with a Kelani subject. You decide what to write and whether to send it; Kelani does not attach training data or app metadata. Sending email reveals your sender email address, possibly your name, and other metadata normally included by your email provider. GitHub handles information you submit there under its own privacy terms.
@@ -30,7 +36,7 @@ Versions through 2.0.64 include a locally generated usage summary with aggregate
 
 ## Optional achievement sharing
 
-You can preview and share a Kelani image from a completed workout, rest day, meet, cycle or strength milestone, or share a general Kelani card from About & Updates. Images are generated on your device. A result card can contain successful work-set weights and repetitions, achieved meet results, cycle counts and strength records, estimated records or experience-level achievements. The card does not include your name, email address, body measurements, free-text notes or a full training backup. The preview shows the exact image and accompanying download text before you share.
+You can preview and share a Kelani image from a completed workout, rest day, meet, cycle or strength milestone, or share a general Kelani card from About & Updates. Images are generated on your device. Cards include your experience level, cycle and workout number. A result card can contain successful work-set weights and repetitions, achieved meet results, cycle counts and strength records, estimated records or experience-level achievements. The card does not include your name, email address, body measurements, free-text notes or a full training backup. The preview shows the exact image and a download link before you share. The accompanying share text contains only the download label and address.
 
 On Android, Kelani writes the image to its private cache and opens the system share sheet only after you choose Share. You choose the receiving app and recipient. The receiving app may transmit or store the image, text and its own account or connection information under its own privacy policy. Kelani does not send the image to the developer or a Kelani server. A cached image may remain on your device until replaced or the system clears the cache. Browsers that cannot share image files offer an image download and a separate action to copy the download link. Downloaded images and copies sent to others are not removed when you delete your local Kelani training data.
 

@@ -14,14 +14,18 @@ Kelani 1.x and 2.x have different Android identities and can coexist. To migrate
 
 ## Smart Training
 
-New users start with Smart Training. It follows a level-specific 28-workout ideal route:
+New users start with Smart Training. The default calendar depends on the athlete level:
 
-| Route | Purpose |
-|---|---|
-| W1–W21 | Build strength with heavy, medium and light workouts |
-| W22–W26 | Taper |
-| W27 | SBD Meet Day |
-| W28 | Planned post-meet recovery |
+| Route | Beginner | Intermediate, Advanced and Elite |
+|---|---|---|
+| Build strength | W1–W18 | W1–W21 |
+| Taper | W19–W24 | W22–W26 |
+| SBD Meet Day | W25 | W27 |
+| Planned post-meet recovery | W26 | W28 |
+
+All beginner routes alternate a training day and a recovery day, including during taper. Each normal six-day block contains three sessions; the prescribed exercises, weights and volume per session remain the same. Feedback can adjust the calendar as described below.
+
+Existing cycles keep their completed workouts and their numbering. Work already started keeps its saved prescription and set progress. The remaining plan adopts the new rhythm, so a cycle already underway can finish later than the default W26. No history or PRs are reset.
 
 The Program screen shows the route ahead. Completed workouts show recorded work-set results on the right instead of the plan: green ✓ for successful sets and red ✕ for missed sets, grouped by repetitions, weight and recorded percentage. Warm-ups are omitted, as in the planning preview. A question mark means an older record has no saved outcome for that set. Confirmed strength determines the prescribed weights. Future workouts open in view-only mode; choosing **Workout** in the navigation returns to your current session.
 
@@ -34,6 +38,16 @@ Meet planning uses demonstrated real 1RM values. Estimated 1RM tracks progress f
 In **Settings → New cycle → Start**, you can leave the current cycle and begin Workout 1 of the next cycle without doing the planned meet. Confirmation is required. Any unfinished progress in the current workout is discarded; remaining workouts are not recorded as failed, and no meet results or cycle-completion result are created. Your completed history, PRs, body data and settings stay saved. The Meet Planner and meet checklist reset for the new cycle. After a break, the existing lighter return-workout option remains available; starting a new cycle does not itself lower your training weights.
 
 To reset the app completely instead, open **Settings → Data & backups → Manage → Delete all data**. This requires a separate confirmation and removes local training data. Export a backup first if you want to keep it.
+
+## Automatic Backup History
+
+In **Settings → Data & backups → Manage → Backup History**, choose **Latest backup only**, **7 days**, **30 days** (default), or **90 days**. The latest automatic backup is still updated after completed workouts and relevant body-data changes. Android and desktop also keep at most one daily recovery point, updated with the last successful backup that day. Retention uses the device's local calendar days, not the number of workouts. At most 90 daily files are kept, plus the latest backup and one safety copy. Reserved previous copies of the latest backup or safety copy may also remain locally to recover an interrupted file replacement. These are separate from the daily recovery points.
+
+A shorter retention period, including **Latest backup only**, takes effect when a new automatic backup is successfully written and verified. Only Kelani's daily files in its dedicated history folder are cleaned up. Manual exports, the latest backup and the safety copy are never removed by this cleanup. The latest backup remains available after a long training break.
+
+Select **Restore** beside a date to preview its cycle and workout progress, then confirm. Restoring replaces your local history, records, settings and in-progress workout; it does not merge histories. Kelani first writes and verifies a separate **Safety backup before restore** containing your current data. If that fails, restoration stops. That safety copy stays available in Backup History until the next restoration replaces it with a new verified safety copy. The retention preference belongs to this installation and is not changed by importing training data. Calendar events already written outside Kelani are not undone by restoration.
+
+On Android, history is stored below `Kelani SBD Tracker/Automatic Backups/History` in the app's Documents location. Desktop uses `Backups/History` in its own application-data directory. Browsers do not create automatic backup files; use manual export and import there. Keep an independent export outside the app and device for protection against device loss or storage failure. Files created before this feature cannot provide earlier recovery points that were already overwritten.
 
 ## Warm-ups and Work Sets
 
@@ -50,7 +64,7 @@ Smart volume work uses these target percentages:
 | Single | 70% | 65% | 60% |
 | Taper | 70% | 65% | 60% |
 
-Top sets have their own prescriptions. During a workout you can complete or fail sets, adjust and restore weights, and open the plate calculator. Failed sets make the workout **Too hard**. Optional preparation, accessories and cooldown work left unchecked are not treated as failure.
+On Meet Day, each lift shows its warm-ups and attempts on separate, centered rows. Top sets have their own prescriptions. During a workout you can complete or fail sets, adjust and restore weights, and open the plate calculator. Failed sets make the workout **Too hard**. Optional preparation, accessories and cooldown work left unchecked are not treated as failure.
 
 ## Rest Timer
 
@@ -74,9 +88,11 @@ Feedback and issue reporting remain available in About & Updates. You choose wha
 
 Tap the logo or the version with the information icon to open **Settings → About & Updates**. The logo and version form one button. This does not reset your training data.
 
-**Share Kelani** is available after completing a workout, rest day, meet or cycle, on strength-milestone dialogs, and in About & Updates. Review the image and download text before choosing **Share**. Result cards use successful recorded sets and achievements, not planned or failed weights. Estimated records remain labeled e1RM. Meet totals require a successful result for all three lifts. Cards follow your interface language and weight unit. They exclude names, body measurements, notes and full training backups.
+The header logo and version open **About & Updates** over the current screen. Closing it returns to the same screen. Result screens and dialogs use larger text on wider displays while retaining the compact layout on smaller phones.
 
-On Android, choose an app and recipient in the system share sheet. The image includes the Kelani download address; the accompanying text contains a clickable link. The receiving app decides how image and text appear. Canceling does not change your saved workout. In browsers that do not support image sharing, download the image and use **Copy download link** to include the text when you send it.
+**Share Kelani** is available after completing a workout, rest day, meet or cycle, on strength-milestone dialogs, and in About & Updates. Review the image and download text before choosing **Share**. Result cards use successful recorded sets and achievements, not planned or failed weights. Estimated records remain labeled e1RM. Meet totals require a successful result for all three lifts. Cards include your level, cycle and workout number and follow your interface language and weight unit. They exclude names, body measurements, notes and full training backups.
+
+On Android, choose an app and recipient in the system share sheet. The download address is shared as separate text with a clickable link, outside the image. The receiving app decides how image and text appear. Canceling does not change your saved workout. In browsers that do not support image sharing, download the image and use **Copy download link** to include the text when you send it.
 
 About & Updates has one email action, one link to the GitHub project, and one link to IzzyOnDroid, also usable with clients such as NeoStore. Email opens a blank draft; GitHub provides downloads, feedback and issue reporting. **Support Kelani** remains a separate, optional GitHub Sponsors action. Completing training or reaching a milestone no longer prompts you to email feedback.
 

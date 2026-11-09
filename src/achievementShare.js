@@ -6,7 +6,7 @@ const colors = { Squat: '#ff5c45', Bench: '#ff8a3d', Deadlift: '#ffd166' };
 const success = set => set.done && !set.failed && !set.skipped && Number(set.weight) > 0 && Number(set.reps) > 0;
 
 // Explicit allowlist: no names, body measurements, dates, notes or backup data.
-export function buildAchievementCard({ kind = 'about', workout, celebration, history = [], cycle = 1, t, weightUnit = 'kg' }) {
+export function buildAchievementCard({ kind = 'about', workout, celebration, history = [], cycle = 1, athleteLevel, workoutNumber, t, weightUnit = 'kg' }) {
   const label = lift => ({ Squat: t.squat, Bench: t.bench, Deadlift: t.deadlift, Total: t.total })[lift] || '';
   const weight = value => formatWeightFromKg(value, weightUnit);
   const rows = [];
@@ -65,11 +65,20 @@ export function buildAchievementCard({ kind = 'about', workout, celebration, his
     }
     if (kind === 'meet' && ['Squat', 'Bench', 'Deadlift'].every(lift => validMeetLifts.has(lift))) add(t.total, weight(total), '#ffd166');
   }
-  return { title, subtitle, rows, footer: t.shareCardFooter, downloadLabel: t.shareDownload, url: KELANI_DOWNLOAD_URL };
+  const levelLabel = ({ beginner: t.athleteLevelBeginner, intermediate: t.athleteLevelIntermediate,
+    advanced: t.athleteLevelAdvanced, elite: t.athleteLevelElite })[athleteLevel];
+  const positiveInteger = value => Number.isSafeInteger(Number(value)) && Number(value) > 0;
+  const number = workout?.number ?? workoutNumber;
+  const context = [
+    levelLabel,
+    positiveInteger(cycle) ? `${t.cycle} ${Number(cycle)}` : null,
+    positiveInteger(number) ? `${t.workout} ${Number(number)}` : null,
+  ].filter(Boolean);
+  return { title, subtitle, context, rows, footer: t.shareCardFooter, downloadLabel: t.shareDownload, url: KELANI_DOWNLOAD_URL };
 }
 
 export function achievementShareText(card) {
-  return `${card.title}\n${card.downloadLabel}: ${card.url}`;
+  return `${card.downloadLabel}: ${card.url}`;
 }
 
 // App-owned logo and explicit result fields only. All line heights are measured first.
@@ -95,48 +104,50 @@ export async function renderAchievementCard(card) {
     if (line) result.push(line);
     return result;
   }
-  const general = !card.rows.length;
-  const titleLines = lines(card.title, general ? 62 : 56);
-  const subtitleLines = lines(card.subtitle, 30);
-  const measuredRows = card.rows.map(row => ({ ...row, labels: lines(row.label, 30), values: lines(row.value, 38) }));
-  const introBottom = 295 + titleLines.length * 70 + 20 + subtitleLines.length * 42 + 50;
-  const rowsHeight = measuredRows.reduce((sum, row) => sum + row.labels.length * 40 + row.values.length * 50 + 28, 0);
-  canvas.height = general ? 1080 : Math.max(1080, introBottom + rowsHeight + 220);
+  // Keep a full-size card. Distribute spare height between content sections,
+  // never into a detached footer. The download link travels as separate text.
+  const drawings = [];
+  let y = 28 + 180 + 40;
+  let section = 0;
+  function nextSection(gap) { section += 1; y += gap; }
+  function paragraph(value, size, lineHeight, color = '#fff4e6', width = 920) {
+    for (const line of lines(value, size, width)) {
+      drawings.push({ value: line, y: y + size, size, color, section });
+      y += lineHeight;
+    }
+  }
+  paragraph('Kelani SBD Tracker', 48, 58);
+  nextSection(56);
+  paragraph(card.title, 68, 82, '#ff8a3d');
+  y += 20;
+  paragraph(card.subtitle, 44, 56, '#ccc4bb');
+  const context = card.context || [];
+  if (context.length) {
+    nextSection(48);
+    paragraph(context[0], 44, 56, '#ffd166');
+    if (context.length > 1) paragraph(context.slice(1).join(' · '), 44, 56, '#ffd166');
+  }
+  if (card.rows.length) {
+    nextSection(56);
+    card.rows.forEach((row, index) => {
+      if (index) y += 40;
+      paragraph(row.label, 44, 56, row.color);
+      paragraph(row.value, 52, 66);
+    });
+  } else {
+    nextSection(56);
+    paragraph(card.footer, 44, 56, '#ddd4ca', 880);
+  }
+  canvas.height = Math.max(1080, y + 48);
+  const sectionSpacing = section ? (canvas.height - y - 48) / section : 0;
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, 1080, canvas.height);
-  const text = (value, x, y, size, color = '#fff4e6', align = 'left') => {
-    ctx.textAlign = align;
-    ctx.fillStyle = color;
-    ctx.font = `700 ${size}px sans-serif`;
-    ctx.fillText(value, x, y, 920);
-  };
-  if (general) {
-    ctx.drawImage(logo, 420, 70, 240, 240);
-    text('Kelani SBD Tracker', 540, 377, 44, '#fff4e6', 'center');
-    let y = 495;
-    titleLines.forEach(line => { text(line, 540, y, 62, '#ff8a3d', 'center'); y += 74; });
-    y += 18;
-    subtitleLines.forEach(line => { text(line, 540, y, 30, '#ffd166', 'center'); y += 42; });
-    y += 55;
-    lines(card.footer, 34, 820).forEach(line => { text(line, 540, y, 34, '#ddd4ca', 'center'); y += 48; });
-  } else {
-    ctx.drawImage(logo, 72, 62, 144, 144);
-    text('Kelani SBD Tracker', 250, 151, 42);
-    let y = 295;
-    titleLines.forEach(line => { text(line, 80, y, 56, '#ff8a3d'); y += 70; });
-    y += 20;
-    subtitleLines.forEach(line => { text(line, 80, y, 30, '#ccc4bb'); y += 42; });
-    y += 50;
-    measuredRows.forEach(row => {
-      row.labels.forEach(line => { text(line, 80, y, 30, row.color); y += 40; });
-      row.values.forEach(line => { text(line, 80, y, 38); y += 50; });
-      y += 28;
-    });
+  ctx.drawImage(logo, 450, 28, 180, 180);
+  for (const item of drawings) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = item.color;
+    ctx.font = `700 ${item.size}px sans-serif`;
+    ctx.fillText(item.value, 540, item.y + item.section * sectionSpacing, 920);
   }
-  const footerY = canvas.height - 170;
-  ctx.fillStyle = '#ff8a3d';
-  ctx.fillRect(440, footerY, 200, 4);
-  text(card.downloadLabel, 540, footerY + 72, 32, '#ff8a3d', 'center');
-  text(card.url.replace('https://', ''), 540, footerY + 123, 25, '#ccc4bb', 'center');
   return canvas.toDataURL('image/png');
 }

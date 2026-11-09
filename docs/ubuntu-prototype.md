@@ -71,7 +71,7 @@ The prototype uses its own local data folder. On a default Ubuntu installation:
 ~/.config/Kelani SBD Tracker Desktop Prototype
 ```
 
-Automatic JSON backups and the previous copy are in its `Backups` folder.
+Automatic JSON backups and the previous copy are in its `Backups` folder. Daily recovery points and the safety copy used before restoration are in `Backups/History`. Manage retention and restoration in **Settings → Data & backups → Manage → Backup History**; see the [backup guide](user-guide.md#automatic-backup-history).
 Manual exports can be saved to a folder you choose. These are separate from
 your Android installation and browser profile. Import replaces the desktop
 prototype profile; it does not merge histories or synchronize with your phone.

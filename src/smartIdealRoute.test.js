@@ -7,6 +7,7 @@ import {
   buildAcceleratedSmartIdealRoutePlan,
   buildAdjustedSmartIdealRoutePlan,
   getSmartIdealNormalTrainingDays,
+  getSmartIdealNormalPeriodDays,
   getSmartIdealNormalPhase,
   getSmartIdealRouteEntryWorkoutNumber,
   getSmartIdealRouteWorkout,
@@ -681,8 +682,8 @@ test('TOO HARD never increases an upcoming recovery block beyond two days', () =
 
   expect(plan).toMatchObject({
     requestedDelayCredits: 2,
-    appliedDelayCredits: 0,
-    unappliedDelayCredits: 2,
+    appliedDelayCredits: 1,
+    unappliedDelayCredits: 1,
   });
   expect(plan.workouts.slice(0, 2).every(workout => workout.type === 'rest'))
     .toBe(true);
@@ -813,3 +814,48 @@ test('every prescribed lift keeps the full-grid invariant and heavy-medium-light
     }
   });
 });
+
+
+test.each(['standard', 'practical', 'beginnerSquat'])(
+  'beginner %s calendar alternates training and recovery without spending feedback credits',
+  trainingFocus => {
+    const plan = buildAdjustedSmartIdealRoutePlan({ athleteLevel: 'beginner', trainingFocus });
+    expect(plan.appliedCredits).toBe(0);
+    expect(plan.workouts).toHaveLength(25);
+    expect(plan.workouts.map(row => row.type)).toEqual([
+      ...Array.from({ length: 24 }, (_, i) => i % 2 ? 'rest' : 'training'), 'meet',
+    ]);
+    expect(plan.workouts.filter(row => row.stage === 'normal')).toHaveLength(18);
+    expect(plan.workouts.filter(row => row.type === 'training').map(row => row.workoutNumber))
+      .toEqual([1, 3, 5, 8, 10, 12, 15, 17, 19, 22, 24, 25]);
+  }
+);
+
+test('beginner taper spacing resumes the same prescription after completing its inserted rest', () => {
+  const before = buildAdjustedSmartIdealRoutePlan({ athleteLevel: 'beginner', startWorkoutNumber: 25 });
+  expect(before.workouts[0]).toMatchObject({
+    type: 'rest', workoutNumber: 25, transitionPending: true, adjustmentReason: 'beginner-spacing',
+  });
+  const after = buildAdjustedSmartIdealRoutePlan({
+    athleteLevel: 'beginner', startWorkoutNumber: 25, hasTrailingCompletedRest: true,
+  });
+  expect(after.workouts.map(row => row.type)).toEqual(['training', 'rest', 'meet']);
+  expect(after.workouts[0]).toEqual(getSmartIdealRouteWorkout({ athleteLevel: 'beginner', workoutNumber: 25 }));
+});
+
+test.each([7, 14, 21])('a saved beginner route at %i removes only a redundant future rest', startWorkoutNumber => {
+  const pending = buildAdjustedSmartIdealRoutePlan({ athleteLevel: 'beginner', startWorkoutNumber });
+  expect(pending.workouts[0].type).toBe('rest');
+  const recovered = buildAdjustedSmartIdealRoutePlan({
+    athleteLevel: 'beginner', startWorkoutNumber, hasTrailingCompletedRest: true,
+  });
+  expect(recovered.workouts[0].workoutNumber).toBe(startWorkoutNumber + 1);
+  expect(recovered.workouts[0].type).toBe('training');
+});
+
+
+test.each([['beginner', 6], ['intermediate', 7], ['advanced', 7], ['elite', 7]])(
+  'the %s training-day preview uses a %i-day normal period', (athleteLevel, days) => {
+    expect(getSmartIdealNormalPeriodDays({ athleteLevel })).toBe(days);
+  }
+);

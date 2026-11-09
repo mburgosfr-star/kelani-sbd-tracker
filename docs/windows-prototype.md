@@ -43,7 +43,10 @@ run it; report a blocked launch instead.
 - Start a rest timer and minimize the window. Check the Windows notification and
   click it to return to the Workout screen.
 - Complete a test workout and check the automatic backup status. The previous
-  automatic backup is retained alongside the latest file.
+  automatic backup is retained alongside the latest file. Daily recovery points
+  and a safety copy before restoration are in `Backups/History`. Use
+  **Settings → Data & backups → Manage → Backup History** to choose retention
+  and restore a saved point; see the [backup guide](user-guide.md#automatic-backup-history).
 
 Keep Kelani running for timer notifications. Closing the window exits the app.
 Notifications are not guaranteed during sleep or while the app is closed. On

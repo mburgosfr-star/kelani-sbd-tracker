@@ -2299,7 +2299,8 @@ test('three-step onboarding persists beginner squat focus and previews calculate
   expect(screen.getByTestId('onboarding-step-content')).toHaveStyle({ gridTemplateRows: 'minmax(auto, 1fr)' });
   expect(screen.getByText('Calculated starting level')).toBeInTheDocument();
   expect(screen.getByText('Beginner')).toBeInTheDocument();
-  expect(screen.getByText('3 / 7')).toBeInTheDocument();
+  expect(screen.getByText('3 / 6')).toBeInTheDocument();
+  expect(screen.getByText(/Per 6 route days/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /Squat and legs focus/ }));
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
@@ -3117,9 +3118,40 @@ test('header logo and centered version open About without changing workout data'
   const version = logo.querySelector('svg').nextElementSibling;
   expect(version).toHaveStyle({ display: 'block', textAlign: 'center' });
   expect(version.querySelector('[aria-hidden="true"]')).toHaveTextContent('i');
+  const dashboard = screen.getByRole('heading', { name: translations.en.dashboard });
   fireEvent.click(logo);
   expect(screen.getByRole('heading', { name: translations.en.aboutAndUpdates })).toBeInTheDocument();
+  expect(dashboard).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: translations.en.settings })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: translations.en.close }));
+  expect(dashboard).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: translations.en.aboutAndUpdates })).not.toBeInTheDocument();
   const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
   expect(saved.currentCycle).toBe(2);
   expect(saved.prs).toEqual({ Squat: 100, Bench: 75, Deadlift: 125 });
+});
+
+
+test('loading a Smart calendar of a different length preserves an already started workout', async () => {
+  localStorage.clear();
+  const { generateWorkoutsForTrainingModel } = await import('./smartTrainingEngine');
+  const plan = generateWorkoutsForTrainingModel('smart', {
+    programProfile: 'kelaniSbd', athleteLevel: 'beginner', squat: 40, bench: 30, deadlift: 50,
+    preparationMode: 'off', accessoryMode: 'off', history: [], currentCycle: 1, currentIndex: 0,
+  });
+  plan[0].lifts[0].sets[0].done = true;
+  plan[0].lifts[0].sets[0].weight = 32.5;
+  plan.push({ number: 29, type: 'rest' }, { number: 30, type: 'rest' });
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1, trainingModel: 'smart', programProfile: 'kelaniSbd', currentCycle: 1,
+    prs: { Squat: 40, Bench: 30, Deadlift: 50 }, history: [], preparationMode: 'off', accessoryMode: 'off',
+    inProgress: { programVersion: 'kelani-program-profiles-v6', currentCycle: 1, currentIndex: 0, workouts: plan },
+  }));
+  render(<App />);
+  await screen.findByTestId('app-header', {}, { timeout: 3000 });
+  await waitFor(() => {
+    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    expect(saved.inProgress.workouts).toHaveLength(28);
+    expect(saved.inProgress.workouts[0].lifts[0].sets[0]).toMatchObject({ done: true, weight: 32.5 });
+  });
 });

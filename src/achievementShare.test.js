@@ -53,12 +53,12 @@ test('weight-unit preference is respected without leaking the original workout o
   expect(card.rows[0].value).not.toContain('kg');
 });
 
-test('PNG renderer uses the real logo, a black background and keeps long result lists above the footer', async () => {
+test('PNG renderer keeps full-size centered cards and sends the download footer only as separate text', async () => {
   let source;
   const drawings = [];
-  const ctx = { font: '', fillStyle: '', drawImage: vi.fn(),
+  const ctx = { font: '', fillStyle: '', textAlign: '', drawImage: vi.fn(),
     measureText(value) { return { width: value.length * parseFloat(this.font.split(' ')[1]) * 0.58 }; },
-    fillRect: vi.fn(), fillText(value, x, y) { drawings.push({ value, x, y }); } };
+    fillRect: vi.fn(), fillText(value, x, y) { drawings.push({ value, x, y, align: this.textAlign }); } };
   vi.stubGlobal('Image', class { set src(value) { source = value; queueMicrotask(() => this.onload()); } });
   const context = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx);
   const data = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/png;base64,PNG');
@@ -69,9 +69,27 @@ test('PNG renderer uses the real logo, a black background and keeps long result 
     expect(await renderAchievementCard(card)).toBe('data:image/png;base64,PNG');
     expect(source).toBe('/icons/icon-512.webp');
     expect(ctx.fillRect.mock.calls[0].slice(0, 3)).toEqual([0, 0, 1080]);
-    const footerY = ctx.fillRect.mock.calls[1][1];
+    expect(ctx.drawImage.mock.calls[0][2]).toBe(28);
+    expect(ctx.fillRect.mock.calls[0][3]).toBeGreaterThanOrEqual(1080);
     const lastResult = drawings.filter(item => item.value.includes('kg')).at(-1);
-    expect(lastResult.y).toBeLessThan(footerY);
+    expect(lastResult.y).toBeLessThan(ctx.fillRect.mock.calls[0][3]);
+    expect(drawings.some(item => item.value.includes('github.com') || item.value === card.downloadLabel)).toBe(false);
+    expect(achievementShareText(card)).toBe(`${card.downloadLabel}: ${card.url}`);
+    expect(drawings.every(item => item.x === 540 && item.align === 'center')).toBe(true);
     expect(data).toHaveBeenCalledWith('image/png');
   } finally { context.mockRestore(); data.mockRestore(); vi.unstubAllGlobals(); }
+});
+
+// Result context must describe the shared result, not the next planned session.
+test.each(['en', 'nl', 'ca'])('share context uses localized level and the completed workout number (%s)', language => {
+  const t = translations[language];
+  const card = buildAchievementCard({ t, kind: 'workout', athleteLevel: 'advanced', cycle: 6,
+    workoutNumber: 27, workout: { number: 26, lifts: [{ lift: 'Bench', sets: [set(90, 3)] }] } });
+  expect(card.context).toEqual([t.athleteLevelAdvanced, `${t.cycle} 6`, `${t.workout} 26`]);
+  expect(achievementShareText(card)).toBe(`${t.shareDownload}: ${KELANI_DOWNLOAD_URL}`);
+  expect(achievementShareText(card)).not.toContain(`${t.workout} 27`);
+});
+
+test('invalid context is omitted instead of sharing arbitrary user fields', () => {
+  expect(make({ athleteLevel: 'PRIVATE', cycle: -1, workoutNumber: 'PRIVATE' }).context).toEqual([]);
 });

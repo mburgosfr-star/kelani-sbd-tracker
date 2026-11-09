@@ -7,7 +7,7 @@ import {
 } from './App';
 import { translations } from './translations';
 import { generateWorkoutsForTrainingModel } from './smartTrainingEngine';
-import { SMART_IDEAL_LEVELS } from './smartIdealRoute';
+import { SMART_IDEAL_LEVELS, buildAdjustedSmartIdealRoutePlan } from './smartIdealRoute';
 import { TRAINING_MODELS } from './smartTrainingConstants';
 
 test('completed workout labels keep their stored historical meaning', () => {
@@ -251,12 +251,13 @@ test.each(['nl', 'en', 'ca'])(
 );
 
 test.each(SMART_IDEAL_LEVELS)(
-  'every active %s W1-W27 route screen keeps readiness informational and blocker-free',
+  'every active %s route screen through Meet Day keeps readiness informational and blocker-free',
   athleteLevel => {
     let history = [];
     const workouts = [];
 
-    for (let currentIndex = 0; currentIndex < 27; currentIndex += 1) {
+    const plan = buildAdjustedSmartIdealRoutePlan({ athleteLevel }).workouts;
+    for (let currentIndex = 0; currentIndex < plan.length; currentIndex += 1) {
       const workout = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
         programProfile: 'kelaniSbd',
         squat: 150,
@@ -273,11 +274,11 @@ test.each(SMART_IDEAL_LEVELS)(
       history = completeIdealRouteWorkout(history, workout);
     }
 
-    expect(workouts).toHaveLength(27);
+    expect(workouts).toHaveLength(plan.length);
 
     workouts.forEach((workout, index) => {
       expect(workout.smartIdealRoute).toMatchObject({
-        workoutNumber: index + 1,
+        workoutNumber: plan[index].workoutNumber,
       });
 
       const rows = getSmartModalDetailRows(workout, translations.en);

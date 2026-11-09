@@ -62,6 +62,38 @@ async function writeVerifiedBackup(filename, json, { keepPrevious = false } = {}
   }
 }
 
+function createBackupHistoryStore(directory, latestPath) {
+  const daily = /^kelani-day-\d{4}-\d{2}-\d{2}\.json$/;
+  const managed = name => daily.test(name) || name === 'kelani-before-restore.json';
+  return async request => {
+    if (!request || typeof request.action !== 'string') throw new Error('Invalid backup request');
+    if (request.action === 'list') {
+      try { return (await fs.readdir(directory)).filter(managed); }
+      catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+    }
+    const { name, action } = request;
+    if (typeof name !== 'string' || (!managed(name) && !(action === 'read' && name === 'latest'))) {
+      throw new Error('Invalid backup filename');
+    }
+    const filename = name === 'latest' ? latestPath : path.join(directory, name);
+    try {
+      const stat = await fs.lstat(filename);
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_BACKUP_BYTES) throw new Error('Invalid backup file');
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      if (action === 'read') return null;
+    }
+    if (action === 'read') {
+      const json = await fs.readFile(filename, 'utf8');
+      validateBackupText(json);
+      return json;
+    }
+    if (action === 'write') return writeVerifiedBackup(filename, request.json);
+    if (action === 'remove' && daily.test(name)) { await fs.unlink(filename); return true; }
+    throw new Error('Invalid backup action');
+  };
+}
+
 function normalizeTimer(value) {
   if (!value || !Number.isInteger(value.id) || !Number.isFinite(value.at) || value.at <= 0 ||
       typeof value.title !== 'string' || typeof value.body !== 'string') return null;
@@ -104,4 +136,4 @@ function createTimerController({ now = Date.now, setTimeout: schedule = setTimeo
   };
 }
 
-module.exports = { APP_ORIGIN, isAppUrl, resolveAssetPath, isAllowedExternalUrl, validateBackupText, writeVerifiedBackup, normalizeTimer, createTimerController };
+module.exports = { createBackupHistoryStore, APP_ORIGIN, isAppUrl, resolveAssetPath, isAllowedExternalUrl, validateBackupText, writeVerifiedBackup, normalizeTimer, createTimerController };

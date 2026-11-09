@@ -1,3 +1,4 @@
+import { workoutHasUserProgress } from './workoutStateMerge';
 import { WORKOUT_GRID_COLUMNS, WORKOUT_VOLUME_MIN_SETS, completeWorkoutVolumeGrid } from './workoutGridPolicy';
 import {
   buildSmartLiftPrescription,
@@ -4800,6 +4801,7 @@ function generateSmartWorkouts({
   idealRouteEnabled = true,
   workoutSetup = null,
   trainingFocus = 'standard',
+  inProgressWorkout = null,
 }) {
   const smartContext = buildSmartTrainingContext({
     history,
@@ -4889,6 +4891,11 @@ function generateSmartWorkouts({
       athleteLevel,
       trainingFocus,
       startWorkoutNumber: idealRouteWorkoutNumber,
+      preserveCurrentTraining: inProgressWorkout?.type === 'training' &&
+        !inProgressWorkout.completed &&
+        Number(inProgressWorkout.number) === decisionWorkoutNumber &&
+        Number(inProgressWorkout.smartIdealRoute?.workoutNumber) === idealRouteWorkoutNumber &&
+        workoutHasUserProgress(inProgressWorkout),
       accelerationCredits:
         idealRouteAdjustments.pendingAccelerationCredits,
       delayCredits: idealRouteAdjustments.pendingDelayCredits,
@@ -5627,6 +5634,7 @@ export function generateWorkoutsForTrainingModelUnconstrained(model, args = {}) 
     idealRouteEnabled: args.idealRouteEnabled !== false,
     workoutSetup: args.workoutSetup || null,
     trainingFocus: normalizeSmartTrainingFocus(args.trainingFocus),
+    inProgressWorkout: args.inProgressWorkout || null,
   };
 
   if (isSmartTrainingModel(model)) {

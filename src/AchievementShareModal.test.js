@@ -24,6 +24,8 @@ test('opening a preview never sends anything; the shown image is the shared imag
   render(<AchievementShareModal card={card} t={translations.en} onClose={close} Modal={Modal} buttonStyle={() => ({})} />);
   expect(Share.share).not.toHaveBeenCalled();
   expect(await screen.findByAltText(translations.en.sharePreviewAlt)).toHaveAttribute('src', image);
+  expect(screen.getByRole('link', { name: translations.en.shareDownload })).toHaveAttribute('href', card.url);
+  expect(screen.queryByText(card.title)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Share' }));
   await waitFor(() => expect(Share.share).toHaveBeenCalledWith(expect.objectContaining({ files: ['file:///cache/card.png'], text: expect.stringContaining(card.url) })));
   expect(Filesystem.writeFile).toHaveBeenCalledWith(expect.objectContaining({ data: 'YWJj', directory: 'CACHE' }));

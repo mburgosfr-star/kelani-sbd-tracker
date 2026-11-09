@@ -143,7 +143,7 @@ test('the combined in-app About and Support section only links to the official r
 test('the in-app About screen shows the exact package ID and certificate fingerprint', () => {
   const source = read('src/App.js');
   const aboutSectionMatch = source.match(
-    /function AboutSupportSection[\s\S]*?\n}\n/
+    /function AboutSupportModals[\s\S]*?\n}\n/
   );
   expect(aboutSectionMatch).toBeTruthy();
   const aboutSectionSource = aboutSectionMatch[0];
