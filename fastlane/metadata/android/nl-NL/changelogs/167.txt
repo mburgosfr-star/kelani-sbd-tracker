@@ -1,0 +1,3 @@
+Bewaar dagelijkse backups gedurende 7, 30 of 90 dagen, met een gecontroleerde veiligheidskopie vóór herstel.
+Beginnersroutes wisselen training en herstel af: 3 trainingen per 6 routedagen. Geschiedenis en begonnen workouts blijven behouden.
+Duidelijkere deelkaarten, grotere responsieve tekst en gecentreerde rijen voor warm-ups en meetpogingen. Over deze app en updates opent boven je huidige scherm.

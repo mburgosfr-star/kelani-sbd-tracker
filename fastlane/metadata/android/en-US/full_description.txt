@@ -25,7 +25,7 @@ Features:
 - 1RM, estimated 1RM and strength statistics
 - Perceived effort tracking for sets and completed workouts
 - Exercise alternatives for lower-stress training periods
-- Local data export and import
+- Local data export and import, with optional daily backup history and a verified safety copy before restoring
 - Completed cycles include a results review, progress since the start and a chart of your best recorded 1RM total
 - Optional sync of future workouts to a selected Android calendar after you grant calendar access and start the first sync
 - Calendar planning includes the remaining current cycle and one provisional next cycle; the forecast can change

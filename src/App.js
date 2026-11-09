@@ -3876,9 +3876,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewSharingItem,
-    t.whatsNewAboutShortcutItem,
-    t.whatsNewContactItem,
+    t.whatsNewBackupsItem,
+    t.whatsNewBeginnerCadenceItem,
+    t.whatsNewScreensItem,
   ];
 
   return (

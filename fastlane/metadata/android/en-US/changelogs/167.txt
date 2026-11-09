@@ -1,0 +1,3 @@
+Keep daily backup history for 7, 30 or 90 days, with a verified safety copy before restoring.
+Beginner routes alternate training and recovery: 3 sessions per 6 route days. Existing history and started workouts stay saved.
+Clearer sharing cards, larger responsive text and centered Meet Day warm-up and attempt rows. About & Updates stays over your current screen.
