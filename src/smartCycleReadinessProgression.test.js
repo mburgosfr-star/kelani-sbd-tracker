@@ -220,7 +220,7 @@ test('names the cycle estimate and real 1RM target separately in the Smart modal
     { label: 'Projected meet', value: 'C3W27–C3W29' },
     {
       label: 'Readiness basis',
-      value: 'Your best e1RM this cycle is an estimate based on your best successful set in this cycle; the target is your confirmed real 1RM. The projection assumes normal progress and unchanged meet attempts.',
+      value: 'Your best e1RM this cycle shows readiness against your confirmed real 1RM. Training weights and automatic meet attempts use your best e1RM across all cycles. The projection assumes normal progress; automatic attempts follow your e1RM until the meet starts.',
       kind: 'note',
     },
   ]);

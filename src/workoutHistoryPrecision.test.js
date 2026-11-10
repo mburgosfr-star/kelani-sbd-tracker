@@ -207,9 +207,9 @@ test('a heavier double raises both the real 1RM floor and e1RM', () => {
     prs: { Squat: 112.5, Bench: 75, Deadlift: 125 },
     currentCycle: 1,
   }).byLift.Squat.attempts).toEqual({
-    opener: 95,
-    secondAttempt: 102.5,
-    thirdAttempt: 107.5,
+    opener: 102.5,
+    secondAttempt: 107.5,
+    thirdAttempt: 112.5,
   });
 });
 
@@ -260,7 +260,7 @@ test('a genuinely heavier single immediately updates automatic meet attempts', (
     currentCycle: 1,
   }).byLift.Squat.attempts).toEqual({
     opener: 95,
-    secondAttempt: 102.5,
-    thirdAttempt: 107.5,
+    secondAttempt: 100,
+    thirdAttempt: 105,
   });
 });

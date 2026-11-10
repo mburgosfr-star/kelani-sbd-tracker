@@ -5,7 +5,7 @@ import {
 import { isSmartIdealRouteEnabled } from './smartIdealRoute';
 import { getAthleteLevel } from './workoutHistoryStats';
 import { isSmartTrainingModel } from './programProfiles';
-import { normalizeOneRMs } from './oneRMState';
+import { resolveEstimatedOneRMs } from './oneRMState';
 
 export function shouldAutomaticallyStartNextSmartCycle({
   trainingModel,
@@ -48,7 +48,7 @@ export function buildNextTrainingCycle({
   smartIdealRouteStartCycle = 1,
 } = {}) {
   const nextCycle = Math.max(Number(currentCycle) || 1, 1) + 1;
-  const loadMaxes = normalizeOneRMs(oneRMs, prs);
+  const loadMaxes = resolveEstimatedOneRMs({ prs, oneRMs, history });
   const athleteLevel = getAthleteLevel({
     prs,
     history,

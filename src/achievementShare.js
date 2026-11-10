@@ -8,7 +8,7 @@ const success = set => set.done && !set.failed && !set.skipped && Number(set.wei
 // Explicit allowlist: no names, body measurements, dates, notes or backup data.
 export function buildAchievementCard({ kind = 'about', workout, celebration, history = [], cycle = 1, athleteLevel, workoutNumber, t, weightUnit = 'kg' }) {
   const label = lift => ({ Squat: t.squat, Bench: t.bench, Deadlift: t.deadlift, Total: t.total })[lift] || '';
-  const weight = value => formatWeightFromKg(value, weightUnit);
+  const weight = value => formatWeightFromKg(value, weightUnit, { recorded: true });
   const rows = [];
   const add = (name, value, color = '#fff4e6') => rows.push({ label: name, value, color });
   let title = t.shareAboutTitle;
@@ -20,7 +20,7 @@ export function buildAchievementCard({ kind = 'about', workout, celebration, his
       if (item.type === 'level') {
         add(t.milestoneNewLevel, ({ beginner: t.athleteLevelBeginner, intermediate: t.athleteLevelIntermediate, advanced: t.athleteLevelAdvanced, elite: t.athleteLevelElite })[item.value] || '', '#ffd166');
       } else if (['oneRM', 'e1RM'].includes(item.type) && Number(item.value) > 0) {
-        const format = item.type === 'e1RM' ? formatEstimatedWeightFromKg : formatWeightFromKg;
+        const format = formatEstimatedWeightFromKg;
         add(`${label(item.lift)} ${item.type === 'oneRM' ? '1RM' : 'e1RM'}`, `${format(item.value, weightUnit)} (+${format(item.gain, weightUnit)})`, colors[item.lift]);
       }
       else if (['strengthMax', 'eStrengthMax'].includes(item.type) && Number(item.value) > 0) {

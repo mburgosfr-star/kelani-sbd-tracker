@@ -4,7 +4,7 @@ De app helpt je SBD-workouts plannen, bijhouden en voltooien zonder accounts, ad
 
 Smart Training:
 
-Smart Training volgt een niveaugebonden ideale route, inclusief SBD Meet Day en herstel daarna. Beginnersroutes wisselen training en herstel af in een standaardcyclus van 26 dagen; andere niveaus gebruiken 28 dagen. Feedback kan de planning aanpassen. De route blijft vooraf zichtbaar, terwijl je bevestigde kracht de voorgeschreven gewichten bepaalt.
+Smart Training volgt een niveaugebonden ideale route, inclusief SBD Meet Day en herstel daarna. Beginnersroutes wisselen training en herstel af in een standaardcyclus van 26 dagen; andere niveaus gebruiken 28 dagen. Feedback kan de planning aanpassen. De route blijft vooraf zichtbaar, terwijl je beste geschatte 1RM de voorgeschreven gewichten bepaalt.
 
 - Plant zware, middelzware en lichte Squat-, Bench Press- en Deadlift-training voor je huidige niveau
 - Stelt warming-ups, topwerk, backoffs en accessoires samen

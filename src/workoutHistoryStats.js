@@ -17,7 +17,7 @@ export function calculateLeanMassEstimate(bodyWeight, bodyFat) {
 
   const leanMass = bodyWeight * (1 - (bodyFat / 100));
 
-  return Math.round(leanMass * 10) / 10;
+  return leanMass;
 }
 
 export function normalizeCooldownMode(value) {
@@ -541,18 +541,17 @@ export function formatCycleWorkoutSubtitle({ t, currentCycle, workoutNumber, tot
   })}${suffix}`;
 }
 
-// Shared relative-strength bands. Rounded from quartiles of tested, raw SBD
-// competitors in OpenPowerlifting, not validated training-experience cutoffs.
-// Kelani applies the same bands to every athlete's lifetime eStrength Max.
+// Practical relative-strength bands, not validated training-experience
+// cutoffs. The same lifetime eStrength Max thresholds apply to everyone.
 export const ATHLETE_LEVEL_THRESHOLDS = Object.freeze({
-  beginner: { min: 0, max: 4.5 },
-  intermediate: { min: 4.5, max: 5.5 },
-  advanced: { min: 5.5, max: 6.5 },
-  elite: { min: 6.5, max: Infinity },
+  beginner: { min: 0, max: 3 },
+  intermediate: { min: 3, max: 6 },
+  advanced: { min: 6, max: 9 },
+  elite: { min: 9, max: Infinity },
 });
 
 const ATHLETE_LEVEL_ORDER = ['beginner', 'intermediate', 'advanced', 'elite'];
-const ATHLETE_LEVEL_THRESHOLD_VERSION = 2;
+const ATHLETE_LEVEL_THRESHOLD_VERSION = 3;
 
 // Only persisted profiles go through legacy migration. Fresh profiles must be
 // marked with the current policy before their first save, including profiles
@@ -598,7 +597,7 @@ export function calculateEStrengthRatio({ prs = {}, history = [], bodyWeights = 
 
   if (!latestBodyWeight) return null;
 
-  return Math.round((totalE1RM / latestBodyWeight) * 100) / 100;
+  return totalE1RM / latestBodyWeight;
 }
 
 // Strength maxima are lifetime records of a *validly paired* strength total
@@ -765,8 +764,8 @@ export function calculateStrengthRatioMaxes({
   }
 
   return {
-    strengthMax: strengthMax > 0 ? Math.round(strengthMax * 100) / 100 : null,
-    eStrengthMax: eStrengthMax > 0 ? Math.round(eStrengthMax * 100) / 100 : null,
+    strengthMax: strengthMax > 0 ? strengthMax : null,
+    eStrengthMax: eStrengthMax > 0 ? eStrengthMax : null,
   };
 }
 
@@ -783,24 +782,32 @@ export function mergeStrengthRatioMaxes(...sources) {
   }), { strengthMax: 0, eStrengthMax: 0 });
   const merged = {
     strengthMax: normalized.strengthMax > 0
-      ? Math.round(normalized.strengthMax * 100) / 100
+      ? normalized.strengthMax
       : null,
     eStrengthMax: normalized.eStrengthMax > 0
-      ? Math.round(normalized.eStrengthMax * 100) / 100
+      ? normalized.eStrengthMax
       : null,
   };
   // Carry the migration floor through record updates, exports and restores.
   const policies = sources.filter(source => (
     Number.isInteger(source?.athleteLevelThresholdVersion) &&
-    source.athleteLevelThresholdVersion >= ATHLETE_LEVEL_THRESHOLD_VERSION &&
+    source.athleteLevelThresholdVersion >= 2 &&
     ATHLETE_LEVEL_ORDER.includes(source.athleteLevelFloor)
   ));
   if (policies.length) {
     merged.athleteLevelThresholdVersion = Math.max(
+      ATHLETE_LEVEL_THRESHOLD_VERSION,
       ...policies.map(source => source.athleteLevelThresholdVersion)
     );
     merged.athleteLevelFloor = ATHLETE_LEVEL_ORDER[Math.max(
-      ...policies.map(source => ATHLETE_LEVEL_ORDER.indexOf(source.athleteLevelFloor))
+      ...policies.map(source => {
+        const floor = ATHLETE_LEVEL_ORDER.indexOf(source.athleteLevelFloor);
+        // Rebase floors from the previous bands. Current-policy precision
+        // protection remains valid even when its ratio was corrected down.
+        return source.athleteLevelThresholdVersion === 2
+          ? Math.min(floor, ATHLETE_LEVEL_ORDER.indexOf(classifyAthleteLevel(source.eStrengthMax)))
+          : floor;
+      })
     )];
   }
   const first = sources[0];
@@ -935,7 +942,7 @@ function normalizeBodyRatioRecord(record) {
   const normalizedGain = value => {
     const gain = Number(value);
     return Number.isFinite(gain) && gain > 0
-      ? Math.round(gain * 100) / 100
+      ? gain
       : 0;
   };
   const strengthMaxGain = normalizedGain(record.strengthMaxGain);

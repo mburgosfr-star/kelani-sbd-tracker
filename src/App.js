@@ -26,7 +26,6 @@ import {
   formatDecimalDisplay,
   formatWeightFromKg,
   formatEstimatedWeightFromKg,
-  roundToStep,
 } from './workoutUnits';
 import {
   LIFT_ORDER,
@@ -62,7 +61,6 @@ import {
   getCompletedWorkoutNumbers,
   getRestorableSelectedIndex,
   normalizeBodyWeights,
-  getCelebratedStrengthRatioMaxes,
   mergeStrengthRatioMaxes,
   initializeAthleteLevelPolicy,
   ATHLETE_LEVEL_THRESHOLDS,
@@ -133,6 +131,7 @@ import {
 } from './workoutSetup';
 import {
   buildMeetAttemptsFromOneRM,
+  buildMeetAttemptsFromE1RM,
   ensureStrictMeetAttempts as ensureStrictMeetAttemptKeys,
 } from './meetAttemptPlanning';
 import { generateCooldownItems } from './classicProgramTemplates';
@@ -160,9 +159,11 @@ import {
   deriveOneRMs,
   mergeHigherOneRMs,
   normalizeOneRMs,
+  resolveEstimatedOneRMs,
   ONE_RM_STATE_VERSION,
 } from './oneRMState';
 import { buildMilestoneCelebration } from './milestoneAchievements';
+import { normalizeStrengthPrecision, STRENGTH_PRECISION_VERSION } from './strengthPrecision';
 import {
   matchesCompletedSmartGeneration,
   mergeAccessoryPrsFromWorkout,
@@ -413,7 +414,7 @@ export function buildBackupSummary(data) {
 }
 
 export function roundDashboardWeightKg(value) {
-  return roundToStep(Number(value) || 0, 2.5);
+  return roundE1RM(value);
 }
 
 export function buildDashboardE1RMMetrics(oneRMs = {}, e1RMs = {}) {
@@ -437,10 +438,8 @@ export function buildDashboardE1RMMetrics(oneRMs = {}, e1RMs = {}) {
   return { lifts, total };
 }
 
-// Dashboard e1RM is factual performance: a real 1RM baseline or a higher
-// estimate actually achieved in training. Do not use inherited `bestE1RM`
-// summary fields here; those can contain inherited planning values even
-// when no set ever achieved them.
+// Use the canonical precise estimate, with the demonstrated weight as a
+// lower bound. Legacy rounded caches are repaired at the load boundary.
 export function getDashboardE1RMValue(oneRM, achievedE1RM) {
   return Math.max(Number(oneRM) || 0, Number(achievedE1RM) || 0);
 }
@@ -1307,6 +1306,9 @@ export function validateImportedBackup(backup) {
         !['beginner', 'intermediate', 'advanced', 'elite'].includes(athleteLevelFloor)) return false;
     }
   }
+  if (data.strengthPrecisionVersion !== undefined && (
+    !Number.isInteger(data.strengthPrecisionVersion) || data.strengthPrecisionVersion < 1
+  )) return false;
 
   if (data.inProgress !== undefined && data.inProgress !== null) {
     if (typeof data.inProgress !== 'object' || Array.isArray(data.inProgress)) return false;
@@ -4817,9 +4819,7 @@ export function MilestoneCelebrationModal({
       return `${formatDecimalDisplay(achievement.value, ratioFormat)}x (+${formatDecimalDisplay(achievement.gain, ratioFormat)})`;
     }
 
-    const formatAchievementWeight = achievement.type === 'e1RM'
-      ? formatEstimatedWeightFromKg
-      : formatWeightFromKg;
+    const formatAchievementWeight = formatEstimatedWeightFromKg;
     return `${formatAchievementWeight(achievement.value, weightUnit)} (+${formatAchievementWeight(achievement.gain, weightUnit)})`;
   }
 
@@ -9203,30 +9203,35 @@ export function ensureStrictMeetAttempts(attempts) {
   return { ...attempts, opener: strict.opener, second: strict.secondAttempt, third: strict.thirdAttempt };
 }
 
-// Single source of truth for the suggested meet plan (opener/2nd/3rd
-// attempts + projected total), based on best REAL 1RM per lift (not the
-// estimated e1RM) - e1RM shifts every time a sub-maximal training set (e.g.
-// a top double) sets a new estimate, which made suggested attempts creep up
-// mid-cycle even though nothing about the athlete's actual proven max had
-// changed. A real 1RM only moves when the athlete genuinely lifts more,
-// which training deliberately avoids testing directly (see the third-
-// attempt phase's "never a literal near-meet single" design) - so this
-// stays stable through a cycle and only really moves after a genuine new
-// max, e.g. at the meet itself. Shared by the Stats "Meet" tab (legacy) and
-// the Dashboard's "route to meet" card so the two can never show different
-// numbers for the same lifter.
-export function buildSuggestedMeetPlan(bestStatsByLift = {}) {
+// Shared by the Dashboard and meet details. A started meet displays its
+// saved attempts, even if records improve during that same meet.
+export function buildSuggestedMeetPlan(bestStatsByLift = {}, {
+  trainingModel = TRAINING_MODELS.SMART,
+  manualAttempts = {},
+  startedMeet = null,
+} = {}) {
+  const frozen = startedMeet?.type === 'meet' && workoutHasUserProgress(startedMeet);
+  const basis = frozen
+    ? startedMeet.meetAttemptBasis || 'real-1rm'
+    : isSmartTrainingModel(trainingModel) ? 'e1rm' : 'real-1rm';
   const meetPlan = LIFT_ORDER.map(lift => {
-    const oneRM = bestStatsByLift[lift]?.oneRM || 0;
-
-    const attempts = buildMeetAttemptsFromOneRM(oneRM);
-    return ensureStrictMeetAttempts({
-      lift,
-      oneRM,
-      opener: attempts.opener,
-      second: attempts.secondAttempt,
-      third: attempts.thirdAttempt,
-    });
+    const oneRM = Number(bestStatsByLift[lift]?.oneRM) || 0;
+    const e1RM = Math.max(oneRM, Number(bestStatsByLift[lift]?.e1RM) || 0);
+    const attempts = basis === 'e1rm'
+      ? buildMeetAttemptsFromE1RM(e1RM)
+      : buildMeetAttemptsFromOneRM(oneRM);
+    const savedSets = startedMeet?.lifts?.find(block => block.lift === lift)?.sets || [];
+    const values = Object.fromEntries(['opener', 'secondAttempt', 'thirdAttempt'].map(key => {
+      const saved = savedSets.find(set => set.labelKey === key);
+      const manual = Number(manualAttempts?.[lift]?.[key]);
+      return [key, frozen && saved ? Number(saved.weight) || 0
+        : manual > 0 ? roundBarbellWeight(manual, 'nearest', 2.5) : attempts[key]];
+    }));
+    const row = {
+      lift, oneRM, e1RM, basis, frozen,
+      opener: values.opener, second: values.secondAttempt, third: values.thirdAttempt,
+    };
+    return frozen ? row : ensureStrictMeetAttempts(row);
   });
 
   const meetTotals = {
@@ -9251,10 +9256,12 @@ export function MeetPlanContent({
   dashboardLayout = false,
 }) {
   const statsWeightUnit = normalizeWeightUnit(weightUnit);
+  const estimatedBasis = meetPlan.some(row => row.basis === 'e1rm');
+  const frozen = meetPlan.some(row => row.frozen);
   const attemptColumns = [
-    ['opener', t.opener, '90%'],
-    ['second', t.secondAttempt, '97.5%'],
-    ['third', t.thirdAttempt, '102.5%'],
+    ['opener', t.opener, frozen ? '' : '90%'],
+    ['second', t.secondAttempt, frozen ? '' : estimatedBasis ? '95%' : '97.5%'],
+    ['third', t.thirdAttempt, frozen ? '' : estimatedBasis ? '100%' : '102.5%'],
   ];
   const attemptGridStyle = {
     display: 'grid',
@@ -9290,7 +9297,7 @@ export function MeetPlanContent({
         lineHeight: 1.4,
         textAlign: 'center',
       }}>
-        {t.basedOnBest1RM}
+        {frozen ? t.meetPlanLocked : estimatedBasis ? t.basedOnBestE1RM : t.basedOnBest1RM}
       </p>
 
       <div style={{ textAlign: 'center', marginBottom: dashboardLayout ? 0 : 16 }}>
@@ -9372,7 +9379,7 @@ export function MeetPlanContent({
                   fontWeight: 700,
                   whiteSpace: 'nowrap',
                 }}>
-                  {t.oneRM} {row.oneRM ? formatWeightFromKg(row.oneRM, statsWeightUnit) : '-'}
+                  {row.basis === 'e1rm' ? t.e1RM : t.oneRM} {(row.basis === 'e1rm' ? row.e1RM : row.oneRM) ? formatEstimatedWeightFromKg(row.basis === 'e1rm' ? row.e1RM : row.oneRM, statsWeightUnit) : '-'}
                 </span>
               </div>
 
@@ -12403,7 +12410,7 @@ function App() {
   const nextCycleCalendarWorkouts = useMemo(() => {
     if (!calendarIntegration.enabled || !isSmartTrainingModel(trainingModel) ||
         !prs.Squat || !prs.Bench || !prs.Deadlift) return [];
-    const loadMaxes = normalizeOneRMs(oneRMs, prs);
+    const loadMaxes = resolveEstimatedOneRMs({ prs, oneRMs, history });
     return projectNextSmartCalendarCycle({
       programProfile,
       squat: isSmartTrainingModel(trainingModel) ? loadMaxes.Squat : prs.Squat,
@@ -12691,7 +12698,7 @@ function App() {
     }
 
     try {
-      const data = JSON.parse(saved);
+      const data = normalizeStrengthPrecision(JSON.parse(saved));
 
       const savedPrs = data.prs || {};
       const squat = savedPrs.Squat || 0;
@@ -12716,7 +12723,6 @@ function App() {
       const restoredBodyWeights = normalizeBodyWeights(data);
       const restoredStrengthRatioMaxes = initializeAthleteLevelPolicy(mergeStrengthRatioMaxes(
         data.strengthRatioMaxes,
-        getCelebratedStrengthRatioMaxes(savedHistory),
         calculateStrengthRatioMaxes({
           prs: restoredPrs,
           oneRMs: restoredOneRMs,
@@ -12742,7 +12748,7 @@ function App() {
         startCycle: savedSmartIdealRouteStartCycle,
       });
       const generationMaxes = isSmartTrainingModel(savedTrainingModel)
-        ? normalizeOneRMs(restoredOneRMs, restoredPrs)
+        ? resolveEstimatedOneRMs({ prs: restoredPrs, oneRMs: restoredOneRMs, history: savedHistory })
         : restoredPrs;
       const hasSavedProgramProfile = Boolean(data.programProfile);
       const savedProgramProfile = hasSavedProgramProfile
@@ -12923,6 +12929,7 @@ function App() {
 
   const storedData = useMemo(() => ({
       version: 1,
+      strengthPrecisionVersion: STRENGTH_PRECISION_VERSION,
       history,
       prs,
       oneRMs,
@@ -13173,7 +13180,7 @@ function App() {
     completedSmartGenerationRef.current = null;
 
     const generationMaxes = isSmartTrainingModel(trainingModel)
-      ? normalizeOneRMs(oneRMs, prs)
+      ? resolveEstimatedOneRMs({ prs, oneRMs, history })
       : prs;
     const generatedWorkouts = generateWorkoutsForTrainingModel(trainingModel, {
       inProgressWorkout: workouts[currentIndex],
@@ -13357,9 +13364,9 @@ function App() {
     setCooldownMode(defaultCooldownMode);
 
     const initialOneRMs = normalizeOneRMs({
-      Squat: roundToStep(s, 2.5),
-      Bench: roundToStep(b, 2.5),
-      Deadlift: roundToStep(d, 2.5),
+      Squat: s,
+      Bench: b,
+      Deadlift: d,
     });
     setWorkouts(generateWorkoutsForTrainingModel(defaultTrainingModel, {
       programProfile: defaultProgramProfile,
@@ -14162,7 +14169,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
     nextOneRMs = oneRMs,
     nextAccessoryPRs = accessoryPRs,
   }) {
-    const loadMaxes = normalizeOneRMs(nextOneRMs, nextPrs);
+    const loadMaxes = resolveEstimatedOneRMs({ prs: nextPrs, oneRMs: nextOneRMs, history: nextHistory });
 
     return regenerateSmartWorkoutsAfterCompletion({
       workouts,
@@ -15172,6 +15179,7 @@ const __kelaniSmartPreviewNextDay = (options = {}) => {
     });
     const generated = generateWorkoutsForTrainingModel(data.trainingModel || TRAINING_MODELS.SMART, {
       programProfile: data.programProfile,
+      e1RMs: data.prs,
       squat: previewOneRMs.Squat,
       bench: previewOneRMs.Bench,
       deadlift: previewOneRMs.Deadlift,
@@ -15321,6 +15329,7 @@ const __kelaniSmartPreviewRegression = () => {
 
       const generated = generateWorkoutsForTrainingModel(data.trainingModel || TRAINING_MODELS.SMART, {
         programProfile: data.programProfile,
+        e1RMs: prs,
         squat: previewOneRMs.Squat,
         bench: previewOneRMs.Bench,
         deadlift: previewOneRMs.Deadlift,
@@ -15619,6 +15628,7 @@ const __kelaniSmartResetToW1 = () => {
       TRAINING_MODELS.SMART,
       {
         programProfile: data.programProfile || programProfile,
+        e1RMs: resolvedPrs,
         squat: resetOneRMs.Squat,
         bench: resetOneRMs.Bench,
         deadlift: resetOneRMs.Deadlift,
@@ -16060,12 +16070,12 @@ const best1RMs = {
 };
 
 const bestE1RMs = {
-  // Smart planning may carry a rounded inherited best (for example 32.5kg
-  // Bench -> 35kg) in completed summaries. Dashboard/Stats must instead show
-  // only a real 1RM baseline or an estimate actually achieved by a set.
-  Squat: getDashboardE1RMValue(best1RMs.Squat, achievedMaxesFromHistory.Squat.e1rm),
-  Bench: getDashboardE1RMValue(best1RMs.Bench, achievedMaxesFromHistory.Bench.e1rm),
-  Deadlift: getDashboardE1RMValue(best1RMs.Deadlift, achievedMaxesFromHistory.Deadlift.e1rm),
+  // The load boundary has already repaired legacy rounded estimates. Use
+  // that same canonical state for Dashboard, Stats and calculations rather
+  // than maintaining a second, independently filtered live estimate.
+  Squat: getDashboardE1RMValue(best1RMs.Squat, prs.Squat),
+  Bench: getDashboardE1RMValue(best1RMs.Bench, prs.Bench),
+  Deadlift: getDashboardE1RMValue(best1RMs.Deadlift, prs.Deadlift),
 };
 
 const total1RM = best1RMs.Squat + best1RMs.Bench + best1RMs.Deadlift;
@@ -16233,11 +16243,11 @@ const completedSummaryForRender =
 
 
 const strengthRatio = latestBodyWeight
-  ? Math.round((total1RM / latestBodyWeight) * 100) / 100
+  ? total1RM / latestBodyWeight
   : null;
 
 const eStrengthRatio = latestBodyWeight
-  ? Math.round((totalE1RM / latestBodyWeight) * 100) / 100
+  ? totalE1RM / latestBodyWeight
   : null;
 
 const { strengthMax, eStrengthMax } = strengthRatioMaxes;
@@ -16304,10 +16314,10 @@ const dashboardUsesExpandedLayout = shouldUseExpandedDashboardLayout({
   compact: dashboardUsesCompactLayout,
 });
 const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
-  Squat: { oneRM: best1RMs.Squat },
-  Bench: { oneRM: best1RMs.Bench },
-  Deadlift: { oneRM: best1RMs.Deadlift },
-});
+  Squat: { oneRM: best1RMs.Squat, e1RM: bestE1RMs.Squat },
+  Bench: { oneRM: best1RMs.Bench, e1RM: bestE1RMs.Bench },
+  Deadlift: { oneRM: best1RMs.Deadlift, e1RM: bestE1RMs.Deadlift },
+}, { trainingModel, manualAttempts: meetPlannerAttempts, startedMeet: dashboardCurrentWorkout });
 const displayedWorkoutNumber = screen === 'current'
   ? (workouts[selectedIndex]?.number || currentIndex + 1)
   : screen === 'completed' ? (completedWorkout?.number || currentIndex + 1)
@@ -16659,7 +16669,7 @@ const screenAllowsContentScroll =
           },
         ];
 
-        const value = weight => weight ? formatWeightFromKg(weight, weightUnit) : '-';
+        const value = weight => weight ? formatEstimatedWeightFromKg(weight, weightUnit) : '-';
         const estimatedValue = weight => weight ? formatEstimatedWeightFromKg(weight, weightUnit) : '-';
         const openStatsTab = tab => {
           setStatsTab(tab);
@@ -16746,7 +16756,7 @@ const screenAllowsContentScroll =
                           marginTop: 2,
                           whiteSpace: 'nowrap'
                         }}>
-                          {t.new1RMPR} +{formatWeightFromKg(card.recentPr.oneRMGain, weightUnit)}
+                          {t.new1RMPR} +{formatEstimatedWeightFromKg(card.recentPr.oneRMGain, weightUnit)}
                         </div>
                       )}
                     </div>
@@ -17244,7 +17254,7 @@ const screenAllowsContentScroll =
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                 <span style={{ color: THEME.text, fontWeight: 700 }}>{label}</span>
                 <strong style={{ color: '#ffffff' }}>
-                  {(estimated ? formatEstimatedWeightFromKg : formatWeightFromKg)(value, weightUnit)} {isPR ? '🚀' : ''}
+                  {formatEstimatedWeightFromKg(value, weightUnit)} {isPR ? '🚀' : ''}
                 </strong>
               </div>
             );

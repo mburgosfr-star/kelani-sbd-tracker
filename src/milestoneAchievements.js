@@ -81,7 +81,7 @@ function ratioAchievement(type, beforeValue, afterValue) {
     type,
     previous: beforeValue,
     value: afterValue,
-    gain: Math.round((afterValue - beforeValue) * 100) / 100,
+    gain: afterValue - beforeValue,
   };
 }
 

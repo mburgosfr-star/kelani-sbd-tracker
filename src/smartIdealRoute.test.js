@@ -483,7 +483,7 @@ test('taper uses the agreed role-specific top sets and reduced grid volume', () 
       });
     }
     expect(item.prescription).toMatchObject({
-      basis: 'real-1rm',
+      basis: 'e1rm',
       fullGridRequired: true,
     });
   });
@@ -525,8 +525,8 @@ test.each(SMART_IDEAL_LEVELS)('%s has the full simulated meet at W27', level => 
       attemptCount: 3,
       attemptPcts: {
         opener: 0.90,
-        secondAttempt: 0.975,
-        thirdAttempt: 1.025,
+        secondAttempt: 0.95,
+        thirdAttempt: 1.00,
       },
       fullGridRequired: true,
     });
@@ -724,29 +724,29 @@ test('one TOO EASY and one TOO HARD credit change the meet date by a net zero da
   expect(plan.workouts.findIndex(workout => workout.type === 'meet')).toBe(4);
 });
 
-test('the ideal route uses confirmed real 1RM with 2.5kg / 2.5-percentage-point precision', () => {
+test('the ideal route uses precise e1RM and rounds only prescriptions', () => {
   expect(SMART_IDEAL_LOAD_POLICY).toEqual({
-    basis: 'real-1rm',
+    basis: 'e1rm',
     workWeightIncrementKg: 2.5,
-    achievedE1RMIncrementKg: 2.5,
+    achievedE1RMIncrementKg: null,
     displayedPercentageIncrement: 0.025,
     heavyPhaseMinimumIncreaseKg: 2.5,
-    heavyPhaseCap: 'real-1rm',
+    heavyPhaseCap: 'e1rm',
   });
 });
 
-test('meet policy uses real 1RM attempts without requiring the third attempt to be pre-demonstrated', () => {
+test('meet policy uses e1RM attempts without requiring the third attempt to be pre-demonstrated', () => {
   expect(SMART_IDEAL_MEET_POLICY).toMatchObject({
     attemptPcts: {
       opener: 0.90,
-      secondAttempt: 0.975,
-      thirdAttempt: 1.025,
+      secondAttempt: 0.95,
+      thirdAttempt: 1.00,
     },
     attemptWeightIncrementKg: 2.5,
     minimumAttemptIncreaseKg: 2.5,
-    automaticAttemptBasis: 'real-1rm',
+    automaticAttemptBasis: 'e1rm',
     recalculateAfterNewReal1RM: true,
-    recalculateAfterE1RMOnlyPR: false,
+    recalculateAfterE1RMOnlyPR: true,
     preserveManualAttempts: true,
     lockAttemptsAfterMeetStarts: true,
     thirdAttemptPreDemonstrationRequired: false,

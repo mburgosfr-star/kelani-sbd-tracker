@@ -251,8 +251,8 @@ test('dashboard reads recent Strength Max records from the latest milestone cele
 test('a lighter weigh-in records new Strength Maxes and a newly reached level', () => {
   const shared = {
     history: [],
-    prs: { Squat: 150, Bench: 100, Deadlift: 190 },
-    oneRMs: { Squat: 150, Bench: 100, Deadlift: 190 },
+    prs: { Squat: 100, Bench: 70, Deadlift: 120 },
+    oneRMs: { Squat: 100, Bench: 70, Deadlift: 120 },
     strengthRatioMaxes: {},
   };
 
@@ -265,13 +265,13 @@ test('a lighter weigh-in records new Strength Maxes and a newly reached level', 
       ...shared,
       bodyWeights: [
         { cycle: 1, workoutNumber: 1, bodyWeight: 100 },
-        { cycle: 1, workoutNumber: 2, bodyWeight: 96.7 },
+        { cycle: 1, workoutNumber: 2, bodyWeight: 95 },
       ],
     },
   })).toEqual({
     version: 1,
-    strengthMaxGain: 0.15,
-    eStrengthMaxGain: 0.15,
+    strengthMaxGain: 290 / 95 - 290 / 100,
+    eStrengthMaxGain: 290 / 95 - 290 / 100,
     levelChange: { previous: 'beginner', value: 'intermediate' },
   });
 });
@@ -318,7 +318,7 @@ test('weigh-in Strength Max and eStrength Max records remain independent', () =>
     },
   })).toEqual({
     version: 1,
-    strengthMaxGain: 0.15,
+    strengthMaxGain: 290 / 95 - 290 / 100,
     eStrengthMaxGain: 0,
     levelChange: null,
   });
@@ -462,12 +462,12 @@ test('dashboard reconstructs a recent eStrength Max from a legacy export', () =>
     prs: { Squat: 150, Bench: 105, Deadlift: 185 },
     oneRMs: { Squat: 147.5, Bench: 100, Deadlift: 180 },
   })).toMatchObject({
-    ratios: { strengthMaxGain: 0, eStrengthMaxGain: 0.04 },
+    ratios: { strengthMaxGain: 0, eStrengthMaxGain: 440 / 82 - 440 / 82.5 },
     ratioEvent: {
       source: 'bodyData',
       cycle: 4,
       workoutNumber: 21,
-      eStrengthMaxGain: 0.04,
+      eStrengthMaxGain: 440 / 82 - 440 / 82.5,
     },
   });
 });
@@ -1706,7 +1706,7 @@ test('only the meet-plan card opens the meet workout, not the level badge', () =
   expect(onOpenWorkout).not.toHaveBeenCalled();
   expect(screen.getByText(translations.nl.athleteLevelModalTitle))
     .toBeInTheDocument();
-  expect(screen.getByText('0.40x → Advanced')).toBeInTheDocument();
+  expect(screen.getByText('0.90x → Advanced')).toBeInTheDocument();
   expect(screen.queryByText(/≈ .* kg → Advanced/)).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', {
@@ -2398,7 +2398,7 @@ test('finishing the compact setup creates a Smart user with body weight and star
     expect(saved.prs.Squat).toBeCloseTo(116.6666666667);
     expect(saved.cycleE1RMs).toBeUndefined();
     expect(saved.oneRMs).toEqual({
-      Squat: 117.5,
+      Squat: 100 * (1 + 5 / 30),
       Bench: 75,
       Deadlift: 125,
     });
@@ -3159,8 +3159,9 @@ test('loading a Smart calendar of a different length preserves an already starte
 
 test.each([
   [3.5, undefined, 'intermediate'],
-  [7, undefined, 'elite'],
-  [3.5, { athleteLevelThresholdVersion: 2, athleteLevelFloor: 'beginner' }, 'beginner'],
+  [7, undefined, 'advanced'],
+  [3.5, { athleteLevelThresholdVersion: 2, athleteLevelFloor: 'beginner' }, 'intermediate'],
+  [7, { athleteLevelThresholdVersion: 2, athleteLevelFloor: 'elite' }, 'advanced'],
 ])('level policy migrates and reloads a profile at %s without resetting started work', async (ratio, policy, level) => {
   localStorage.clear();
   const storageKey = 'kel-powerlifting-user-data-v1';
@@ -3185,7 +3186,7 @@ test.each([
   await screen.findByRole('button', { name: `${translations.en.athleteLevelBadgeLabel}: ${expected}` }, { timeout: 3000 });
   await waitFor(() => {
     const saved = JSON.parse(localStorage.getItem(storageKey));
-    expect(saved.strengthRatioMaxes.athleteLevelThresholdVersion).toBe(2);
+    expect(saved.strengthRatioMaxes.athleteLevelThresholdVersion).toBe(3);
     expect(saved.strengthRatioMaxes.eStrengthMax).toBe(ratio);
     expect(saved.inProgress.workouts[0].sets).toEqual(started.sets);
   });
@@ -3202,10 +3203,58 @@ test.each([
 test.each(['en', 'nl', 'ca'])('the level modal explains a retained old level in %s', language => {
   const t = translations[language];
   render(<AppHeader t={t} currentCycle={1} workoutNumber={1}
-    athleteLevel="intermediate" eStrengthRatio={3.5} eStrengthMax={3.5} />);
+    athleteLevel="intermediate" eStrengthRatio={2.99} eStrengthMax={2.99} />);
   fireEvent.click(screen.getByRole('button', {
     name: `${t.athleteLevelBadgeLabel}: ${t.athleteLevelIntermediate}`,
   }));
   expect(screen.getByText(t.athleteLevelRetainedExplanation)).toBeInTheDocument();
-  expect(screen.getByText('4.5x - 5.5x')).toBeInTheDocument();
+  expect(screen.getByText('3x - 6x')).toBeInTheDocument();
+});
+
+
+test('legacy rounded estimates are repaired before saving and reloading a profile', async () => {
+  localStorage.clear();
+  const key = 'kel-powerlifting-user-data-v1';
+  const seeds = Object.entries({ Squat: 120, Bench: 82.5, Deadlift: 150 }).map(([lift, weight]) => ({
+    lift, cycle: 0, workoutNumber: 0, seedMax: true, topWeight: weight, topReps: 1, e1rm: weight,
+  }));
+  localStorage.setItem(key, JSON.stringify({ version: 1, trainingModel: 'smart', showWhatsNewAfterUpdates: false,
+    currentCycle: 1, prs: { Squat: 120, Bench: 85, Deadlift: 150 },
+    oneRMs: { Squat: 120, Bench: 82.5, Deadlift: 150 }, oneRMStateVersion: 2,
+    bodyWeights: [{ cycle: 1, workoutNumber: 0, bodyWeight: 80 }],
+    history: [...seeds, { cycle: 1, workoutNumber: 1, lift: 'Bench', topWeight: 77.5, topReps: 3, e1rm: 85,
+      workoutSnapshot: { number: 1, type: 'training', completed: true,
+        lifts: [{ lift: 'Bench', sets: [{ weight: 77.5, reps: 3, done: true }] }] } }],
+  }));
+  let view = render(<App />);
+  await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 });
+  await waitFor(() => {
+    const saved = JSON.parse(localStorage.getItem(key));
+    expect(saved.prs.Bench).toBe(77.5 * (1 + 3 / 30));
+    expect(saved.history.at(-1).e1rm).toBe(saved.prs.Bench);
+    expect(saved.strengthPrecisionVersion).toBe(1);
+    expect(saved.oneRMs.Bench).toBe(82.5);
+  });
+  const before = JSON.parse(localStorage.getItem(key));
+  view.unmount();
+  view = render(<App />);
+  await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 });
+  await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).prs).toEqual(before.prs));
+  view.unmount();
+  localStorage.clear();
+});
+
+test.each(['nl', 'en', 'ca'])('Smart meet details show e1RM percentages and the locked-plan explanation in %s', language => {
+  const t = translations[language];
+  const plan = [{ lift: 'Bench', basis: 'e1rm', oneRM: 100, e1RM: 104,
+    opener: 92.5, second: 100, third: 105 }];
+  const props = { meetPlan: plan, meetTotals: { third: 105 }, t };
+  const { rerender } = render(<MeetPlanContent {...props} />);
+  expect(screen.getByText(t.basedOnBestE1RM)).toBeInTheDocument();
+  expect(screen.getByText('95%')).toBeInTheDocument();
+  expect(screen.getByText('100%')).toBeInTheDocument();
+  expect(screen.queryByText('97.5%')).not.toBeInTheDocument();
+  rerender(<MeetPlanContent {...props} meetPlan={[{ ...plan[0], frozen: true }]} />);
+  expect(screen.getByText(t.meetPlanLocked)).toBeInTheDocument();
+  expect(screen.queryByText('95%')).not.toBeInTheDocument();
 });

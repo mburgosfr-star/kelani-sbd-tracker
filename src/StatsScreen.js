@@ -6,7 +6,6 @@ import {
   WEIGHT_UNITS,
   normalizeWeightUnit,
   kgToDisplayWeight,
-  formatWeightValue,
   formatDecimalDisplay,
 } from './workoutUnits';
 import {
@@ -192,14 +191,10 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
       physiqueRating: [],
     };
 
-    function chartWeightFromKg(weightKg, options = {}) {
+    function chartWeightFromKg(weightKg) {
       const displayWeight = kgToDisplayWeight(weightKg, statsWeightUnit);
       if (displayWeight === '') return null;
-
-      if (options.estimated) return displayWeight;
-      const formatted = formatWeightValue(displayWeight, statsWeightUnit, options);
-      const value = Number(formatted);
-      return Number.isFinite(value) ? value : null;
+      return displayWeight;
     }
 
     const bestStats = Object.fromEntries(
@@ -392,8 +387,8 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
       );
       if (!bodyWeightForWorkout) return;
 
-      const strength = Math.round((entry.oneRM / bodyWeightForWorkout) * 100) / 100;
-      const eStrength = Math.round((entry.e1rm / bodyWeightForWorkout) * 100) / 100;
+      const strength = entry.oneRM / bodyWeightForWorkout;
+      const eStrength = entry.e1rm / bodyWeightForWorkout;
       runningStrengthMax = Math.max(runningStrengthMax, strength);
       runningEStrengthMax = Math.max(runningEStrengthMax, eStrength);
       strengthData.push({

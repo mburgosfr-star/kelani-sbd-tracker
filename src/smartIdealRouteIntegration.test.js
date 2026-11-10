@@ -1882,3 +1882,45 @@ test('the beginner calendar forecast uses the same alternating 26-day next cycle
   expect(forecast[25]).toMatchObject({ number: 26, type: 'rest' });
   expect(history).toEqual([]);
 });
+
+test('precise rolling e1RM changes future Smart loads without changing started or completed sets', () => {
+  const oneRMs = { Squat: 100, Bench: 75, Deadlift: 125 };
+  const options = { ...baseOptions, squat: 100, bench: 75, deadlift: 125, oneRMs,
+    currentIndex: 0, athleteLevel: 'intermediate', skipMeetProjectionSimulation: true };
+  const original = generateWorkoutsForTrainingModel('smart', { ...options, history: [] });
+  const higher = generateWorkoutsForTrainingModel('smart', {
+    ...options, history: [{ cycle: 0, workoutNumber: 12, lift: 'Squat',
+      topWeight: 100, topReps: 3, e1rm: 110 }],
+  });
+  expect(higher[0].smartLoadMaxes.Squat).toBeCloseTo(110);
+  expect(higher[0].lifts.find(block => block.lift === 'Squat').sets[0].weight)
+    .toBeGreaterThan(original[0].lifts.find(block => block.lift === 'Squat').sets[0].weight);
+  const saved = JSON.parse(JSON.stringify(original));
+  saved[0].lifts[0].sets[0].done = true;
+  expect(mergeGeneratedWorkoutStructure(saved, higher, [], 1)[0].lifts).toEqual(saved[0].lifts);
+  const completed = { ...saved[0], completed: true };
+  expect(mergeGeneratedWorkoutStructure(saved, higher, [{ cycle: 1, workoutNumber: 1,
+    workoutSnapshot: completed }], 1)[0]).toEqual(completed);
+  expect(oneRMs).toEqual({ Squat: 100, Bench: 75, Deadlift: 125 });
+});
+
+test('untouched meet uses updated e1RM while a started legacy meet survives save and regeneration', () => {
+  const options = { ...baseOptions, currentIndex: 26, history: [], oneRMs: {
+    Squat: 150, Bench: 100, Deadlift: 200,
+  }, athleteLevel: 'intermediate', skipMeetProjectionSimulation: true };
+  const previous = generateWorkoutsForTrainingModel('smart', options);
+  const upgraded = generateWorkoutsForTrainingModel('smart', {
+    ...options, e1RMs: { Squat: 160, Bench: 110, Deadlift: 210 },
+  });
+  const meetIndex = upgraded.findIndex(workout => workout.type === 'meet');
+  expect(meetIndex).toBeGreaterThanOrEqual(0);
+  expect(upgraded[meetIndex].meetAttemptBasis).toBe('e1rm');
+  expect(upgraded[meetIndex].lifts[0].sets.map(set => set.weight)).toEqual([145, 152.5, 160]);
+  expect(mergeGeneratedWorkoutStructure(previous, upgraded, [], 1)[meetIndex].lifts)
+    .toEqual(upgraded[meetIndex].lifts);
+  const saved = JSON.parse(JSON.stringify(previous));
+  delete saved[meetIndex].meetAttemptBasis;
+  saved[meetIndex].lifts[0].sets[0].done = true;
+  expect(mergeGeneratedWorkoutStructure(saved, upgraded, [], 1)[meetIndex].lifts)
+    .toEqual(saved[meetIndex].lifts);
+});

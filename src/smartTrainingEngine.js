@@ -53,7 +53,8 @@ import {
   applyAccessoryPlanToWorkouts,
 } from './accessoryGeneration';
 import { generateProgramForProfile } from './classicProgramTemplates';
-import { buildMeetAttemptsFromOneRM } from './meetAttemptPlanning';
+import { buildMeetAttemptsFromE1RM } from './meetAttemptPlanning';
+import { resolveEstimatedOneRMs } from './oneRMState';
 import {
   SMART_IDEAL_MEET_WORKOUT_NUMBER,
   SMART_IDEAL_ROUTE_VERSION,
@@ -1782,25 +1783,18 @@ export function buildSmartMeetPlanReadiness({
   const byLift = LIFT_ORDER.reduce((acc, lift) => {
     const bestE1RM = Math.max(
       Number(prs?.[lift]) || 0,
-      Number(bestMaxes?.[lift]?.e1rm) || 0
+      Number(bestMaxes?.[lift]?.e1rm) || 0,
+      Number(oneRMs?.[lift]) || 0
     );
     const currentCycleBestE1RM = Number(currentCycleBestMaxes?.[lift]?.e1rm) || 0;
-    // Meet attempts (opener/2nd/3rd) are meant to be percentages of a real,
-    // achieved 1RM - not the estimated e1RM, which shifts every time a
-    // sub-maximal training set (e.g. a top double) sets a new e1RM. Real
-    // 1RM only moves when the athlete actually completes a work set with a
-    // heavier weight. Planned training stays at or below the current real
-    // 1RM by default, so this normally happens after a manually raised set
-    // or a successful meet attempt. oneRMs is the persisted established-max
-    // source of truth. The history work-set and prs fallbacks keep older/direct engine callers
-    // compatible, but once oneRMs exists an e1RM-only PR can no longer pull
-    // the attempt plan upward.
+    // Real 1RM still anchors readiness evidence. Automatic attempts use the
+    // current precise estimated max, independently of that readiness gate.
     const bestOneRM = Number(oneRMs?.[lift]) ||
       Number(bestMaxes?.[lift]?.oneRM) ||
       Number(prs?.[lift]) ||
       0;
 
-    const suggestedAttempts = buildMeetAttemptsFromOneRM(bestOneRM);
+    const suggestedAttempts = buildMeetAttemptsFromE1RM(bestE1RM);
     const attempts = MEET_ATTEMPT_KEYS.reduce((attemptAcc, key) => {
       const custom = Number(meetPlannerAttempts?.[lift]?.[key]);
       return {
@@ -2781,7 +2775,7 @@ export function buildSmartMeetAttemptSets(lift = '', readiness = {}, fallbackSet
     (fallbackSets || []).map(set => [set.labelKey, Number(set.weight) || 0])
   );
   const attemptKeys = ['opener', 'secondAttempt', 'thirdAttempt'];
-  const attemptPcts = [0.90, 0.975, 1.025];
+  const attemptPcts = [0.90, 0.95, 1.00];
   let previousWeight = 0;
 
   return attemptKeys.map((labelKey, index) => {
@@ -2824,6 +2818,7 @@ function buildSmartMeetWorkout(sourceWorkout = {}, meetCandidate = null, readine
     type: 'meet',
     labelKey: 'meetDay',
     smartDayType: SMART_DAY_TYPES.MEET,
+    meetAttemptBasis: 'e1rm',
     smartSourceWorkoutNumber: template.number,
     [SMART_GENERATED_FLAGS.MEET]: true,
     lifts,
@@ -2840,17 +2835,17 @@ function buildSmartIdealRouteScaffold({
   benchPressVariant = 'standard',
   deadliftVariant = 'standard',
 } = {}) {
-  const realOneRMs = {
+  const trainingMaxes = {
     Squat: Number(squat) || 0,
     Bench: Number(bench) || 0,
     Deadlift: Number(deadlift) || 0,
   };
   const meetLifts = LIFT_ORDER.map((lift, index) => {
-    const oneRM = realOneRMs[lift];
+    const oneRM = trainingMaxes[lift];
     const sets = buildSmartMeetAttemptSets(lift, {}, [
-      { labelKey: 'opener', weight: oneRM * 0.90 },
-      { labelKey: 'secondAttempt', weight: oneRM * 0.975 },
-      { labelKey: 'thirdAttempt', weight: oneRM * 1.025 },
+      { labelKey: 'opener', weight: buildMeetAttemptsFromE1RM(oneRM).opener },
+      { labelKey: 'secondAttempt', weight: buildMeetAttemptsFromE1RM(oneRM).secondAttempt },
+      { labelKey: 'thirdAttempt', weight: buildMeetAttemptsFromE1RM(oneRM).thirdAttempt },
     ]);
     const liftBlock = {
       lift,
@@ -2883,6 +2878,7 @@ function buildSmartIdealRouteScaffold({
           type: 'meet',
           lift: 'SBD',
           labelKey: 'meetDay',
+          meetAttemptBasis: 'e1rm',
           lifts: meetLifts,
           warmups: meetLifts[0]?.warmups || [],
           sets: meetLifts[0]?.sets || [],
@@ -3987,7 +3983,7 @@ export function buildSmartIdealTrainingWorkout({
 } = {}) {
   if (routeWorkout?.type !== 'training') return null;
 
-  const realOneRMs = {
+  const trainingMaxes = {
     Squat: Number(squat) || 0,
     Bench: Number(bench) || 0,
     Deadlift: Number(deadlift) || 0,
@@ -3996,7 +3992,7 @@ export function buildSmartIdealTrainingWorkout({
   const isTaper = routeWorkout.stage === 'taper';
 
   const liftBlocks = routeWorkout.lifts.map((routeLift, liftIndex) => {
-    const realOneRM = realOneRMs[routeLift.lift];
+    const trainingMax = trainingMaxes[routeLift.lift];
     const prescription = routeLift.prescription || {};
     const hasTopSet = Boolean(prescription.topSet);
     const volume = hasTopSet ? prescription.backoff : prescription;
@@ -4013,11 +4009,11 @@ export function buildSmartIdealTrainingWorkout({
         labelKey: getSmartIdealTopSetLabel(topSet.reps),
         reps: topSet.reps,
         pct: topSet.pct,
-        realOneRM,
+        realOneRM: trainingMax,
         groupKey: `${routeLift.lift}-top`,
         weightOverride: routeLift.intensityRole === 'heavy'
           ? getSmartIdealHeavyTopWeight({
-            realOneRM,
+            realOneRM: trainingMax,
             routeWorkout,
             pct: topSet.pct,
           })
@@ -4031,7 +4027,7 @@ export function buildSmartIdealTrainingWorkout({
         labelKey: hasTopSet ? 'backoff' : 'workSets',
         reps: Number(volume.reps) || 4,
         pct: volume.pct,
-        realOneRM,
+        realOneRM: trainingMax,
         groupKey: `${routeLift.lift}-${hasTopSet ? 'backoff' : 'worksets'}`,
         prescribedPct: isTaper ? volume.pct : null,
       })));
@@ -4096,7 +4092,7 @@ export function buildSmartIdealTrainingWorkout({
   const accessoryIntensity = isTaper ? 'light' : 'normal';
   const accessories = generateAccessoriesForWorkout({
     type: 'training', lifts: liftBlocks, accessoryIntensity,
-  }, { accessoryMode, accessoryPRs, oneRMs: realOneRMs, history, smart: true, workoutSetup });
+  }, { accessoryMode, accessoryPRs, oneRMs: trainingMaxes, history, smart: true, workoutSetup });
 
   return applySmartIdealRouteMetadata({
     ...resetSmartWorkoutProgress(sourceWorkout),
@@ -4104,6 +4100,8 @@ export function buildSmartIdealTrainingWorkout({
     type: 'training',
     label: null,
     labelKey: 'practice',
+    smartLoadBasis: 'e1rm',
+    smartLoadMaxes: { ...trainingMaxes },
     lift: primaryBlock?.lift || null,
     lifts: liftBlocks,
     sets: primaryBlock?.sets || [],
@@ -5610,12 +5608,18 @@ function generateSmartWorkouts({
 }
 
 export function generateWorkoutsForTrainingModelUnconstrained(model, args = {}) {
+  const estimated = isSmartTrainingModel(model) && args.idealRouteEnabled !== false
+    ? resolveEstimatedOneRMs({
+      prs: { Squat: args.squat, Bench: args.bench, Deadlift: args.deadlift, ...args.e1RMs },
+      oneRMs: args.oneRMs || args.data?.oneRMs,
+      history: args.history || args.data?.history,
+    }) : { Squat: args.squat, Bench: args.bench, Deadlift: args.deadlift };
   const workoutArgs = {
     programProfile: normalizeProgramProfile(args.programProfile),
     athleteLevel: normalizeAthleteLevel(args.athleteLevel),
-    squat: args.squat,
-    bench: args.bench,
-    deadlift: args.deadlift,
+    squat: estimated.Squat,
+    bench: estimated.Bench,
+    deadlift: estimated.Deadlift,
     accessoryMode: args.accessoryMode ?? 'off',
     accessoryPRs: args.accessoryPRs || {},
     preparationMode: args.preparationMode ?? 'basicFirst',
@@ -6122,6 +6126,11 @@ export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
   if (!isSmartTrainingModel(trainingModel)) return generatedWorkouts;
 
   const currentIndex = getSmartFrequencyCurrentIndex(generatedWorkouts, options);
+  const accessoryMaxes = options.idealRouteEnabled !== false
+    ? resolveEstimatedOneRMs({
+      prs: { Squat: options.squat, Bench: options.bench, Deadlift: options.deadlift, ...options.e1RMs },
+      oneRMs: options.oneRMs, history: options.history || options.data?.history || [],
+    }) : { Squat: options.squat, Bench: options.bench, Deadlift: options.deadlift };
   // Finalize after selection/frequency constraints so preparation and
   // accessories follow the actual lifts, including any replacement Bench.
   const workouts = generatedWorkouts.map((workout, index) => {
@@ -6141,7 +6150,7 @@ export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
       accessories: index === currentIndex ? generateAccessoriesForWorkout(workout, {
         accessoryMode: options.accessoryMode,
         accessoryPRs: options.accessoryPRs,
-        oneRMs: { Squat: options.squat, Bench: options.bench, Deadlift: options.deadlift },
+        oneRMs: accessoryMaxes,
         history: options.history || options.data?.history || [],
         smart: true,
         workoutSetup: options.workoutSetup,

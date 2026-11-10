@@ -132,3 +132,16 @@ test('every genuine successful work-set weight can raise a persisted established
     calculateActualOneRMsFromHistory([double, single])
   ).Squat).toBe(152.5);
 });
+
+test('estimated training bases preserve precise estimates without promoting real records', async () => {
+  const { resolveEstimatedOneRMs } = await import('./oneRMState');
+  const oneRMs = { Squat: 100, Bench: 75, Deadlift: 125 };
+  const history = [{
+    cycle: 1, workoutNumber: 1, lift: 'Squat', topWeight: 97.5, topReps: 2,
+    e1rm: 97.5 * (1 + 2 / 30),
+  }];
+  expect(resolveEstimatedOneRMs({ oneRMs, history, prs: { Bench: 80.125 } })).toEqual({
+    Squat: 104, Bench: 80.125, Deadlift: 125,
+  });
+  expect(oneRMs).toEqual({ Squat: 100, Bench: 75, Deadlift: 125 });
+});

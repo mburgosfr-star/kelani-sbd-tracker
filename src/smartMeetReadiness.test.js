@@ -444,11 +444,11 @@ test('uses the same strictly increasing beginner attempts as the visible meet pl
   });
 
   expect(result.byLift.Squat.attempts)
-    .toEqual({ opener: 37.5, secondAttempt: 42.5, thirdAttempt: 45 });
+    .toEqual({ opener: 40, secondAttempt: 42.5, thirdAttempt: 45 });
   expect(result.byLift.Bench.attempts)
     .toEqual({ opener: 30, secondAttempt: 32.5, thirdAttempt: 35 });
   expect(result.byLift.Deadlift.attempts)
-    .toEqual({ opener: 55, secondAttempt: 57.5, thirdAttempt: 62.5 });
+    .toEqual({ opener: 55, secondAttempt: 57.5, thirdAttempt: 60 });
   expect(result.byLift.Deadlift.readinessPhase).toBe('opener');
   expect(result.byLift.Squat.readinessPhase).toBe('third-attempt');
   expect(result.byLift.Bench.readinessPhase).toBe('third-attempt');
@@ -533,19 +533,19 @@ test('established 1RMs restore consistent attempts and confirm meet readiness', 
   });
 
   expect(result.byLift.Squat.attempts).toEqual({
-    opener: 130,
-    secondAttempt: 142.5,
+    opener: 132.5,
+    secondAttempt: 140,
     thirdAttempt: 147.5,
   });
   expect(result.byLift.Bench.attempts).toEqual({
-    opener: 87.5,
-    secondAttempt: 95,
-    thirdAttempt: 100,
+    opener: 92.5,
+    secondAttempt: 97.5,
+    thirdAttempt: 102.5,
   });
   expect(result.byLift.Deadlift.attempts).toEqual({
-    opener: 162.5,
-    secondAttempt: 175,
-    thirdAttempt: 185,
+    opener: 165,
+    secondAttempt: 172.5,
+    thirdAttempt: 182.5,
   });
   expect(result.byLift).toMatchObject({
     Squat: { currentCycleBestE1RM: 146.66666666666666, secondAttemptReady: true },
@@ -607,7 +607,7 @@ test('a clean taper after enough work offers the meet with the restored attempt 
     },
   });
   expect(meet.lifts.find(block => block.lift === 'Squat').sets.map(set => set.weight))
-    .toEqual([130, 142.5, 147.5]);
+    .toEqual([132.5, 140, 147.5]);
 });
 
 test('a failed heavy Deadlift proof keeps its strength evidence but requires two final recovery days', () => {
@@ -1315,13 +1315,9 @@ test('a light taper workout forces rest before the meet even when the active blo
   });
 });
 
-test("a sub-maximal training PR (raising e1RM/prs) never moves the athlete's meet attempts - only a real heavier single does", () => {
-  // A real 95kg single (W29) sets the true 1RM basis. Later, a 95kg TOP
-  // DOUBLE (2 reps, same weight, no real single attempted) raises e1RM/prs
-  // to ~101 - a legitimate training PR - but opener/2nd/3rd must not move,
-  // since no heavier single was actually lifted. "opener 90 -> unchanged,
-  // 2nd 100 -> not real, 3rd 105 -> never attempted" was
-  // the exact wrong behavior this fixes.
+test('a successful double updates automatic meet attempts through its precise e1RM', () => {
+  // The demonstrated 95kg weight remains the same, but the estimate rises
+  // from 95 to 101.333...kg. Automatic attempts now follow that estimate.
   const historyBeforeDouble = [
     makeTrainingEntry({
       workoutNumber: 29,
@@ -1357,10 +1353,12 @@ test("a sub-maximal training PR (raising e1RM/prs) never moves the athlete's mee
     currentCycle: 3,
   });
 
-  expect(readinessBefore.byLift.Bench.attempts).toEqual(
-    readinessAfter.byLift.Bench.attempts
-  );
-  expect(readinessAfter.byLift.Bench.attempts.opener).toBe(85);
+  expect(readinessBefore.byLift.Bench.attempts).toEqual({
+    opener: 85, secondAttempt: 90, thirdAttempt: 95,
+  });
+  expect(readinessAfter.byLift.Bench.attempts).toEqual({
+    opener: 90, secondAttempt: 97.5, thirdAttempt: 102.5,
+  });
 });
 
 test('supporting the attempts still does not satisfy the 100%-of-real-1RM gate', () => {

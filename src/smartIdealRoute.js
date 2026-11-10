@@ -33,25 +33,25 @@ export function normalizeSmartTrainingFocus(value) {
 }
 
 export const SMART_IDEAL_LOAD_POLICY = Object.freeze({
-  basis: 'real-1rm',
+  basis: 'e1rm',
   workWeightIncrementKg: 2.5,
-  achievedE1RMIncrementKg: 2.5,
+  achievedE1RMIncrementKg: null,
   displayedPercentageIncrement: 0.025,
   heavyPhaseMinimumIncreaseKg: 2.5,
-  heavyPhaseCap: 'real-1rm',
+  heavyPhaseCap: 'e1rm',
 });
 
 export const SMART_IDEAL_MEET_POLICY = Object.freeze({
   attemptPcts: Object.freeze({
     opener: 0.90,
-    secondAttempt: 0.975,
-    thirdAttempt: 1.025,
+    secondAttempt: 0.95,
+    thirdAttempt: 1.00,
   }),
   attemptWeightIncrementKg: 2.5,
   minimumAttemptIncreaseKg: 2.5,
-  automaticAttemptBasis: 'real-1rm',
+  automaticAttemptBasis: 'e1rm',
   recalculateAfterNewReal1RM: true,
-  recalculateAfterE1RMOnlyPR: false,
+  recalculateAfterE1RMOnlyPR: true,
   preserveManualAttempts: true,
   lockAttemptsAfterMeetStarts: true,
   thirdAttemptPreDemonstrationRequired: false,

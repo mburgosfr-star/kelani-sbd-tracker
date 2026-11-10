@@ -22,7 +22,9 @@ export function roundKgForStorage(weightKg) {
   const numericWeight = Number(weightKg);
   if (!Number.isFinite(numericWeight)) return '';
 
-  return Number(numericWeight.toFixed(1));
+  // Kept as a compatibility export. Unit conversion must not discard the
+  // precision of measured body data, recorded maxes or calculated estimates.
+  return numericWeight;
 }
 
 export function displayWeightToKg(weight, unit = WEIGHT_UNITS.KG) {
@@ -59,11 +61,13 @@ export function decimalLocale() {
   return 'en-US';
 }
 
-export function formatWeightValue(value, unit = WEIGHT_UNITS.KG, { body = false } = {}) {
+export function formatWeightValue(value, unit = WEIGHT_UNITS.KG, { body = false, recorded = false } = {}) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return '-';
 
   const normalizedUnit = normalizeWeightUnit(unit);
+
+  if (recorded) return Number(numericValue.toFixed(2)).toString();
 
   if (body) {
     return Number(numericValue.toFixed(1)).toString();
@@ -91,7 +95,7 @@ export function formatDecimalDisplay(value, { minimumFractionDigits, maximumFrac
 
 export function formatWeightDisplayValue(value, unit = WEIGHT_UNITS.KG, options = {}) {
   const rawValue = formatWeightValue(value, unit, options);
-  return formatDecimalDisplay(rawValue, { maximumFractionDigits: 1 });
+  return formatDecimalDisplay(rawValue, { maximumFractionDigits: options.recorded ? 2 : 1 });
 }
 
 export function formatWeightFromKg(weightKg, unit = WEIGHT_UNITS.KG, options = {}) {

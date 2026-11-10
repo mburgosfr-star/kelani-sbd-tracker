@@ -66,7 +66,7 @@ test('meet attempts use readiness rather than the stale template and remain stri
   ]);
 
   expect(sets.map(set => set.weight)).toEqual([87.5, 95, 100]);
-  expect(sets.map(set => set.pct)).toEqual([0.9, 0.975, 1.025]);
+  expect(sets.map(set => set.pct)).toEqual([0.9, 0.95, 1]);
 });
 
 test('rejects a 90% Bench single with only one double as normal training', () => {

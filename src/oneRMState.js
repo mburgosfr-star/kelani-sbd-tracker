@@ -2,9 +2,22 @@ import {
   LIFT_ORDER,
   getEstablishedOneRMFromHistoryEntry,
   getHistoryMaxCandidates,
+  calculateBestMaxesFromHistory,
 } from './workoutHistoryStats';
 
 export const ONE_RM_STATE_VERSION = 2;
+
+// Estimated planning values and demonstrated weights remain separate. No
+// rounding here: only concrete barbell prescriptions may be rounded.
+export function resolveEstimatedOneRMs({ prs = {}, oneRMs = {}, history = [] } = {}) {
+  const best = calculateBestMaxesFromHistory(history);
+  return Object.fromEntries(LIFT_ORDER.map(lift => [lift, Math.max(
+    Number(prs?.[lift]) || 0,
+    Number(oneRMs?.[lift]) || 0,
+    Number(best[lift]?.e1rm) || 0,
+    Number(best[lift]?.oneRM) || 0
+  )]));
+}
 
 function emptyOneRMs() {
   return LIFT_ORDER.reduce((result, lift) => ({

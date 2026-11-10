@@ -27,12 +27,12 @@ test('preserves calculated e1RM precision instead of rounding to barbell steps',
 describe('classifyAthleteLevel', () => {
   test.each([
     [0, 'beginner'],
-    [4.49, 'beginner'],
-    [4.5, 'intermediate'],
-    [5.49, 'intermediate'],
-    [5.5, 'advanced'],
-    [6.49, 'advanced'],
-    [6.5, 'elite'],
+    [2.99, 'beginner'],
+    [3, 'intermediate'],
+    [5.99, 'intermediate'],
+    [6, 'advanced'],
+    [8.99, 'advanced'],
+    [9, 'elite'],
     [15, 'elite'],
   ])('classifies an eStrength ratio of %s as %s', (ratio, expectedLevel) => {
     expect(classifyAthleteLevel(ratio)).toBe(expectedLevel);
@@ -53,10 +53,10 @@ describe('classifyAthleteLevel', () => {
 
 describe('ATHLETE_LEVEL_THRESHOLDS', () => {
   test('tiers are contiguous with no gaps or overlaps', () => {
-    expect(ATHLETE_LEVEL_THRESHOLDS.beginner).toEqual({ min: 0, max: 4.5 });
-    expect(ATHLETE_LEVEL_THRESHOLDS.intermediate).toEqual({ min: 4.5, max: 5.5 });
-    expect(ATHLETE_LEVEL_THRESHOLDS.advanced).toEqual({ min: 5.5, max: 6.5 });
-    expect(ATHLETE_LEVEL_THRESHOLDS.elite).toEqual({ min: 6.5, max: Infinity });
+    expect(ATHLETE_LEVEL_THRESHOLDS.beginner).toEqual({ min: 0, max: 3 });
+    expect(ATHLETE_LEVEL_THRESHOLDS.intermediate).toEqual({ min: 3, max: 6 });
+    expect(ATHLETE_LEVEL_THRESHOLDS.advanced).toEqual({ min: 6, max: 9 });
+    expect(ATHLETE_LEVEL_THRESHOLDS.elite).toEqual({ min: 9, max: Infinity });
   });
 });
 
@@ -97,8 +97,8 @@ describe('calculateEStrengthRatio / getAthleteLevel', () => {
 
     expect(calculateEStrengthRatio(input)).toBeCloseTo(5.38, 2);
     expect(calculateStrengthRatioMaxes(input)).toEqual({
-      strengthMax: 6.14,
-      eStrengthMax: 6.14,
+      strengthMax: 430 / 70,
+      eStrengthMax: 430 / 70,
     });
     expect(getAthleteLevel(input)).toBe('advanced');
   });
@@ -119,7 +119,7 @@ describe('calculateEStrengthRatio / getAthleteLevel', () => {
 
     expect(result).toEqual({
       strengthMax: 3.75,
-      eStrengthMax: 3.84,
+      eStrengthMax: 307.5 / 80,
     });
   });
 
@@ -144,8 +144,8 @@ describe('calculateEStrengthRatio / getAthleteLevel', () => {
       bodyWeights: [{ cycle: 1, workoutNumber: 0, bodyWeight: 80 }],
     });
 
-    expect(before).toEqual({ strengthMax: 3.56, eStrengthMax: 3.75 });
-    expect(after).toEqual({ strengthMax: 3.63, eStrengthMax: 3.84 });
+    expect(before).toEqual({ strengthMax: 285 / 80, eStrengthMax: 3.75 });
+    expect(after).toEqual({ strengthMax: 290 / 80, eStrengthMax: 307.5 / 80 });
   });
 
   test('multi-rep work records both demonstrated real-1RM floors and higher e1RMs', () => {
@@ -158,7 +158,7 @@ describe('calculateEStrengthRatio / getAthleteLevel', () => {
       bodyWeights: [{ cycle: 1, workoutNumber: 0, bodyWeight: 80 }],
     });
 
-    expect(result).toEqual({ strengthMax: 3.34, eStrengthMax: 3.75 });
+    expect(result).toEqual({ strengthMax: 267.5 / 80, eStrengthMax: 3.75 });
   });
 
   test('recovers established historical real 1RMs at the bodyweight recorded then', () => {
@@ -213,8 +213,8 @@ describe('calculateEStrengthRatio / getAthleteLevel', () => {
       history,
       bodyWeights: [{ cycle: 3, workoutNumber: 10, bodyWeight: 79.3 }],
     })).toEqual({
-      strengthMax: 5.33,
-      eStrengthMax: 5.33,
+      strengthMax: 422.5 / 79.3,
+      eStrengthMax: 422.5 / 79.3,
     });
   });
 
@@ -289,8 +289,8 @@ describe('calculateEStrengthRatio / getAthleteLevel', () => {
 describe('relative-strength threshold migration', () => {
   test.each([
     [2.9, 'beginner'], [3, 'intermediate'], [4.49, 'intermediate'],
-    [4.5, 'intermediate'], [5.5, 'advanced'], [6, 'advanced'],
-    [6.5, 'elite'], [9, 'elite'],
+    [4.5, 'intermediate'], [5.5, 'intermediate'], [6, 'advanced'],
+    [6.5, 'advanced'], [9, 'elite'],
   ])('legacy ratio %s retains or raises the previous level to %s', (ratio, level) => {
     const records = initializeAthleteLevelPolicy({ eStrengthMax: ratio }, { legacy: true });
     expect(getAthleteLevel({ strengthRatioMaxes: records })).toBe(level);
@@ -301,16 +301,32 @@ describe('relative-strength threshold migration', () => {
   test('new profiles do not acquire legacy protection on reload or import', () => {
     const records = initializeAthleteLevelPolicy({ eStrengthMax: 3.5 });
     const restored = initializeAthleteLevelPolicy(JSON.parse(JSON.stringify(records)), { legacy: true });
-    expect(getAthleteLevel({ strengthRatioMaxes: restored })).toBe('beginner');
+    expect(getAthleteLevel({ strengthRatioMaxes: restored })).toBe('intermediate');
     expect(restored.athleteLevelFloor).toBe('beginner');
   });
 
   test('a protected legacy profile progresses under the new thresholds without losing its floor', () => {
     const initial = initializeAthleteLevelPolicy({ eStrengthMax: 3.5 }, { legacy: true });
-    const increased = mergeStrengthRatioMaxes(initial, { eStrengthMax: 5.5 });
+    const increased = mergeStrengthRatioMaxes(initial, { eStrengthMax: 6 });
     const restored = initializeAthleteLevelPolicy(JSON.parse(JSON.stringify(increased)), { legacy: true });
-    expect(restored).toMatchObject({ eStrengthMax: 5.5, athleteLevelFloor: 'intermediate' });
+    expect(restored).toMatchObject({ eStrengthMax: 6, athleteLevelFloor: 'intermediate' });
     expect(getAthleteLevel({ strengthRatioMaxes: restored })).toBe('advanced');
     expect(mergeStrengthRatioMaxes({ eStrengthMax: 5.5 }, initial).athleteLevelFloor).toBe('intermediate');
   });
+});
+
+
+test.each([[5.6, 'advanced', 'intermediate'], [7, 'elite', 'advanced']])(
+  'rebases a previous-policy floor at %s to the 3/6/9 bands', (ratio, oldFloor, expected) => {
+    const records = initializeAthleteLevelPolicy({ eStrengthMax: ratio,
+      athleteLevelThresholdVersion: 2, athleteLevelFloor: oldFloor });
+    expect(records.athleteLevelThresholdVersion).toBe(3);
+    expect(getAthleteLevel({ strengthRatioMaxes: records })).toBe(expected);
+    expect(getAthleteLevel({ strengthRatioMaxes: JSON.parse(JSON.stringify(records)) })).toBe(expected);
+  }
+);
+
+test('current-policy precision protection remains valid below a corrected threshold', () => {
+  expect(getAthleteLevel({ strengthRatioMaxes: { eStrengthMax: 5.9999,
+    athleteLevelThresholdVersion: 3, athleteLevelFloor: 'advanced' } })).toBe('advanced');
 });

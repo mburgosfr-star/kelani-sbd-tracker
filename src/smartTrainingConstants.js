@@ -80,8 +80,8 @@ export const MEET_ATTEMPT_KEYS = ['opener', 'secondAttempt', 'thirdAttempt'];
 
 export const MEET_ATTEMPT_PCTS = {
   opener: 0.9,
-  secondAttempt: 0.975,
-  thirdAttempt: 1.025,
+  secondAttempt: 0.95,
+  thirdAttempt: 1.00,
 };
 
 // Weighted intensity-score frequency model. Lives in this

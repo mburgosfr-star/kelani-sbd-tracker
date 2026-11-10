@@ -20,14 +20,14 @@ Smart Training uses your lifetime **eStrength Max** (total estimated 1RM divided
 
 | Level | eStrength Max |
 |---|---|
-| Beginner | Below 4.5× |
-| Intermediate | From 4.5× to below 5.5× |
-| Advanced | From 5.5× to below 6.5× |
-| Elite | 6.5× or higher |
+| Beginner | Below 3× |
+| Intermediate | From 3× to below 6× |
+| Advanced | From 6× to below 9× |
+| Elite | 9× or higher |
 
-These are relative-strength bands, informed by rounded quartiles of tested, raw, full-SBD competitors in [OpenPowerlifting](https://openpowerlifting.gitlab.io/opl-csv/bulk-csv.html). They do not measure training experience or prove an optimal training frequency. Competition totals are measured results, whereas eStrength includes estimates.
+These are practical relative-strength bands with equally spaced thresholds. They do not contain equal numbers of lifters, measure training experience or prove an optimal training frequency. They are not exact quartiles of the observed minimum-to-maximum range. Competition totals are measured results, whereas eStrength includes estimates.
 
-When updating from the previous 3×/6×/9× thresholds, your previous level is retained if the new calculation would lower it; a higher calculated level applies immediately. This protection is saved with your records and backups. Older backups receive the same protection when loaded. New profiles use the new thresholds immediately. The update does not inflate strength records or reset completed or started workouts. Future prescriptions use the resulting level. Meet-attempt percentages and the strength basis for training weights are unchanged.
+Your level uses lifetime eStrength Max. Protection against a precision correction lowering an already attained level under these bands is saved with your records and backups. No strength record is inflated, and completed or started workouts are preserved. Future prescriptions use the resulting level.
 
 ### Training Calendar
 
@@ -44,11 +44,17 @@ All beginner routes alternate a training day and a recovery day, including durin
 
 Existing cycles keep their completed workouts and their numbering. Work already started keeps its saved prescription and set progress. The remaining plan adopts the new rhythm, so a cycle already underway can finish later than the default W26. No history or PRs are reset.
 
-The Program screen shows the route ahead. Completed workouts show recorded work-set results on the right instead of the plan: green ✓ for successful sets and red ✕ for missed sets, grouped by repetitions, weight and recorded percentage. Warm-ups are omitted, as in the planning preview. A question mark means an older record has no saved outcome for that set. Confirmed strength determines the prescribed weights. Future workouts open in view-only mode; choosing **Workout** in the navigation returns to your current session.
+The Program screen shows the route ahead. Completed workouts show recorded work-set results on the right instead of the plan: green ✓ for successful sets and red ✕ for missed sets, grouped by repetitions, weight and recorded percentage. Warm-ups are omitted, as in the planning preview. A question mark means an older record has no saved outcome for that set. Your precise best e1RM determines the prescribed weights and is updated after each completed workout when successful sets improve it. Future workouts open in view-only mode; choosing **Workout** in the navigation returns to your current session.
 
 **Too easy** shortens the route unless Meet Day is already next. **Too hard** or failed work can add recovery without scheduling more than two consecutive rest days. Readiness information explains progress without silently replacing planned workouts or postponing the meet.
 
-Meet planning uses demonstrated real 1RM values. Estimated 1RM tracks progress from successful sets. Existing Classic users can continue their fixed programs or switch permanently to Smart using their existing history. Classic remains in maintenance mode.
+Smart training percentages use your precise best e1RM across all cycles, never less than your demonstrated 1RM. Failed or skipped sets cannot improve it. Only prescribed barbell weights are rounded, not stored strength estimates. A higher estimate can therefore increase later training weights in the same cycle.
+
+Automatic Smart meet attempts target **90%, 95% and 100% of e1RM**. The third attempt is rounded to the nearest 2.5 kg first; the second and opener are then rounded with at least 2.5 kg between attempts. For example, an e1RM of 32.5 kg gives 27.5, 30 and 32.5 kg. Three positive attempts require a minimum plan of 2.5, 5 and 7.5 kg for unusually small estimates. Custom attempts remain available. Readiness stages still compare demonstrated current-cycle estimates with real 1RM; they are separate from the automatic attempt percentages.
+
+Future and untouched workouts adopt updated estimates. Started workouts, started meets and completed snapshots retain their saved weights and outcomes. Attempts stop updating once the meet has started, including when a successful attempt improves your records. Custom attempts are preserved, subject to the existing strictly increasing attempt rule.
+
+Classic retains its existing real-1RM programming and 90%, 97.5%, 102.5% meet defaults. Existing Classic users can continue their fixed programs or switch permanently to Smart using their existing history. Classic remains in maintenance mode.
 
 ### Starting a New Cycle Early
 
@@ -92,6 +98,16 @@ The timer provides sound and Android notifications. After the final warm-up befo
 In **Settings → Workout setup**, choose whether preparation and accessories are enabled, which exercises belong to each lift, and their sets and reps. Kelani places the selected exercises into relevant workouts and chooses their training intensity. Meet Day contains only the competition lifts.
 
 Statistics track 1RM, estimated 1RM, SBD totals, Strength, eStrength and body measurements. Completed cycles include a results review, progress since the start and a chart of the best recorded 1RM total. You can preview and share a cycle-results card from the review. Navigating to another screen starts the next cycle.
+
+### Strength Records and Precision
+
+- **1RM** is the heaviest demonstrated successful work-set weight. Completing several repetitions also proves that the same weight can be lifted once. It need not be a maximal single.
+- **e1RM** is an estimate calculated from successful weight and repetitions. For more than one repetition, Kelani uses `weight × (1 + reps / 30)`; a single uses its actual weight.
+- **Strength** is the sum of the three recorded 1RMs divided by bodyweight. **eStrength** uses the three estimated maxima instead. Their **Max** values preserve the highest historical ratios, pairing strength with the bodyweight recorded at that time.
+
+Calculated estimates, totals, ratios, gains and unit conversions retain their numeric precision in storage and calculations. Only prescribed training weights and meet attempts are rounded to loadable increments. Screens may abbreviate decimal places for readability without changing the stored value.
+
+Older backups may contain estimates rounded to 2.5 kg and ratios rounded to two decimal places. When the original successful sets and bodyweight evidence are available, Kelani reconstructs those derived values on load and saves the corrected values in subsequent backups. Explicit seed/manual values and records whose original evidence is unavailable are not guessed. Your established level is protected, even if correcting an old estimate lowers a ratio. Recorded sets, outcomes, dates, settings, manual attempts and started workouts are preserved.
 
 ## Optional Calendar and Sharing
 
