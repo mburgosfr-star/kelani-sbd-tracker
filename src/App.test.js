@@ -251,8 +251,8 @@ test('dashboard reads recent Strength Max records from the latest milestone cele
 test('a lighter weigh-in records new Strength Maxes and a newly reached level', () => {
   const shared = {
     history: [],
-    prs: { Squat: 100, Bench: 70, Deadlift: 120 },
-    oneRMs: { Squat: 100, Bench: 70, Deadlift: 120 },
+    prs: { Squat: 150, Bench: 100, Deadlift: 190 },
+    oneRMs: { Squat: 150, Bench: 100, Deadlift: 190 },
     strengthRatioMaxes: {},
   };
 
@@ -265,7 +265,7 @@ test('a lighter weigh-in records new Strength Maxes and a newly reached level', 
       ...shared,
       bodyWeights: [
         { cycle: 1, workoutNumber: 1, bodyWeight: 100 },
-        { cycle: 1, workoutNumber: 2, bodyWeight: 95 },
+        { cycle: 1, workoutNumber: 2, bodyWeight: 96.7 },
       ],
     },
   })).toEqual({
@@ -1706,7 +1706,7 @@ test('only the meet-plan card opens the meet workout, not the level badge', () =
   expect(onOpenWorkout).not.toHaveBeenCalled();
   expect(screen.getByText(translations.nl.athleteLevelModalTitle))
     .toBeInTheDocument();
-  expect(screen.getByText('0.90x → Advanced')).toBeInTheDocument();
+  expect(screen.getByText('0.40x → Advanced')).toBeInTheDocument();
   expect(screen.queryByText(/≈ .* kg → Advanced/)).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', {
@@ -3154,4 +3154,58 @@ test('loading a Smart calendar of a different length preserves an already starte
     expect(saved.inProgress.workouts).toHaveLength(28);
     expect(saved.inProgress.workouts[0].lifts[0].sets[0]).toMatchObject({ done: true, weight: 32.5 });
   });
+});
+
+
+test.each([
+  [3.5, undefined, 'intermediate'],
+  [7, undefined, 'elite'],
+  [3.5, { athleteLevelThresholdVersion: 2, athleteLevelFloor: 'beginner' }, 'beginner'],
+])('level policy migrates and reloads a profile at %s without resetting started work', async (ratio, policy, level) => {
+  localStorage.clear();
+  const storageKey = 'kel-powerlifting-user-data-v1';
+  const started = {
+    number: 1, type: 'training', lift: 'Squat',
+    sets: [{ labelKey: 'topSingle', weight: 90, originalWeight: 90, reps: 1, done: true, failed: true }],
+    warmups: [],
+  };
+  localStorage.setItem(storageKey, JSON.stringify({
+    version: 1, showWhatsNewAfterUpdates: false,
+    trainingModel: 'smart', currentCycle: 1,
+    prs: { Squat: 100, Bench: 75, Deadlift: 125 }, history: [],
+    bodyWeights: [{ cycle: 1, workoutNumber: 0, bodyWeight: 100 }],
+    strengthRatioMaxes: { eStrengthMax: ratio, ...policy },
+    inProgress: {
+      programVersion: 'kelani-program-profiles-v6', currentCycle: 1,
+      currentIndex: 0, selectedIndex: 0, workouts: [started],
+    },
+  }));
+  let view = render(<App />);
+  const expected = translations.en[`athleteLevel${level[0].toUpperCase()}${level.slice(1)}`];
+  await screen.findByRole('button', { name: `${translations.en.athleteLevelBadgeLabel}: ${expected}` }, { timeout: 3000 });
+  await waitFor(() => {
+    const saved = JSON.parse(localStorage.getItem(storageKey));
+    expect(saved.strengthRatioMaxes.athleteLevelThresholdVersion).toBe(2);
+    expect(saved.strengthRatioMaxes.eStrengthMax).toBe(ratio);
+    expect(saved.inProgress.workouts[0].sets).toEqual(started.sets);
+  });
+  const beforeReload = JSON.parse(localStorage.getItem(storageKey));
+  view.unmount();
+  view = render(<App />);
+  await screen.findByRole('button', { name: `${translations.en.athleteLevelBadgeLabel}: ${expected}` }, { timeout: 3000 });
+  await waitFor(() => expect(JSON.parse(localStorage.getItem(storageKey)).strengthRatioMaxes)
+    .toEqual(beforeReload.strengthRatioMaxes));
+  view.unmount();
+  localStorage.clear();
+});
+
+test.each(['en', 'nl', 'ca'])('the level modal explains a retained old level in %s', language => {
+  const t = translations[language];
+  render(<AppHeader t={t} currentCycle={1} workoutNumber={1}
+    athleteLevel="intermediate" eStrengthRatio={3.5} eStrengthMax={3.5} />);
+  fireEvent.click(screen.getByRole('button', {
+    name: `${t.athleteLevelBadgeLabel}: ${t.athleteLevelIntermediate}`,
+  }));
+  expect(screen.getByText(t.athleteLevelRetainedExplanation)).toBeInTheDocument();
+  expect(screen.getByText('4.5x - 5.5x')).toBeInTheDocument();
 });

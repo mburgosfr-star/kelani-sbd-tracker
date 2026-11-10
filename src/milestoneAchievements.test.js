@@ -195,22 +195,22 @@ test('an e1RM PR is not an eStrength Max PR while a lighter historical ratio rem
 test('a level increase is the primary milestone', () => {
   const nearIntermediate = {
     history: [
-      { cycle: 0, workoutNumber: 0, seedMax: true, lift: 'Squat', topWeight: 80, e1rm: 80 },
-      { cycle: 0, workoutNumber: 0, seedMax: true, lift: 'Bench', topWeight: 60, e1rm: 60 },
-      { cycle: 0, workoutNumber: 0, seedMax: true, lift: 'Deadlift', topWeight: 97.5, e1rm: 97.5 },
+      { cycle: 0, workoutNumber: 0, seedMax: true, lift: 'Squat', topWeight: 120, e1rm: 120 },
+      { cycle: 0, workoutNumber: 0, seedMax: true, lift: 'Bench', topWeight: 80, e1rm: 80 },
+      { cycle: 0, workoutNumber: 0, seedMax: true, lift: 'Deadlift', topWeight: 157.5, e1rm: 157.5 },
     ],
-    prs: { Squat: 80, Bench: 60, Deadlift: 97.5 },
-    oneRMs: { Squat: 80, Bench: 60, Deadlift: 97.5 },
+    prs: { Squat: 120, Bench: 80, Deadlift: 157.5 },
+    oneRMs: { Squat: 120, Bench: 80, Deadlift: 157.5 },
     bodyWeights,
   };
-  const newEntry = completedEntry({ weight: 82.5, reps: 1, e1rm: 82.5 });
+  const newEntry = completedEntry({ weight: 122.5, reps: 1, e1rm: 122.5 });
   const celebration = buildMilestoneCelebration({
     before: nearIntermediate,
     after: {
       ...nearIntermediate,
       history: [...nearIntermediate.history, newEntry],
-      prs: { ...nearIntermediate.prs, Squat: 82.5 },
-      oneRMs: { ...nearIntermediate.oneRMs, Squat: 82.5 },
+      prs: { ...nearIntermediate.prs, Squat: 122.5 },
+      oneRMs: { ...nearIntermediate.oneRMs, Squat: 122.5 },
     },
   });
 

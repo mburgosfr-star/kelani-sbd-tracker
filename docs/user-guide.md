@@ -14,6 +14,23 @@ Kelani 1.x and 2.x have different Android identities and can coexist. To migrate
 
 ## Smart Training
 
+### Athlete Levels
+
+Smart Training uses your lifetime **eStrength Max** (total estimated 1RM divided by bodyweight), with the same thresholds for everyone:
+
+| Level | eStrength Max |
+|---|---|
+| Beginner | Below 4.5× |
+| Intermediate | From 4.5× to below 5.5× |
+| Advanced | From 5.5× to below 6.5× |
+| Elite | 6.5× or higher |
+
+These are relative-strength bands, informed by rounded quartiles of tested, raw, full-SBD competitors in [OpenPowerlifting](https://openpowerlifting.gitlab.io/opl-csv/bulk-csv.html). They do not measure training experience or prove an optimal training frequency. Competition totals are measured results, whereas eStrength includes estimates.
+
+When updating from the previous 3×/6×/9× thresholds, your previous level is retained if the new calculation would lower it; a higher calculated level applies immediately. This protection is saved with your records and backups. Older backups receive the same protection when loaded. New profiles use the new thresholds immediately. The update does not inflate strength records or reset completed or started workouts. Future prescriptions use the resulting level. Meet-attempt percentages and the strength basis for training weights are unchanged.
+
+### Training Calendar
+
 New users start with Smart Training. The default calendar depends on the athlete level:
 
 | Route | Beginner | Intermediate, Advanced and Elite |

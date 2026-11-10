@@ -541,16 +541,37 @@ export function formatCycleWorkoutSubtitle({ t, currentCycle, workoutNumber, tot
   })}${suffix}`;
 }
 
-// Experience-tier thresholds, in total-e1RM-to-bodyweight ratio ("eStrength").
-// Deliberately unisex - the app treats every athlete the same way. Grounded
-// in openpowerlifting.org all-tested rankings (e.g. the strongest raw
-// lifters of all time sit around a 9-10x-bodyweight total).
+// Shared relative-strength bands. Rounded from quartiles of tested, raw SBD
+// competitors in OpenPowerlifting, not validated training-experience cutoffs.
+// Kelani applies the same bands to every athlete's lifetime eStrength Max.
 export const ATHLETE_LEVEL_THRESHOLDS = Object.freeze({
-  beginner: { min: 0, max: 3 },
-  intermediate: { min: 3, max: 6 },
-  advanced: { min: 6, max: 9 },
-  elite: { min: 9, max: Infinity },
+  beginner: { min: 0, max: 4.5 },
+  intermediate: { min: 4.5, max: 5.5 },
+  advanced: { min: 5.5, max: 6.5 },
+  elite: { min: 6.5, max: Infinity },
 });
+
+const ATHLETE_LEVEL_ORDER = ['beginner', 'intermediate', 'advanced', 'elite'];
+const ATHLETE_LEVEL_THRESHOLD_VERSION = 2;
+
+// Only persisted profiles go through legacy migration. Fresh profiles must be
+// marked with the current policy before their first save, including profiles
+// that have not yet completed a workout. Never inflate the actual ratio record.
+export function initializeAthleteLevelPolicy(records = {}, { legacy = false } = {}) {
+  const normalized = mergeStrengthRatioMaxes(records);
+  if (normalized.athleteLevelThresholdVersion >= ATHLETE_LEVEL_THRESHOLD_VERSION) {
+    return normalized;
+  }
+  const ratio = Number(normalized.eStrengthMax) || 0;
+  const oldLevel = ratio >= 9 ? 'elite'
+    : ratio >= 6 ? 'advanced'
+      : ratio >= 3 ? 'intermediate' : 'beginner';
+  return {
+    ...normalized,
+    athleteLevelThresholdVersion: ATHLETE_LEVEL_THRESHOLD_VERSION,
+    athleteLevelFloor: legacy ? oldLevel : 'beginner',
+  };
+}
 
 export function classifyAthleteLevel(eStrengthRatio) {
   const ratio = Number(eStrengthRatio) || 0;
@@ -768,6 +789,20 @@ export function mergeStrengthRatioMaxes(...sources) {
       ? Math.round(normalized.eStrengthMax * 100) / 100
       : null,
   };
+  // Carry the migration floor through record updates, exports and restores.
+  const policies = sources.filter(source => (
+    Number.isInteger(source?.athleteLevelThresholdVersion) &&
+    source.athleteLevelThresholdVersion >= ATHLETE_LEVEL_THRESHOLD_VERSION &&
+    ATHLETE_LEVEL_ORDER.includes(source.athleteLevelFloor)
+  ));
+  if (policies.length) {
+    merged.athleteLevelThresholdVersion = Math.max(
+      ...policies.map(source => source.athleteLevelThresholdVersion)
+    );
+    merged.athleteLevelFloor = ATHLETE_LEVEL_ORDER[Math.max(
+      ...policies.map(source => ATHLETE_LEVEL_ORDER.indexOf(source.athleteLevelFloor))
+    )];
+  }
   const first = sources[0];
 
   if (
@@ -775,7 +810,9 @@ export function mergeStrengthRatioMaxes(...sources) {
     typeof first === 'object' &&
     !Array.isArray(first) &&
     (Number(first.strengthMax) || null) === merged.strengthMax &&
-    (Number(first.eStrengthMax) || null) === merged.eStrengthMax
+    (Number(first.eStrengthMax) || null) === merged.eStrengthMax &&
+    first.athleteLevelThresholdVersion === merged.athleteLevelThresholdVersion &&
+    first.athleteLevelFloor === merged.athleteLevelFloor
   ) {
     return first;
   }
@@ -823,9 +860,11 @@ export function getAthleteLevel({
     calculateStrengthRatioMaxes({ prs, history, bodyWeights })
   );
 
-  return classifyAthleteLevel(
-    lifetimeRatioMaxes.eStrengthMax
-  );
+  const calculated = classifyAthleteLevel(lifetimeRatioMaxes.eStrengthMax);
+  const floorIndex = ATHLETE_LEVEL_ORDER.indexOf(lifetimeRatioMaxes.athleteLevelFloor);
+  return ATHLETE_LEVEL_ORDER[Math.max(
+    ATHLETE_LEVEL_ORDER.indexOf(calculated), floorIndex
+  )];
 }
 
 export function formatSetPercentDisplay(pct) {

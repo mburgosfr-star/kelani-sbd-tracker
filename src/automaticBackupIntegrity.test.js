@@ -519,3 +519,30 @@ test('a failed latest backup keeps the earlier backup and prevents cleanup', asy
     expect(JSON.parse(localStorage.getItem('kelani-sbd-tracker-auto-backup-status')).ok).toBe(false);
   } finally { delete window.kelaniDesktop; localStorage.clear(); }
 });
+
+
+test('backup export/import preserves the level migration floor and workout state', () => {
+  const data = makeStoredData({
+    strengthRatioMaxes: {
+      strengthMax: 3.3, eStrengthMax: 3.5,
+      athleteLevelThresholdVersion: 2, athleteLevelFloor: 'intermediate',
+    },
+  });
+  const backup = JSON.parse(JSON.stringify(buildBackupPayload(data)));
+  expect(validateImportedBackup(backup)).toBe(true);
+  const values = new Map();
+  const storage = { setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  storeImportedBackup(storage, backup.data);
+  const restored = JSON.parse(values.get('kel-powerlifting-user-data-v1'));
+  expect(restored.strengthRatioMaxes).toEqual(data.strengthRatioMaxes);
+  expect(restored.inProgress).toEqual(data.inProgress);
+  for (const policy of [
+    { athleteLevelThresholdVersion: 2, athleteLevelFloor: 'invalid' },
+    { athleteLevelThresholdVersion: 2 },
+    { athleteLevelFloor: 'elite' },
+  ]) {
+    expect(validateImportedBackup(buildBackupPayload(makeStoredData({
+      strengthRatioMaxes: { eStrengthMax: 3.5, ...policy },
+    })))).toBe(false);
+  }
+});

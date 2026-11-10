@@ -64,6 +64,7 @@ import {
   normalizeBodyWeights,
   getCelebratedStrengthRatioMaxes,
   mergeStrengthRatioMaxes,
+  initializeAthleteLevelPolicy,
   ATHLETE_LEVEL_THRESHOLDS,
   getAthleteLevel,
 } from './workoutHistoryStats';
@@ -1300,6 +1301,11 @@ export function validateImportedBackup(backup) {
       );
     });
     if (hasInvalidRatioRecord) return false;
+    const { athleteLevelThresholdVersion, athleteLevelFloor } = data.strengthRatioMaxes;
+    if (athleteLevelThresholdVersion !== undefined || athleteLevelFloor !== undefined) {
+      if (!Number.isInteger(athleteLevelThresholdVersion) || athleteLevelThresholdVersion < 2 ||
+        !['beginner', 'intermediate', 'advanced', 'elite'].includes(athleteLevelFloor)) return false;
+    }
   }
 
   if (data.inProgress !== undefined && data.inProgress !== null) {
@@ -10539,6 +10545,11 @@ function AthleteLevelBadge({
             <div style={modalValueStyle}>
               {tier.min}x - {tier.max === Infinity ? '∞' : `${tier.max}x`}
             </div>
+            {maxRatio < tier.min && (
+              <p style={{ fontSize: 13, lineHeight: 1.4, marginBottom: 0 }}>
+                {t.athleteLevelRetainedExplanation}
+              </p>
+            )}
           </div>
 
           <div style={modalDividerStyle} />
@@ -12018,7 +12029,9 @@ function App() {
   const [currentCycle, setCurrentCycle] = useState(1);
   const [scheduleToday, setScheduleToday] = useState(() => localDateKey());
   const [bodyWeights, setBodyWeights] = useState([]);
-  const [recordedStrengthRatioMaxes, setRecordedStrengthRatioMaxes] = useState({});
+  const [recordedStrengthRatioMaxes, setRecordedStrengthRatioMaxes] = useState(
+    () => initializeAthleteLevelPolicy()
+  );
   const calculatedStrengthRatioMaxes = useMemo(
     () => calculateStrengthRatioMaxes({
       prs,
@@ -12701,7 +12714,7 @@ function App() {
         history: savedHistory,
       });
       const restoredBodyWeights = normalizeBodyWeights(data);
-      const restoredStrengthRatioMaxes = mergeStrengthRatioMaxes(
+      const restoredStrengthRatioMaxes = initializeAthleteLevelPolicy(mergeStrengthRatioMaxes(
         data.strengthRatioMaxes,
         getCelebratedStrengthRatioMaxes(savedHistory),
         calculateStrengthRatioMaxes({
@@ -12710,7 +12723,7 @@ function App() {
           history: savedHistory,
           bodyWeights: restoredBodyWeights,
         })
-      );
+      ), { legacy: true });
       const savedCycle = data.currentCycle || 1;
       const savedTrainingModel = normalizeTrainingModel(
         data.trainingModel || localStorage.getItem('trainingModel')
@@ -13410,7 +13423,7 @@ function App() {
     setOneRMs(initialOneRMs);
     setSmartIdealRouteStartCycle(1);
     setAccessoryPRs({});
-    setRecordedStrengthRatioMaxes({});
+    setRecordedStrengthRatioMaxes(initializeAthleteLevelPolicy());
     setMeetPlannerAttempts({});
     setMeetPrepChecklist({});
     setBodyWeights(initialBodyData ? [
@@ -13465,7 +13478,7 @@ function handleResetApp() {
   setOneRMs({});
   setSmartIdealRouteStartCycle(1);
   setAccessoryPRs({});
-  setRecordedStrengthRatioMaxes({});
+  setRecordedStrengthRatioMaxes(initializeAthleteLevelPolicy());
   setMeetPlannerAttempts({});
   setMeetPrepChecklist({});
   setShowNewCycle(false);
@@ -15170,6 +15183,7 @@ const __kelaniSmartPreviewNextDay = (options = {}) => {
         prs: data.prs,
         history: nextHistory,
         bodyWeights: normalizeBodyWeights(data),
+        strengthRatioMaxes,
       }),
       deadliftVariant: data.deadliftVariant,
       benchPressVariant: data.benchPressVariant,
@@ -15318,6 +15332,7 @@ const __kelaniSmartPreviewRegression = () => {
           prs,
           history: previewHistory,
           bodyWeights,
+          strengthRatioMaxes,
         }),
         deadliftVariant: data.deadliftVariant,
         benchPressVariant: data.benchPressVariant,
@@ -15615,6 +15630,7 @@ const __kelaniSmartResetToW1 = () => {
           prs: resolvedPrs,
           history: resetHistory,
           bodyWeights,
+          strengthRatioMaxes,
         }),
         deadliftVariant: data.deadliftVariant || deadliftVariant,
         benchPressVariant: data.benchPressVariant || benchPressVariant,

@@ -1,4 +1,4 @@
-import { ATHLETE_LEVEL_THRESHOLDS, calculateBestMaxesFromHistory, calculateEStrengthRatio, calculateStrengthRatioMaxes, classifyAthleteLevel, getAthleteLevel, getCelebratedStrengthRatioMaxes, mergeStrengthRatioMaxes, roundE1RM } from './workoutHistoryStats';
+import { ATHLETE_LEVEL_THRESHOLDS, calculateBestMaxesFromHistory, calculateEStrengthRatio, calculateStrengthRatioMaxes, classifyAthleteLevel, getAthleteLevel, getCelebratedStrengthRatioMaxes, mergeStrengthRatioMaxes, initializeAthleteLevelPolicy, roundE1RM } from './workoutHistoryStats';
 
 test('preserves calculated e1RM precision instead of rounding to barbell steps', () => {
   const seedHistory = [
@@ -27,12 +27,12 @@ test('preserves calculated e1RM precision instead of rounding to barbell steps',
 describe('classifyAthleteLevel', () => {
   test.each([
     [0, 'beginner'],
-    [2.99, 'beginner'],
-    [3, 'intermediate'],
-    [5.99, 'intermediate'],
-    [6, 'advanced'],
-    [8.99, 'advanced'],
-    [9, 'elite'],
+    [4.49, 'beginner'],
+    [4.5, 'intermediate'],
+    [5.49, 'intermediate'],
+    [5.5, 'advanced'],
+    [6.49, 'advanced'],
+    [6.5, 'elite'],
     [15, 'elite'],
   ])('classifies an eStrength ratio of %s as %s', (ratio, expectedLevel) => {
     expect(classifyAthleteLevel(ratio)).toBe(expectedLevel);
@@ -53,10 +53,10 @@ describe('classifyAthleteLevel', () => {
 
 describe('ATHLETE_LEVEL_THRESHOLDS', () => {
   test('tiers are contiguous with no gaps or overlaps', () => {
-    expect(ATHLETE_LEVEL_THRESHOLDS.beginner).toEqual({ min: 0, max: 3 });
-    expect(ATHLETE_LEVEL_THRESHOLDS.intermediate).toEqual({ min: 3, max: 6 });
-    expect(ATHLETE_LEVEL_THRESHOLDS.advanced).toEqual({ min: 6, max: 9 });
-    expect(ATHLETE_LEVEL_THRESHOLDS.elite).toEqual({ min: 9, max: Infinity });
+    expect(ATHLETE_LEVEL_THRESHOLDS.beginner).toEqual({ min: 0, max: 4.5 });
+    expect(ATHLETE_LEVEL_THRESHOLDS.intermediate).toEqual({ min: 4.5, max: 5.5 });
+    expect(ATHLETE_LEVEL_THRESHOLDS.advanced).toEqual({ min: 5.5, max: 6.5 });
+    expect(ATHLETE_LEVEL_THRESHOLDS.elite).toEqual({ min: 6.5, max: Infinity });
   });
 });
 
@@ -283,4 +283,34 @@ describe('calculateEStrengthRatio / getAthleteLevel', () => {
     expect(result.eStrengthMax).toBeGreaterThan(5);
     expect(Date.now() - startedAt).toBeLessThan(2000);
   }, 5000);
+});
+
+
+describe('relative-strength threshold migration', () => {
+  test.each([
+    [2.9, 'beginner'], [3, 'intermediate'], [4.49, 'intermediate'],
+    [4.5, 'intermediate'], [5.5, 'advanced'], [6, 'advanced'],
+    [6.5, 'elite'], [9, 'elite'],
+  ])('legacy ratio %s retains or raises the previous level to %s', (ratio, level) => {
+    const records = initializeAthleteLevelPolicy({ eStrengthMax: ratio }, { legacy: true });
+    expect(getAthleteLevel({ strengthRatioMaxes: records })).toBe(level);
+    expect(records.eStrengthMax).toBe(ratio);
+    expect(initializeAthleteLevelPolicy(records, { legacy: true })).toBe(records);
+  });
+
+  test('new profiles do not acquire legacy protection on reload or import', () => {
+    const records = initializeAthleteLevelPolicy({ eStrengthMax: 3.5 });
+    const restored = initializeAthleteLevelPolicy(JSON.parse(JSON.stringify(records)), { legacy: true });
+    expect(getAthleteLevel({ strengthRatioMaxes: restored })).toBe('beginner');
+    expect(restored.athleteLevelFloor).toBe('beginner');
+  });
+
+  test('a protected legacy profile progresses under the new thresholds without losing its floor', () => {
+    const initial = initializeAthleteLevelPolicy({ eStrengthMax: 3.5 }, { legacy: true });
+    const increased = mergeStrengthRatioMaxes(initial, { eStrengthMax: 5.5 });
+    const restored = initializeAthleteLevelPolicy(JSON.parse(JSON.stringify(increased)), { legacy: true });
+    expect(restored).toMatchObject({ eStrengthMax: 5.5, athleteLevelFloor: 'intermediate' });
+    expect(getAthleteLevel({ strengthRatioMaxes: restored })).toBe('advanced');
+    expect(mergeStrengthRatioMaxes({ eStrengthMax: 5.5 }, initial).athleteLevelFloor).toBe('intermediate');
+  });
 });
