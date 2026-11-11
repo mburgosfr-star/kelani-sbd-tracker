@@ -74,7 +74,7 @@ On Android, history is stored below `Kelani SBD Tracker/Automatic Backups/Histor
 
 ## Warm-ups and Work Sets
 
-Warm-ups prepare for the first work set or opening meet attempt. They use multiples of 10 kg and only 1, 3 or 5 repetitions. The final warm-up aims for about 85% of that weight and never exceeds 90%. Warm-ups above this limit are removed, allowing a larger final jump at very high loads.
+Warm-ups prepare for the first work set or opening meet attempt. They use multiples of 10 kg and only 1, 3 or 5 repetitions. The final warm-up aims for about 85% of that weight and never exceeds 90%. Warm-ups above this limit are removed, allowing a larger final jump at very high loads. Before a single, three warm-ups use 5/3/1 repetitions and four use 5/5/3/1, consistently across lifts and loads. Longer ladders distribute sets across the 5/3/1 groups, with extra sets assigned to the earlier groups. Before higher-rep work, warm-ups retain their repetition floor.
 
 The five-column workout grid stays filled. Newly generated work-set and back-off blocks contain 2–6 volume sets, depending on the warm-up count. Started workouts and completed history keep their saved prescriptions.
 
@@ -87,7 +87,9 @@ Smart volume work uses these target percentages:
 | Single | 70% | 65% | 60% |
 | Taper | 70% | 65% | 60% |
 
-On Meet Day, each lift shows its warm-ups and attempts on separate, centered rows. Top sets have their own prescriptions. During a workout you can complete or fail sets, adjust and restore weights, and open the plate calculator. Failed sets make the workout **Too hard**. Optional preparation, accessories and cooldown work left unchecked are not treated as failure.
+During the Smart taper, the middle Bench session is omitted while the other lifts in that session remain. The final Bench session has no top single: it contains 2–6 work sets of 3 repetitions at 70% of e1RM, with the count determined by the full five-column grid. The earlier Bench taper session and the percentages for all other work remain unchanged. This applies to every Smart route and level; started and completed workouts retain their saved prescriptions.
+
+On Meet Day, each lift shows its warm-ups and attempts on separate, centered rows. Top sets have their own prescriptions. During a workout you can complete or fail sets, adjust and restore weights, and open the plate calculator. Automatic loads retain their prescribed increments (2.5 kg for work sets and meet attempts, 10 kg for warm-ups). Manually edited work sets, accessories and any meet attempt can use 0.5 kg increments. This does not change automatic attempt percentages or require record attempts. The plate calculator shows any load that cannot be made with its available plates. Failed sets make the workout **Too hard**. Optional preparation, accessories and cooldown work left unchecked are not treated as failure.
 
 ## Rest Timer
 

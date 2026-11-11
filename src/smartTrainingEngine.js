@@ -1800,7 +1800,7 @@ export function buildSmartMeetPlanReadiness({
       return {
         ...attemptAcc,
         [key]: Number.isFinite(custom) && custom > 0
-          ? roundMeetWeight(custom)
+          ? roundBarbellWeight(custom, 'nearest', 0.5)
           : suggestedAttempts[key],
       };
     }, {});
@@ -1945,6 +1945,7 @@ export function buildSmartMeetPlanReadiness({
         currentCycleBestE1RM,
         hasCurrentCycleEvidence,
         attempts,
+        manualAttemptKeys: MEET_ATTEMPT_KEYS.filter(key => Number(meetPlannerAttempts?.[lift]?.[key]) > 0),
         plannedTopAttempt,
         openerTargetAttempt,
         secondAttemptSupportTarget,
@@ -2780,14 +2781,20 @@ export function buildSmartMeetAttemptSets(lift = '', readiness = {}, fallbackSet
 
   return attemptKeys.map((labelKey, index) => {
     const plannedWeight = Number(plannedAttempts[labelKey]) || fallbackByKey[labelKey] || 0;
-    let weight = roundBarbellWeight(plannedWeight, 'nearest', 2.5);
-    if (weight > 0 && weight <= previousWeight) weight = previousWeight + 2.5;
+    // Automatic plans are already on the 2.5kg grid. Preserve manual
+    // half-kilogram attempts instead of rounding them a second time.
+    const isManual = readiness?.meetPlanReadiness?.[lift]?.manualAttemptKeys?.includes(labelKey);
+    let weight = roundBarbellWeight(plannedWeight, 'nearest', isManual ? 0.5 : 2.5);
+    if (weight > 0 && weight <= previousWeight) {
+      weight = roundBarbellWeight(previousWeight + 2.5, 'up', isManual ? 0.5 : 2.5);
+    }
     previousWeight = weight;
 
     return {
       labelKey,
       reps: 1,
       pct: attemptPcts[index],
+      ...(isManual ? { manualWeight: true } : {}),
       weight,
       originalWeight: weight,
       done: false,
@@ -5686,6 +5693,10 @@ function getSmartFrequencyCurrentIndex(workouts, options = {}) {
 }
 
 function normalizeGeneratedMeetSet(set = {}) {
+  // Normalize automatic plans only. User-confirmed and recorded loads are
+  // authoritative, including half-kilogram attempts.
+  if (set.manualWeight || set.done || set.failed || set.skipped ||
+      set.adjustedFromOriginal || Number(set.weight) !== Number(set.originalWeight ?? set.weight)) return set;
   const currentWeight = Number(set.weight) || 0;
   if (currentWeight <= 0) return set;
 

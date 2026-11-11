@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import {
   AccessoryGroup,
+  SetRow,
   BackoffGroup,
   CurrentWorkout,
   WarmupGrid,
@@ -598,7 +599,7 @@ test('group editing starts from the current open work-set weight', () => {
     <BackoffGroup
       entries={[
         { index: 0, set: { weight: 100, originalWeight: 100, reps: 4, done: true } },
-        { index: 1, set: { weight: 90, originalWeight: 100, reps: 4, done: false } },
+        { index: 1, set: { weight: 90.5, originalWeight: 100, reps: 4, done: false } },
       ]}
       activeIndex={1}
       isReadOnly={false}
@@ -614,10 +615,11 @@ test('group editing starts from the current open work-set weight', () => {
 
   fireEvent.click(screen.getByRole('button', { name: translations.en.edit }));
   const input = screen.getByRole('spinbutton');
-  expect(input).toHaveValue(90);
-  fireEvent.change(input, { target: { value: '85' } });
+  expect(input).toHaveAttribute('step', '0.5');
+  expect(input).toHaveValue(90.5);
+  fireEvent.change(input, { target: { value: '85.5' } });
   fireEvent.keyDown(input, { key: 'Enter' });
-  expect(onEditAll).toHaveBeenCalledWith(85);
+  expect(onEditAll).toHaveBeenCalledWith(85.5);
 });
 
 test('accessory editing starts from the current open accessory-set weight', () => {
@@ -627,7 +629,7 @@ test('accessory editing starts from the current open accessory-set weight', () =
       acc={{
         name: 'Row',
         reps: 10,
-        weights: [40, 35],
+        weights: [40, 35.5],
         originalWeights: [40, 40],
         done: [true, false],
         failed: [false, false],
@@ -648,8 +650,22 @@ test('accessory editing starts from the current open accessory-set weight', () =
 
   fireEvent.click(screen.getByRole('button', { name: translations.en.edit }));
   const input = screen.getByRole('spinbutton');
-  expect(input).toHaveValue(35);
-  fireEvent.change(input, { target: { value: '30' } });
+  expect(input).toHaveAttribute('step', '0.5');
+  expect(input).toHaveValue(35.5);
+  fireEvent.change(input, { target: { value: '30.5' } });
   fireEvent.keyDown(input, { key: 'Enter' });
-  expect(onEditAll).toHaveBeenCalledWith(30);
+  expect(onEditAll).toHaveBeenCalledWith(30.5);
+});
+
+test('a set editor accepts a decimal comma and reopens a half-kilogram load accurately', () => {
+  const onWeightChange = jest.fn();
+  render(<SetRow set={{ weight: 104, reps: 1 }} index={0} isActive
+    onWeightChange={onWeightChange} t={translations.nl} lift="Bench" />);
+  expect(screen.getByText(/104 kg/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: translations.nl.edit }));
+  const input = screen.getByRole('textbox');
+  expect(input).toHaveValue('104');
+  fireEvent.change(input, { target: { value: '104,5' } });
+  fireEvent.keyDown(input, { key: 'Enter' });
+  expect(onWeightChange).toHaveBeenCalledWith(104.5);
 });

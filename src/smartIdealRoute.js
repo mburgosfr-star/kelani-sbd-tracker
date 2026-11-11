@@ -236,24 +236,24 @@ export const SMART_IDEAL_TAPER_ROUTE = Object.freeze({
   beginner: Object.freeze({
     22: route(lift('Squat', H), lift('Bench', L)),
     23: route(),
-    24: route(lift('Deadlift', H), lift('Bench', M)),
+    24: route(lift('Deadlift', H)),
     25: route(lift('Bench', H)),
   }),
   intermediate: Object.freeze({
     22: route(lift('Squat', H), lift('Bench', L)),
-    23: route(lift('Deadlift', H), lift('Bench', M)),
+    23: route(lift('Deadlift', H)),
     24: route(),
     25: route(lift('Bench', H)),
   }),
   advanced: Object.freeze({
     22: route(lift('Squat', H), lift('Bench', L)),
-    23: route(lift('Deadlift', H), lift('Bench', M)),
+    23: route(lift('Deadlift', H)),
     24: route(),
     25: route(lift('Bench', H)),
   }),
   elite: Object.freeze({
     22: route(lift('Squat', H), lift('Bench', L)),
-    23: route(lift('Deadlift', H), lift('Bench', M), lift('Squat', L)),
+    23: route(lift('Deadlift', H), lift('Squat', L)),
     24: route(),
     25: route(lift('Bench', H)),
   }),
@@ -413,7 +413,11 @@ function buildTrainingWorkout({
     // retains only a light Row on days containing Bench.
     accessoriesAllowed: stage !== 'taper',
     lifts: lifts.map(item => {
-      const includeTopSet = !hasEarlierMatchingExposure({
+      // The final Bench session keeps the existing 70% triples and full
+      // grid, but no longer adds a 90% single before the meet.
+      const isFinalTaperBench = stage === 'taper' &&
+        workoutNumber === 25 && item.lift === 'Bench';
+      const includeTopSet = !isFinalTaperBench && !hasEarlierMatchingExposure({
         routeTable,
         firstWorkout,
         workoutNumber,

@@ -1,5 +1,7 @@
 import {
   buildSmartMeetPlanReadiness,
+  buildSmartMeetAttemptSets,
+  normalizeSmartMeetWorkoutWeights,
   buildSmartMeetWorkoutProjection,
   buildSmartReadinessSignals,
   generateWorkoutsForTrainingModel,
@@ -1812,4 +1814,19 @@ test('the "avoid repeating the same stimulus" variation never fires during a mee
   // dropped to a single by the generic variation logic.
   expect(prescription.sets[0].labelKey).toBe('topDouble');
   expect(prescription.sets[0].reps).toBe(2);
+});
+
+test('custom half-kilogram attempts survive readiness and generated meet sets', () => {
+  const attempts = { opener: 90.5, secondAttempt: 99.5, thirdAttempt: 104 };
+  const readiness = buildSmartMeetPlanReadiness({
+    oneRMs: { Squat: 150, Bench: 100, Deadlift: 180 },
+    prs: { Squat: 150, Bench: 104, Deadlift: 184 },
+    meetPlannerAttempts: { Bench: attempts },
+    history: [], currentCycle: 1,
+  });
+  expect(readiness.byLift.Bench.attempts).toEqual(attempts);
+  const sets = buildSmartMeetAttemptSets('Bench', { meetPlanReadiness: readiness.byLift });
+  expect(sets.map(set => set.weight)).toEqual([90.5, 99.5, 104]);
+  const [normalized] = normalizeSmartMeetWorkoutWeights([{ type: 'meet', lifts: [{ lift: 'Bench', sets }] }]);
+  expect(normalized.lifts[0].sets.map(set => set.weight)).toEqual([90.5, 99.5, 104]);
 });

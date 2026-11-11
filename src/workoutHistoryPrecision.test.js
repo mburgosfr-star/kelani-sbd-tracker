@@ -18,7 +18,7 @@ test('estimated weights display decimal precision without barbell rounding', () 
   expect(formatEstimatedWeightFromKg(125.4166666667, 'kg')).toBe('125.42 kg');
   expect(formatEstimatedWeightFromKg(152.5, 'kg')).toBe('152.5 kg');
   expect(formatEstimatedWeightFromKg(99.00000000000001, 'kg')).toBe('99 kg');
-  expect(formatWeightFromKg(125.4166666667, 'kg')).toBe('125 kg');
+  expect(formatWeightFromKg(125.4166666667, 'kg')).toBe('125.42 kg');
 });
 
 test.each([
@@ -263,4 +263,11 @@ test('a genuinely heavier single immediately updates automatic meet attempts', (
     secondAttempt: 100,
     thirdAttempt: 105,
   });
+});
+
+test('load formatting preserves manual half-kilograms and per-arm quarter weights', () => {
+  for (const weight of [20.5, 90.5, 104, 184]) {
+    expect(formatWeightFromKg(weight, 'kg')).toBe(`${weight} kg`);
+  }
+  expect(formatWeightFromKg(21.25, 'kg')).toBe('21.25 kg');
 });

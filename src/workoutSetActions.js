@@ -1,7 +1,7 @@
 import {
   getSetPctForWeight,
-  roundMeetWeight,
 } from './warmupAndPrepGeneration';
+import { roundBarbellWeight } from './smartFrequencyPolicy';
 
 export function isWorkoutSetFinalized(set = {}) {
   return Boolean(set.done || set.skipped);
@@ -97,7 +97,7 @@ export function changeOpenMeetAttemptWeights(sets = [], setIndex, requestedWeigh
     return sets;
   }
 
-  const roundedRequestedWeight = roundMeetWeight(requestedWeight);
+  const roundedRequestedWeight = roundBarbellWeight(requestedWeight, 'nearest', 0.5);
   if (!Number.isFinite(roundedRequestedWeight) || roundedRequestedWeight <= 0) {
     return sets;
   }
@@ -115,14 +115,15 @@ export function changeOpenMeetAttemptWeights(sets = [], setIndex, requestedWeigh
       continue;
     }
 
-    const currentWeight = roundMeetWeight(set.weight);
+    const currentWeight = Number(set.weight);
     // The weight the athlete explicitly confirms for the current attempt is
     // authoritative. In particular, a failed earlier attempt must not force
     // a retry or lowered third attempt 2.5kg upward again. Only later open
     // attempts retain the convenient strictly-increasing plan adjustment.
     const nextWeight = index === setIndex
       ? roundedRequestedWeight
-      : Math.max(currentWeight, previousWeight + 2.5);
+      : (currentWeight > previousWeight ? currentWeight
+        : roundBarbellWeight(previousWeight + 2.5, 'up', 2.5));
 
     if (index === setIndex || nextWeight !== currentWeight) {
       nextSets[index] = changeOpenWorkoutSetWeight(set, nextWeight);

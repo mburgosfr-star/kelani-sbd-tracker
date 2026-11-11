@@ -109,3 +109,10 @@ test('estimated attempt rounding stays increasing without inflating the rounded 
   expect(buildMeetAttemptsFromE1RM(0)).toEqual({ opener: 0, secondAttempt: 0, thirdAttempt: 0 });
   expect(buildMeetAttemptsFromE1RM(5)).toEqual({ opener: 2.5, secondAttempt: 5, thirdAttempt: 7.5 });
 });
+
+test('all custom meet attempts preserve half-kilograms in the dashboard', () => {
+  const { meetPlan } = buildSuggestedMeetPlan({ Bench: { oneRM: 100, e1RM: 104 } }, {
+    manualAttempts: { Bench: { opener: 90.5, secondAttempt: 99.5, thirdAttempt: 104 } },
+  });
+  expect(meetPlan.find(row => row.lift === 'Bench')).toMatchObject({ opener: 90.5, second: 99.5, third: 104 });
+});

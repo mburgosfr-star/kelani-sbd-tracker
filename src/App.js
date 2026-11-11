@@ -3333,7 +3333,7 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
   }
 
   function handleConfirm() {
-    const val = parseFloat(inputVal);
+    const val = parseFloat(String(inputVal).replace(',', '.'));
 
     if (!isNaN(val) && val > 0) {
       onWeightChange(workoutInputWeightKg(val, weightUnit, lift, benchPressVariant));
@@ -3884,9 +3884,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewPrecisionItem,
-    t.whatsNewTrainingBasisItem,
-    t.whatsNewMeetAttemptsItem,
+    t.whatsNewBenchTaperItem,
+    t.whatsNewWarmupRepsItem,
+    t.whatsNewManualWeightsItem,
   ];
 
   return (
@@ -5855,7 +5855,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
   if (!entries?.length) return null;
 
   function confirmEdit() {
-    const val = parseFloat(inputVal);
+    const val = parseFloat(String(inputVal).replace(',', '.'));
 
     if (!Number.isNaN(val) && val > 0) {
       onEditAll(workoutInputWeightKg(val, weightUnit, lift, benchPressVariant));
@@ -5894,7 +5894,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
     }}>
       <input
         type="number"
-        step={normalizeWeightUnit(weightUnit) === WEIGHT_UNITS.LB ? "5" : "2.5"}
+        step="0.5"
         value={inputVal}
         autoFocus
         onChange={e => setInputVal(e.target.value)}
@@ -6082,7 +6082,7 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
   }, [editing, editableWeight, weightUnit]);
 
   function confirmEdit() {
-    const val = parseFloat(inputVal);
+    const val = parseFloat(String(inputVal).replace(',', '.'));
 
     if (!Number.isNaN(val) && val > 0) {
       onEditAll(displayWeightToKg(val, weightUnit));
@@ -6120,7 +6120,7 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginTop: 8 }}>
       <input
         type="number"
-        step={normalizeWeightUnit(weightUnit) === WEIGHT_UNITS.LB ? "5" : "2.5"}
+        step="0.5"
         value={inputVal}
         autoFocus
         onChange={e => setInputVal(e.target.value)}
@@ -9225,7 +9225,7 @@ export function buildSuggestedMeetPlan(bestStatsByLift = {}, {
       const saved = savedSets.find(set => set.labelKey === key);
       const manual = Number(manualAttempts?.[lift]?.[key]);
       return [key, frozen && saved ? Number(saved.weight) || 0
-        : manual > 0 ? roundBarbellWeight(manual, 'nearest', 2.5) : attempts[key]];
+        : manual > 0 ? roundBarbellWeight(manual, 'nearest', 0.5) : attempts[key]];
     }));
     const row = {
       lift, oneRM, e1RM, basis, frozen,
@@ -11458,7 +11458,7 @@ function Onboarding({ onStart, t }) {
                 type="number"
                 aria-label={`${label} ${t.weight}`}
                 min="0"
-                step={onboardingWeightUnit === WEIGHT_UNITS.LB ? "5" : "2.5"}
+                step="0.5"
                 value={liftInputs[lift]?.weight || ''}
                 onChange={e => updateLiftInput(lift, 'weight', e.target.value)}
                 style={{

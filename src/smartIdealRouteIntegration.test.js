@@ -112,7 +112,8 @@ test('beginner squat priority reaches generated training and taper workouts with
 
   for (const number of [3, 9, 15, 21]) {
     expect(focused[number - 1].lifts.map(block => block.lift)).toEqual(['Deadlift', 'Squat']);
-    expect(standard[number - 1].lifts.map(block => block.lift)).toEqual(['Deadlift', 'Bench']);
+    expect(standard[number - 1].lifts.map(block => block.lift))
+      .toEqual(number === 21 ? ['Deadlift'] : ['Deadlift', 'Bench']);
     expect(focused[number - 1].lifts[1].sets.length).toBeGreaterThanOrEqual(1);
     expect(focused[number - 1].lifts[1].sets.every(set => set.pct >= 0.6)).toBe(true);
   }
@@ -827,7 +828,6 @@ test('C4W22 TOO EASY keeps ideal W23 and moves the meet from W27 to W26', () => 
   expect(w23.lifts.map(({ lift, intensityRole }) => [lift, intensityRole]))
     .toEqual([
       ['Deadlift', 'heavy'],
-      ['Bench', 'medium'],
     ]);
 
   history = completeWorkout(history, w23, 'good');
@@ -1381,7 +1381,6 @@ test('beginner W24 uses a useful five-column deadlift ladder and preserves the p
     preparationMode: 'basicFirst',
   });
   const deadlift = workout.lifts.find(block => block.lift === 'Deadlift');
-  const bench = workout.lifts.find(block => block.lift === 'Bench');
 
   expect(deadlift.warmups.map(({ weight, reps }) => ({ weight, reps })))
     .toEqual([
@@ -1405,13 +1404,7 @@ test('beginner W24 uses a useful five-column deadlift ladder and preserves the p
   });
   expect(deadlift.warmups.length + deadlift.sets.length).toBe(5);
 
-  expect(bench.warmups).toHaveLength(0);
-  expect(bench.sets.map(({ weight, reps }) => ({ weight, reps })))
-    .toEqual(expect.arrayContaining([
-      { weight: 27.5, reps: 2 },
-      ...Array.from({ length: 4 }, () => ({ weight: 20, reps: 4 })),
-    ]));
-  expect(bench.warmups.length + bench.sets.length).toBe(5);
+  expect(workout.lifts.map(block => block.lift)).toEqual(['Deadlift']);
 });
 
 test('C4W22 preserves intermediate taper weights in five-column grids', () => {
@@ -1487,18 +1480,15 @@ test('beginner W25 uses the minimum taper volume needed to fill its grid', () =>
 
   expect(bench.lift).toBe('Bench');
   expect(bench.warmups.length + bench.sets.length).toBe(5);
-  expect(bench.sets[0]).toMatchObject({
-    labelKey: 'topSingle',
-    reps: 1,
-    prescribedPct: 0.9,
-  });
-  bench.sets.slice(1).forEach(set => {
+  expect(bench.sets.length).toBeGreaterThanOrEqual(2);
+  expect(bench.sets.length).toBeLessThanOrEqual(6);
+  bench.sets.forEach(set => {
     expect(set).toMatchObject({
-      labelKey: 'backoff',
+      labelKey: 'workSets',
       reps: 3,
       prescribedPct: 0.70,
     });
-    expect(Number(set.weight)).toBeGreaterThanOrEqual(35 * 0.70);
+    expect(Math.abs(set.weight - 35 * 0.70)).toBeLessThanOrEqual(1.25);
   });
 });
 
@@ -1699,7 +1689,8 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
 
         if (
           workout.smartIdealRoute?.stage === 'taper' &&
-          liftBlock.intensityRole === 'heavy'
+          liftBlock.intensityRole === 'heavy' &&
+          liftBlock.lift !== 'Bench'
         ) {
           expect(workSets[0]).toMatchObject({
             labelKey: 'topSingle',
@@ -1923,4 +1914,60 @@ test('untouched meet uses updated e1RM while a started legacy meet survives save
   saved[meetIndex].lifts[0].sets[0].done = true;
   expect(mergeGeneratedWorkoutStructure(saved, upgraded, [], 1)[meetIndex].lifts)
     .toEqual(saved[meetIndex].lifts);
+});
+
+test.each(SMART_IDEAL_LEVELS.flatMap(athleteLevel =>
+  ['standard', 'practical', 'beginnerSquat'].map(trainingFocus => ({ athleteLevel, trainingFocus }))
+))('$athleteLevel/$trainingFocus generates the reduced Bench taper through the real selection pipeline', ({ athleteLevel, trainingFocus }) => {
+  let history = [];
+  const taperBench = [];
+  for (let currentIndex = 0; currentIndex < 28; currentIndex += 1) {
+    const workout = generateCurrent({ history, currentIndex, athleteLevel,
+      options: { trainingFocus, bench: 104 } });
+    if (workout.type === 'training' && workout.smartIdealRoute?.stage === 'taper') {
+      const bench = workout.lifts.find(block => block.lift === 'Bench');
+      if (bench) {
+        taperBench.push(workout.smartIdealRoute.workoutNumber);
+        if (workout.smartIdealRoute.workoutNumber === 25) {
+          expect(bench.sets.length).toBeGreaterThanOrEqual(2);
+          expect(bench.sets.length).toBeLessThanOrEqual(6);
+          expect((bench.warmups.length + bench.sets.length) % 5).toBe(0);
+          bench.sets.forEach(set => {
+            expect(set).toMatchObject({ labelKey: 'workSets', reps: 3, prescribedPct: 0.7 });
+            expect(Math.abs(set.weight - workout.smartLoadMaxes.Bench * 0.7)).toBeLessThanOrEqual(1.25);
+          });
+        }
+      }
+    }
+    history = completeWorkout(history, workout);
+    if (workout.type === 'meet') break;
+  }
+  expect(taperBench).toEqual([22, 25]);
+});
+
+test('upgrading a taper preserves started and completed legacy Bench work, replacing only untouched plans', () => {
+  const options = { ...baseOptions, athleteLevel: 'intermediate', bench: 100 };
+  const generated = generateWorkoutsForTrainingModel('smart', options);
+  const saved = JSON.parse(JSON.stringify(generated));
+  // Representative previous prescriptions, without any real user history.
+  const middle = saved[22];
+  middle.lifts.push({ lift: 'Bench', role: 'secondary', warmups: [],
+    sets: [{ labelKey: 'topDouble', weight: 85, originalWeight: 85, reps: 2, done: false }] });
+  const finalBench = saved[24].lifts[0];
+  finalBench.sets = [{ labelKey: 'topSingle', weight: 90, originalWeight: 90, reps: 1, done: false },
+    ...finalBench.sets.map(set => ({ ...set, labelKey: 'backoff' }))];
+  const merged = mergeGeneratedWorkoutStructure(saved, generated, [], 1);
+  expect(merged[22].lifts.map(block => block.lift)).toEqual(['Deadlift']);
+  expect(merged[24].lifts[0].sets.every(set => set.labelKey === 'workSets')).toBe(true);
+
+  finalBench.sets[0].done = true;
+  finalBench.sets[0].weight = 87.5;
+  expect(mergeGeneratedWorkoutStructure(saved, generated, [], 1)[24]).toEqual(saved[24]);
+  middle.lifts[0].warmups[0].done = true;
+  expect(mergeGeneratedWorkoutStructure(saved, generated, [], 1)[22]).toEqual(middle);
+  const history = completeWorkout([], middle);
+  const before = JSON.stringify(history);
+  expect(mergeGeneratedWorkoutStructure(saved, generated, history, 1)[22])
+    .toEqual(history[0].workoutSnapshot);
+  expect(JSON.stringify(history)).toBe(before);
 });

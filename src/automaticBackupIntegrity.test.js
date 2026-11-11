@@ -546,3 +546,16 @@ test('backup export/import preserves the level migration floor and workout state
     })))).toBe(false);
   }
 });
+
+test('half-kilogram manual loads and attempts survive backup validation and import', () => {
+  const data = makeStoredData({ meetPlannerAttempts: { Bench: { opener: 90.5, secondAttempt: 99.5, thirdAttempt: 104 } } });
+  data.inProgress.workouts = [{ number: 1, type: 'meet', lifts: [{ lift: 'Bench',
+    sets: [{ labelKey: 'thirdAttempt', weight: 104, originalWeight: 105, reps: 1, adjustedFromOriginal: true, done: false }] }] }];
+  const backup = JSON.parse(JSON.stringify(buildBackupPayload(data)));
+  expect(validateImportedBackup(backup)).toBe(true);
+  const values = new Map();
+  storeImportedBackup({ setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) }, backup.data);
+  const restored = JSON.parse(values.get('kel-powerlifting-user-data-v1'));
+  expect(restored.meetPlannerAttempts).toEqual(data.meetPlannerAttempts);
+  expect(restored.inProgress.workouts[0].lifts[0].sets[0].weight).toBe(104);
+});

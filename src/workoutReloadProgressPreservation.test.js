@@ -237,3 +237,13 @@ test.each(['warmup', 'workSet', 'completed'])('warm-up regeneration preserves sa
   const reloaded = hydrateWorkoutsWithHistory(JSON.parse(JSON.stringify(merged)), history, 1);
   expect(reloaded[0].lifts[0]).toEqual(saved.lifts[0]);
 });
+
+test.each(['training', 'meet'])('manual half-kilograms survive reload and regeneration of a %s', type => {
+  const saved = multiLiftWorkout({ done: false });
+  saved.type = type;
+  saved.lifts[0].sets[0] = { ...saved.lifts[0].sets[0], weight: 89.5, adjustedFromOriginal: true };
+  const generated = multiLiftWorkout({ done: false });
+  generated.type = type;
+  const [reloaded] = mergeGeneratedWorkoutStructure(JSON.parse(JSON.stringify([saved])), [generated], [], 1);
+  expect(reloaded.lifts[0].sets[0]).toMatchObject({ weight: 89.5, originalWeight: 90, adjustedFromOriginal: true });
+});

@@ -1,0 +1,1 @@
+Millora la reducció de càrrega de banca en Smart mantenint la intensitat i les graelles plenes. Els escalfaments abans de sèries d’una repetició segueixen 5/3/1 o 5/5/3/1. Ajusta manualment els pesos en increments de 0,5 kg, també en qualsevol intent de competició, i conserva’n la precisió. Els intents automàtics no canvien.

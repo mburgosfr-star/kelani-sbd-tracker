@@ -35,7 +35,7 @@ test('meet warm-ups prepare the opener with the requested SBD ladders', () => {
   ]);
   expect(buildSmartMeetWarmups(90, 'Bench')).toEqual([
     { reps: 5, weight: 20, originalWeight: 20, done: false },
-    { reps: 1, weight: 70, originalWeight: 70, done: false },
+    { reps: 3, weight: 70, originalWeight: 70, done: false },
     { reps: 1, weight: 80, originalWeight: 80, done: false },
   ]);
   expect(buildSmartMeetWarmups(165, 'Deadlift')).toEqual([

@@ -31,9 +31,9 @@ test('opt-in beginner squat priority exchanges Bench medium for Squat light with
       workoutNumber,
       trainingFocus: SMART_TRAINING_FOCUSES.BEGINNER_SQUAT,
     });
-    expect(standard.lifts.map(item => [item.lift, item.intensityRole])).toEqual([
-      ['Deadlift', 'heavy'], ['Bench', 'medium'],
-    ]);
+    expect(standard.lifts.map(item => [item.lift, item.intensityRole])).toEqual(
+      workoutNumber === 24 ? [['Deadlift', 'heavy']] : [['Deadlift', 'heavy'], ['Bench', 'medium']]
+    );
     expect(focused.lifts.map(item => [item.lift, item.intensityRole])).toEqual([
       ['Deadlift', 'heavy'], ['Squat', 'light'],
     ]);
@@ -380,7 +380,7 @@ test('W25 is the single-lift Bench primer for every level', () => {
     Array.from({ length: 4 }, (_, index) => {
       const workoutNumber = index + 22;
       const workout = getSmartIdealRouteWorkout({ athleteLevel: level, workoutNumber });
-      return workout.type === 'training' && workout.lifts.length === 1
+      return workout.type === 'training' && workout.lifts.length === 1 && workout.lifts[0].lift === 'Bench'
         ? `${level}-${workoutNumber}`
         : null;
     }).filter(Boolean)
@@ -398,27 +398,27 @@ const expectedTaper = {
   beginner: [
     'Squat H → Bench L',
     'Rust',
-    'Deadlift H → Bench M',
+    'Deadlift H',
     'Bench H',
     'Rust',
   ],
   intermediate: [
     'Squat H → Bench L',
-    'Deadlift H → Bench M',
+    'Deadlift H',
     'Rust',
     'Bench H',
     'Rust',
   ],
   advanced: [
     'Squat H → Bench L',
-    'Deadlift H → Bench M',
+    'Deadlift H',
     'Rust',
     'Bench H',
     'Rust',
   ],
   elite: [
     'Squat H → Bench L',
-    'Deadlift H → Bench M → Squat L',
+    'Deadlift H → Squat L',
     'Rust',
     'Bench H',
     'Rust',
@@ -487,7 +487,9 @@ test('taper uses the agreed role-specific top sets and reduced grid volume', () 
       fullGridRequired: true,
     });
   });
-  Object.values(topSetCounts).forEach(count => expect(count).toBe(1));
+  Object.entries(topSetCounts).forEach(([key, count]) => {
+    expect(count).toBe(key === 'Bench-heavy' ? 0 : 1);
+  });
 });
 
 test.each(SMART_IDEAL_LEVELS)(
@@ -509,6 +511,27 @@ test.each(SMART_IDEAL_LEVELS)(
     expect(taper.at(-1).type).toBe('meet');
   }
 );
+
+test.each(SMART_IDEAL_LEVELS.flatMap(athleteLevel =>
+  ['standard', 'practical', 'beginnerSquat'].map(trainingFocus => ({ athleteLevel, trainingFocus }))
+))('$athleteLevel/$trainingFocus keeps taper loads while removing middle Bench and the final top single', options => {
+  const taper = Array.from({ length: 4 }, (_, index) =>
+    getSmartIdealRouteWorkout({ ...options, workoutNumber: index + 22 })
+  );
+  expect(taper[0].lifts.find(item => item.lift === 'Bench').prescription).toMatchObject({
+    topSet: { reps: 3, pct: 0.8 }, backoff: { reps: 5, pct: 0.6 },
+  });
+  expect(taper.slice(1, 3).flatMap(workout => workout.lifts)
+    .filter(item => item.lift === 'Bench')).toEqual([]);
+  expect(taper.flatMap(workout => workout.lifts).find(item => item.lift === 'Deadlift').prescription)
+    .toMatchObject({ topSet: { reps: 1, pct: 0.9 }, backoff: { reps: 3, pct: 0.7 } });
+  const finalBench = taper[3].lifts.find(item => item.lift === 'Bench');
+  expect(finalBench.prescription.topSet).toBeUndefined();
+  expect(finalBench.prescription).toMatchObject({
+    kind: 'taper-work-sets', pct: 0.7, reps: 3, minimumSetCount: 2,
+    maximumSetCount: 6, fullGridRequired: true,
+  });
+});
 
 test.each(SMART_IDEAL_LEVELS)('%s has the full simulated meet at W27', level => {
   const meet = getSmartIdealRouteWorkout({ athleteLevel: level, workoutNumber: 27 });

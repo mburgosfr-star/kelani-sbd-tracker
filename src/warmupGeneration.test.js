@@ -128,7 +128,7 @@ test('uses the first main, attempt or work set and ignores lift-specific excepti
   expect(generateWarmups(attempts, 'Squat').map(item => item.weight))
     .toEqual(expectedWeights);
   expect(generateWarmups(attempts, 'Squat').map(item => item.reps))
-    .toEqual([5, 5, 1]);
+    .toEqual([5, 3, 1]);
 });
 
 test('lets universal warmup counts determine normal workout-grid volume', () => {
@@ -156,7 +156,7 @@ test.each([
   [102.5, 1, [[20, 5], [70, 3], [90, 1]]],
   [180, 1, [[20, 5], [70, 5], [120, 3], [150, 1]]],
   [220, 2, [[20, 5], [70, 5], [120, 3], [160, 3], [190, 3]]],
-  [300, 1, [[20, 5], [70, 5], [120, 5], [170, 3], [220, 3], [260, 1]]],
+  [300, 1, [[20, 5], [70, 5], [120, 3], [170, 3], [220, 1], [260, 1]]],
   [120, 5, [[20, 5], [70, 5], [100, 5]]],
 ])('uses the universal warm-up policy before %skg x %s', (weight, reps, expected) => {
   for (const lift of ['Squat', 'Bench', 'Deadlift']) {
@@ -183,4 +183,17 @@ test('keeps reps in 1/3/5 and at or above the work-set rep floor across load bou
       if (warmups.length) expect(warmups[0].reps).toBe(5);
     }
   }
+});
+
+// The same ladder applies across lifts and the 50% zone boundary.
+test.each(['Squat', 'Bench', 'Deadlift'])('uses stable single warm-up reps for %s', lift => {
+  for (const weight of [140, 142.5]) {
+    expect(generateWarmups([{ weight, reps: 1 }], lift).map(s => [s.weight, s.reps]))
+      .toEqual([[20, 5], [70, 3], [120, 1]]);
+  }
+  expect(generateWarmups([{ weight: 92.5, reps: 1 }], lift).map(s => [s.weight, s.reps]))
+    .toEqual([[20, 5], [60, 3], [80, 1]]);
+  expect(generateWarmups([{ weight: 165, reps: 1 }], lift).map(s => [s.weight, s.reps]))
+    .toEqual([[20, 5], [70, 5], [110, 3], [140, 1]]);
+  expect(distributeUniversalWarmupReps(2, 1)).toEqual([5, 3]);
 });

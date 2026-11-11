@@ -53,7 +53,7 @@ test('the complete weight label opens the plate calculator without taking extra 
   );
 
   const weightTrigger = screen.getByTestId('workout-weight-calculator-trigger');
-  expect(weightTrigger).toHaveTextContent('495 lb90%');
+  expect(weightTrigger).toHaveTextContent('496.04 lb90%');
   expect(weightTrigger.style.width).toBe('100%');
   expect(weightTrigger.style.borderStyle).toBe('none');
   expect(screen.getByTestId('workout-weight-plate-icon')).toBeInTheDocument();

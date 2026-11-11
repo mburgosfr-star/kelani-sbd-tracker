@@ -65,18 +65,15 @@ export function formatWeightValue(value, unit = WEIGHT_UNITS.KG, { body = false,
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return '-';
 
-  const normalizedUnit = normalizeWeightUnit(unit);
-
   if (recorded) return Number(numericValue.toFixed(2)).toString();
 
   if (body) {
     return Number(numericValue.toFixed(1)).toString();
   }
 
-  const decimals = normalizedUnit === WEIGHT_UNITS.LB ? 0 : 1;
-  const rounded = roundToStep(numericValue, normalizedUnit === WEIGHT_UNITS.LB ? 5 : 2.5);
-
-  return Number(rounded.toFixed(decimals)).toString();
+  // Generators own barbell rounding. Keep manual loads and converted
+  // per-arm weights accurate when displaying or reopening an editor.
+  return Number(numericValue.toFixed(2)).toString();
 }
 
 export function formatDecimalDisplay(value, { minimumFractionDigits, maximumFractionDigits = 1 } = {}) {
@@ -95,7 +92,7 @@ export function formatDecimalDisplay(value, { minimumFractionDigits, maximumFrac
 
 export function formatWeightDisplayValue(value, unit = WEIGHT_UNITS.KG, options = {}) {
   const rawValue = formatWeightValue(value, unit, options);
-  return formatDecimalDisplay(rawValue, { maximumFractionDigits: options.recorded ? 2 : 1 });
+  return formatDecimalDisplay(rawValue, { maximumFractionDigits: options.body && !options.recorded ? 1 : 2 });
 }
 
 export function formatWeightFromKg(weightKg, unit = WEIGHT_UNITS.KG, options = {}) {

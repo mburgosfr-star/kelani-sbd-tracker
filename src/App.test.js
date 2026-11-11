@@ -2972,7 +2972,7 @@ test('completed Program results support legacy single lifts, pounds, Meet Day an
   const { rerender, container } = render(<ProgramCompletedSetSummary
     workout={{ number: 2, lift: 'Deadlift', sets: [{ weight: 100, reps: 1, done: true }] }}
     t={translations.en} weightUnit="lb" />);
-  expect(screen.getByTestId('program-workout-results-2')).toHaveTextContent('✓ 1×1×220 lb');
+  expect(screen.getByTestId('program-workout-results-2')).toHaveTextContent('✓ 1×1×220.46 lb');
   rerender(<ProgramCompletedSetSummary workout={{ number: 3, type: 'meet', lifts: [
     { lift: 'Squat', sets: [{ weight: 150, reps: 1, done: true }, { weight: 160, reps: 1, failed: true }] },
   ] }} t={translations.en} />);

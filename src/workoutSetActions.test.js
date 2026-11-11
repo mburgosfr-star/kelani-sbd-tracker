@@ -172,3 +172,29 @@ test('weighted accessory actions affect only an open set', () => {
     failedWeights: [null, 35, null],
   });
 });
+
+test.each([0, 1, 2])('manual half-kilogram meet attempt %s survives saving and restore', index => {
+  const attempts = [90, 100, 105].map(weight => openSet(weight));
+  const requested = [90.5, 100.5, 104][index];
+  const edited = changeOpenMeetAttemptWeights(attempts, index, requested);
+  expect(edited[index].weight).toBe(requested);
+  const reloaded = JSON.parse(JSON.stringify(edited));
+  expect(reloaded[index].weight).toBe(requested);
+  expect(restoreOpenMeetAttemptWeights(reloaded, index)[index].weight).toBe(attempts[index].weight);
+  expect(markOpenWorkoutSetFailed(edited[index]).failedWeight).toBe(requested);
+});
+
+test('editing an earlier attempt preserves later manual weights and rounds automatic corrections up', () => {
+  const attempts = [90, 100.5, 104].map(weight => openSet(weight));
+  expect(changeOpenMeetAttemptWeights(attempts, 0, 90.5).map(s => s.weight))
+    .toEqual([90.5, 100.5, 104]);
+  expect(changeOpenMeetAttemptWeights(attempts, 0, 104).map(s => s.weight))
+    .toEqual([104, 107.5, 110]);
+});
+
+test('manual work and accessory half-kilograms survive completion and serialization', () => {
+  const set = changeOpenWorkoutSetWeight(openSet(), 99.5);
+  expect(JSON.parse(JSON.stringify({ ...set, done: true })).weight).toBe(99.5);
+  const accessory = changeOpenAccessorySetWeight({ weights: [20], done: [false] }, 0, 20.5);
+  expect(JSON.parse(JSON.stringify(accessory)).weights).toEqual([20.5]);
+});
