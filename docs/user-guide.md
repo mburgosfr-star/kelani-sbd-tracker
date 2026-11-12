@@ -8,7 +8,7 @@ Requires Android 7.0 or later. Download the APK from [official GitHub Releases](
 
 Enter your starting lift maxes, choose your workout setup and start Smart Training. No Kelani sign-up is needed.
 
-Export an independent JSON backup before updating. Existing 2.x users can update a compatible installation normally. Do not uninstall the app to bypass an installation error. GitHub APK updates are installed manually; a compatible F-Droid client can manage IzzyOnDroid updates. Kelani’s optional release checks link to downloads without installing updates automatically.
+Export an independent JSON backup before updating. Existing 2.x users can update a compatible installation normally. Do not uninstall the app to bypass an installation error. Google Play is the primary distribution channel and is currently available to enrolled closed-test participants. Installations delivered by Play open Google Play for updates and do not check GitHub for newer APKs. GitHub and IzzyOnDroid remain free secondary download options: GitHub APK updates are installed manually; a compatible F-Droid client can manage IzzyOnDroid updates. Their optional GitHub update checks are disabled by default. Kelani never installs updates itself. If the installation source cannot be determined, it offers Google Play rather than falling back to an APK. During the Play test, pause Obtainium or other APK updates for Kelani so they do not replace the Play-delivered version.
 
 Kelani 1.x and 2.x have different Android identities and can coexist. To migrate, export a JSON backup from 1.x, import it into 2.x and verify your data before removing the older app.
 

@@ -10,6 +10,8 @@ Kelani is an open-source Android app for independent lifters. It is free through
 
 Requires **Android 7.0 or later**.
 
+Google Play is Kelani’s primary distribution channel, currently available through a closed test. Enrolled testers should install and update through Google Play. Free downloads remain available below.
+
 - [GitHub Releases](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases/latest): open **Assets**, download the `.apk` and follow Android’s installation prompts.
 - [IzzyOnDroid](https://apt.izzysoft.de/packages/com.kelani.sbdtracker): install and update through a compatible F-Droid client, such as Neo Store.
 

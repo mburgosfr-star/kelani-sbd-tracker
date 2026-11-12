@@ -178,12 +178,12 @@ import {
   IZZY_ON_DROID_URL,
   UPDATE_CHECK_CACHE_KEY,
   UPDATE_DISMISSED_VERSION_KEY,
-  fetchLatestReleaseVersion,
   isFreshUpdateCheck,
   isNewerReleaseVersion,
   readUpdateCheckCache,
   shouldShowUpdateNotice,
 } from './appUpdates';
+import { GOOGLE_PLAY_URL, initialUpdateChannel, resolveUpdateChannel, canCheckGitHubUpdates, fetchChannelReleaseVersion } from './updateChannel';
 import {
   buildWorkoutScheduleDateKeys,
   formatWorkoutScheduleDateRange,
@@ -3955,6 +3955,7 @@ export function UpdatesSettingsModal({
   onOpenLink,
   onClose,
   inactive = false,
+  updateChannel = 'direct',
 }) {
   if (isDesktopRuntime()) {
     return (
@@ -3968,7 +3969,10 @@ export function UpdatesSettingsModal({
       </SettingsModal>
     );
   }
-  const statusText = checkStatus === 'checking'
+  const directUpdates = canCheckGitHubUpdates(updateChannel);
+  const statusText = !directUpdates
+    ? (updateChannel === 'pending' ? t.updateChannelChecking : updateChannel === 'play' ? t.updateViaGooglePlay : t.updateChannelUnknown)
+    : checkStatus === 'checking'
     ? t.updateChecking
     : checkStatus === 'available'
       ? t.updateAvailableStatus.replace('{version}', latestVersion || '')
@@ -4004,7 +4008,7 @@ export function UpdatesSettingsModal({
         {t.whatsNewView}
       </button>
 
-      <label style={{
+      {directUpdates && <label style={{
         display: 'flex',
         alignItems: 'center',
         gap: 10,
@@ -4022,7 +4026,7 @@ export function UpdatesSettingsModal({
           style={{ width: 20, height: 20, flex: '0 0 auto', accentColor: THEME.primary }}
         />
         <span>{t.updateCheckAutomatically}</span>
-      </label>
+      </label>}
 
       <p style={{
         minHeight: '2.6em',
@@ -4036,7 +4040,7 @@ export function UpdatesSettingsModal({
         {statusText}
       </p>
 
-      {checkStatus === 'available' && (
+      {directUpdates && checkStatus === 'available' && (
         <div style={modalActionRowStyle()}>
           <button type="button" onClick={() => onOpenLink(GITHUB_RELEASES_URL)} style={modalActionButtonStyle()}>
             {t.updateDownloadGitHub}
@@ -4050,14 +4054,14 @@ export function UpdatesSettingsModal({
       <div style={modalActionRowStyle()}>
         <button
           type="button"
-          onClick={onCheck}
-          disabled={checkStatus === 'checking'}
+          onClick={directUpdates ? onCheck : () => onOpenLink(GOOGLE_PLAY_URL)}
+          disabled={updateChannel === 'pending' || (directUpdates && checkStatus === 'checking')}
           style={{
             ...modalActionButtonStyle('primary'),
-            opacity: checkStatus === 'checking' ? 0.65 : 1,
+            opacity: updateChannel === 'pending' || (directUpdates && checkStatus === 'checking') ? 0.65 : 1,
           }}
         >
-          {checkStatus === 'checking' ? t.updateChecking : t.updateCheckNow}
+          {updateChannel === 'pending' ? t.updateChannelChecking : directUpdates ? (checkStatus === 'checking' ? t.updateChecking : t.updateCheckNow) : t.updateOpenGooglePlay}
         </button>
         <button type="button" onClick={onClose} style={modalActionButtonStyle('secondary')}>
           {t.close}
@@ -4075,7 +4079,9 @@ export function UpdateAvailableModal({
   onCheckAutomaticallyChange,
   onOpenLink,
   onClose,
+  updateChannel = 'direct',
 }) {
+  if (!canCheckGitHubUpdates(updateChannel)) return null;
   return (
     <SettingsModal title={t.updateAvailableTitle} onClose={onClose}>
       <p style={{
@@ -4914,7 +4920,7 @@ function AboutSupportModals({
   t, onShare, shareOpen = false, currentVersion, latestVersion, checkStatus,
   checkAutomatically, onCheckAutomaticallyChange, onCheck, onOpenWhatsNew,
   onOpenUpdateLink, isOpen, onClose,
-  projectOpen, onProjectOpen, onProjectBack,
+  projectOpen, onProjectOpen, onProjectBack, updateChannel = 'direct',
 }) {
 
   function openLink(url) {
@@ -4929,8 +4935,10 @@ function AboutSupportModals({
     { label: t.shareKelani, onClick: onShare },
     { label: t.emailKelani, onClick: () => openLink('mailto:mburgosfr@gmail.com?subject=Kelani') },
     { label: t.githubRepository, onClick: () => openLink('https://github.com/mburgosfr-star/kelani-sbd-tracker') },
-    { label: t.izzyOnDroid, onClick: () => openLink('https://apt.izzysoft.de/packages/com.kelani.sbdtracker') },
-  ];
+    canCheckGitHubUpdates(updateChannel)
+      ? { label: t.izzyOnDroid, onClick: () => openLink(IZZY_ON_DROID_URL) }
+      : null,
+  ].filter(Boolean);
   const projectLinks = [
     {
       label: t.verifyRelease,
@@ -4982,6 +4990,7 @@ function AboutSupportModals({
         <UpdatesSettingsModal
           t={t}
           title={t.aboutAndUpdates}
+          updateChannel={updateChannel}
           currentVersion={currentVersion}
           latestVersion={latestVersion}
           checkStatus={checkStatus}
@@ -11927,6 +11936,19 @@ function App() {
   const [showUpdateAvailable, setShowUpdateAvailable] = useState(false);
   const [latestAvailableVersion, setLatestAvailableVersion] = useState(null);
   const [updateCheckStatus, setUpdateCheckStatus] = useState('idle');
+  const [updateChannel, setUpdateChannel] = useState(initialUpdateChannel);
+  const updateChannelRef = useRef(updateChannel);
+  updateChannelRef.current = updateChannel;
+  useEffect(() => {
+    let active = true;
+    resolveUpdateChannel().then(channel => {
+      if (active) setUpdateChannel(channel);
+    }).catch(error => {
+      console.warn('Could not determine update channel', error);
+      if (active) setUpdateChannel('unknown');
+    });
+    return () => { active = false; };
+  }, []);
 
   function startTimer(seconds, placement = null) {
     const effectiveSeconds = getRecommendedRestTimeSeconds({
@@ -13070,6 +13092,7 @@ function App() {
     : import.meta.env.VITE_APP_VERSION;
 
   const applyLatestReleaseVersion = useCallback((latestVersion, { automatic = false } = {}) => {
+    if (!canCheckGitHubUpdates(updateChannelRef.current)) return false;
     const updateAvailable = isNewerReleaseVersion(latestVersion, installedUpdateVersion);
     setLatestAvailableVersion(latestVersion);
     setUpdateCheckStatus(updateAvailable ? 'available' : 'upToDate');
@@ -13086,11 +13109,12 @@ function App() {
   }, [installedUpdateVersion]);
 
   const performUpdateCheck = useCallback(async ({ automatic = false } = {}) => {
-    if (isDesktopRuntime()) return;
+    if (isDesktopRuntime() || !canCheckGitHubUpdates(updateChannelRef.current)) return;
     if (!automatic) setUpdateCheckStatus('checking');
 
     try {
-      const latestVersion = await fetchLatestReleaseVersion();
+      const latestVersion = await fetchChannelReleaseVersion(updateChannelRef.current);
+      if (!canCheckGitHubUpdates(updateChannelRef.current)) return;
       localStorage.setItem(UPDATE_CHECK_CACHE_KEY, JSON.stringify({
         latestVersion,
         checkedAt: Date.now(),
@@ -13112,6 +13136,7 @@ function App() {
     });
     if (
       isDesktopRuntime() ||
+      !canCheckGitHubUpdates(updateChannel) ||
       !hasLoadedData ||
       !hasExistingProfile ||
       showLaunchSplash ||
@@ -13140,9 +13165,11 @@ function App() {
     checkForUpdatesAutomatically,
     applyLatestReleaseVersion,
     performUpdateCheck,
+    updateChannel,
   ]);
 
   function prepareUpdatesSettings() {
+    if (!canCheckGitHubUpdates(updateChannelRef.current)) return;
     const cachedCheck = readUpdateCheckCache(localStorage);
     if (cachedCheck) {
       applyLatestReleaseVersion(cachedCheck.latestVersion);
@@ -13159,7 +13186,8 @@ function App() {
   }
 
   function openUpdateDownload(url) {
-    window.open(url, '_blank', 'noopener,noreferrer');
+    const destination = canCheckGitHubUpdates(updateChannelRef.current) ? url : GOOGLE_PLAY_URL;
+    window.open(destination, '_blank', 'noopener,noreferrer');
     if (showUpdateAvailable) closeUpdateAvailable();
   }
 
@@ -17452,6 +17480,7 @@ const screenAllowsContentScroll =
         onShare={() => setShareCard(buildAchievementCard({ ...shareContext, t }))}
         shareOpen={Boolean(shareCard)}
         currentVersion={installedUpdateVersion}
+        updateChannel={updateChannel}
         latestVersion={latestAvailableVersion}
         checkStatus={updateCheckStatus}
         checkAutomatically={checkForUpdatesAutomatically}
@@ -17502,10 +17531,11 @@ const screenAllowsContentScroll =
   />
 )}
 
-{showUpdateAvailable && latestAvailableVersion && (
+{canCheckGitHubUpdates(updateChannel) && showUpdateAvailable && latestAvailableVersion && (
   <UpdateAvailableModal
     t={t}
     currentVersion={installedUpdateVersion}
+    updateChannel={updateChannel}
     latestVersion={latestAvailableVersion}
     checkAutomatically={checkForUpdatesAutomatically}
     onCheckAutomaticallyChange={setCheckForUpdatesAutomatically}

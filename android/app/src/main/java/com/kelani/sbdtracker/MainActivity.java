@@ -14,6 +14,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DeviceAlertStatusPlugin.class);
         registerPlugin(RestTimerAlarmPlugin.class);
         registerPlugin(CalendarIntegrationPlugin.class);
+        registerPlugin(DistributionChannelPlugin.class);
         super.onCreate(savedInstanceState);
 
         Window window = getWindow();

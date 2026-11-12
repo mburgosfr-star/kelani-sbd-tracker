@@ -4,8 +4,43 @@ import { vi } from 'vitest';
 import { UpdateAvailableModal, UpdatesSettingsModal } from './App';
 import { GITHUB_RELEASES_URL, IZZY_ON_DROID_URL } from './appUpdates';
 import { translations } from './translations';
+import { GOOGLE_PLAY_URL } from './updateChannel';
 
 describe('app update modals', () => {
+  test.each(['en', 'nl', 'ca'])('Play updates bypass cached GitHub availability and direct downloads (%s)', language => {
+    const t = translations[language];
+    const onOpenLink = vi.fn();
+    const onCheck = vi.fn();
+    render(<UpdatesSettingsModal t={t} currentVersion="2.0.71" latestVersion="9.0.0"
+      checkStatus="available" checkAutomatically={true} updateChannel="play"
+      onCheckAutomaticallyChange={vi.fn()} onCheck={onCheck} onOpenWhatsNew={vi.fn()}
+      onOpenLink={onOpenLink} onClose={vi.fn()} />);
+    expect(screen.getByText(t.updateViaGooglePlay)).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByText('9.0.0')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: t.updateDownloadGitHub })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: t.updateDownloadIzzy })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: t.updateOpenGooglePlay }));
+    expect(onOpenLink).toHaveBeenCalledWith(GOOGLE_PLAY_URL);
+    expect(onCheck).not.toHaveBeenCalled();
+  });
+
+  test('pending and unknown sources never offer an APK fallback or claim an available version', () => {
+    const t = translations.en;
+    const props = { t, currentVersion: '2.0.71', latestVersion: '9.0.0', checkStatus: 'available',
+      checkAutomatically: true, onCheckAutomaticallyChange: vi.fn(), onCheck: vi.fn(),
+      onOpenWhatsNew: vi.fn(), onOpenLink: vi.fn(), onClose: vi.fn() };
+    const { rerender } = render(<UpdatesSettingsModal {...props} updateChannel="pending" />);
+    expect(screen.getByRole('button', { name: t.updateChannelChecking })).toBeDisabled();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    rerender(<UpdatesSettingsModal {...props} updateChannel="unknown" />);
+    expect(screen.getByText(t.updateChannelUnknown)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: t.updateDownloadGitHub })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: t.updateOpenGooglePlay })).toBeEnabled();
+    rerender(<UpdateAvailableModal {...props} updateChannel="play" />);
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+  });
+
   test('shows a newer version with trusted download choices and a positive preference', () => {
     const onCheckAutomaticallyChange = vi.fn();
     const onOpenLink = vi.fn();

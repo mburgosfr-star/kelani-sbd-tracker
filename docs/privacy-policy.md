@@ -60,7 +60,11 @@ Kelani SBD Tracker contains no ads, analytics SDK, telemetry or tracking. Feedba
 
 ## Update checks
 
-Kelani can check GitHub for a newer public release. Automatic update checks are disabled by default and only begin after you enable them in Settings. Once enabled, they happen no more than once every 24 hours. You can also start a check manually.
+On Android, Kelani reads its own installation source locally to choose the update route. This requires no additional permission and does not send the installation source to the developer or an external service. The source is not included in training backups.
+
+Play-delivered installations open Google Play when you choose to check for updates and do not make GitHub update requests. Opening Play uses Google’s service and its privacy terms. If the installation source cannot be determined, Kelani also avoids GitHub update requests and offers a link to Google Play.
+
+For direct APK and other-store installations, and the web app, Kelani can check GitHub for a newer public release. Automatic update checks are disabled by default and only begin after you enable them in Settings. Once enabled, they happen no more than once every 24 hours. You can also start a check manually.
 
 An update check requests only the latest public release metadata. Kelani does not include training data, body data, app settings or a device identifier in that request. As with any internet request, GitHub may receive technical connection information such as your IP address and user agent under its own privacy terms.
 
