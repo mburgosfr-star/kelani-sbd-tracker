@@ -41,6 +41,41 @@ function assertInstallation({ installer, versionName, versionCode }, expected) {
   }
 }
 
+function parseInstalledMetadata(badging) {
+  const line = badging.split(/\r?\n/).find(value => value.startsWith('package:')) || '';
+  return {
+    packageName: line.match(/\bname='([^']+)'/)?.[1],
+    versionCode: line.match(/\bversionCode='(\d+)'/)?.[1],
+    versionName: line.match(/\bversionName='([^']*)'/)?.[1] || '',
+    splitName: line.match(/\bsplit='([^']*)'/)?.[1] || '',
+  };
+}
+
+function assertInstalledMetadata(metadata, expected) {
+  const bases = metadata.filter(item => !item.splitName);
+  if (bases.length !== 1 || new Set(metadata.map(item => item.splitName)).size !== metadata.length ||
+      metadata.some(item => item.packageName !== expected.packageName ||
+        String(item.versionCode) !== String(expected.versionCode) ||
+        (item.versionName && item.versionName !== expected.versionName)) ||
+      bases[0].versionName !== expected.versionName) {
+    throw new Error('Installed base/split identity does not match the candidate.');
+  }
+}
+
+function inspectInstalledApks(files, root, common, expected) {
+  const sdk = common.findAndroidSdk(root);
+  const aapt = common.findBuildTool('aapt', sdk);
+  const metadata = files.map(file => {
+    common.assertSignedV2(file, sdk);
+    const item = parseInstalledMetadata(common.output(aapt, ['dump', 'badging', file]));
+    // Bundletool config splits carry versionCode but may omit versionName.
+    // The base APK still has to pass the complete existing metadata guard.
+    if (!item.splitName) common.assertApkMetadata(file, expected, sdk);
+    return item;
+  });
+  assertInstalledMetadata(metadata, expected);
+}
+
 function candidate(root, common) {
   const manifest = common.readJson(path.join(root, 'release/build-manifest.json'));
   const expected = common.readVersionInfo(root);
@@ -95,10 +130,9 @@ function capture(root, common, build) {
   const files = paths.map((remote, index) => {
     const file = path.join(directory, `${index}.apk`);
     common.run('adb', ['-s', device.serial, 'pull', remote, file]);
-    common.assertApkMetadata(file, build.expected, common.findAndroidSdk(root));
-    common.assertSignedV2(file, common.findAndroidSdk(root));
     return { path: path.relative(root, file), sha256: common.sha256File(file) };
   });
+  inspectInstalledApks(files.map(file => path.join(root, file.path)), root, common, build.expected);
   const supportedAbis = device.adb(['shell', 'getprop', 'ro.product.cpu.abilist']).split(',');
   const comparedPayloadFiles = assertInstalledPayload(payload([build.apk]), payload(files.map(f => path.join(root, f.path))), supportedAbis);
   // Detect a concurrent update while pulling base/split APKs.
@@ -121,12 +155,12 @@ function verifyPhoneProof(root, common, build) {
     if (!/^release\/play-phone-[^/]+\/\d+\.apk$/.test(file.path)) throw new Error('Invalid captured APK evidence path.');
     const absolute = path.join(root, file.path);
     if (common.sha256File(absolute) !== file.sha256) throw new Error('Captured Play APK changed.');
-    common.assertApkMetadata(absolute, build.expected, common.findAndroidSdk(root));
-    common.assertSignedV2(absolute, common.findAndroidSdk(root));
     return absolute;
   });
+  inspectInstalledApks(files, root, common, build.expected);
   assertInstalledPayload(payload([build.apk]), payload(files), proof.installed.supportedAbis);
   return { proof, proofPath, sha256: common.sha256File(proofPath) };
 }
 
-module.exports = { assertInstalledPayload, assertInstallation, candidate, capture, verifyPhoneProof };
+module.exports = { assertInstalledPayload, assertInstallation, candidate, capture, verifyPhoneProof,
+  parseInstalledMetadata, assertInstalledMetadata };

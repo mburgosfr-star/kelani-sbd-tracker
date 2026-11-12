@@ -1,4 +1,5 @@
-const { assertInstalledPayload, assertInstallation, verifyPhoneProof } = require('../scripts/play-release-proof.cjs');
+const { assertInstalledPayload, assertInstallation, verifyPhoneProof, parseInstalledMetadata,
+  assertInstalledMetadata } = require('../scripts/play-release-proof.cjs');
 
 const expected = { packageName: 'com.example.app', versionName: '1.2.3', versionCode: 123 };
 const installed = { installer: 'com.android.vending', ...expected };
@@ -6,6 +7,19 @@ const universal = { 'classes.dex': 'code', 'classes2.dex': 'more code',
   'assets/public/index.html': 'web', 'lib/arm64-v8a/native.so': 'arm',
   'lib/x86_64/native.so': 'x86' };
 const arm = Object.fromEntries(Object.entries(universal).filter(([name]) => !name.includes('x86_64')));
+
+test('accepts a versioned base plus Play config splits without a version name', () => {
+  const base = parseInstalledMetadata("package: name='com.example.app' versionCode='123' versionName='1.2.3'\nsdkVersion:'24'");
+  const split = parseInstalledMetadata("package: name='com.example.app' versionCode='123' versionName='' split='config.nl'");
+  expect(() => assertInstalledMetadata([base, split], expected)).not.toThrow();
+  expect(() => assertInstalledMetadata([base, { ...split, versionName: '1.2.3' }], expected)).not.toThrow();
+  for (const invalid of [[], [split], [base, base], [base, split, split],
+    [{ ...base, versionName: '' }, split], [base, { ...split, packageName: 'other' }],
+    [base, { ...split, versionCode: '124' }], [base, { ...split, versionName: '1.2.4' }],
+    [base, parseInstalledMetadata('missing package line')]]) {
+    expect(() => assertInstalledMetadata(invalid, expected)).toThrow(/identity/);
+  }
+});
 
 test('accepts the exact Play version and rejects sideloads, missing installer and stale versions', () => {
   expect(() => assertInstallation(installed, expected)).not.toThrow();
