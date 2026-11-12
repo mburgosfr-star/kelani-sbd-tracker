@@ -41,6 +41,16 @@ test('accepts release notes that start directly with What’s new', () => {
   );
 });
 
+test('allows the official user-facing store name while retaining internal pipeline exclusions', () => {
+  withReleaseNotes("## What's new\n\n- Free GitHub and IzzyOnDroid installations keep their update options.\n",
+    (version, base) => expect(readReleaseNotes(version, base).text).toContain('IzzyOnDroid'));
+  for (const internal of ['Izzy build', 'IzzyOnDroid preflight', 'IzzyOnDroid clean clone',
+    'internal release', 'reproducible build', 'NeoStore preflight']) {
+    withReleaseNotes(`## What's new\n\n- ${internal}.\n`,
+      (version, base) => expect(() => readReleaseNotes(version, base)).toThrow('internal wording'));
+  }
+});
+
 test('rejects a repeated GitHub release title', () => {
   withReleaseNotes(
     "# Kelani SBD Tracker v9.9.9\n\n" +

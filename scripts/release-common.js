@@ -607,7 +607,7 @@ function readReleaseNotes(version, base = root) {
   }
 
   const forbidden = [
-    /izzy/i,
+    /izzy(?!ondroid\b)/i,
     /neostore/i,
     /neo\s*store/i,
     /preflight/i,
