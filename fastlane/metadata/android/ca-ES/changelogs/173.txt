@@ -1,0 +1,3 @@
+Les instal·lacions de Play obren Google Play per actualitzar-se, sense comprovacions a GitHub ni avisos per baixar APK.
+Les instal·lacions gratuïtes de GitHub i IzzyOnDroid conserven les opcions d’actualització existents.
+Si no es pot determinar l’origen de la instal·lació, Kelani ofereix Google Play en lloc de baixar un APK.
