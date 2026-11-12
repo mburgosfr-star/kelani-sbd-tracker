@@ -637,6 +637,8 @@ function releaseScriptHashes(base = root) {
     "scripts/package-ubuntu.cjs",
     "scripts/package-desktop.cjs",
     "scripts/check-ubuntu-package.cjs",
+    "scripts/ensure-desktop-validator.cjs",
+    "scripts/test-desktop-validator.cjs",
     "scripts/check-desktop-package.cjs",
     "desktop/ubuntu/package.json",
     "package.json",

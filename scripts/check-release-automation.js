@@ -74,6 +74,8 @@ for (const [name, expected] of Object.entries(expectedScripts)) {
 
 const requiredFiles = [
   'scripts/ubuntu-release.cjs',
+  'scripts/ensure-desktop-validator.cjs',
+  'scripts/test-desktop-validator.cjs',
   'scripts/check-dependency-security.js',
   'scripts/check-public-repository-boundary.js',
   'scripts/release-common.js',
@@ -371,6 +373,8 @@ for (const signal of [
 }
 
 for (const signal of [
+  'node --test scripts/test-desktop-validator.cjs',
+  'node scripts/ensure-desktop-validator.cjs',
   'npm run release:self-check',
   'npm run security:check',
   './gradlew :app:testReleaseUnitTest --no-daemon',
@@ -417,6 +421,8 @@ for (const requiredPath of [
   "scripts/stage-release.js",
   "scripts/install-apk.js",
   "scripts/check-release-automation.js",
+  "scripts/ensure-desktop-validator.cjs",
+  "scripts/test-desktop-validator.cjs",
   ".github/workflows/android-release-sanity.yml",
   ".github/workflows/distribution-integrity.yml",
 ]) {

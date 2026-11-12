@@ -129,6 +129,18 @@ desktop package, checks its executable/archive and builds the DEB using
 `dpkg-deb`. Building does not install the package or load the AppArmor profile.
 The package checks also require `desktop-file-validate` from Ubuntu's
 `desktop-file-utils` package.
+
+GitHub CI prepares a checksum-pinned Ubuntu 24.04 amd64 copy of this validator
+with `node scripts/ensure-desktop-validator.cjs`. It downloads only the tool
+from approved Ubuntu HTTPS sources, checks its size, SHA-256 and package
+identity, and tests both a valid and an invalid desktop entry before adding
+it to the job's path. Downloads have bounded timeouts and an alternate source;
+network or integrity failures still block validation. This avoids refreshing
+all Ubuntu package indexes for one small build tool. The validator is not
+included in the Kelani application. When updating the tool pin, verify the
+version, size and SHA-256 against the linked official Ubuntu package page and
+run `node scripts/test-desktop-validator.cjs` plus the Ubuntu package check.
+
 The final DEB is inspected for its menu entry, real Kelani icon, runtime files,
 ownership, permissions and checksum. The same check runs in GitHub CI.
 

@@ -1,0 +1,1 @@
+Verbeter de Smart-benchtaper met behoud van werksetintensiteit en volle rasters. Gebruik vóór singles consistente warm-ups van 5/3/1 of 5/5/3/1 herhalingen. Pas gewichten handmatig aan in stappen van 0,5 kg, ook bij iedere meetpoging, en behoud de juiste weergave en opgeslagen waarden. Automatische pogingen blijven gelijk.

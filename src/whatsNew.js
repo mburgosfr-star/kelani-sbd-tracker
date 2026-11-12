@@ -1,4 +1,4 @@
-export const LATEST_WHATS_NEW_VERSION = '2.0.70';
+export const LATEST_WHATS_NEW_VERSION = '2.0.71';
 
 export const WHATS_NEW_LAST_SEEN_KEY = 'kelani-whats-new-last-seen-version';
 

@@ -33,6 +33,14 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
+      # Fail early on a missing validation tool, before expensive builds/tests.
+      # Download only the checksum-pinned tool, not every Ubuntu package index.
+      - name: Prepare verified desktop entry validator
+        timeout-minutes: 2
+        run: |
+          node --test scripts/test-desktop-validator.cjs
+          node scripts/ensure-desktop-validator.cjs
+
       - name: Set up Java 21
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
@@ -64,10 +72,6 @@ jobs:
 
       - name: Build and inspect Ubuntu prototype package
         run: |
-          if ! command -v desktop-file-validate >/dev/null; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends desktop-file-utils
-          fi
           node scripts/package-desktop.cjs linux
           node scripts/check-desktop-package.cjs linux
           node scripts/package-ubuntu.cjs
