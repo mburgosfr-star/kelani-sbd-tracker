@@ -27,6 +27,8 @@ const {
   assertVerifiedReleaseCommits,
 } = require('./release-common');
 
+const play = require('./play-release-proof.cjs');
+
 function sameJson(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
@@ -58,10 +60,6 @@ function main() {
     `release/kelani-sbd-tracker-v` +
     `${expected.versionName}.apk.sha256`
   );
-  const phoneApk = path.join(
-    root,
-    'release/kelani-sbd-tracker-phone-test.apk'
-  );
   const phoneProofPath = path.join(
     root,
     'release/phone-test-proof.json'
@@ -82,22 +80,10 @@ function main() {
     );
   }
 
-  const phoneProof = readJson(phoneProofPath);
+  const playCandidate = play.candidate(root, require('./release-common'));
+  const verifiedPhone = play.verifyPhoneProof(root, require('./release-common'), playCandidate);
+  const phoneProof = verifiedPhone.proof;
   const publicHash = sha256File(publicApk);
-  const phoneHash = sha256File(phoneApk);
-
-  if (
-    phoneProof.commit !== commit ||
-    phoneProof.versionName !== expected.versionName ||
-    phoneProof.versionCode !== expected.versionCode ||
-    phoneProof.apk?.sha256 !== publicHash ||
-    phoneHash !== publicHash
-  ) {
-    fail(
-      'Phone-test proof does not match the current ' +
-      'commit and release APK.'
-    );
-  }
 
   const shaText = fs.readFileSync(publicSha, 'utf8');
   if (!shaText.includes(publicHash)) {
@@ -245,13 +231,15 @@ function main() {
     },
     apk: {
       publicPath: path.relative(root, publicApk),
-      phoneTestPath: path.relative(root, phoneApk),
       sha256: publicHash,
       sizeBytes: fs.statSync(publicApk).size,
       signedV2: true,
     },
     phoneTest: {
       proofPath: path.relative(root, phoneProofPath),
+      proofSha256: verifiedPhone.sha256,
+      delivery: 'google-play',
+      bundle: playCandidate.bundle,
       confirmedAt: phoneProof.confirmedAt,
       deviceSerial: phoneProof.deviceSerial,
       valid: true,
@@ -265,7 +253,8 @@ function main() {
       releaseStagingProof: true,
       buildManifest: true,
       phoneTestProof: true,
-      apkHashesMatch: true,
+      playPayloadMatches: true,
+      playInstaller: true,
       packageMetadata: true,
       localV2Signing: true,
       cleanUnsignedBuild: true,
@@ -285,7 +274,7 @@ function main() {
   );
 
   console.log(
-    '\n✅ IZZY/NEOSTORE-PREFLIGHT VOLLEDIG GESLAAGD'
+    '\n✅ PLAY-FIRST RELEASE-PREFLIGHT VOLLEDIG GESLAAGD'
   );
   console.log(`✅ Commit: ${commit}`);
   console.log(`✅ APK SHA-256: ${publicHash}`);

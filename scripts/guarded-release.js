@@ -22,6 +22,8 @@ const {
   releaseCertificateSha256,
 } = require('./release-common');
 
+const play = require('./play-release-proof.cjs');
+
 // Appended to the hand-written release notes, not replacing them - every
 // release must self-document how to verify it without relying on a human
 // to remember to type this out per release. Values are computed fresh at
@@ -119,10 +121,6 @@ function main() {
     root
   );
   const publicApk = path.join(root, proof.apk?.publicPath || '');
-  const phoneApk = path.join(
-    root,
-    proof.apk?.phoneTestPath || ''
-  );
   const publicSha = path.join(
     root,
     `release/kelani-sbd-tracker-v` +
@@ -155,11 +153,16 @@ function main() {
   }
 
   const publicHash = sha256File(publicApk);
-  const phoneHash = sha256File(phoneApk);
+  const playCandidate = play.candidate(root, require('./release-common'));
+  const verifiedPhone = play.verifyPhoneProof(root, require('./release-common'), playCandidate);
+  if (proof.phoneTest?.proofSha256 !== verifiedPhone.sha256 ||
+      proof.phoneTest?.delivery !== 'google-play' ||
+      JSON.stringify(proof.phoneTest?.bundle) !== JSON.stringify(playCandidate.bundle)) {
+    fail('Play phone-test evidence changed after preflight.');
+  }
 
   if (
-    publicHash !== proof.apk.sha256 ||
-    phoneHash !== proof.apk.sha256
+    publicHash !== proof.apk.sha256
   ) {
     fail('Release APK changed after preflight.');
   }
@@ -207,6 +210,8 @@ function main() {
     !proof.checks?.releasePreparationProof ||
     !proof.checks?.releaseStagingProof ||
     !proof.checks?.phoneTestProof ||
+    !proof.checks?.playPayloadMatches ||
+    !proof.checks?.playInstaller ||
     !proof.checks?.localV2Signing ||
     !proof.checks?.cleanUnsignedBuild ||
     !proof.checks?.publicAssetsByteIdentical ||

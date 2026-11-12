@@ -1,18 +1,17 @@
-const { assertPhoneProof, bundlePath, assertPayloadMatches } = require('../scripts/build-play-bundle.cjs');
+const { assertCandidateProof, bundlePath, assertPayloadMatches } = require('../scripts/build-play-bundle.cjs');
 
 const manifest = { git: { commit: 'tested-commit' }, packageName: 'com.kelani.sbdtracker',
   versionName: '2.0.61', versionCode: 161, apk: { sha256: 'tested-apk' } };
-const proof = { schema: 1, confirmedByUser: true, commit: 'tested-commit',
-  packageName: manifest.packageName, versionName: manifest.versionName, versionCode: 161,
-  apk: { sha256: 'tested-apk' } };
+const proof = { commit: manifest.git.commit, ci: { runId: 123, publicAssetsSha256: 'assets' } };
 
-test('requires phone confirmation for the exact APK, commit and identity', () => {
-  expect(() => assertPhoneProof(proof, manifest)).not.toThrow();
-  for (const change of [{ confirmedByUser: false }, { commit: 'other' },
-    { packageName: 'other' }, { versionCode: 162 }, { versionName: 'other' },
-    { apk: { sha256: 'other' } }, { schema: 2 }]) {
-    expect(() => assertPhoneProof({ ...proof, ...change }, manifest)).toThrow(/matching confirmed phone test/);
+test('builds a Play bundle before a phone test, only for the staged CI candidate', () => {
+  expect(() => assertCandidateProof(proof, manifest, 'assets')).not.toThrow();
+  for (const change of [{ commit: 'other' }, { ci: null },
+    { ci: { runId: 0, publicAssetsSha256: 'assets' } }, { ci: { runId: 123 } }]) {
+    expect(() => assertCandidateProof({ ...proof, ...change }, manifest, 'assets')).toThrow(/staged candidate/);
   }
+  expect(() => assertCandidateProof(proof, manifest, 'different-assets')).toThrow();
+  expect(() => assertCandidateProof(proof, manifest)).toThrow();
 });
 
 const apk = { 'classes.dex': Buffer.from('code'), 'assets/public/index.html': Buffer.from('web'),

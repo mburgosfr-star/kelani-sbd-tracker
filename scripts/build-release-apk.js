@@ -231,4 +231,4 @@ run('node', ['scripts/check-release-apk-hygiene.js'], {
 
 console.log(`\n✅ release APK built from clean source state: ${publicApkRel}`);
 console.log(`✅ sha256: ${hash}`);
-console.log('Next: install this APK on the phone, test it, then copy it to release/kelani-sbd-tracker-phone-test.apk.');
+console.log('Next: npm run android:play-bundle. Deliver the approved closed Alpha candidate through Play before phone testing.');

@@ -1,63 +1,17 @@
 #!/usr/bin/env node
-
-const path = require("path");
-
-const {
-  root,
-  fail,
-  run,
-  sha256File,
-  readJson,
-  readVersionInfo,
-  getHeadCommit,
-  assertCleanSourceTreeExceptRelease,
-  findAndroidSdk,
-  assertApkMetadata,
-  assertSignedV2,
-} = require("./release-common");
-
+// The primary release channel is Google Play. Never sideload over the daily app.
+const common = require('./release-common');
+const play = require('./play-release-proof.cjs');
 function main() {
-  assertCleanSourceTreeExceptRelease(root);
-
-  run("node", [
-    "scripts/check-release-build-manifest.js",
-  ]);
-
-  const expected = readVersionInfo(root);
-  const commit = getHeadCommit(root);
-  const manifest = readJson(
-    path.join(root, "release/build-manifest.json")
-  );
-
-  if (manifest.git?.commit !== commit) {
-    fail(
-      "Build manifest does not belong to the current commit."
-    );
-  }
-
-  const apkPath = path.join(root, manifest.apk?.path || "");
-
-  if (sha256File(apkPath) !== manifest.apk?.sha256) {
-    fail("Release APK checksum differs from the build manifest.");
-  }
-
-  const sdkDir = findAndroidSdk(root);
-
-  assertApkMetadata(apkPath, expected, sdkDir);
-  assertSignedV2(apkPath, sdkDir);
-
-  console.log(`Installing exact release APK: ${apkPath}`);
-  console.log(`Commit: ${commit}`);
-  console.log(`SHA-256: ${manifest.apk.sha256}`);
-
-  run("adb", ["install", "-r", apkPath]);
-
-  console.log("\n✅ Exact manifest-bound release APK installed");
+  common.assertCleanSourceTreeExceptRelease(common.root);
+  common.run('node', ['scripts/check-release-build-manifest.js']);
+  const build = play.candidate(common.root, common);
+  console.log(`Candidate: ${build.expected.versionName}/${build.expected.versionCode}`);
+  console.log(`Play bundle: ${build.bundle.path}`);
+  console.log('First obtain separate approval for the closed Alpha rollout and wait until this exact version is available.');
+  console.log(`Update through Google Play: https://play.google.com/store/apps/details?id=${build.expected.packageName}`);
+  console.log('Do not uninstall, downgrade or sideload. If no update appears, stop and check track availability and the installed version.');
+  console.log('After the Play update and successful user test: npm run release:phone-tested -- --confirmed');
+  console.log('No installation, upload or rollout performed by this command.');
 }
-
-try {
-  main();
-} catch (error) {
-  console.error(`\nERROR: ${error.message}`);
-  process.exitCode = 1;
-}
+try { main(); } catch (error) { console.error(`\nERROR: ${error.message}`); process.exitCode = 1; }

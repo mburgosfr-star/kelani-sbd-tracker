@@ -6,13 +6,10 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
-function assertPhoneProof(proof, manifest) {
-  if (proof.schema !== 1 || proof.confirmedByUser !== true ||
-      proof.commit !== manifest.git.commit || proof.packageName !== manifest.packageName ||
-      proof.versionName !== manifest.versionName ||
-      String(proof.versionCode) !== String(manifest.versionCode) ||
-      proof.apk?.sha256 !== manifest.apk.sha256) {
-    throw new Error('The APK must have a matching confirmed phone test before building a Play bundle.');
+function assertCandidateProof(proof, manifest, publicAssetsSha256) {
+  if (proof.commit !== manifest.git.commit || !proof.ci?.runId ||
+      !publicAssetsSha256 || proof.ci?.publicAssetsSha256 !== publicAssetsSha256) {
+    throw new Error('The Play bundle requires matching staged candidate and green CI evidence.');
   }
 }
 
@@ -32,7 +29,7 @@ function assertPayloadMatches(apkEntries, bundleEntries, readApk, readBundle) {
       expected.length !== actual.length ||
       expected.some(entry => !actual.includes(bundlePath(entry)) ||
         !readApk(entry).equals(readBundle(bundlePath(entry))))) {
-    throw new Error('Bundle code or assets differ from the phone-tested APK.');
+    throw new Error('Bundle code or assets differ from the candidate APK.');
   }
   return expected.length;
 }
@@ -56,8 +53,8 @@ function main() {
   // This existing guard validates clean HEAD, metadata, APK bytes and checksum file.
   run('APK provenance', process.execPath, ['scripts/check-release-build-manifest.js']);
   const manifest = read('release/build-manifest.json');
-  assertPhoneProof(read('release/phone-test-proof.json'), manifest);
   const apk = path.join(root, manifest.apk.path);
+  assertCandidateProof(common.assertReleaseStagingProof(root).proof, manifest, common.publicAssetManifest(apk).sha256);
   common.assertSignedV2(apk, common.findAndroidSdk());
   run('Web build', 'npm', ['run', 'build']);
   run('Android sync', 'npx', ['cap', 'sync', 'android']);
@@ -78,7 +75,7 @@ function main() {
     name => entry(apk, name), name => entry(bundle, name));
   // Recheck source and APK after the build, before recording a usable output.
   run('Final APK provenance', process.execPath, ['scripts/check-release-build-manifest.js']);
-  assertPhoneProof(read('release/phone-test-proof.json'), manifest);
+  assertCandidateProof(common.assertReleaseStagingProof(root).proof, manifest, common.publicAssetManifest(apk).sha256);
   fs.mkdirSync(directory, { recursive: true });
   fs.copyFileSync(bundle, destination, fs.constants.COPYFILE_EXCL);
   const sha256 = common.sha256File(destination);
@@ -92,7 +89,7 @@ function main() {
   console.log(`Verified local Play bundle: ${destination}\nNo upload performed. Google Play testing remains required.`);
 }
 
-module.exports = { assertPhoneProof, bundlePath, assertPayloadMatches };
+module.exports = { assertCandidateProof, bundlePath, assertPayloadMatches };
 if (require.main === module) {
   try { main(); } catch (error) { console.error(`ERROR: ${error.message}`); process.exitCode = 1; }
 }

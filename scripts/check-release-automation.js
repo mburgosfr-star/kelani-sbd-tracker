@@ -392,18 +392,25 @@ for (const signal of [
   }
 }
 
-for (const signal of [
-  'release/build-manifest.json',
-  'manifest.apk?.path',
-  'manifest.apk?.sha256',
-  'assertApkMetadata',
-  'assertSignedV2',
-  'adb',
-  'install',
-  '-r',
-]) {
-  if (!installApk.includes(signal)) {
-    fail(`Release installer is missing required check: ${signal}`);
+for (const signal of ['check-release-build-manifest.js', 'play.candidate',
+  'Google Play', 'release:phone-tested', 'Do not uninstall']) {
+  if (!installApk.includes(signal)) fail(`Play delivery guidance is missing: ${signal}`);
+}
+if (/adb|install", "-r|install', '-r/.test(installApk)) fail('Primary release delivery must never sideload.');
+
+const playProof = read('scripts/play-release-proof.cjs');
+const phoneMarker = read('scripts/mark-phone-tested.js');
+for (const signal of ['play.candidate', 'play.capture', "delivery: 'google-play'", 'schema: 2']) {
+  if (!phoneMarker.includes(signal)) fail(`Phone proof is missing Play evidence: ${signal}`);
+}
+if (phoneMarker.includes('copyFileSync')) fail('Phone proof must capture the actual installed APKs.');
+for (const signal of ['com.android.vending', 'assertSignedV2', 'assertApkMetadata',
+  'assertInstalledPayload', 'Captured Play APK changed', 'assertReleaseStagingProof']) {
+  if (!playProof.includes(signal)) fail(`Play evidence guard is missing: ${signal}`);
+}
+for (const entryPoint of [preflight, guarded]) {
+  if (!entryPoint.includes('play.verifyPhoneProof') || !entryPoint.includes('play.candidate')) {
+    fail('Preflight and publication must both revalidate Play evidence.');
   }
 }
 
@@ -420,6 +427,7 @@ for (const requiredPath of [
   "scripts/prepare-release.js",
   "scripts/stage-release.js",
   "scripts/install-apk.js",
+  "scripts/play-release-proof.cjs",
   "scripts/check-release-automation.js",
   "scripts/ensure-desktop-validator.cjs",
   "scripts/test-desktop-validator.cjs",
