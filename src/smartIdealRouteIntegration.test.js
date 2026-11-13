@@ -1130,10 +1130,7 @@ test('a legacy beginner inserts one rest after HARD and then resumes the ideal r
       { reps: 5, weight: 20, originalWeight: 20, done: false },
       { reps: 1, weight: 30, originalWeight: 30, done: false },
     ]);
-  expect(meet.lifts.find(block => block.lift === 'Bench').warmups)
-    .toEqual([
-      { reps: 5, weight: 20, originalWeight: 20, done: false },
-    ]);
+  expect(meet.lifts.find(block => block.lift === 'Bench').warmups).toEqual([]);
   expect(meet.lifts.find(block => block.lift === 'Deadlift').warmups)
     .toEqual([
       { reps: 5, weight: 20, originalWeight: 20, done: false },
@@ -1283,7 +1280,7 @@ test('normal heavy phase changes guarantee a 2.5 kg rise when the cycle cap allo
     return workout.lifts[0].sets[0].weight;
   });
 
-  expect(topWeights).toEqual([35, 37.5, 40]);
+  expect(topWeights).toEqual([36, 38.5, 40]);
 });
 
 test('C4W18 top single and backoffs use the confirmed real Bench 1RM', () => {
@@ -1340,16 +1337,16 @@ test('beginner W22 keeps taper intensities and five-rep light work on a full gri
     ]);
   expect(squat.sets).toHaveLength(3);
   expect(squat.sets[0]).toMatchObject({
-    weight: 37.5,
+    weight: 38.5,
     reps: 1,
-    pct: 0.875,
+    pct: 0.9,
     precisePct: 0.9,
     prescribedPct: 0.9,
   });
   expect(squat.sets.slice(1)).toEqual(
     expect.arrayContaining(Array.from({ length: 2 }, () => expect.objectContaining({
       labelKey: 'backoff',
-      weight: 30,
+      weight: 29.5,
       reps: 3,
       precisePct: 0.70,
       prescribedPct: 0.70,
@@ -1360,8 +1357,8 @@ test('beginner W22 keeps taper intensities and five-rep light work on a full gri
   expect(bench.warmups).toHaveLength(0);
   expect(bench.sets.map(({ weight, reps }) => ({ weight, reps })))
     .toEqual(expect.arrayContaining([
-      { weight: 25, reps: 3 },
-      ...Array.from({ length: 4 }, () => ({ weight: 20, reps: 5 })),
+      { weight: 26, reps: 3 },
+      ...Array.from({ length: 4 }, () => ({ weight: 19.5, reps: 5 })),
     ]));
   expect(bench.warmups.length + bench.sets.length).toBe(5);
 });
@@ -1389,15 +1386,15 @@ test('beginner W24 uses a useful five-column deadlift ladder and preserves the p
     ]);
   expect(deadlift.sets).toHaveLength(3);
   expect(deadlift.sets[0]).toMatchObject({
-    weight: 55,
+    weight: 54,
     reps: 1,
-    pct: 0.925,
+    pct: 0.9,
     precisePct: 0.9,
     prescribedPct: 0.9,
   });
   expect(deadlift.sets[1]).toMatchObject({
     labelKey: 'backoff',
-    weight: 42.5,
+    weight: 42,
     reps: 3,
     precisePct: 0.70,
     prescribedPct: 0.70,
@@ -1432,14 +1429,14 @@ test('C4W22 preserves intermediate taper weights in five-column grids', () => {
     ]);
   expect(squat.sets[0]).toMatchObject({
     labelKey: 'topSingle',
-    weight: 132.5,
+    weight: 133,
     reps: 1,
     prescribedPct: 0.9,
   });
   expect(squat.sets.slice(1)).toEqual(
     Array.from({ length: 6 }, () => expect.objectContaining({
       labelKey: 'backoff',
-      weight: 102.5,
+      weight: 103.5,
       reps: 3,
       prescribedPct: 0.70,
     }))
@@ -1643,7 +1640,13 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
         expect(workout.accessories).toEqual(rows);
         rows.forEach(row => {
           expect(row.reps).toBe(5);
-          expect(row.weights).toEqual([25, 25, 25, 25]);
+          expect(row.weights).toHaveLength(4);
+          row.weights.forEach(weight => {
+            expect(weight % 0.5).toBe(0);
+            // Light Row is half of the 25% source load, with rounding at
+            // both stages. The total rounding error is at most 0.375 kg.
+            expect(Math.abs(weight - workout.smartLoadMaxes.Deadlift * 0.125)).toBeLessThanOrEqual(0.375 + 1e-8);
+          });
         });
       }
       if (workout.type !== 'training') expect(workout.accessories).toEqual([]);
@@ -1656,8 +1659,8 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
         );
 
         [...(liftBlock.warmups || []), ...workSets].forEach(item => {
-          expect((Number(item.weight) || 0) / 2.5).toBeCloseTo(
-            Math.round((Number(item.weight) || 0) / 2.5),
+          expect((Number(item.weight) || 0) / (workout.type === 'meet' ? 2.5 : 0.5)).toBeCloseTo(
+            Math.round((Number(item.weight) || 0) / (workout.type === 'meet' ? 2.5 : 0.5)),
             8
           );
         });
@@ -1970,4 +1973,43 @@ test('upgrading a taper preserves started and completed legacy Bench work, repla
   expect(mergeGeneratedWorkoutStructure(saved, generated, history, 1)[22])
     .toEqual(history[0].workoutSnapshot);
   expect(JSON.stringify(history)).toBe(before);
+});
+
+test('half-kilogram training precision applies at every level and focus, while warmups stay on ten kilograms', () => {
+  for (const athleteLevel of ['beginner', 'intermediate', 'advanced', 'elite']) {
+    for (const trainingFocus of ['standard', 'practical', 'beginnerSquat']) {
+      for (let workoutNumber = 1; workoutNumber <= 27; workoutNumber += 1) {
+        const routeWorkout = getSmartIdealRouteWorkout({ athleteLevel, trainingFocus, workoutNumber });
+        if (routeWorkout.type !== 'training') continue;
+        const workout = buildSmartIdealTrainingWorkout({ routeWorkout, athleteLevel,
+          squat: 157.5, bench: 104, deadlift: 184, accessoryMode: 'standard' });
+        workout.lifts.forEach(block => {
+          expect((block.warmups.length + block.sets.length) % 5).toBe(0);
+          block.sets.forEach(set => expect(set.weight % 0.5).toBe(0));
+          block.warmups.forEach(set => {
+            expect(set.weight % 10).toBe(0);
+            expect(set.weight).toBeLessThan(block.sets[0].weight);
+          });
+        });
+      }
+    }
+  }
+});
+
+test('80% of a 104 kg training basis is 83 kg, and regeneration preserves existing manual, started and completed work', () => {
+  const routeWorkout = { type: 'training', stage: 'normal', phase: 'triple', workoutNumber: 1,
+    lifts: [{ lift: 'Bench', intensityRole: 'medium', prescription: { reps: 3, pct: 0.8, minimumSetCount: 2 } }] };
+  const fresh = buildSmartIdealTrainingWorkout({ routeWorkout, bench: 104, squat: 157.5, deadlift: 184 });
+  expect(fresh.lifts[0].sets[0].weight).toBe(83);
+  const old = structuredClone(fresh);
+  old.lifts[0].sets[0] = { ...old.lifts[0].sets[0], weight: 82.5, originalWeight: 82.5 };
+  expect(mergeGeneratedWorkoutStructure([old], [fresh], [], 1)[0].lifts[0].sets[0].weight).toBe(83);
+  const manual = structuredClone(old);
+  Object.assign(manual.lifts[0].sets[0], { weight: 81.5, adjustedFromOriginal: true });
+  expect(mergeGeneratedWorkoutStructure([manual], [fresh], [], 1)[0].lifts[0].sets[0]).toEqual(manual.lifts[0].sets[0]);
+  const started = structuredClone(old);
+  started.lifts[0].warmups[0].done = true;
+  expect(mergeGeneratedWorkoutStructure([started], [fresh], [], 1)[0].lifts[0].sets[0].weight).toBe(82.5);
+  const completed = { ...old, completed: true };
+  expect(mergeGeneratedWorkoutStructure([completed], [fresh], [], 1)[0]).toBe(completed);
 });

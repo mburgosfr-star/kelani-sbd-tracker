@@ -72,9 +72,9 @@ test('C3W36 safety boundary turns an overloaded light Bench block into a genuine
       reps: 4,
       pct: 0.60,
       precisePct: 0.60,
-      weight: 60,
+      weight: 60.5,
       originalPct: 0.60,
-      originalWeight: 60,
+      originalWeight: 60.5,
     });
   });
 });

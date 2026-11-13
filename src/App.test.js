@@ -1764,7 +1764,7 @@ test('regular dashboards distribute spare height between their sections without 
     rowGap: 'var(--kelani-content-row-gap, clamp(14px, 2.2dvh, 24px))',
   });
   expect(regularDashboardContentStyle({ compact: true }).alignContent)
-    .toBe('space-between');
+    .toBe('start');
 });
 
 test('three-lift and PR-rich training dashboards use tighter spacing without changing sparse dashboards', () => {
@@ -1795,7 +1795,7 @@ test('three-lift and PR-rich training dashboards use tighter spacing without cha
   expect(regularDashboardScreenStyle({ compact: true }).rowGap)
     .toBe('clamp(9px, 1.2dvh, 12px)');
   expect(regularDashboardContentStyle({ compact: true }).rowGap)
-    .toBe('var(--kelani-content-row-gap, clamp(8px, 1.1dvh, 12px))');
+    .toBe('clamp(4px, 0.6dvh, 6px)');
 
   expect(shouldUseCompactDashboardLayout({
     workout: { type: 'training' },

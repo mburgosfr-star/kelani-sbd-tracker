@@ -1,3 +1,4 @@
+import { generateProgramForProfile } from './classicProgramTemplates';
 import { completeWorkoutVolumeGrid, reduceVolumeReps } from './workoutGridPolicy';
 import { generateWorkoutsForTrainingModel } from './smartTrainingEngine';
 import { mergeGeneratedWorkoutStructure } from './workoutStateMerge';
@@ -44,7 +45,7 @@ test.each(['default','practical'])('%s route uses 2–6 sets and 3–4–5 reps 
     expect(i).toBeGreaterThanOrEqual(0);
     expect(volume.every(s=>s.reps===3+i)).toBe(true);
     const expectedPct=(80-5*i-5*phaseOffset)/100;
-    expect(volume.every(s=>s.originalWeight===Math.round(options[{Squat:'squat',Bench:'bench',Deadlift:'deadlift'}[b.lift]]*expectedPct/2.5)*2.5)).toBe(true);
+    expect(volume.every(s=>s.originalWeight===Math.round(options[{Squat:'squat',Bench:'bench',Deadlift:'deadlift'}[b.lift]]*expectedPct/0.5)*0.5)).toBe(true);
    }
   }
  }
@@ -116,4 +117,23 @@ test.each(['set', 'warmup'])('old one-set history and %s progress survive the 2�
   expect(merged[1]).toEqual(before[1]);
   expect(merged[2].lifts[0].sets.filter(set => set.labelKey === 'backoff')).toHaveLength(6);
   expect(saved).toEqual(before);
+});
+
+
+test.each(['kelaniSbd', 'kelaniSbdUltra'])('Classic %s also separates half-kilogram training loads from competition attempts', profile => {
+  const workouts = generateProgramForProfile(profile, 157.5, 104, 184);
+  let fineTrainingLoads = 0;
+  workouts.filter(workout => workout.type === 'training').forEach(workout => {
+    workout.lifts.forEach(block => {
+      block.sets.forEach(set => {
+        expect(set.weight % 0.5).toBe(0);
+        if (set.weight % 2.5) fineTrainingLoads += 1;
+      });
+      block.warmups.forEach(warmup => expect(warmup.weight % 10).toBe(0));
+    });
+  });
+  expect(fineTrainingLoads).toBeGreaterThan(0);
+  const meet = workouts.find(workout => workout.type === 'meet');
+  expect(meet.lifts.find(block => block.lift === 'Bench').sets.map(set => set.weight)).toEqual([92.5, 102.5, 107.5]);
+  meet.lifts.forEach(block => block.sets.forEach(set => expect(set.weight % 2.5).toBe(0)));
 });

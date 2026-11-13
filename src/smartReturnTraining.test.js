@@ -74,7 +74,7 @@ test('return choice lightens only the current Smart training and can be restored
     expect((block.sets.length + block.warmups.length) % 5).toBe(0);
     block.sets.slice(0, Math.min(block.sets.length, regular.lifts[index].sets.length)).forEach((set, setIndex) => {
       expect(set.weight).toBeLessThanOrEqual(regular.lifts[index].sets[setIndex].weight);
-      expect(set.weight % 2.5).toBe(0);
+      expect(set.weight % 0.5).toBe(0);
     });
     expect(block.warmups.every(warmup => warmup.weight < block.sets[0].weight)).toBe(true);
     expect(warmupLoadJumpsNeverIncrease(
@@ -107,8 +107,8 @@ test('the reported low-load collisions keep a real top/back-off difference', () 
   };
   const lighter = buildSmartReturnTraining(regular);
 
-  expect(lighter.lifts[0].sets[0].weight).toBe(35);
-  expect(lighter.lifts[0].sets[1].weight).toBe(32.5);
+  expect(lighter.lifts[0].sets[0].weight).toBe(36);
+  expect(lighter.lifts[0].sets[1].weight).toBe(34);
   expect(lighter.lifts[1].sets[0].weight).toBe(25);
   expect(lighter.lifts[1].sets[1].weight).toBe(22.5);
   lighter.lifts.forEach(block => {
@@ -116,7 +116,7 @@ test('the reported low-load collisions keep a real top/back-off difference', () 
     expect((block.warmups.length + block.sets.length) % 5).toBe(0);
     expect(block.sets[1].pct).toBeLessThan(block.sets[0].pct);
   });
-  expect(lighter.accessories[0].weights).toEqual([12.5, 12.5, 12.5, 12.5]);
+  expect(lighter.accessories[0].weights).toEqual([12, 12, 12, 12]);
   expect(lighter.prepItems).toEqual(regular.prepItems);
 });
 

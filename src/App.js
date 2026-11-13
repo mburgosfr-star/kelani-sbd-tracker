@@ -1885,10 +1885,10 @@ export function regularDashboardContentStyle({ spreadContent = false, compact = 
     ...scrollableScreenContentStyle(),
     minHeight: 0,
     display: 'grid',
-    // Put spare height between sections. The screen padding owns the outer
-    // clearance, matching the inset above the content title.
-    alignContent: 'space-between',
-    rowGap: `var(--kelani-content-row-gap, ${defaultRowGap})`,
+    // Dense dashboards use actual gaps, never stretch spare height into
+    // large empty bands. Keep the shared screen title inset unchanged.
+    alignContent: compact ? 'start' : 'space-between',
+    rowGap: compact ? 'clamp(4px, 0.6dvh, 6px)' : `var(--kelani-content-row-gap, ${defaultRowGap})`,
   };
 }
 
@@ -3884,9 +3884,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewPlayUpdatesItem,
-    t.whatsNewFreeUpdatesItem,
-    t.whatsNewUnknownSourceItem,
+    t.whatsNewShareDashboardItem,
+    t.whatsNewTrainingPrecisionItem,
+    t.whatsNewUpdateChannelsItem,
   ];
 
   return (
@@ -16466,7 +16466,7 @@ const screenAllowsContentScroll =
 
     <ScreenTitle title={t.dashboard} />
     <div style={{ ...regularDashboardContentStyle({ spreadContent: dashboardUsesExpandedLayout,
-      compact: dashboardUsesCompactLayout }), overflow: 'visible', flex: '1 0 auto' }}>
+      compact: dashboardUsesCompactLayout }), overflow: 'visible', flex: dashboardUsesCompactLayout ? '0 0 auto' : '1 0 auto' }}>
 
     {!dashboardMeetState.isMeetDay && workouts[currentIndex] && (() => {
       const nextWorkout = workouts[currentIndex];
@@ -16491,9 +16491,7 @@ const screenAllowsContentScroll =
         >
           <div style={{
             color: isNextMeetDay ? THEME.meet : THEME.text,
-            fontSize: dashboardUsesExpandedLayout
-              ? 'clamp(28px, 7vw, 34px)'
-              : 'clamp(24px, 6vw, 30px)',
+            fontSize: 'clamp(28px, 7vw, 34px)',
             fontWeight: 900,
             marginBottom: dashboardScheduleDateLabel
               ? 4
@@ -16509,13 +16507,11 @@ const screenAllowsContentScroll =
               data-testid="dashboard-workout-schedule-date"
               style={{
                 color: THEME.muted,
-                fontSize: dashboardUsesExpandedLayout
-                  ? 'clamp(14px, 3.4vw, 17px)'
-                  : 'clamp(13px, 3.1vw, 15px)',
+                fontSize: 'clamp(14px, 3.4vw, 17px)',
                 fontWeight: 800,
                 lineHeight: 1.3,
                 margin: planLines.length
-                  ? '0 0 clamp(8px, 1.2dvh, 12px)'
+                  ? (dashboardUsesCompactLayout ? '0 0 4px' : '0 0 clamp(8px, 1.2dvh, 12px)')
                   : '4px 0 0',
               }}
             >
@@ -16529,8 +16525,8 @@ const screenAllowsContentScroll =
               justifyContent: 'center',
               flexWrap: 'wrap',
               gap: 'clamp(8px, 2vw, 12px)',
-              margin: '-3px 0 clamp(8px, 1.2dvh, 12px)',
-              fontSize: 'clamp(12px, 3vw, 15px)',
+              margin: dashboardUsesCompactLayout ? '0 0 4px' : '-3px 0 clamp(8px, 1.2dvh, 12px)',
+              fontSize: 'clamp(13px, 3.3vw, 16px)',
               fontWeight: 900,
             }}>
               {nextWorkout.lifts.map((liftBlock, index) => {
@@ -16556,9 +16552,9 @@ const screenAllowsContentScroll =
               color: THEME.muted,
               fontSize: dashboardUsesExpandedLayout
                 ? 'clamp(16px, 3.8vw, 19px)'
-                : 'clamp(14px, 3.4vw, 17px)',
+                : 'clamp(15px, 3.8vw, 19px)',
               fontWeight: 800,
-              lineHeight: 1.45
+              lineHeight: dashboardUsesCompactLayout ? 1.3 : 1.45
             }}>
               {planLines.map((line, index) => {
                 const text = String(line);
@@ -16610,7 +16606,7 @@ const screenAllowsContentScroll =
               cursor: 'pointer',
             }}
           >
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: THEME.meet, fontSize: dashboardUsesExpandedLayout ? 'clamp(14px, 3.3vw, 16px)' : 'clamp(12px, 2.9vw, 14px)', fontWeight: 900, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: THEME.meet, fontSize: dashboardUsesExpandedLayout ? 'clamp(14px, 3.3vw, 16px)' : 'clamp(13px, 3.3vw, 16px)', fontWeight: 900, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4 }}>
               <span>{t.dashboardMeetRouteTitle}</span>
               <TapInfoIcon color={THEME.meet} />
             </div>
@@ -16622,7 +16618,7 @@ const screenAllowsContentScroll =
                 color: THEME.text,
                 fontSize: dashboardUsesExpandedLayout
                   ? 'clamp(16px, 3.8vw, 19px)'
-                  : 'clamp(14px, 3.3vw, 16px)',
+                  : 'clamp(15px, 3.8vw, 19px)',
                 fontWeight: 800,
                 marginBottom: 6,
                 lineHeight: 1.35,
@@ -16712,7 +16708,7 @@ const screenAllowsContentScroll =
               gap: dashboardUsesExpandedLayout
                 ? 'clamp(14px, 2.4dvh, 22px) clamp(12px, 3vw, 16px)'
                 : dashboardUsesCompactLayout
-                  ? 'clamp(6px, 0.8dvh, 9px) clamp(12px, 3vw, 16px)'
+                  ? '4px clamp(12px, 3vw, 16px)'
                   : 'clamp(12px, 3vw, 16px)'
             }}>
               {cards.map(card => (
@@ -16728,19 +16724,17 @@ const screenAllowsContentScroll =
                     padding: dashboardUsesExpandedLayout
                       ? 'clamp(6px, 1dvh, 10px) 2px'
                       : dashboardUsesCompactLayout
-                        ? 'clamp(3px, 0.45dvh, 5px) 2px'
+                        ? '2px 2px'
                         : 'clamp(5px, 0.8dvh, 8px) 2px',
                     cursor: 'pointer',
                   }}
                 >
                   <div style={{
                     color: card.color,
-                    fontSize: dashboardUsesExpandedLayout
-                      ? 'clamp(21px, 5vw, 25px)'
-                      : 'clamp(19px, 4.6vw, 23px)',
+                    fontSize: 'clamp(21px, 5vw, 25px)',
                     fontWeight: 900,
                     marginBottom: dashboardUsesCompactLayout
-                      ? 'clamp(5px, 0.7dvh, 7px)'
+                      ? '4px'
                       : 'clamp(7px, 1dvh, 10px)',
                     lineHeight: 1.1
                   }}>
@@ -16751,15 +16745,13 @@ const screenAllowsContentScroll =
                     display: 'grid',
                     gridTemplateColumns: 'auto 1fr',
                     gap: dashboardUsesCompactLayout
-                      ? 'clamp(5px, 0.65dvh, 7px) 10px'
+                      ? '3px 10px'
                       : 'clamp(7px, 0.9dvh, 10px) 10px',
                     alignItems: 'baseline'
                   }}>
                     <span style={{
                       color: THEME.muted,
-                      fontSize: dashboardUsesExpandedLayout
-                        ? 'clamp(14px, 3.4vw, 17px)'
-                        : 'clamp(13px, 3.2vw, 16px)',
+                      fontSize: 'clamp(14px, 3.4vw, 17px)',
                       fontWeight: 900
                     }}>
                       {t.oneRM}
@@ -16768,9 +16760,7 @@ const screenAllowsContentScroll =
                       <strong style={{
                         display: 'block',
                         color: card.color,
-                        fontSize: dashboardUsesExpandedLayout
-                          ? 'clamp(19px, 4.6vw, 23px)'
-                          : 'clamp(17px, 4.2vw, 21px)',
+                        fontSize: 'clamp(19px, 4.6vw, 23px)',
                         fontWeight: 900,
                         whiteSpace: 'nowrap'
                       }}>
@@ -16791,9 +16781,7 @@ const screenAllowsContentScroll =
 
                     <span style={{
                       color: THEME.muted,
-                      fontSize: dashboardUsesExpandedLayout
-                        ? 'clamp(14px, 3.4vw, 17px)'
-                        : 'clamp(13px, 3.2vw, 16px)',
+                      fontSize: 'clamp(14px, 3.4vw, 17px)',
                       fontWeight: 900
                     }}>
                       {t.e1RM}
@@ -16802,9 +16790,7 @@ const screenAllowsContentScroll =
                       <strong style={{
                         display: 'block',
                         color: card.color,
-                        fontSize: dashboardUsesExpandedLayout
-                          ? 'clamp(19px, 4.6vw, 23px)'
-                          : 'clamp(17px, 4.2vw, 21px)',
+                        fontSize: 'clamp(19px, 4.6vw, 23px)',
                         fontWeight: 900,
                         whiteSpace: 'nowrap'
                       }}>
@@ -16866,12 +16852,12 @@ const screenAllowsContentScroll =
                   alignItems: 'center',
                   columnGap: 14,
                   padding: dashboardUsesCompactLayout
-                    ? 'clamp(4px, 0.55dvh, 6px) 8px'
+                    ? '3px 8px'
                     : 'clamp(6px, 0.9dvh, 10px) 8px',
                   marginBottom: index === dashboardBodyRows.length - 1
                     ? 0
                     : dashboardUsesCompactLayout
-                      ? 'clamp(2px, 0.3dvh, 3px)'
+                      ? '1px'
                       : 'clamp(3px, 0.5dvh, 6px)',
                   borderRadius: 8,
                   cursor: 'pointer',
@@ -16880,9 +16866,7 @@ const screenAllowsContentScroll =
                 <span style={{
                   color: THEME.text,
                   fontWeight: 800,
-                  fontSize: dashboardUsesExpandedLayout
-                    ? 'clamp(18px, 4.2vw, 21px)'
-                    : 'clamp(16px, 3.8vw, 19px)'
+                  fontSize: 'clamp(18px, 4.2vw, 21px)'
                 }}>
                   {row.label}
                 </span>
@@ -16891,9 +16875,7 @@ const screenAllowsContentScroll =
                   <strong style={{
                     display: 'block',
                     whiteSpace: 'nowrap',
-                    fontSize: dashboardUsesExpandedLayout
-                      ? 'clamp(18px, 4.2vw, 21px)'
-                      : 'clamp(16px, 3.8vw, 19px)',
+                    fontSize: 'clamp(18px, 4.2vw, 21px)',
                     color: row.status?.color || THEME.primary
                   }}>
                     {row.value}
@@ -17477,7 +17459,7 @@ const screenAllowsContentScroll =
 
       <AboutSupportModals
         t={t}
-        onShare={() => setShareCard(buildAchievementCard({ ...shareContext, t }))}
+        onShare={() => setShareCard(buildAchievementCard({ ...shareContext, dashboard: dashboardE1RMMetrics, weightUnit, t }))}
         shareOpen={Boolean(shareCard)}
         currentVersion={installedUpdateVersion}
         updateChannel={updateChannel}

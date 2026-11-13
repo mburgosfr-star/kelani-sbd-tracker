@@ -94,7 +94,7 @@ test.each([10, 20, 50, 122.5, 200, 1000])('light Row keeps valid positive increm
   expect(light.reps).toBe(5);
   light.weights.forEach(weight => {
     expect(weight).toBeGreaterThanOrEqual(2.5);
-    expect(weight % 2.5).toBe(0);
+    expect(weight % 0.5).toBe(0);
     expect(weight).toBeLessThanOrEqual(regular.weights[0]);
   });
 });

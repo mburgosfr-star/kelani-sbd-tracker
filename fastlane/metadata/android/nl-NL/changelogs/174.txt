@@ -1,0 +1,3 @@
+Deel een mini-dashboard of uitgebreidere resultaatkaart. Het Dashboard toont grotere tekst met minder witruimte.
+Trainingsgewichten worden afgerond op 0,5 kg; automatische meetpogingen blijven op 2,5 kg. De rekenmachine gebruikt een halter van 20 kg en microschijven.
+Play-installaties en installaties met een onbekende bron openen Play voor updates. Gratis GitHub- en IzzyOnDroid-installaties behouden hun updateopties.

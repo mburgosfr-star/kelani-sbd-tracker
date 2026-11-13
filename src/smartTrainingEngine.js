@@ -1,3 +1,4 @@
+import { roundTrainingWeight } from './workoutUnits';
 import { workoutHasUserProgress } from './workoutStateMerge';
 import { WORKOUT_GRID_COLUMNS, WORKOUT_VOLUME_MIN_SETS, completeWorkoutVolumeGrid } from './workoutGridPolicy';
 import {
@@ -45,7 +46,6 @@ import {
   removeDeprecatedPrepItemsFromWorkouts,
   generateWarmups,
   generateSmartWorkoutPrepItems,
-  roundMeetWeight,
   warmupLoadJumpsNeverIncrease,
 } from './warmupAndPrepGeneration';
 import {
@@ -2579,7 +2579,7 @@ function shouldUseSmartVolumeStimulus(workout = {}, readiness = {}) {
 }
 
 function buildSmartVolumeStimulusSet({ trainingMax, reps, pct, groupKey }) {
-  const weight = roundMeetWeight(trainingMax * pct);
+  const weight = roundTrainingWeight(trainingMax * pct);
 
   return {
     labelKey: 'workSets',
@@ -2668,7 +2668,7 @@ function reduceSmartDeloadSet(set = {}) {
   const pct = Number(nextSet.pct);
 
   if (Number.isFinite(weight) && weight > 0) {
-    nextSet.weight = Math.round((weight * SMART_DELOAD.LOAD_FACTOR) / 2.5) * 2.5;
+    nextSet.weight = roundTrainingWeight(weight * SMART_DELOAD.LOAD_FACTOR);
     nextSet.originalWeight = nextSet.weight;
   }
 
@@ -3675,8 +3675,8 @@ export function reshapeSmartTopSetBackoffReps({ sets = [], trainingMax = 0 } = {
       desiredBackoffPct
     );
     const targetWeight = Number(trainingMax) > 0 && targetPct > 0
-      ? roundBarbellWeight(Number(trainingMax) * targetPct)
-      : Math.floor((Number(set.weight) || 0) / 2.5) * 2.5;
+      ? roundTrainingWeight(Number(trainingMax) * targetPct)
+      : roundTrainingWeight(Number(set.weight) || 0, 'down');
 
     return {
       ...set,
@@ -3703,11 +3703,9 @@ export function constrainExplicitLightLiftDose({ sets = [], trainingMax = 0 } = 
     3,
     Math.min(5, Math.floor(SMART_LIGHT_MAX_TOTAL_WORK_REPS / volumeSetCount))
   );
-  // Round the actual load down to a valid 2.5kg increment. Nearest rounding
-  // could put the bar above the promised 70% ceiling.
-  const maxLoadedWeight = Math.floor(
-    (Number(trainingMax) * SMART_LIGHT_MAX_LOADED_PCT) / 2.5
-  ) * 2.5;
+  // Round the actual load down to a valid 0.5kg increment. Nearest rounding
+  // could put the bar above the promised light ceiling.
+  const maxLoadedWeight = roundTrainingWeight(Number(trainingMax) * SMART_LIGHT_MAX_LOADED_PCT, 'down');
 
   let remainingWorkReps = SMART_LIGHT_MAX_TOTAL_WORK_REPS;
 
@@ -3788,7 +3786,7 @@ export function constrainExplicitMediumLiftDose({
   const targetPct = preserveLowerDose && plannedPct < SMART_MEDIUM_MIN_NORMAL_PLANNED_PCT
     ? plannedPct
     : SMART_MEDIUM_LOADED_PCT;
-  const weight = roundBarbellWeight(Number(trainingMax) * targetPct);
+  const weight = roundTrainingWeight(Number(trainingMax) * targetPct);
   const loadedPct = weight > 0 ? weight / Number(trainingMax) : targetPct;
 
   return repConstrainedSets.map(set => {
@@ -3826,7 +3824,7 @@ function buildSmartIdealSet({
   const explicitWeight = Number(weightOverride);
   const weight = Number.isFinite(explicitWeight) && explicitWeight > 0
     ? explicitWeight
-    : roundBarbellWeight(numericRealOneRM * precisePct);
+    : roundTrainingWeight(numericRealOneRM * precisePct);
   const displayPct = numericRealOneRM > 0
     ? roundPercent(weight / numericRealOneRM)
     : roundPercent(precisePct);
@@ -3856,7 +3854,7 @@ function getSmartIdealHeavyTopWeight({
   pct = 0,
 } = {}) {
   const numericRealOneRM = Number(realOneRM) || 0;
-  const target = roundBarbellWeight(numericRealOneRM * (Number(pct) || 0));
+  const target = roundTrainingWeight(numericRealOneRM * (Number(pct) || 0));
 
   if (routeWorkout.stage !== 'normal') return target;
 
@@ -3869,17 +3867,17 @@ function getSmartIdealHeavyTopWeight({
   const phaseIndex = phaseOrder.indexOf(routeWorkout.phase);
   if (phaseIndex <= 0) return target;
 
-  let minimum = roundBarbellWeight(
+  let minimum = roundTrainingWeight(
     numericRealOneRM * phasePctByKey[phaseOrder[0]]
   );
   for (let index = 1; index <= phaseIndex; index += 1) {
-    const phaseTarget = roundBarbellWeight(
+    const phaseTarget = roundTrainingWeight(
       numericRealOneRM * phasePctByKey[phaseOrder[index]]
     );
     minimum = Math.max(phaseTarget, minimum + 2.5);
   }
 
-  const realOneRMCap = roundBarbellWeight(numericRealOneRM);
+  const realOneRMCap = roundTrainingWeight(numericRealOneRM);
   return Math.min(Math.max(target, minimum), realOneRMCap);
 }
 

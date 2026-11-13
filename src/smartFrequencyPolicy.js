@@ -1,3 +1,4 @@
+import { roundTrainingWeight } from './workoutUnits';
 import { roundPercent } from './smartPrescriptionEngine';
 import {
   SMART_INTENSITY_POINTS,
@@ -684,7 +685,7 @@ function normalizeSupplementalHeavyLiftBlock(liftBlock, realTrainingMax = 0) {
     ? Number(realTrainingMax)
     : getTrainingMaxFromSet(topSingle);
   const topPct = roundPercent(precisePct);
-  const topWeight = roundBarbellWeight(trainingMax * topPct);
+  const topWeight = roundTrainingWeight(trainingMax * topPct);
 
   if (!trainingMax || !topWeight || !topPct) return liftBlock;
 
@@ -702,7 +703,7 @@ function normalizeSupplementalHeavyLiftBlock(liftBlock, realTrainingMax = 0) {
   );
   const secondWarmupWeight = Math.max(
     20,
-    Math.min(topWeight - 5, roundBarbellWeight(trainingMax * 0.70)),
+    Math.min(topWeight - 5, roundTrainingWeight(trainingMax * 0.70)),
   );
   // Mirrors the primary-role backoff formula in smartPrescriptionEngine.js
   // (buildSmartLiftPrescription: topPct - 10%, capped at the shared primary
@@ -717,7 +718,7 @@ function normalizeSupplementalHeavyLiftBlock(liftBlock, realTrainingMax = 0) {
     0.60,
     SMART_PRIMARY_BACKOFF_MAX_PCT,
   ));
-  const volumeWeight = roundBarbellWeight(trainingMax * volumePct);
+  const volumeWeight = roundTrainingWeight(trainingMax * volumePct);
   const volumeTemplate = originalSets.find(set => set !== topSingle)
     || topSingle;
   const normalizedTopSingle = {

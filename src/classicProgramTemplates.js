@@ -1,3 +1,4 @@
+import { roundTrainingWeight } from './workoutUnits';
 import { reduceVolumeReps, completeWorkoutVolumeGrid, WORKOUT_VOLUME_MAX_SETS } from './workoutGridPolicy';
 import { roundBarbellWeight } from './smartFrequencyPolicy';
 import { LIFT_ORDER, isTopSetLabel, normalizeCooldownMode } from './workoutHistoryStats';
@@ -39,8 +40,8 @@ export function generateCooldownItems(cooldownMode = 'upperBackFriendly') {
 }
 
 function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly', workoutSetup = null, programOverride = null) {
-  function round25(w) {
-  return roundBarbellWeight(w);
+  function roundTraining(w) {
+  return roundTrainingWeight(w);
 }
 
   const oneRMs = {
@@ -142,7 +143,7 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
         }
 
         for (let i = 0; i < (['backoff', 'workSets'].includes(labelKey) ? Math.min(block.sets, WORKOUT_VOLUME_MAX_SETS) : block.sets); i++) {
-          const weight = round25(oneRMs[liftConfig.lift] * block.pct);
+          const weight = roundTraining(oneRMs[liftConfig.lift] * block.pct);
 
           sets.push({
             labelKey,
@@ -236,21 +237,21 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
         labelKey: 'opener',
         reps: 1,
         pct: 0.90,
-        weight: round25(oneRMs[lift] * 0.90),
+        weight: roundBarbellWeight(oneRMs[lift] * 0.90, 'nearest', 2.5),
         done: false,
       },
       {
         labelKey: 'secondAttempt',
         reps: 1,
         pct: 0.975,
-        weight: round25(oneRMs[lift] * 0.975),
+        weight: roundBarbellWeight(oneRMs[lift] * 0.975, 'nearest', 2.5),
         done: false,
       },
       {
         labelKey: 'thirdAttempt',
         reps: 1,
         pct: 1.025,
-        weight: round25(oneRMs[lift] * 1.025),
+        weight: roundBarbellWeight(oneRMs[lift] * 1.025, 'nearest', 2.5),
         done: false,
       },
     ];

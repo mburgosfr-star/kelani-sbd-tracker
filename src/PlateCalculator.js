@@ -1,9 +1,7 @@
-import { useState } from 'react';
 import {
   calculatePlateBreakdown,
   DEFAULT_PLATE_SET_KG,
   DEFAULT_BARBELL_WEIGHT_KG,
-  WOMENS_BARBELL_WEIGHT_KG,
 } from './plateMath';
 
 const PLATE_COLORS = {
@@ -14,10 +12,13 @@ const PLATE_COLORS = {
   5: '#ffffff',
   2.5: '#e74c3c',
   1.25: '#95a5a6',
+  1: '#95a5a6',
+  0.5: '#95a5a6',
+  0.25: '#95a5a6',
 };
 
 export default function PlateCalculator({ weightKg, onClose, theme, t }) {
-  const [barWeightKg, setBarWeightKg] = useState(DEFAULT_BARBELL_WEIGHT_KG);
+  const barWeightKg = DEFAULT_BARBELL_WEIGHT_KG;
   const breakdown = calculatePlateBreakdown(weightKg, {
     barWeightKg,
     availablePlatesKg: DEFAULT_PLATE_SET_KG,
@@ -45,6 +46,9 @@ export default function PlateCalculator({ weightKg, onClose, theme, t }) {
           borderRadius: 12,
           padding: 20,
           maxWidth: 380,
+          maxHeight: 'calc(100dvh - 32px)',
+          overflowY: 'auto',
+          boxSizing: 'border-box',
           width: '100%',
           color: theme.text,
         }}
@@ -57,27 +61,9 @@ export default function PlateCalculator({ weightKg, onClose, theme, t }) {
           {t.plateCalculatorTotal}: <strong style={{ color: theme.text }}>{breakdown.requestedTotalKg} kg</strong>
         </p>
 
-        <div style={{ display: 'flex', gap: 8, margin: '10px 0 16px' }}>
-          {[DEFAULT_BARBELL_WEIGHT_KG, WOMENS_BARBELL_WEIGHT_KG].map((bw) => (
-            <button
-              key={bw}
-              onClick={() => setBarWeightKg(bw)}
-              style={{
-                flex: 1,
-                padding: 10,
-                fontSize: 13,
-                fontWeight: 700,
-                borderRadius: 8,
-                border: `1px solid ${theme.primary}`,
-                background: barWeightKg === bw ? theme.primary : 'transparent',
-                color: barWeightKg === bw ? '#ffffff' : theme.text,
-                cursor: 'pointer',
-              }}
-            >
-              {bw} kg {t.plateCalculatorBar}
-            </button>
-          ))}
-        </div>
+        <p style={{ margin: '10px 0 16px', fontSize: 14, color: theme.muted }}>
+          {t.plateCalculatorBar}: <strong style={{ color: theme.text }}>{barWeightKg} kg</strong>
+        </p>
 
         {breakdown.perSidePlates.length === 0 ? (
           <p style={{ fontSize: 14, color: theme.muted }}>

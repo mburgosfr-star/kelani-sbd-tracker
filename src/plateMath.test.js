@@ -65,8 +65,8 @@ test('75 kg with a 15 kg bar uses 25 kg and 5 kg per side', () => {
   });
 });
 
-test('81 kg reports the closest lower load when the exact total is unavailable', () => {
-  const result = calculatePlateBreakdown(81);
+test('81 kg reports the closest lower load when microplates are unavailable', () => {
+  const result = calculatePlateBreakdown(81, { availablePlatesKg: [25, 20, 15, 10, 5, 2.5, 1.25] });
 
   expect(result).toMatchObject({
     barWeightKg: 20,
@@ -79,4 +79,18 @@ test('81 kg reports the closest lower load when the exact total is unavailable',
       { weightKg: 5, count: 1 },
     ],
   });
+});
+
+
+test('the standard plate set loads every half-kilogram total from the empty bar through 500 kg', () => {
+  for (let target = 20; target <= 500; target += 0.5) {
+    const result = calculatePlateBreakdown(target);
+    expect(result.isExact).toBe(true);
+    expect(result.achievedTotalKg).toBe(target);
+    expect(20 + 2 * result.perSidePlates.reduce((total, plate) => total + plate.weightKg * plate.count, 0)).toBe(target);
+  }
+  expect(calculatePlateBreakdown(83).perSidePlates).toEqual([
+    { weightKg: 25, count: 1 }, { weightKg: 5, count: 1 }, { weightKg: 1.25, count: 1 }, { weightKg: 0.25, count: 1 },
+  ]);
+  expect(calculatePlateBreakdown(19).isExact).toBe(false);
 });

@@ -1,3 +1,4 @@
+import { TRAINING_WEIGHT_INCREMENT_KG, roundTrainingWeight } from './workoutUnits';
 import { WORKOUT_VOLUME_MIN_SETS, WORKOUT_VOLUME_MAX_SETS } from './workoutGridPolicy';
 import {
   SMART_PRIMARY_BACKOFF_MAX_PCT,
@@ -80,7 +81,7 @@ function roundPct(value) {
   return Math.round(value * 1000) / 1000;
 }
 
-export function roundSmartWeight(weight, increment = 2.5) {
+export function roundSmartWeight(weight, increment = TRAINING_WEIGHT_INCREMENT_KG) {
   const numericWeight = Number(weight);
   const numericIncrement = Number(increment);
 
@@ -1114,7 +1115,7 @@ export function buildSmartLiftPrescription({
     // below, e.g. a deload or failed feedback) - always make real
     // progress unless there's a reason not to. The % anchor above already
     // guards the *percentage*, but converting % to a barbell-loadable
-    // weight (2.5kg steps) can still round the actual kg down below the last
+    // weight (0.5kg rounding) can still round the actual kg down below the last
     // proven top - especially right after a rep-scheme change (e.g. a
     // single carried into a double-only phase), where a lower %1RM can
     // still be a "valid" double even though it's a lower absolute weight.
@@ -1167,12 +1168,9 @@ export function buildSmartLiftPrescription({
         : provenWeight;
 
       if (projectedWeight < minimumWeight) {
-        let flooredWeight = projectedWeight;
-
-        while (flooredWeight < minimumWeight) {
-          flooredWeight = roundSmartWeight(flooredWeight + 2.5);
-        }
-
+        // Preserve the existing minimum progression, then express that
+        // floor on the finer load grid without adding another full jump.
+        const flooredWeight = roundTrainingWeight(minimumWeight, 'up');
         top = { ...top, pct: flooredWeight / state.trainingMax };
       }
     }

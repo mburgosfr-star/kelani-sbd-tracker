@@ -202,3 +202,15 @@ test('all workout weight paths use the shared full-label trigger and inline icon
   expect(warmupCalls).toBe(2);
   expect(accessoryCalls).toBe(2);
 });
+
+test('the calculator uses one 20 kg bar and shows the microplates without bar-selection buttons', async () => {
+  const { default: PlateCalculator } = await import('./PlateCalculator');
+  const { translations } = await import('./translations');
+  render(<PlateCalculator weightKg={83} onClose={noop} theme={{}} t={translations.en} />);
+  expect(screen.getAllByRole('button')).toHaveLength(1);
+  expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  expect(screen.getByText('20 kg')).toBeInTheDocument();
+  expect(screen.getByText('1.25 kg')).toBeInTheDocument();
+  expect(screen.getByText('0.25 kg')).toBeInTheDocument();
+  expect(screen.queryByText('15 kg bar')).not.toBeInTheDocument();
+});

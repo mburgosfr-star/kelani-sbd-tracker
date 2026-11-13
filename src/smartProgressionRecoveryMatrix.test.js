@@ -175,7 +175,7 @@ test.each([
     expectedDirection: 'progress',
     expectedReason: 'good-progress',
     expectedTopPct: 0.775,
-    expectedVolumePct: 0.7,
+    expectedVolumePct: 0.675,
   },
   {
     name: 'EASY progresses immediately',
@@ -185,7 +185,7 @@ test.each([
     expectedDirection: 'progress',
     expectedReason: 'easy-progress',
     expectedTopPct: 0.775,
-    expectedVolumePct: 0.7,
+    expectedVolumePct: 0.675,
   },
   {
     name: 'HARD progresses immediately - workoutEffort is a whole-day rating, not lift-specific, and frequency policy never repeats a lift on consecutive days',
@@ -195,7 +195,7 @@ test.each([
     expectedDirection: 'progress',
     expectedReason: 'hard-progress',
     expectedTopPct: 0.775,
-    expectedVolumePct: 0.7,
+    expectedVolumePct: 0.675,
   },
   {
     name: 'HARD progresses after one intervening training workout',
@@ -205,7 +205,7 @@ test.each([
     expectedDirection: 'progress',
     expectedReason: 'hard-progress',
     expectedTopPct: 0.775,
-    expectedVolumePct: 0.7,
+    expectedVolumePct: 0.675,
   },
   {
     name: 'HARD progresses after two intervening training workouts',
@@ -215,7 +215,7 @@ test.each([
     expectedDirection: 'progress',
     expectedReason: 'hard-progress',
     expectedTopPct: 0.775,
-    expectedVolumePct: 0.7,
+    expectedVolumePct: 0.675,
   },
   {
     name: 'HARD progression remains valid when recovery follows the spacing',
@@ -226,7 +226,7 @@ test.each([
     expectedDirection: 'progress',
     expectedReason: 'hard-progress',
     expectedTopPct: 0.775,
-    expectedVolumePct: 0.7,
+    expectedVolumePct: 0.675,
   },
 ])('$name', ({
   effort,

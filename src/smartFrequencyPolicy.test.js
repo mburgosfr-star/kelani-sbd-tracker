@@ -374,13 +374,12 @@ describe('Smart rolling seven-workout frequency policy', () => {
 
     const bench = result.workout.lifts[0];
     expect(bench.lift).toBe('Bench');
-    // 110 * 0.90 = 99, rounded to the nearest 2.5 kg (the barbell increment
-    // used everywhere in Smart Training) is 100 kg. The backoff now mirrors
+    // 110 * 0.90 = 99, already a multiple of the 0.5 kg training increment. The backoff now mirrors
     // the primary-role formula with its 75% ceiling, i.e. 110 * 0.75 = 82.5,
     // already is 82.5 kg rather than retaining the template's stale load.
     expect(bench.sets.map(({ weight, reps }) => [weight, reps]))
       .toEqual([
-        [100, 1],
+        [99, 1],
         [82.5, 4],
         [82.5, 4],
         [82.5, 4],
@@ -441,9 +440,9 @@ describe('Smart rolling seven-workout frequency policy', () => {
     const squat = result.workout.lifts.find(({ lift }) => lift === 'Squat');
     expect(squat).toBeTruthy();
     expect(squat.frequencyRole).toBe('supplemental-heavy');
-    // 145 * 0.85 = 123.25, rounded to the nearest 2.5 kg is 122.5 kg - not the
+    // 145 * 0.85 = 123.25, rounded to the nearest 0.5 kg is 123.5 kg - not the
     // template's stale 85 kg.
-    expect(squat.sets[0]).toMatchObject({ weight: 122.5, pct: 0.85 });
+    expect(squat.sets[0]).toMatchObject({ weight: 123.5, pct: 0.85 });
   });
 
   test("a supplemental heavy lift's backoff scales with its own top intensity instead of a flat 75%", () => {
@@ -569,8 +568,8 @@ describe('Smart rolling seven-workout frequency policy', () => {
     expect(bench).toBeTruthy();
     expect(bench.frequencyRole).toBe('supplemental-heavy');
     // Precise 0.825 stays on the 2.5% step, then 97.5 * 0.825 = 80.4375,
-    // rounded to the nearest 2.5 kg is 80 kg - not the stale template load.
-    expect(bench.sets[0]).toMatchObject({ weight: 80, pct: 0.825 });
+    // rounded to the nearest 0.5 kg is 80.5 kg - not the stale template load.
+    expect(bench.sets[0]).toMatchObject({ weight: 80.5, pct: 0.825 });
   });
 
   test('a fallback single light Deadlift receives six real work sets', () => {

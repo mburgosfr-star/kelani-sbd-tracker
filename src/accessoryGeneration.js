@@ -5,7 +5,7 @@ import {
   setHasUserState,
   workoutHasUserProgress,
 } from './workoutStateMerge';
-import { roundMeetWeight } from './warmupAndPrepGeneration';
+import { roundTrainingWeight } from './workoutUnits';
 import { getWorkoutAccessories } from './workoutSetup';
 
 const ROW_TEMPLATE = {
@@ -74,7 +74,7 @@ function getAccessoryBaseWeight(template, oneRMs, accessoryPRs = {}) {
 
   const sourceWeight = Number(oneRMs?.[sourceLift]) || 0;
   const calculated = sourceWeight && template.pct
-    ? Math.max(2.5, roundMeetWeight(sourceWeight * template.pct))
+    ? Math.max(2.5, roundTrainingWeight(sourceWeight * template.pct))
     : 20;
 
   return Math.max(calculated, previous || 0);
@@ -94,7 +94,7 @@ function makeWorkoutSet({ labelKey, groupKey, reps, weight, perSide = false }) {
 }
 
 export function generateSquatAlternativeSets(oneRMs = {}) {
-  const beltSquatWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.60));
+  const beltSquatWeight = Math.max(2.5, roundTrainingWeight((Number(oneRMs.Squat) || 0) * 0.60));
 
   return Array.from({ length: 4 }, () => makeWorkoutSet({
     labelKey: 'squatAlternativeBeltSquat',
@@ -105,7 +105,7 @@ export function generateSquatAlternativeSets(oneRMs = {}) {
 }
 
 export function generateSquatHomeAlternativeSets(oneRMs = {}) {
-  const zercherSquatWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.45));
+  const zercherSquatWeight = Math.max(2.5, roundTrainingWeight((Number(oneRMs.Squat) || 0) * 0.45));
 
   return Array.from({ length: 4 }, () => makeWorkoutSet({
     labelKey: 'squatAlternativeZercherSquat',
@@ -116,9 +116,9 @@ export function generateSquatHomeAlternativeSets(oneRMs = {}) {
 }
 
 export function generateBenchMachineAlternativeSets(oneRMs = {}) {
-  const chestPressWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.60));
-  const pecDeckWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.25));
-  const tricepsPushdownWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.20));
+  const chestPressWeight = Math.max(2.5, roundTrainingWeight((Number(oneRMs.Bench) || 0) * 0.60));
+  const pecDeckWeight = Math.max(2.5, roundTrainingWeight((Number(oneRMs.Bench) || 0) * 0.25));
+  const tricepsPushdownWeight = Math.max(2.5, roundTrainingWeight((Number(oneRMs.Bench) || 0) * 0.20));
 
   return [
     ...Array.from({ length: 3 }, () => makeWorkoutSet({
@@ -143,7 +143,7 @@ export function generateBenchMachineAlternativeSets(oneRMs = {}) {
 }
 
 export function generateBenchHomeAlternativeSets(oneRMs = {}) {
-  const shoulderPressWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Bench) || 0) * 0.35));
+  const shoulderPressWeight = Math.max(2.5, roundTrainingWeight((Number(oneRMs.Bench) || 0) * 0.35));
 
   return Array.from({ length: 4 }, () => makeWorkoutSet({
     labelKey: 'benchHomeAlternativeShoulderPress',
@@ -154,7 +154,7 @@ export function generateBenchHomeAlternativeSets(oneRMs = {}) {
 }
 
 export function generateBenchGoodMorningSets(oneRMs = {}) {
-  const goodMorningWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Deadlift) || 0) * 0.40));
+  const goodMorningWeight = Math.max(2.5, roundTrainingWeight((Number(oneRMs.Deadlift) || 0) * 0.40));
 
   return Array.from({ length: 4 }, () => makeWorkoutSet({
     labelKey: 'benchHomeAlternativeGoodMorning',
@@ -165,9 +165,9 @@ export function generateBenchGoodMorningSets(oneRMs = {}) {
 }
 
 export function generateDeadliftAlternativeSets(oneRMs = {}) {
-  const legPressWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.85));
-  const cablePullThroughWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Deadlift) || 0) * 0.25));
-  const cableGluteKickbackWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Squat) || 0) * 0.125));
+  const legPressWeight = Math.max(2.5, roundTrainingWeight((Number(oneRMs.Squat) || 0) * 0.85));
+  const cablePullThroughWeight = Math.max(2.5, roundTrainingWeight((Number(oneRMs.Deadlift) || 0) * 0.25));
+  const cableGluteKickbackWeight = Math.max(2.5, roundTrainingWeight((Number(oneRMs.Squat) || 0) * 0.125));
 
   return [
     ...Array.from({ length: 3 }, () => makeWorkoutSet({
@@ -193,7 +193,7 @@ export function generateDeadliftAlternativeSets(oneRMs = {}) {
 }
 
 export function generateDeadliftHomeAlternativeSets(oneRMs = {}) {
-  const hipThrustWeight = Math.max(2.5, roundMeetWeight((Number(oneRMs.Deadlift) || 0) * 0.60));
+  const hipThrustWeight = Math.max(2.5, roundTrainingWeight((Number(oneRMs.Deadlift) || 0) * 0.60));
 
   return Array.from({ length: 4 }, () => makeWorkoutSet({
     labelKey: 'deadliftHomeAlternativeBarbellHipThrust',
@@ -219,7 +219,7 @@ export function generateAccessoriesForLift(
       const isLightRow = template.key === 'row' && (lightRow || normalizedMode !== 'standard');
       // Keep four accessible grid cells, but halve both reps and load for a
       // light Row. Reduce AFTER the PR floor so a saved Row PR cannot undo it.
-      const weight = isLightRow ? Math.max(2.5, roundMeetWeight(baseWeight * 0.5)) : baseWeight;
+      const weight = isLightRow ? Math.max(2.5, roundTrainingWeight(baseWeight * 0.5)) : baseWeight;
 
       return {
         key: template.key,
@@ -325,7 +325,7 @@ export function generateAccessoriesForWorkout(workout, {
     return getWorkoutAccessories(workoutSetup, lifts).map(template => {
       const baseWeight = getAccessoryBaseWeight(template, oneRMs, accessoryPRs);
       const intensity = lightRow ? 0.6 : 1;
-      const weight = template.source === 'bodyweight' ? 0 : Math.max(2.5, roundMeetWeight(baseWeight * intensity));
+      const weight = template.source === 'bodyweight' ? 0 : Math.max(2.5, roundTrainingWeight(baseWeight * intensity));
       return {
         key: template.key,
         nameKey: template.labelKey,

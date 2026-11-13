@@ -148,7 +148,7 @@ test('beginner Squat stimulus progresses beyond C1W11 even when C1W15 has anothe
     labelKey: 'topTriple',
     reps: 3,
     pct: 0.775,
-    weight: 32.5,
+    weight: 33,
   });
 
   const initialWarmups = generateWarmups(
@@ -358,7 +358,7 @@ test('beginner Deadlift stimulus progresses beyond C1W9 at C1W14', () => {
     labelKey: 'topDouble',
     reps: 2,
     pct: 0.825,
-    weight: 50,
+    weight: 49.5,
   });
 
   const initialWarmups = generateWarmups(

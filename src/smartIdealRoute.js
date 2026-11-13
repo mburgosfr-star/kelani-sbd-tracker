@@ -34,7 +34,7 @@ export function normalizeSmartTrainingFocus(value) {
 
 export const SMART_IDEAL_LOAD_POLICY = Object.freeze({
   basis: 'e1rm',
-  workWeightIncrementKg: 2.5,
+  workWeightIncrementKg: 0.5,
   achievedE1RMIncrementKg: null,
   displayedPercentageIncrement: 0.025,
   heavyPhaseMinimumIncreaseKg: 2.5,

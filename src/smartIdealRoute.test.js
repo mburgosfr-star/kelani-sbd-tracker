@@ -750,7 +750,7 @@ test('one TOO EASY and one TOO HARD credit change the meet date by a net zero da
 test('the ideal route uses precise e1RM and rounds only prescriptions', () => {
   expect(SMART_IDEAL_LOAD_POLICY).toEqual({
     basis: 'e1rm',
-    workWeightIncrementKg: 2.5,
+    workWeightIncrementKg: 0.5,
     achievedE1RMIncrementKg: null,
     displayedPercentageIncrement: 0.025,
     heavyPhaseMinimumIncreaseKg: 2.5,

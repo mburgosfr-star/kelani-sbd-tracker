@@ -116,6 +116,6 @@ test('a ready-phase taper is not forced back up to the demonstrated double', () 
   const prescription = buildSmartLiftPrescription({ state, role: 'primary' });
   const topSet = prescription.sets.find(set => set.reps === 3);
 
-  expect(topSet.weight).toBe(130);
+  expect(topSet.weight).toBe(130.5);
   expect(prescription.regressionReason).toBe('ready-taper');
 });

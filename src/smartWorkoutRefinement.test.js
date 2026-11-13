@@ -141,9 +141,9 @@ test('generates a beginner Deadlift 80/70 prescription consistently from a 60 kg
     labelKey: 'topDouble',
     reps: 2,
     pct: 0.8,
-    weight: 47.5,
+    weight: 48,
     originalPct: 0.8,
-    originalWeight: 47.5,
+    originalWeight: 48,
   });
 
   deadlift.sets.slice(1).forEach(set => {
@@ -151,9 +151,9 @@ test('generates a beginner Deadlift 80/70 prescription consistently from a 60 kg
       labelKey: 'backoff',
       reps: 3,
       pct: 0.7,
-      weight: 42.5,
+      weight: 42,
       originalPct: 0.7,
-      originalWeight: 42.5,
+      originalWeight: 42,
     });
   });
 });

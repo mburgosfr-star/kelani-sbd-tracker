@@ -1,3 +1,4 @@
+import { roundTrainingWeight } from './workoutUnits';
 import { WORKOUT_GRID_COLUMNS, WORKOUT_VOLUME_MIN_SETS, completeWorkoutVolumeGrid } from './workoutGridPolicy';
 import { generateWarmups } from './warmupAndPrepGeneration';
 import { roundPercent } from './smartPrescriptionEngine';
@@ -14,7 +15,7 @@ export const SMART_RETURN_TRAINING = Object.freeze({
 function roundedLoad(weight, factor) {
   const numericWeight = Number(weight);
   return Number.isFinite(numericWeight) && numericWeight > 0
-    ? Math.max(2.5, Math.round(numericWeight * factor / 2.5) * 2.5)
+    ? Math.max(2.5, roundTrainingWeight(numericWeight * factor))
     : weight;
 }
 

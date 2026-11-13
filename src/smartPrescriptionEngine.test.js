@@ -110,16 +110,16 @@ test('generates the same relative beginner prescription at different strength le
     labelKey: 'topTriple',
     reps: 3,
     pct: 0.70,
-    weight: 42.5,
+    weight: 42,
   });
 
   expect(stronger.sets[0]).toMatchObject({
     labelKey: 'topTriple',
     reps: 3,
     pct: 0.70,
-    weight: 125,
+    weight: 126,
   });
-  expect(lighter.sets.slice(1).every(set => set.pct === 0.575)).toBe(true);
+  expect(lighter.sets.slice(1).every(set => set.pct === 0.6)).toBe(true);
   expect(stronger.sets.slice(1).every(set => set.pct === 0.6)).toBe(true);
 });
 
@@ -150,7 +150,7 @@ test('progresses a successful good top double instead of moving backwards', () =
     labelKey: 'topDouble',
     reps: 2,
     pct: 0.825,
-    weight: 147.5,
+    weight: 148.5,
   });
 
   const backoffs = prescription.sets.slice(1);
@@ -465,7 +465,7 @@ test('keeps beginner C1W10 single-lift Bench back-offs below top work', () => {
     labelKey: 'topTriple',
     reps: 3,
     pct: 0.70,
-    weight: 22.5,
+    weight: 23,
   });
 
   const backoffs = prescription.sets.slice(1);
@@ -474,8 +474,8 @@ test('keeps beginner C1W10 single-lift Bench back-offs below top work', () => {
     expect(set).toMatchObject({
       labelKey: 'backoff',
       reps: 5,
-      pct: 0.625,
-      weight: 20,
+      pct: 0.6,
+      weight: 19.5,
     });
     expect(set.pct).toBeLessThan(prescription.sets[0].pct);
   });
@@ -907,8 +907,8 @@ test.each(['good', 'easy', 'hard'])(
     backoffs.forEach(set => {
       expect(set).toMatchObject({
         reps: 4,
-        pct: 0.7,
-        weight: 22.5,
+        pct: 0.675,
+        weight: 22,
       });
     });
   }

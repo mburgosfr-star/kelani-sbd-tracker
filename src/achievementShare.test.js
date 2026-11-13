@@ -69,7 +69,7 @@ test('PNG renderer keeps full-size centered cards and sends the download footer 
     expect(await renderAchievementCard(card)).toBe('data:image/png;base64,PNG');
     expect(source).toBe('/icons/icon-512.webp');
     expect(ctx.fillRect.mock.calls[0].slice(0, 3)).toEqual([0, 0, 1080]);
-    expect(ctx.drawImage.mock.calls[0][2]).toBe(28);
+    expect(ctx.drawImage.mock.calls[0][2]).toBe(40);
     expect(ctx.fillRect.mock.calls[0][3]).toBeGreaterThanOrEqual(1080);
     const lastResult = drawings.filter(item => item.value.includes('kg')).at(-1);
     expect(lastResult.y).toBeLessThan(ctx.fillRect.mock.calls[0][3]);
@@ -92,4 +92,88 @@ test.each(['en', 'nl', 'ca'])('share context uses localized level and the comple
 
 test('invalid context is omitted instead of sharing arbitrary user fields', () => {
   expect(make({ athleteLevel: 'PRIVATE', cycle: -1, workoutNumber: 'PRIVATE' }).context).toEqual([]);
+});
+
+
+test.each(['en', 'nl', 'ca'])('cycle share retains the real review results and progress without personal history (%s)', language => {
+  const t = translations[language];
+  const lifts = ['Squat', 'Bench', 'Deadlift'];
+  const baseline = lifts.map(lift => ({ lift, cycle: 0, workoutNumber: 0, topWeight: 90, e1rm: 90, seedMax: true }));
+  const snapshot = { completed: true, type: 'meet', notes: 'PRIVATE', lifts: lifts.map(lift => ({
+    lift, sets: [set(100, 1), set(110, 1, { failed: true })],
+  })) };
+  const history = [...baseline, ...lifts.map(lift => ({ cycle: 1, workoutNumber: 28, lift, workoutSnapshot: snapshot }))];
+  const before = JSON.stringify(history);
+  const card = buildAchievementCard({ kind: 'cycle', t, history, cycle: 1 });
+  expect(card.cycleSummary.lifts).toHaveLength(3);
+  expect(card.cycleSummary.lifts[0]).toMatchObject({ values: ['100 kg', '100 kg'], gains: ['+10 kg', '+10 kg'], sinceStart: '+10 kg' });
+  expect(card.cycleSummary.meet.value).toBe('300 kg');
+  expect(card.cycleSummary.points.map(point => point.value)).toEqual([270, 300]);
+  expect(JSON.stringify(card)).not.toMatch(/PRIVATE|110 kg|workoutSnapshot/);
+  expect(JSON.stringify(history)).toBe(before);
+});
+
+test('cycle renderer lays out every translated results panel and the progress chart within the image', async () => {
+  const drawings = [];
+  const ctx = { font: '', drawImage: vi.fn(), fillRect: vi.fn(),
+    beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(), arc: vi.fn(), fill: vi.fn(),
+    measureText(value) { return { width: value.length * parseFloat(this.font.split(' ')[1]) * 0.58 }; },
+    fillText(value, x, y) { drawings.push({ value, x, y }); },
+  };
+  vi.stubGlobal('Image', class { set src(value) { queueMicrotask(() => this.onload()); } });
+  const context = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx);
+  const data = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/png;base64,PNG');
+  try {
+    const seeds = ['Squat', 'Bench', 'Deadlift'].map(lift => ({ lift, cycle: 0, workoutNumber: 0, topWeight: 100, seedMax: true }));
+    for (const language of ['en', 'nl', 'ca']) {
+      drawings.length = 0;
+      const card = buildAchievementCard({ t: translations[language], kind: 'cycle', history: seeds });
+      await renderAchievementCard(card);
+      const height = ctx.fillRect.mock.calls.filter(call => call[0] === 0).at(-1)[3];
+      expect(drawings.every(item => item.y > 0 && item.y < height && item.x > 0 && item.x < 1080)).toBe(true);
+      expect(drawings.some(item => item.value === translations[language].e1RM)).toBe(true);
+      expect(drawings.some(item => item.value.includes('github.com'))).toBe(false);
+    }
+    expect(ctx.arc).toHaveBeenCalled();
+  } finally { context.mockRestore(); data.mockRestore(); vi.unstubAllGlobals(); }
+});
+
+test.each(['en', 'nl', 'ca'])('About share is the real mini-dashboard in %s, with precise estimates and no personal fields', language => {
+  const t = translations[language];
+  const dashboard = { lifts: {
+    Squat: { oneRM: 155, e1RM: 157.333333 }, Bench: { oneRM: 100, e1RM: 104 }, Deadlift: { oneRM: 175, e1RM: 184 },
+  }, total: { oneRM: 430, e1RM: 445.333333 }, bodyWeight: 85.6, email: 'PRIVATE' };
+  const before = JSON.stringify(dashboard);
+  const card = buildAchievementCard({ t, dashboard, athleteLevel: 'intermediate', cycle: 7, workoutNumber: 1 });
+  expect(card.title).toBe(t.dashboard);
+  expect(card.subtitle).toBe('');
+  expect(card.dashboardSummary.columns).toEqual([t.oneRM, t.e1RM]);
+  expect(card.dashboardSummary.tiles.map(tile => tile.values)).toEqual([
+    ['155 kg', '157.33 kg'], ['100 kg', '104 kg'], ['175 kg', '184 kg'], ['430 kg', '445.33 kg'],
+  ]);
+  expect(JSON.stringify(card)).not.toMatch(/PRIVATE|85\.6|bodyWeight/);
+  expect(JSON.stringify(dashboard)).toBe(before);
+  expect(buildAchievementCard({ t, dashboard, weightUnit: 'lb' }).dashboardSummary.tiles[0].values[0]).toContain('lb');
+});
+
+test('mini-dashboard renderer has four colored quadrants and no advertising panel', async () => {
+  const drawings = [];
+  const ctx = { font: '', drawImage: vi.fn(), fillRect: vi.fn(),
+    measureText(value) { return { width: value.length * parseFloat(this.font.split(' ')[1]) * 0.58 }; },
+    fillText(value, x, y) { drawings.push({ value, x, y }); },
+  };
+  vi.stubGlobal('Image', class { set src(value) { queueMicrotask(() => this.onload()); } });
+  const context = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx);
+  const data = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/png;base64,PNG');
+  try {
+    const card = buildAchievementCard({ t, dashboard: { lifts: { Bench: { oneRM: 100, e1RM: 104 } } } });
+    await renderAchievementCard(card);
+    expect(drawings.filter(item => item.value === '1RM')).toHaveLength(4);
+    expect(drawings.filter(item => item.value === 'e1RM')).toHaveLength(4);
+    expect(drawings.find(item => item.value === t.squat).x).toBeLessThan(drawings.find(item => item.value === t.bench).x);
+    expect(drawings.find(item => item.value === t.deadlift).y).toBeGreaterThan(drawings.find(item => item.value === t.squat).y);
+    expect(drawings.some(item => item.value.includes('Plan your training') || item.value === t.shareAboutTitle)).toBe(false);
+    const height = ctx.fillRect.mock.calls[0][3];
+    expect(drawings.every(item => item.y > 0 && item.y < height)).toBe(true);
+  } finally { context.mockRestore(); data.mockRestore(); vi.unstubAllGlobals(); }
 });

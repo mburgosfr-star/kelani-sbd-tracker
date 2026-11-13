@@ -1,4 +1,4 @@
-export const DEFAULT_PLATE_SET_KG = [25, 20, 15, 10, 5, 2.5, 1.25];
+export const DEFAULT_PLATE_SET_KG = [25, 20, 15, 10, 5, 2.5, 1.25, 1, 0.5, 0.25];
 export const DEFAULT_BARBELL_WEIGHT_KG = 20;
 export const WOMENS_BARBELL_WEIGHT_KG = 15;
 
