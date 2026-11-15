@@ -123,3 +123,15 @@ test('formats a localized projected meet date range', () => {
     { language: 'nl' }
   )).toMatch(/2.*5 oktober/);
 });
+
+
+test.each([['nl', 'morgen', 'Morgen'], ['en', 'tomorrow', 'Tomorrow'], ['ca', 'demà', 'Demà']])(
+  'Program can omit only tomorrow’s absolute date in %s without changing Dashboard labels',
+  (language, tomorrowLabel, expected) => {
+    const options = { language, tomorrowLabel, today: TODAY, compact: true };
+    expect(formatWorkoutScheduleDate('2026-10-01', { ...options, omitTomorrowDate: true })).toBe(expected);
+    expect(formatWorkoutScheduleDate('2026-10-01', options)).toMatch(new RegExp(`^${expected} · `));
+    expect(formatWorkoutScheduleDate('2026-10-02', { ...options, omitTomorrowDate: true }))
+      .toBe(formatWorkoutScheduleDate('2026-10-02', options));
+  }
+);

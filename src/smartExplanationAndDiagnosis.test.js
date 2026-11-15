@@ -46,7 +46,7 @@ test('meet-day Smart details switch from diagnostics to positive execution guida
     },
   }, {})).toEqual([
     {
-      label: 'You are ready',
+      label: 'Execution',
       value: 'Trust your preparation. Stay calm and execute one attempt at a time.',
       kind: 'meet-day',
     },
@@ -210,48 +210,8 @@ function completeIdealRouteWorkout(history, workout) {
   ];
 }
 
-test('fully demonstrated meet readiness does not claim taper before taper starts', () => {
-  const workout = workoutWith([smartLift({ lift: 'Squat', role: 'secondary' })]);
-  workout.smartDecisionSummary.readiness.meetPlanFullyDemonstrated = true;
-  workout.smartDecisionSummary.readiness.meetPlanOpenerReadyCount = 3;
-  workout.smartDecisionSummary.readiness.meetPlanSecondAttemptReadyCount = 3;
-  workout.smartDecisionSummary.readiness.meetPlanThirdAttemptPotentialCount = 3;
-
-  const rows = getSmartModalDetailRows(workout, {
-    smartMeetStatus: 'Meetstatus',
-    smartMeetFullyReady: 'Volledig wedstrijdklaar: alle liftdoelen bereikt. De training gaat verder volgens plan.',
-  });
-
-  expect(rows).toContainEqual({
-    label: 'Meetstatus',
-    value: 'Volledig wedstrijdklaar: alle liftdoelen bereikt. De training gaat verder volgens plan.',
-  });
-});
-
-test.each(['nl', 'en', 'ca'])(
-  'a fully meet-ready ideal-route taper explicitly explains tapering in %s',
-  language => {
-    const t = translations[language];
-    const workout = workoutWith([
-      smartLift({ lift: 'Squat' }),
-      smartLift({ lift: 'Bench', role: 'secondary' }),
-    ]);
-    workout.smartIdealRoute = { stage: 'taper', workoutNumber: 22 };
-    workout.smartDecisionSummary.readiness.meetPlanReady = true;
-    workout.smartDecisionSummary.readiness.meetPlanFullyDemonstrated = true;
-
-    const rows = getSmartModalDetailRows(workout, t);
-
-    expect(rows).toContainEqual({
-      label: t.smartMeetStatus,
-      value: t.smartMeetFullyReadyTaper,
-    });
-    expect(t.smartMeetFullyReadyTaper).not.toBe(t.smartMeetFullyReady);
-  }
-);
-
 test.each(SMART_IDEAL_LEVELS)(
-  'every active %s route screen through Meet Day keeps readiness informational and blocker-free',
+  'every active %s route screen keeps its meet plan without readiness claims',
   athleteLevel => {
     let history = [];
     const workouts = [];
@@ -291,7 +251,7 @@ test.each(SMART_IDEAL_LEVELS)(
       expect(diagnosis).not.toContain('Meet blockers:');
 
       if (workout.type === 'meet') {
-        expect(labels).toContain(translations.en.smartMeetDayReadyLabel);
+        expect(labels).toContain(translations.en.smartMeetDayExecutionLabel);
         expect(labels).not.toContain(translations.en.expectedMeetWindow);
         return;
       }
@@ -302,7 +262,7 @@ test.each(SMART_IDEAL_LEVELS)(
       if (Object.keys(
         workout.smartDecisionSummary?.readiness?.meetPlanReadiness || {}
       ).length > 0) {
-        expect(rows.some(row => row.kind === 'lift-readiness')).toBe(true);
+        expect(rows.some(row => row.kind === 'lift-readiness')).toBe(false);
       }
     });
   }
@@ -322,64 +282,7 @@ test('a ready-phase Bench prescription explains taper instead of recovery or blo
   expect(rows[0].value).not.toContain('Recovery or blocked.');
 });
 
-test('names the current blocker once, not duplicated as a separate primary-blocker row', () => {
-  const rows = getSmartModalDetailRows(workoutWith([
-    smartLift({ lift: 'Deadlift' }),
-  ]));
-
-  expect(rows).toEqual(expect.arrayContaining([
-    {
-      label: 'Current blocker',
-      value: 'Deadlift (100% of the real 1RM not yet reached)',
-    },
-  ]));
-  expect(rows.filter(row => row.label === 'Primary blocker')).toHaveLength(0);
-});
-
-test.each(['nl', 'en', 'ca'])(
-  'the authoritative ideal route shows readiness without presenting unfinished lifts as blockers in %s',
-  language => {
-    const t = translations[language];
-    const workout = workoutWith([smartLift({ lift: 'Deadlift' })]);
-    workout.smartIdealRoute = { stage: 'normal', workoutNumber: 24 };
-
-    const rows = getSmartModalDetailRows(workout, t);
-
-    expect(rows.some(row =>
-      row.label === t.smartCurrentBlocker ||
-      row.label === t.smartCurrentBlockers ||
-      row.label === t.smartPrimaryBlocker
-    )).toBe(false);
-    expect(rows).toContainEqual({
-      label: 'Deadlift',
-      value: expect.stringContaining(t.smartCycleEstimateShort),
-      kind: 'lift-readiness',
-    });
-    expect(rows).toContainEqual({
-      label: t.expectedMeetWindow,
-      value: 'C3W32–C3W35',
-    });
-    expect(rows).toContainEqual({
-      label: t.smartReadinessBasis,
-      value: t.smartIdealRouteReadinessBasisText,
-      kind: 'note',
-    });
-
-    const diagnosis = buildSmartDiagnosticText(workout, t);
-    expect(diagnosis).not.toContain('Meet blockers:');
-    expect(diagnosis).not.toContain(`${t.smartCurrentBlocker}:`);
-    expect(diagnosis).toContain(`${t.expectedMeetWindow}: C3W32–C3W35`);
-  }
-);
-
-test('shows the full readiness/blocker/fatigue detail on a deload or rest day too, not just on training-fallback days', () => {
-  // C3W35 was correctly converted to a rest day (via the
-  // deload frequency fallback), but the modal collapsed to showing only
-  // "Projected meet" because this whole block used to be gated on
-  // isTrainingFallback (dayType==='training' && reason==='training-fallback').
-  // The underlying readiness/fatigue data is exactly as meaningful on a
-  // deload or recovery day - if anything more so, since it explains why
-  // today isn't a training day at all.
+test('keeps actionable fatigue and missed-set details on recovery days', () => {
   const workout = workoutWith([]);
   workout.smartDayType = 'recovery';
   workout.smartDecisionSummary.dayType = 'recovery';
@@ -391,15 +294,6 @@ test('shows the full readiness/blocker/fatigue detail on a deload or rest day to
 
   expect(rows).toEqual(expect.arrayContaining([
     {
-      label: 'Current blocker',
-      value: 'Deadlift (100% of the real 1RM not yet reached)',
-    },
-    {
-      label: 'Deadlift',
-      value: 'Best e1RM this cycle 157.3 kg → 180 kg (Gap 22.7 kg)',
-      kind: 'lift-readiness',
-    },
-    {
       label: 'Fatigue score',
       value: '6/2 (recovery threshold reached)',
     },
@@ -408,32 +302,6 @@ test('shows the full readiness/blocker/fatigue detail on a deload or rest day to
       value: '2/2 (recovery selected)',
     },
   ]));
-});
-
-test('the Gap is always exactly (displayed target) - (displayed current) - simple, visible arithmetic on the two numbers shown right above it', () => {
-  // Reproduces the C3W33 diagnosis boundary: the UI showed
-  // "Best e1RM this cycle: 170 kg" and "Real 1RM target: 185 kg" but a Gap of "13.8 kg" -
-  // a flat contradiction of the two rounded numbers right above it (the
-  // expects 185 - 170 = 15). Whether a lift still counts as a blocker at
-  // all is decided separately from raw (unrounded) values in
-  // smartTrainingEngine.js (isEffectivelyMet), but once a lift IS shown as
-  // the blocker, its Gap must match simple subtraction of the displayed
-  // Best e1RM this cycle and target - never a more "precise" number that doesn't add
-  // up against what's on screen.
-  const workout = workoutWith([smartLift({ lift: 'Deadlift' })]);
-  workout.smartDecisionSummary.readiness.meetPlanReadiness.Deadlift = {
-    currentCycleBestE1RM: 170.66666666666666,
-    oneRMTargetE1RM: 185,
-    readinessTargetAttempt: 184.5,
-    readinessPhase: 'third-attempt',
-    openerReady: true,
-  };
-  workout.smartDecisionSummary.readiness.meetPlanWeakestPhase = 'third-attempt';
-
-  const rows = getSmartModalDetailRows(workout);
-  const liftRow = rows.find(row => row.label === 'Deadlift');
-
-  expect(liftRow.value).toBe('Best e1RM this cycle 170.67 kg → 185 kg (Gap 14.33 kg)');
 });
 
 function secondaryLiftBlock(lift, { volumePct = 0.75, volumeReps = 6, volumeCount = 6 } = {}) {
@@ -593,126 +461,6 @@ test('ideal-route modal keeps planned intensities and presents every lift consis
   );
   expect(diagnosis).not.toContain('measuredDoseIntensity');
   expect(diagnosis).not.toMatch(/(?:topAnchor|volumeAnchor|plannedVolume)=0%/);
-});
-
-test('lists every lift still short of its real 1RM as a blocker, not just the single weakest one', () => {
-  const workout = workoutWith([smartLift({ lift: 'Deadlift' })]);
-  workout.smartDecisionSummary.readiness.meetPlanReadiness = {
-    Deadlift: {
-      currentCycleBestE1RM: 170.66666666666666,
-      oneRMTargetE1RM: 185,
-      readinessTargetAttempt: 184.5,
-      readinessPhase: 'third-attempt',
-      openerReady: true,
-    },
-    Squat: {
-      currentCycleBestE1RM: 138.66666666666666,
-      oneRMTargetE1RM: 147.5,
-      readinessTargetAttempt: 148.5,
-      readinessPhase: 'third-attempt',
-      openerReady: true,
-    },
-    Bench: {
-      currentCycleBestE1RM: 101.33333333333333,
-      oneRMTargetE1RM: 100,
-      readinessTargetAttempt: 100,
-      readinessPhase: 'ready',
-      openerReady: true,
-    },
-  };
-  workout.smartDecisionSummary.readiness.meetPlanWeakestLift = 'Deadlift';
-  workout.smartDecisionSummary.readiness.meetPlanWeakestPhase = 'third-attempt';
-
-  const rows = getSmartModalDetailRows(workout);
-  const blockerRow = rows.find(row =>
-    row.label === 'Current blockers' || row.label === 'Current blocker'
-  );
-
-  expect(blockerRow.label).toBe('Current blockers');
-  expect(blockerRow.value).toBe(
-    'Deadlift, Squat (100% of the real 1RM not yet reached)'
-  );
-  // Bench is fully ready and must not be listed as a blocker.
-  expect(blockerRow.value).not.toContain('Bench');
-
-  // Showing a row for only the single weakest lift (Deadlift) while naming
-  // Squat as a blocker too was inconsistent - all 3 lifts still get their
-  // own row, including Bench even though it's already fully ready (not
-  // omitted), just compacted to one line each instead of three cells.
-  expect(rows).toEqual(expect.arrayContaining([
-    { label: 'Deadlift', value: 'Best e1RM this cycle 170.67 kg → 185 kg (Gap 14.33 kg)', kind: 'lift-readiness' },
-    { label: 'Squat', value: 'Best e1RM this cycle 138.67 kg → 147.5 kg (Gap 8.83 kg)', kind: 'lift-readiness' },
-    { label: 'Bench', value: 'Ready (Best e1RM this cycle 101.33 kg)', kind: 'lift-readiness' },
-  ]));
-});
-
-test('live dashboard e1RMs override stale 5kg workout snapshots in the Smart modal', () => {
-  const workout = workoutWith([smartLift({ lift: 'Deadlift' })]);
-  workout.smartDecisionSummary.readiness.meetPlanReadiness = {
-    Bench: {
-      currentCycleBestE1RM: 100,
-      oneRMTargetE1RM: 105,
-      readinessTargetAttempt: 105,
-      readinessPhase: 'third-attempt',
-    },
-    Deadlift: {
-      currentCycleBestE1RM: 180,
-      oneRMTargetE1RM: 185,
-      readinessTargetAttempt: 185,
-      readinessPhase: 'third-attempt',
-    },
-  };
-
-  const rows = getSmartModalDetailRows(workout, {}, {
-    Bench: 102.5,
-    Deadlift: 182.5,
-  });
-
-  expect(rows).toEqual(expect.arrayContaining([
-    { label: 'Bench', value: 'Best e1RM this cycle 102.5 kg → 105 kg (Gap 2.5 kg)', kind: 'lift-readiness' },
-    { label: 'Deadlift', value: 'Best e1RM this cycle 182.5 kg → 185 kg (Gap 2.5 kg)', kind: 'lift-readiness' },
-  ]));
-});
-
-test.each([
-  ['nl', 'Nog geen gegevens in deze cyclus'],
-  ['en', 'No data yet this cycle'],
-  ['ca', 'Encara no hi ha dades en aquest cicle'],
-])('shows every lift and labels missing active-cycle evidence in %s', (language, expected) => {
-  const workout = workoutWith([smartLift({ lift: 'Deadlift' })]);
-  workout.smartDecisionSummary.readiness.meetPlanReadiness = {
-    Squat: {
-      currentCycleBestE1RM: 45,
-      oneRMTargetE1RM: 45,
-      readinessTargetAttempt: 45,
-      readinessPhase: 'ready',
-    },
-    Bench: {
-      currentCycleBestE1RM: 22.5,
-      oneRMTargetE1RM: 35,
-      readinessTargetAttempt: 35,
-      readinessPhase: 'opener',
-    },
-    Deadlift: {
-      currentCycleBestE1RM: 57.5,
-      oneRMTargetE1RM: 62.5,
-      readinessTargetAttempt: 62.5,
-      readinessPhase: 'opener',
-    },
-  };
-
-  const rows = getSmartModalDetailRows(
-    workout,
-    translations[language],
-    { Squat: 45, Bench: 22.5, Deadlift: 0 }
-  );
-
-  expect(rows).toContainEqual({
-    label: 'Deadlift',
-    value: expected,
-    kind: 'lift-readiness',
-  });
-  expect(rows.filter(row => row.kind === 'lift-readiness')).toHaveLength(3);
 });
 
 test("does not add a fatigue detail or 'cause' for an all-clear rest day", () => {
@@ -905,7 +653,7 @@ test('builds a copyable diagnosis with decision, projection and technical proof'
   expect(text).toContain('Kelani SBD Smart diagnosis');
   expect(text).toContain('Prescription version: 10');
   expect(text).toContain('Workout: C3W24');
-  expect(text).toContain('Current blocker: Deadlift');
+  expect(text).not.toContain('Current blocker:');
   expect(text).toContain('Projected meet: C3W32–C3W35');
   expect(text).not.toContain('Projected limiter');
   expect(text).toContain('Deadlift (Plan):');
@@ -913,3 +661,43 @@ test('builds a copyable diagnosis with decision, projection and technical proof'
   expect(text).toContain('repeatVariation=true');
   expect(text).toContain('gridItems=9');
 });
+
+
+test.each(['nl', 'en', 'ca'])(
+  'Smart details omit strength gaps and readiness claims while preserving plans in %s',
+  language => {
+    const t = translations[language];
+    for (const dayType of ['training', 'recovery', 'deload']) {
+      for (const stage of [null, 'normal', 'taper']) {
+        for (const ready of [false, true]) {
+          const workout = workoutWith([smartLift({ lift: 'Deadlift' })]);
+          workout.smartDecisionSummary.dayType = dayType;
+          if (stage) workout.smartIdealRoute = { stage, workoutNumber: 24 };
+          Object.assign(workout.smartDecisionSummary.readiness, {
+            meetPlanReady: ready,
+            meetPlanFullyDemonstrated: ready,
+            meetPlanReadiness: {
+              Squat: { currentCycleBestE1RM: 0, oneRMTargetE1RM: 150, readinessPhase: 'opener' },
+              Bench: { currentCycleBestE1RM: 105, oneRMTargetE1RM: 100, readinessPhase: 'ready' },
+              Deadlift: { currentCycleBestE1RM: 170, oneRMTargetE1RM: 185, readinessPhase: 'third-attempt' },
+            },
+          });
+          const before = JSON.stringify(workout);
+          const rows = getSmartModalDetailRows(workout, t, { Deadlift: 182.5 }, 'Tomorrow');
+          const labels = rows.map(row => row.label);
+          expect(rows.some(row => row.kind === 'lift-readiness')).toBe(false);
+          for (const removed of [t.smartCurrentBlocker, t.smartCurrentBlockers,
+            t.smartMeetStatus, t.smartReadinessBasis, 'Squat', 'Bench', 'Deadlift']) {
+            expect(labels).not.toContain(removed);
+          }
+          expect(rows).toContainEqual({
+            label: stage ? t.expectedMeetWindow : t.smartProjectedMeet,
+            value: 'C3W32–C3W35 · Tomorrow',
+          });
+          expect(rows.some(row => row.kind === 'prescription')).toBe(true);
+          expect(JSON.stringify(workout)).toBe(before);
+        }
+      }
+    }
+  }
+);

@@ -1,6 +1,7 @@
+import { screenContentPadding } from './appChromeLayout';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsScrollableContentStyle, statsTabListStyle } from './StatsScreen';
-import App, { StartNewCycleSection, AllWorkouts, ProgramCompletedSetSummary, AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartDayTypeInline, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
+import App, { StartNewCycleSection, AllWorkouts, ProgramCompletedSetSummary, AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartWorkoutHeader, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
 import { translations } from './translations';
 
 test('a failed Squat set uses the darker SBD status color instead of the Squat lift color', () => {
@@ -551,7 +552,7 @@ test('rest and training completion actions share the same compact button style',
     padding: '10px 28px',
     fontWeight: 700,
     borderRadius: 8,
-    margin: '14px auto 18px',
+    margin: '14px auto 0',
   });
 });
 
@@ -631,12 +632,16 @@ test('active workout screen bounds scrolling between the fixed chrome', () => {
 });
 
 test('program screen uses the same responsive header alignment as other content screens', () => {
+  for (const style of [programScreenStyle(), activeWorkoutScreenStyle(), meetWorkoutScreenStyle(),
+    restWorkoutScreenStyle(), regularDashboardScreenStyle(), statsScreenStyle()]) {
+    expect(style.padding).toBe(`var(--kelani-screen-padding, ${screenContentPadding()})`);
+    expect(style.paddingBottom).toBeUndefined();
+  }
   expect(programScreenStyle()).toMatchObject({
     width: '100%',
     maxWidth: 500,
     margin: '0 auto',
-    padding: 'var(--kelani-screen-padding, clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px)',
-    paddingBottom: 12,
+    padding: `var(--kelani-screen-padding, ${screenContentPadding()})`,
     minHeight: 0,
     boxSizing: 'border-box',
     height: 'calc(100dvh - 78px - var(--kelani-header-space, 0px))',
@@ -796,7 +801,7 @@ test('meet workout keeps the standard top and lift spacing', () => {
   expect(meetWorkoutScreenStyle()).toMatchObject({
     display: 'flex',
     flexDirection: 'column',
-    paddingBottom: 4,
+    padding: `var(--kelani-screen-padding, ${screenContentPadding()})`,
   });
   expect(meetWorkoutScreenStyle().paddingTop).toBeUndefined();
   expect(meetWorkoutLiftBlockStyle()).toMatchObject({
@@ -804,8 +809,8 @@ test('meet workout keeps the standard top and lift spacing', () => {
     marginBottom: 4,
   });
   expect(meetWorkoutLiftBlockStyle().marginTop).toBeUndefined();
-  expect(workoutCompletionButtonMargin({ isMeetDay: true })).toBe('8px auto 18px');
-  expect(workoutCompletionButtonMargin({ isMeetDay: false })).toBe('2px auto 18px');
+  expect(workoutCompletionButtonMargin({ isMeetDay: true })).toBe('8px auto 0');
+  expect(workoutCompletionButtonMargin({ isMeetDay: false })).toBe('2px auto 0');
 });
 
 test('meet workout uses spare height between lift blocks instead of below completion', () => {
@@ -863,7 +868,7 @@ test('rest information sits optically above centre with its completion action be
     flexDirection: 'column',
     height: 'calc(100dvh - 78px - var(--kelani-header-space, 0px))',
     overflow: 'hidden',
-    paddingBottom: 'clamp(10px, 1.8dvh, 18px)',
+    padding: `var(--kelani-screen-padding, ${screenContentPadding()})`,
   });
 
   expect(restWorkoutContentStyle()).toMatchObject({
@@ -916,7 +921,7 @@ test('completed workout content uses fixed chrome with internal scrolling', () =
     height: 'calc(100dvh - 78px - var(--kelani-header-space, 0px))',
     overflowX: 'hidden',
     overflow: 'hidden',
-    padding: 'var(--kelani-completed-screen-padding, 12px clamp(10px, 3vw, 16px) 8px)',
+    padding: `var(--kelani-completed-screen-padding, ${screenContentPadding('clamp(10px, 3vw, 16px)')})`,
   });
 });
 
@@ -951,9 +956,9 @@ test('all main screens suppress tiny pseudo-overflow and scroll only for hidden 
     '--kelani-screen-overflow-y': 'auto',
   });
   expect(appViewportStyle({ screen: 'dashboard', allowContentScroll: false }))
-    .toMatchObject({ '--kelani-screen-overflow-y': 'hidden' });
+    .toMatchObject({ '--kelani-screen-overflow-y': 'auto' });
   expect(appViewportStyle({ screen: 'dashboard', compactToFit: true })).toMatchObject({
-    '--kelani-screen-padding': 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 10px',
+    '--kelani-screen-padding': screenContentPadding(),
     '--kelani-content-row-gap': 'clamp(6px, 0.8dvh, 9px)',
   });
   expect(appViewportStyle({
@@ -1012,7 +1017,7 @@ test('stats charts share available height with matching outer insets', () => {
     height: 'calc(100dvh - 78px - var(--kelani-header-space, 0px))',
     display: 'flex',
     flexDirection: 'column',
-    paddingBottom: 'clamp(10px, 1.8dvh, 18px)',
+    padding: `var(--kelani-screen-padding, ${screenContentPadding()})`,
     overflow: 'hidden',
   });
   expect(statsScrollableContentStyle()).toMatchObject({
@@ -1077,7 +1082,7 @@ test('settings distribute regular actions and keep Start over at the bottom', ()
     flex: 1,
     minHeight: 0,
     overflowY: 'var(--kelani-screen-overflow-y, auto)',
-    gridTemplateRows: 'auto minmax(min-content, 1fr)',
+    gridTemplateRows: 'minmax(min-content, 1fr)',
     marginTop: 0,
     rowGap: 0,
     alignContent: 'stretch',
@@ -1411,10 +1416,10 @@ test('stats keeps body data attached to its real measurement workout', () => {
 test('settings rows use responsive text and phone-sized action targets', () => {
   render(<SettingsListRow label="Profile" actionLabel="Edit" onAction={() => {}} />);
 
-  expect(screen.getByText('Profile').style.fontSize).toBe('clamp(16px, 4vw, 20px)');
+  expect(screen.getByText('Profile').style.fontSize).toBe('calc(clamp(16px, 4vw, 20px) * var(--kelani-content-font-scale, 1))');
   const action = screen.getByRole('button', { name: 'Edit' });
   expect(action.style.minHeight).toBe('var(--kelani-button-height)');
-  expect(action.style.fontSize).toBe('clamp(15px, 3.7vw, 18px)');
+  expect(action.style.fontSize).toBe('calc(clamp(15px, 3.7vw, 18px) * var(--kelani-content-font-scale, 1))');
   expect(action.style.whiteSpace).toBe('normal');
 });
 
@@ -1757,14 +1762,14 @@ test('regular dashboards distribute spare height between their sections without 
     display: 'grid',
     overflowY: 'var(--kelani-screen-overflow-y, auto)',
     alignContent: 'space-between',
-    rowGap: 'var(--kelani-content-row-gap, clamp(10px, 1.4dvh, 16px))',
+    rowGap: 'var(--kelani-content-row-gap, clamp(8px, 1.1dvh, 12px))',
   });
   expect(regularDashboardContentStyle()).toMatchObject({
     alignContent: 'space-between',
-    rowGap: 'var(--kelani-content-row-gap, clamp(14px, 2.2dvh, 24px))',
+    rowGap: 'var(--kelani-content-row-gap, clamp(8px, 1.1dvh, 12px))',
   });
   expect(regularDashboardContentStyle({ compact: true }).alignContent)
-    .toBe('start');
+    .toBe('space-between');
 });
 
 test('three-lift and PR-rich training dashboards use tighter spacing without changing sparse dashboards', () => {
@@ -1795,7 +1800,7 @@ test('three-lift and PR-rich training dashboards use tighter spacing without cha
   expect(regularDashboardScreenStyle({ compact: true }).rowGap)
     .toBe('clamp(9px, 1.2dvh, 12px)');
   expect(regularDashboardContentStyle({ compact: true }).rowGap)
-    .toBe('clamp(4px, 0.6dvh, 6px)');
+    .toBe('var(--kelani-content-row-gap, clamp(8px, 1.1dvh, 12px))');
 
   expect(shouldUseCompactDashboardLayout({
     workout: { type: 'training' },
@@ -2026,55 +2031,28 @@ test('informative Ideal Route adjustments and other Smart reasons remain visible
   })).toBe(true);
 });
 
-test('planned Ideal Route recovery omits the tautological Reason row in the Smart modal', () => {
-  render(
-    <SmartDayTypeInline
-      workout={{
-        type: 'rest',
-        smartDayType: 'recovery',
-        smartDecisionSummary: {
-          reason: 'ideal-route',
-          dayType: 'recovery',
-          readiness: {},
-        },
-        smartIdealRoute: { stage: 'normal' },
-      }}
-      t={translations.en}
-    />
-  );
-
-  fireEvent.click(screen.getByRole('button', {
-    name: /Rest & recovery/i,
-  }));
-
-  expect(screen.queryByText(translations.en.smartReason)).not.toBeInTheDocument();
-  expect(screen.queryByText(translations.en.smartReasonIdealRouteRecovery))
-    .not.toBeInTheDocument();
+test.each(['nl', 'en', 'ca'])('Smart workout titles are static and routine training needs no explanation in %s', language => {
+  const t = translations[language];
+  render(<SmartWorkoutHeader contentTitle="SBD" workout={{
+    type: 'training', smartDayType: 'training',
+    smartIdealRoute: { stage: 'normal' },
+    smartDecisionSummary: { reason: 'ideal-route', dayType: 'training' },
+  }} t={t} />);
+  expect(screen.getByRole('heading', { level: 1, name: 'SBD' })).toHaveAttribute('data-testid', 'screen-title');
+  expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('smart-workout-explanation')).not.toBeInTheDocument();
 });
 
-test('Smart modal shows the projected meet date beside its workout projection', () => {
-  render(
-    <SmartDayTypeInline
-      workout={{
-        type: 'training',
-        smartDayType: 'training',
-        smartDecisionSummary: {
-          reason: 'ideal-route',
-          dayType: 'training',
-          readiness: {
-            meetProjection: { available: true, label: 'C4W29' },
-          },
-        },
-        smartIdealRoute: { stage: 'normal' },
-      }}
-      t={translations.en}
-      meetProjectionDateLabel="October 12"
-    />
-  );
-
-  fireEvent.click(screen.getByRole('button', { name: /Training\. Open workout information/i }));
-
-  expect(screen.getByText('C4W29 · October 12')).toBeInTheDocument();
+test.each(['nl', 'en', 'ca'])('extra recovery has a brief visible explanation without readiness claims in %s', language => {
+  const t = translations[language];
+  render(<SmartWorkoutHeader workout={{
+    type: 'rest', smartDayType: 'recovery',
+    smartIdealRoute: { stage: 'normal', adjustmentReason: 'too-hard-recovery' },
+    smartDecisionSummary: { reason: 'ideal-route', dayType: 'recovery' },
+  }} t={t} />);
+  expect(screen.getByTestId('smart-workout-explanation')).toHaveTextContent(t.smartReasonIdealRouteTooHardRecovery);
+  expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
 
 test.each(['nl', 'en', 'ca'])('fatigue details consistently show score, threshold and reason in %s', language => {
@@ -2100,42 +2078,13 @@ test.each(['nl', 'en', 'ca'])('fatigue details consistently show score, threshol
   expect(t.smartReasonFatigueRecovery).not.toContain('{details}');
 });
 
-test('Smart recovery status stays above the shifted recovery content and opens its information', () => {
-  render(
-    <SmartDayTypeInline
-      workout={{
-        type: 'rest',
-        smartDayType: 'recovery',
-        smartDecisionSummary: {
-          reason: 'post-meet-recovery',
-          dayType: 'recovery',
-          readiness: {
-            postMeetRecoveryTarget: 3,
-            postMeetRecoveryDaysCompleted: 0,
-          },
-        },
-      }}
-      t={translations.en}
-    />
-  );
-
-  const button = screen.getByRole('button', {
-    name: /Rest & recovery/i,
-  });
-  expect(button).toHaveStyle({
-    position: 'relative',
-    zIndex: '2',
-    touchAction: 'manipulation',
-  });
-
-  fireEvent.click(button);
-
-  expect(screen.getByRole('dialog', { name: translations.en.smartWorkoutDialogLabel }))
-    .toBeInTheDocument();
-  expect(button).toHaveAttribute('aria-expanded', 'true');
-  expect(screen.getByText(/Recovery day 1 of 3/i))
-    .toBeInTheDocument();
-  expect(screen.queryByText('Reason')).not.toBeInTheDocument();
+test('post-meet recovery explains its purpose directly on the Workout screen', () => {
+  render(<SmartWorkoutHeader workout={{
+    type: 'rest', smartDayType: 'recovery',
+    smartDecisionSummary: { reason: 'post-meet-recovery', dayType: 'recovery' },
+  }} t={translations.en} />);
+  expect(screen.getByTestId('smart-workout-explanation')).toHaveTextContent(translations.en.smartPostMeetStatusText);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
 
 test('a normal workout in the new cycle restores route to meet', () => {
@@ -2428,11 +2377,11 @@ test('every Smart set has a phase label without breaking the five-column grid', 
 
   const squatGrid = await screen.findByTestId('workout-lift-grid-0');
   expect(squatGrid).toHaveStyle({ gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' });
-  expect(squatGrid.querySelectorAll('[data-workout-circle-item="true"]')).toHaveLength(5);
+  expect(squatGrid.querySelectorAll('[data-workout-circle-item="true"]')).toHaveLength(10);
   expect(squatGrid.children[0]).toHaveStyle({ display: 'contents' });
   expect(squatGrid.children[1]).toHaveAttribute('data-testid', 'workout-set-group');
   expect(Array.from(squatGrid.querySelectorAll('[data-testid="workout-phase-tag"]')).map(tag => tag.textContent))
-    .toEqual(['WU', 'WU', 'TOP', 'BO', 'BO']);
+    .toEqual(['WU', 'WU', 'TOP', ...Array(7).fill('BO')]);
   const benchGrid = screen.getByTestId('workout-lift-grid-1');
   expect(Array.from(benchGrid.querySelectorAll('[data-testid="workout-phase-tag"]')).map(tag => tag.textContent))
     .toEqual(['TOP', 'BO', 'BO', 'BO', 'BO']);
@@ -2617,7 +2566,7 @@ test('Smart workout dates appear on Dashboard and in the Program completion-labe
   expect(await screen.findByTestId('program-workout-schedule-date-1'))
     .toHaveTextContent(/^Today · /);
   expect(screen.getByTestId('program-workout-schedule-date-2'))
-    .toHaveTextContent(/^Tomorrow · /);
+    .toHaveTextContent(/^Tomorrow$/);
 });
 
 test('Smart practical route is available above beginner and immediately replaces an untouched workout', async () => {
@@ -2845,7 +2794,7 @@ test.each(['en', 'nl', 'ca'])('compact header keeps localized context and opens 
   expect(screen.getByText(t.athleteLevelModalTitle)).toBeInTheDocument();
 });
 
-test('all main screens share one compact header while titles belong to their content', async () => {
+test('all main screens keep accessible names but only Workout retains its visible title', async () => {
   localStorage.clear();
   localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
     version: 1, trainingModel: 'smart', currentCycle: 1,
@@ -2862,10 +2811,19 @@ test('all main screens share one compact header while titles belong to their con
     expect(header.querySelector('[role="heading"], h1, h2')).toBeNull();
     expect(screen.getByTestId('app-viewport')).toHaveStyle({ paddingTop: `${BOTTOM_NAV_SPACE}px` });
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    if (label === 'Workout') {
+      expect(screen.getByTestId('screen-title')).toBeInTheDocument();
+      expect(screen.queryByTestId('screen-label')).not.toBeInTheDocument();
+    } else {
+      expect(screen.queryByTestId('screen-title')).not.toBeInTheDocument();
+      expect(screen.getByTestId('screen-label')).toHaveStyle({
+        position: 'absolute', width: '1px', height: '1px', margin: '-1px',
+      });
+    }
   }
 });
 
-test('Program keeps its title outside the bounded list and retains both end controls', async () => {
+test('Program keeps its accessible name outside the list without a visible title and retains both end controls', async () => {
   localStorage.clear();
   localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
     version: 1, trainingModel: 'smart', currentCycle: 1, trainingFocus: 'practical',
@@ -2899,7 +2857,7 @@ test('Program keeps its title outside the bounded list and retains both end cont
   expect(screen.getByTestId('app-viewport').scrollTop).toBe(0);
   expect(screen.getAllByRole('button', { name: 'Show fewer workouts' })).toHaveLength(2);
   expect(list.lastElementChild).toHaveTextContent('Show fewer workouts');
-  expect(list).toHaveStyle({ overflowY: 'auto', rowGap: '9.5px', paddingBottom: '8px' });
+  expect(list).toHaveStyle({ overflowY: 'auto', rowGap: '9.5px', paddingBottom: '0px' });
   expect(list.previousElementSibling).toBe(title);
   currentCard.getBoundingClientRect = () => ({ top: -50, bottom: 50, height: 100 });
   fireEvent.click(screen.getAllByRole('button', { name: 'Show fewer workouts' })[1]);
@@ -3257,4 +3215,16 @@ test.each(['nl', 'en', 'ca'])('Smart meet details show e1RM percentages and the 
   rerender(<MeetPlanContent {...props} meetPlan={[{ ...plan[0], frozen: true }]} />);
   expect(screen.getByText(t.meetPlanLocked)).toBeInTheDocument();
   expect(screen.queryByText('95%')).not.toBeInTheDocument();
+});
+
+
+test('Classic Program factors stay accessible after removing the visible route title', () => {
+  const t = translations.en;
+  render(<AllWorkouts workouts={[{ number: 1, type: 'rest' }]} currentIndex={0}
+    currentCycle={1} onSelect={() => {}} programProfile="kelaniSbd" t={t} />);
+  expect(screen.queryByTestId('screen-title')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: t.programTrainingFactors }));
+  expect(screen.getByRole('heading', { level: 3, name: 'Kelani SBD' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: t.back }));
+  expect(screen.queryByRole('heading', { level: 3 })).not.toBeInTheDocument();
 });

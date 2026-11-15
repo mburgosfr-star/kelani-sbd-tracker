@@ -9,7 +9,7 @@ Smart Training segueix una ruta ideal adaptada al nivell, incloent-hi el SBD Mee
 - Planifica treball pesant, mitjà i lleuger de Squat, Bench Press i Deadlift per al teu nivell actual
 - Prescriu escalfaments, treball principal, sèries de descens i accessoris
 - Apropa la competició després de Massa fàcil i afegeix recuperació després de Massa dur o de sèries fallides
-- Fa un seguiment de la preparació per a la competició sense substituir silenciosament els entrenaments de la ruta ni ajornar el Meet Day
+- Tria un entrenament Smart més lleuger abans de començar i consulta les explicacions de recuperació quan siguin rellevants
 - Mostra els entrenaments anteriors, l'actual i els futurs provisionals fins a la competició i la recuperació
 - Tots els càlculs de Smart es fan localment al teu dispositiu
 

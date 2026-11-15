@@ -1,5 +1,6 @@
+import { adaptiveFontSize } from './adaptiveScreenLayout';
 import React, { useMemo } from 'react';
-import { BOTTOM_NAV_SPACE } from './appChromeLayout';
+import { BOTTOM_NAV_SPACE, screenContentPadding } from './appChromeLayout';
 import StatsLineChart from './StatsLineChart';
 import { TRAINING_MODELS } from './smartTrainingConstants';
 import {
@@ -31,12 +32,12 @@ const THEME = {
   brown: '#a67c52',
 };
 
-const RESPONSIVE_SCREEN_PADDING = 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px';
+const RESPONSIVE_SCREEN_PADDING = screenContentPadding();
 const RESPONSIVE_CONTENT_UI = Object.freeze({
   screenPadding: `var(--kelani-screen-padding, ${RESPONSIVE_SCREEN_PADDING})`,
   headerTitleFontSize: 'clamp(30px, 7vw, 36px)',
   headerSubtitleFontSize: 'clamp(15px, 3.4vw, 17px)',
-  bodyFontSize: 'clamp(14px, 3.4vw, 17px)',
+  bodyFontSize: adaptiveFontSize('clamp(14px, 3.4vw, 17px)'),
 });
 const RESPONSIVE_STATS_UI = Object.freeze({
   tabGap: 'clamp(5px, 1.5vw, 8px)',
@@ -44,8 +45,8 @@ const RESPONSIVE_STATS_UI = Object.freeze({
   tabMinHeight: 'var(--kelani-button-height)',
   cardGap: 'clamp(2px, 0.4dvh, 4px)',
   cardPadding: 'clamp(1px, 0.7vw, 3px)',
-  chartTitleFontSize: 'clamp(18px, 4.4vw, 21px)',
-  chartTitleHeight: 'clamp(24px, 3.2dvh, 28px)',
+  chartTitleFontSize: adaptiveFontSize('clamp(18px, 4.4vw, 21px)'),
+  chartTitleHeight: adaptiveFontSize('clamp(24px, 3.2dvh, 28px)'),
   chartMinHeight: 120,
 });
 
@@ -67,8 +68,6 @@ export function statsScreenStyle() {
     height: `calc(100dvh - ${BOTTOM_NAV_SPACE}px - var(--kelani-header-space, 0px))`,
     margin: '0 auto',
     padding: RESPONSIVE_CONTENT_UI.screenPadding,
-    // Match the top inset. The chart grid shares the recovered height.
-    paddingBottom: 'clamp(10px, 1.8dvh, 18px)',
     boxSizing: 'border-box',
     color: THEME.text,
     fontFamily: 'sans-serif',

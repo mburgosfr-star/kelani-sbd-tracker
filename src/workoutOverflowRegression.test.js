@@ -8,7 +8,7 @@ test('a short viewport never disables scrolling on the active workout', () => {
   expect(appViewportStyle({ screen: 'current', allowContentScroll: false }))
     .toMatchObject({ '--kelani-screen-overflow-y': 'auto' });
   expect(appViewportStyle({ screen: 'dashboard', allowContentScroll: false }))
-    .toMatchObject({ '--kelani-screen-overflow-y': 'hidden' });
+    .toMatchObject({ '--kelani-screen-overflow-y': 'auto' });
 });
 
 function focusGeometry({ targetTop = 500, targetBottom = 550, liftTop, liftBottom, completionBottom, scrollTop = 100, viewportHeight = 600 } = {}) {

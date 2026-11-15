@@ -22,7 +22,7 @@ export default function CycleCompletedScreen({ history, currentCycle, t, weightU
   const panel = { padding: '10px 6px', borderTop: `1px solid ${theme.border}` };
   return (
     <div style={containerStyle} data-testid="cycle-completed-screen">
-      <div data-testid="screen-scroll-content" style={{ ...contentStyle, padding: '4px 0 12px' }}>
+      <div data-testid="screen-scroll-content" style={{ ...contentStyle, padding: '4px 0' }}>
         {header}
         <div className="kelani-cycle-review" style={{ display: 'grid', alignContent: 'space-evenly', minHeight: '100%', gap: 10 }}>
           <section style={{ display: 'flex', justifyContent: 'space-evenly', gap: 12, textAlign: 'center' }}>

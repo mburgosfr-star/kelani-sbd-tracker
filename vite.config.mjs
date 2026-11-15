@@ -45,7 +45,7 @@ export default defineConfig({
     sourcemap: false,
   },
   test: {
-    exclude: [...configDefaults.exclude, 'desktop/**', 'desktop-out/**'],
+    exclude: [...configDefaults.exclude, '.private/**', 'desktop/**', 'desktop-out/**'],
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/setupTests.js',

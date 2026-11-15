@@ -9,7 +9,7 @@ export const SMART_RETURN_TRAINING = Object.freeze({
   loadFactor: 0.9,
   accessoryLoadFactor: 0.8,
   minimumWorkSetsPerLift: WORKOUT_VOLUME_MIN_SETS,
-  version: 4,
+  version: 5,
 });
 
 function roundedLoad(weight, factor) {
@@ -78,7 +78,30 @@ export function canChooseSmartReturnTraining(workout) {
 export function buildSmartReturnTraining(workout) {
   if (!canChooseSmartReturnTraining(workout)) return workout;
 
-  const lifts = workout.lifts.map(block => {
+  // An older saved return choice may still contain a two-set baseline.
+  // Upgrade its untouched regular plan too, so restoring it cannot bring
+  // back the retired volume range. Loads and recorded state are unchanged.
+  const baselineLifts = workout.lifts.map(block => {
+    const sets = completeWorkoutVolumeGrid(block);
+    const gridItemCount = (block.warmups || []).length + sets.length;
+    return {
+      ...block,
+      sets,
+      ...(block.smartPrescription ? { smartPrescription: {
+        ...block.smartPrescription,
+        completeGrid: gridItemCount % WORKOUT_GRID_COLUMNS === 0,
+        gridItemCount,
+      } } : {}),
+    };
+  });
+  const baseline = {
+    ...workout,
+    lifts: baselineLifts,
+    sets: baselineLifts[0].sets,
+    warmups: baselineLifts[0].warmups || [],
+  };
+
+  const lifts = baseline.lifts.map(block => {
     const trainingMax = trainingMaxForBlock(block);
     let topWeight = null;
     let sets = block.sets.map(set => {
@@ -121,7 +144,7 @@ export function buildSmartReturnTraining(workout) {
     smartReturnTraining: true,
     smartReturnTrainingVersion: SMART_RETURN_TRAINING.version,
     smartDayType: 'deload',
-    smartReturnBaseline: workout,
+    smartReturnBaseline: baseline,
     lifts,
     sets: lifts[0].sets,
     warmups: lifts[0].warmups,

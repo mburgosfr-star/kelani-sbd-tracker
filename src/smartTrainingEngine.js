@@ -3803,7 +3803,7 @@ export function constrainExplicitMediumLiftDose({
   });
 }
 
-// Five consecutive allowed counts (2–6) give exactly one complete grid.
+// Five consecutive allowed counts (3–7) give exactly one complete grid.
 // Layout must never pad a volume block beyond the prescribed upper bound.
 export function completeSmartLiftGrid(options = {}) {
   return completeWorkoutVolumeGrid(options);

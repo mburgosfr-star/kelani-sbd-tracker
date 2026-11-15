@@ -469,8 +469,8 @@ test('taper uses the agreed role-specific top sets and reduced grid volume', () 
         backoff: {
           reps: volumeReps,
           pct: volumePct,
-          minimumSetCount: 2,
-          maximumSetCount: 6,
+          minimumSetCount: 3,
+          maximumSetCount: 7,
         },
       });
     } else {
@@ -478,8 +478,8 @@ test('taper uses the agreed role-specific top sets and reduced grid volume', () 
         kind: 'taper-work-sets',
         reps: volumeReps,
         pct: volumePct,
-        minimumSetCount: 2,
-        maximumSetCount: 6,
+        minimumSetCount: 3,
+        maximumSetCount: 7,
       });
     }
     expect(item.prescription).toMatchObject({
@@ -528,8 +528,8 @@ test.each(SMART_IDEAL_LEVELS.flatMap(athleteLevel =>
   const finalBench = taper[3].lifts.find(item => item.lift === 'Bench');
   expect(finalBench.prescription.topSet).toBeUndefined();
   expect(finalBench.prescription).toMatchObject({
-    kind: 'taper-work-sets', pct: 0.7, reps: 3, minimumSetCount: 2,
-    maximumSetCount: 6, fullGridRequired: true,
+    kind: 'taper-work-sets', pct: 0.7, reps: 3, minimumSetCount: 3,
+    maximumSetCount: 7, fullGridRequired: true,
   });
 });
 

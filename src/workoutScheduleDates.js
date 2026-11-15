@@ -131,6 +131,7 @@ export function formatWorkoutScheduleDate(dateKey, {
   todayLabel = 'today',
   tomorrowLabel = 'tomorrow',
   compact = false,
+  omitTomorrowDate = false,
 } = {}) {
   const parsedKey = parseWorkoutDateKey(dateKey);
   const todayKey = parseWorkoutDateKey(today);
@@ -147,7 +148,7 @@ export function formatWorkoutScheduleDate(dateKey, {
     return `${capitalizeFirst(todayLabel)} · ${absoluteLabel}`;
   }
   if (parsedKey === addLocalDays(todayKey, 1)) {
-    return `${capitalizeFirst(tomorrowLabel)} · ${absoluteLabel}`;
+    return omitTomorrowDate ? capitalizeFirst(tomorrowLabel) : `${capitalizeFirst(tomorrowLabel)} · ${absoluteLabel}`;
   }
 
   return capitalizeFirst(absoluteLabel);

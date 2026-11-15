@@ -1,0 +1,3 @@
+- Els blocs nous de treball i de descàrrega tenen 3–7 sèries. La graella completa fa passar els blocs de 2 sèries a 7; es conserven els entrenaments començats.
+- Tria un entrenament Smart més lleuger al costat de Finalitza l’entrenament abans de començar. L’explicació de recuperació apareix directament a la pantalla.
+- El text i els espais s’adapten a l’espai disponible. Les pantalles principals no repeteixen els títols; Programa mostra Demà sense la data.

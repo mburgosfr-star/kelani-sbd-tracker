@@ -359,7 +359,7 @@ test('replaces a stale pre-generated next workout immediately after completion',
   ]);
   expect(
     refreshedWorkouts[10].smartGeneratedPrescriptionVersion
-  ).toBe(13);
+  ).toBe(14);
   const refreshedPrimaryLift = refreshedWorkouts[10].lifts[0];
   expect(
     (refreshedPrimaryLift.warmups || []).length +

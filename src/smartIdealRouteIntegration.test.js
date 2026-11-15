@@ -1335,7 +1335,7 @@ test('beginner W22 keeps taper intensities and five-rep light work on a full gri
       { weight: 20, reps: 5 },
       { weight: 30, reps: 1 },
     ]);
-  expect(squat.sets).toHaveLength(3);
+  expect(squat.sets).toHaveLength(8);
   expect(squat.sets[0]).toMatchObject({
     weight: 38.5,
     reps: 1,
@@ -1344,7 +1344,7 @@ test('beginner W22 keeps taper intensities and five-rep light work on a full gri
     prescribedPct: 0.9,
   });
   expect(squat.sets.slice(1)).toEqual(
-    expect.arrayContaining(Array.from({ length: 2 }, () => expect.objectContaining({
+    expect.arrayContaining(Array.from({ length: 7 }, () => expect.objectContaining({
       labelKey: 'backoff',
       weight: 29.5,
       reps: 3,
@@ -1352,7 +1352,7 @@ test('beginner W22 keeps taper intensities and five-rep light work on a full gri
       prescribedPct: 0.70,
     })))
   );
-  expect(squat.warmups.length + squat.sets.length).toBe(5);
+  expect(squat.warmups.length + squat.sets.length).toBe(10);
 
   expect(bench.warmups).toHaveLength(0);
   expect(bench.sets.map(({ weight, reps }) => ({ weight, reps })))
@@ -1384,7 +1384,7 @@ test('beginner W24 uses a useful five-column deadlift ladder and preserves the p
       { weight: 20, reps: 5 },
       { weight: 40, reps: 3 },
     ]);
-  expect(deadlift.sets).toHaveLength(3);
+  expect(deadlift.sets).toHaveLength(8);
   expect(deadlift.sets[0]).toMatchObject({
     weight: 54,
     reps: 1,
@@ -1399,7 +1399,7 @@ test('beginner W24 uses a useful five-column deadlift ladder and preserves the p
     precisePct: 0.70,
     prescribedPct: 0.70,
   });
-  expect(deadlift.warmups.length + deadlift.sets.length).toBe(5);
+  expect(deadlift.warmups.length + deadlift.sets.length).toBe(10);
 
   expect(workout.lifts.map(block => block.lift)).toEqual(['Deadlift']);
 });
@@ -1452,11 +1452,11 @@ test('C4W22 preserves intermediate taper weights in five-column grids', () => {
     labelKey: 'topTriple', weight: 80, reps: 3, prescribedPct: 0.8,
   });
   expect(bench.sets.slice(1)).toEqual(
-    Array.from({ length: 2 }, () => expect.objectContaining({
+    Array.from({ length: 7 }, () => expect.objectContaining({
       labelKey: 'backoff', weight: 60, reps: 5, prescribedPct: 0.60,
     }))
   );
-  expect(bench.warmups.length + bench.sets.length).toBe(5);
+  expect(bench.warmups.length + bench.sets.length).toBe(10);
 });
 
 test('beginner W25 uses the minimum taper volume needed to fill its grid', () => {
@@ -1477,8 +1477,8 @@ test('beginner W25 uses the minimum taper volume needed to fill its grid', () =>
 
   expect(bench.lift).toBe('Bench');
   expect(bench.warmups.length + bench.sets.length).toBe(5);
-  expect(bench.sets.length).toBeGreaterThanOrEqual(2);
-  expect(bench.sets.length).toBeLessThanOrEqual(6);
+  expect(bench.sets.length).toBeGreaterThanOrEqual(3);
+  expect(bench.sets.length).toBeLessThanOrEqual(7);
   bench.sets.forEach(set => {
     expect(set).toMatchObject({
       labelKey: 'workSets',
@@ -1553,8 +1553,8 @@ test('every ideal-route taper day preserves its role dose and reduced grid volum
           const volumeSets = workSets.filter(set => (
             set.labelKey === 'backoff' || set.labelKey === 'workSets'
           ));
-          expect(volumeSets.length).toBeGreaterThanOrEqual(2);
-          expect(volumeSets.length).toBeLessThanOrEqual(6);
+          expect(volumeSets.length).toBeGreaterThanOrEqual(3);
+          expect(volumeSets.length).toBeLessThanOrEqual(7);
           expect(topSets.length).toBeLessThanOrEqual(1);
           topSets.forEach(set => {
             expect(set).toMatchObject({
@@ -1595,8 +1595,8 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
     workouts.slice(0, 27).filter(workout => workout.type === 'training')
       .forEach(workout => {
         workout.lifts.forEach(liftBlock => {
-          const minimum = 2;
-          const maximum = 6;
+          const minimum = 3;
+          const maximum = 7;
           const topCount = liftBlock.sets.filter(set => (
             set.labelKey.startsWith('top')
           )).length;
@@ -1678,16 +1678,16 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
           const volumeSets = workSets.filter(set => (
             set.labelKey === 'backoff' || set.labelKey === 'workSets'
           ));
-          expect(volumeSets.length).toBeGreaterThanOrEqual(2);
-          expect(volumeSets.length).toBeLessThanOrEqual(6);
+          expect(volumeSets.length).toBeGreaterThanOrEqual(3);
+          expect(volumeSets.length).toBeLessThanOrEqual(7);
         }
 
         if (workout.smartIdealRoute?.stage === 'taper') {
           const volumeSets = workSets.filter(set => (
             set.labelKey === 'backoff' || set.labelKey === 'workSets'
           ));
-          expect(volumeSets.length).toBeGreaterThanOrEqual(2);
-          expect(volumeSets.length).toBeLessThanOrEqual(6);
+          expect(volumeSets.length).toBeGreaterThanOrEqual(3);
+          expect(volumeSets.length).toBeLessThanOrEqual(7);
         }
 
         if (
@@ -1700,7 +1700,7 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
             reps: 1,
             precisePct: 0.9,
           });
-          expect(workSets.length).toBeGreaterThanOrEqual(2);
+          expect(workSets.length).toBeGreaterThanOrEqual(3);
           workSets.slice(1).forEach(set => {
             expect(set).toMatchObject({
               labelKey: 'backoff',
@@ -1932,8 +1932,8 @@ test.each(SMART_IDEAL_LEVELS.flatMap(athleteLevel =>
       if (bench) {
         taperBench.push(workout.smartIdealRoute.workoutNumber);
         if (workout.smartIdealRoute.workoutNumber === 25) {
-          expect(bench.sets.length).toBeGreaterThanOrEqual(2);
-          expect(bench.sets.length).toBeLessThanOrEqual(6);
+          expect(bench.sets.length).toBeGreaterThanOrEqual(3);
+          expect(bench.sets.length).toBeLessThanOrEqual(7);
           expect((bench.warmups.length + bench.sets.length) % 5).toBe(0);
           bench.sets.forEach(set => {
             expect(set).toMatchObject({ labelKey: 'workSets', reps: 3, prescribedPct: 0.7 });

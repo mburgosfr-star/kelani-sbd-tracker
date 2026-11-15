@@ -343,12 +343,12 @@ test('preserves a begun accessory plan when the active workout regenerates', () 
 });
 
 
-test('gives Ultra Bench Strength two Deadlift work sets', () => {
+test('gives Ultra Bench Strength seven Deadlift work sets on the shared grid', () => {
   const workouts = generateUltraProgram(145, 100, 180);
   const workout = workouts.find(item => item.label === 'Ultra Bench Strength');
   const deadlift = workout.lifts.find(item => item.lift === 'Deadlift');
 
-  expect(deadlift.sets).toHaveLength(2);
+  expect(deadlift.sets).toHaveLength(7);
 
   deadlift.sets.forEach(set => {
     expect(set).toMatchObject({
@@ -1141,10 +1141,6 @@ test('splits training fallback details into separate modal rows', () => {
     })
   ).toEqual([
     {
-      label: 'Current blocker',
-      value: 'Meet plan not ready',
-    },
-    {
       label: 'Fatigue score',
       value: '1/2 (recovery starts at 2)',
     },
@@ -1488,8 +1484,8 @@ test('generates progressive C3W18 training without template prescriptions', () =
       ['backoff', 'workSets'].includes(set.labelKey)
     );
 
-    expect(volumeSets.length).toBeGreaterThanOrEqual(2);
-    expect(volumeSets.length).toBeLessThanOrEqual(6);
+    expect(volumeSets.length).toBeGreaterThanOrEqual(3);
+    expect(volumeSets.length).toBeLessThanOrEqual(7);
     expect(
       ((liftBlock.warmups || []).length + (liftBlock.sets || []).length) % 5
     ).toBe(0);

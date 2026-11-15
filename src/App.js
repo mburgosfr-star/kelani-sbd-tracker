@@ -1,9 +1,10 @@
+import { adaptiveFontSize, fitScreenContent, screenFontCandidates, scrollRegionsFit } from './adaptiveScreenLayout';
 import { createBackupHistory, backupDay } from './backupHistory';
 import { getBackupHistoryIO, writeVerifiedNativeBackup } from './backupHistoryStorage';
 import BackupHistoryModal from './BackupHistoryModal';
 import { responsiveFontSize } from './responsiveTypography';
 import { getDesktopBridge, isDesktopRuntime, DESKTOP_AUTOMATIC_BACKUP_PATH } from './desktopRuntime';
-import { BOTTOM_NAV_SPACE, APP_HEADER_SPACE } from './appChromeLayout';
+import { BOTTOM_NAV_SPACE, APP_HEADER_SPACE, NAV_DIVIDER_INSET, screenContentPadding } from './appChromeLayout';
 import { WORKOUT_GRID_COLUMNS } from './workoutGridPolicy';
 import CycleCompletedScreen from './CycleCompletedScreen';
 import AchievementShareModal from './AchievementShareModal';
@@ -119,7 +120,6 @@ import {
   buildSmartReturnTraining,
   getDaysSinceLastCompletedWorkout,
   restoreSmartReturnTraining,
-  SMART_RETURN_TRAINING,
 } from './smartReturnTraining';
 import { getActiveMultiLiftStep } from './workoutFocusSequence';
 import {
@@ -1604,10 +1604,10 @@ const THEME = {
 
 const SUBTLE_DIVIDER = '1px solid rgba(255, 244, 230, 0.34)';
 const HEADER_CONTENT_GAP = 'clamp(9px, 1.2dvh, 12px)';
-const BOTTOM_NAV_DIVIDER_OFFSET = 'clamp(4px, 0.7dvh, 6px)';
-const RESPONSIVE_SCREEN_PADDING = 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 16px';
+const BOTTOM_NAV_DIVIDER_OFFSET = NAV_DIVIDER_INSET;
+const RESPONSIVE_SCREEN_PADDING = screenContentPadding();
 // Compact content keeps the same header position as every other screen.
-const COMPACT_SCREEN_PADDING = 'clamp(10px, 1.8dvh, 18px) clamp(14px, 4vw, 20px) 10px';
+const COMPACT_SCREEN_PADDING = RESPONSIVE_SCREEN_PADDING;
 const COMPACT_CONTENT_ROW_GAP = 'clamp(6px, 0.8dvh, 9px)';
 
 export const FAILED_SET_COLOR = THEME.meet;
@@ -1657,20 +1657,6 @@ export function scrollRegionNeedsScroll(
   return measuredScrollHeight - measuredClientHeight > measuredTolerance;
 }
 
-export function resolveAdaptiveScreenDensity(
-  previous = { screen: null, compact: false },
-  screen,
-  contentNeedsCompaction = false
-) {
-  const compact = previous.screen === screen
-    ? Boolean(previous.compact || contentNeedsCompaction)
-    : Boolean(contentNeedsCompaction);
-
-  return previous.screen === screen && previous.compact === compact
-    ? previous
-    : { screen, compact };
-}
-
 export function shouldMeasureScreenMutations(mutations = []) {
   return mutations.some(mutation => {
     const element = mutation.target?.nodeType === 1
@@ -1698,47 +1684,6 @@ function getActiveScreenFlowRoot(viewport) {
   }) || null;
 }
 
-const SCREEN_CONTENT_ELEMENT_TAGS = new Set([
-  'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'IMG', 'SVG', 'CANVAS', 'VIDEO', 'AUDIO',
-]);
-
-function measureActualScreenContentBottom(viewport) {
-  const screenRoot = getActiveScreenFlowRoot(viewport);
-  if (!screenRoot) return 0;
-
-  const viewportRect = viewport.getBoundingClientRect();
-  const viewportScrollTop = viewport.scrollTop;
-
-  return Array.from(screenRoot.querySelectorAll('*')).reduce((lowestBottom, element) => {
-    const style = window.getComputedStyle(element);
-    if (
-      style.display === 'none' ||
-      style.visibility === 'hidden' ||
-      style.position === 'fixed'
-    ) {
-      return lowestBottom;
-    }
-
-    const rect = element.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return lowestBottom;
-
-    const hasDirectText = Array.from(element.childNodes).some(node =>
-      node.nodeType === Node.TEXT_NODE && (node.textContent || '').trim()
-    );
-    const isContentElement = hasDirectText ||
-      SCREEN_CONTENT_ELEMENT_TAGS.has(element.tagName) ||
-      element.getAttribute('role') === 'button';
-
-    // Full-height screen and card wrappers create technical overflow even
-    // when their visible content already fits. Only real text, controls and
-    // rendered media determine whether scrolling is useful.
-    if (!isContentElement) return lowestBottom;
-
-    const contentBottom = rect.bottom - viewportRect.top + viewportScrollTop;
-    return Math.max(lowestBottom, contentBottom);
-  }, 0);
-}
-
 export function appViewportStyle({
   screen,
   workoutNeedsNavClearance = false,
@@ -1757,6 +1702,7 @@ export function appViewportStyle({
     minHeight: '100dvh',
     height: '100dvh',
     color: THEME.text,
+    fontSize: adaptiveFontSize('clamp(16px, 4.0712vw, 20px)'),
     overflowX: 'hidden',
     // Every main screen owns a bounded middle scroll region. Letting this
     // outer viewport scroll would allow content to travel behind the fixed
@@ -1766,12 +1712,10 @@ export function appViewportStyle({
     // Workout rows can contain preparation and accessory grids whose
     // intrinsic height is not reflected reliably by the overflow probe.
     // `auto` still has no scroll range when the complete workout fits.
-    '--kelani-screen-overflow-y': screen === 'current' || allowContentScroll
-      ? 'auto'
-      : 'hidden',
+    '--kelani-screen-overflow-y': 'auto',
     ...(compactToFit ? {
       '--kelani-screen-padding': COMPACT_SCREEN_PADDING,
-      '--kelani-completed-screen-padding': '10px clamp(10px, 3vw, 16px)',
+      '--kelani-completed-screen-padding': screenContentPadding('clamp(10px, 3vw, 16px)'),
       '--kelani-content-row-gap': COMPACT_CONTENT_ROW_GAP,
       '--kelani-stats-card-gap': '1px',
       '--kelani-stats-tab-gap': 'clamp(3px, 1vw, 5px)',
@@ -1809,17 +1753,17 @@ const RESPONSIVE_CONTENT_UI = Object.freeze({
   screenPadding: `var(--kelani-screen-padding, ${RESPONSIVE_SCREEN_PADDING})`,
   headerTitleFontSize: 'clamp(30px, 7vw, 36px)',
   headerSubtitleFontSize: 'clamp(15px, 3.4vw, 17px)',
-  bodyFontSize: 'clamp(14px, 3.4vw, 17px)',
-  compactFontSize: 'clamp(11px, 2.7vw, 14px)',
+  bodyFontSize: adaptiveFontSize('clamp(14px, 3.4vw, 17px)'),
+  compactFontSize: adaptiveFontSize('clamp(11px, 2.7vw, 14px)'),
 });
 
 const RESPONSIVE_SETTINGS_UI = Object.freeze({
   rowGap: 'clamp(8px, 2vw, 12px)',
   rowPadding: 'var(--kelani-settings-row-padding, clamp(3px, 0.55dvh, 6px) 0)',
-  labelFontSize: 'clamp(16px, 4vw, 20px)',
-  descriptionFontSize: 'clamp(13px, 3.2vw, 16px)',
-  valueFontSize: 'clamp(15px, 3.7vw, 18px)',
-  buttonFontSize: 'clamp(15px, 3.7vw, 18px)',
+  labelFontSize: adaptiveFontSize('clamp(16px, 4vw, 20px)'),
+  descriptionFontSize: adaptiveFontSize('clamp(13px, 3.2vw, 16px)'),
+  valueFontSize: adaptiveFontSize('clamp(15px, 3.7vw, 18px)'),
+  buttonFontSize: adaptiveFontSize('clamp(15px, 3.7vw, 18px)'),
   buttonMinHeight: 'var(--kelani-button-height)',
   modalTitleFontSize: 'clamp(20px, 4.8vw, 24px)',
   modalBodyFontSize: 'clamp(15px, 3.6vw, 18px)',
@@ -1874,21 +1818,13 @@ export function regularDashboardScreenStyle({ compact = false } = {}) {
   });
 }
 
-export function regularDashboardContentStyle({ spreadContent = false, compact = false } = {}) {
-  const defaultRowGap = spreadContent
-    ? 'clamp(10px, 1.4dvh, 16px)'
-    : compact
-      ? 'clamp(8px, 1.1dvh, 12px)'
-      : 'clamp(14px, 2.2dvh, 24px)';
-
+export function regularDashboardContentStyle() {
   return {
     ...scrollableScreenContentStyle(),
     minHeight: 0,
     display: 'grid',
-    // Dense dashboards use actual gaps, never stretch spare height into
-    // large empty bands. Keep the shared screen title inset unchanged.
-    alignContent: compact ? 'start' : 'space-between',
-    rowGap: compact ? 'clamp(4px, 0.6dvh, 6px)' : `var(--kelani-content-row-gap, ${defaultRowGap})`,
+    alignContent: 'space-between',
+    rowGap: 'var(--kelani-content-row-gap, clamp(8px, 1.1dvh, 12px))',
   };
 }
 
@@ -1938,7 +1874,6 @@ export function programScreenStyle() {
   // inherited minimum pushes the last rows beneath the fixed navigation.
   return fixedChromeScreenStyle({
     ...responsiveContentScreenStyle(),
-    paddingBottom: 12,
   });
 }
 
@@ -1980,7 +1915,7 @@ export function programWorkoutListContainerStyle({ showAll = false, marginTop = 
     rowGap: showAll ? expandedGap : 4,
     marginTop: 0,
     paddingTop: marginTop,
-    paddingBottom: Math.max(8, marginTop),
+    paddingBottom: marginTop,
     borderTop: 'none',
     borderBottom: 'none',
     boxSizing: 'border-box',
@@ -2049,10 +1984,10 @@ export function MeetDayDashboardPlan({
       }}
     >
       <div style={{ textAlign: 'center' }}>
-        <ScreenTitle title={t.dashboard} />
+        <HiddenScreenTitle title={t.dashboard} />
         <h3 style={{
           color: THEME.meet,
-          fontSize: 'clamp(24px, 6vw, 30px)',
+          fontSize: adaptiveFontSize('clamp(24px, 6vw, 30px)'),
           fontWeight: 900,
           lineHeight: 1.2,
           margin: '0 0 4px',
@@ -2064,7 +1999,7 @@ export function MeetDayDashboardPlan({
             data-testid="dashboard-workout-schedule-date"
             style={{
               color: THEME.muted,
-              fontSize: 'clamp(13px, 3.2vw, 16px)',
+              fontSize: adaptiveFontSize('clamp(13px, 3.2vw, 16px)'),
               fontWeight: 800,
               lineHeight: 1.3,
               textAlign: 'center',
@@ -2095,7 +2030,6 @@ export function meetWorkoutScreenStyle() {
     // A meet contains three full lift blocks plus the completion action.
     // The lift collection may absorb genuinely free viewport height, while
     // its intrinsic height still makes smaller screens scroll naturally.
-    paddingBottom: 4,
   });
 }
 
@@ -2130,7 +2064,6 @@ export function activeWorkoutLiftBlockStyle() {
 export function restWorkoutScreenStyle() {
   return fixedChromeScreenStyle({
     ...responsiveContentScreenStyle(),
-    paddingBottom: 'clamp(10px, 1.8dvh, 18px)',
   });
 }
 
@@ -2197,7 +2130,7 @@ export function completedWorkoutScreenStyle() {
     width: '100%',
     maxWidth: 500,
     margin: '0 auto',
-    padding: 'var(--kelani-completed-screen-padding, 12px clamp(10px, 3vw, 16px) 8px)',
+    padding: `var(--kelani-completed-screen-padding, ${screenContentPadding('clamp(10px, 3vw, 16px)')})`,
     boxSizing: 'border-box',
     background: THEME.bg,
     color: THEME.text,
@@ -2248,7 +2181,7 @@ export function workoutCompletionButtonStyle({ enabled = true, active = false } 
     border: `1px solid ${THEME.primary}`,
     borderRadius: 8,
     cursor: enabled ? 'pointer' : 'not-allowed',
-    margin: '14px auto 18px',
+    margin: '14px auto 0',
     opacity: 1,
     boxShadow: isActive
       ? '0 0 0 3px rgba(255, 138, 61, 0.30)'
@@ -2332,7 +2265,7 @@ export function WorkoutCompletionButton({
 }
 
 export function workoutCompletionButtonMargin({ isMeetDay = false } = {}) {
-  return isMeetDay ? '8px auto 18px' : '2px auto 18px';
+  return isMeetDay ? '8px auto 0' : '2px auto 0';
 }
 
 // // const APP_TOP_BAR_HEIGHT = 50; // unused // unused after local black statusbar patch
@@ -3651,7 +3584,7 @@ export function settingsContentLayoutStyle() {
     flex: 1,
     minHeight: 0,
     display: 'grid',
-    gridTemplateRows: 'auto minmax(min-content, 1fr)',
+    gridTemplateRows: 'minmax(min-content, 1fr)',
     rowGap: 0,
     alignContent: 'stretch',
   };
@@ -3884,9 +3817,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewShareDashboardItem,
-    t.whatsNewTrainingPrecisionItem,
-    t.whatsNewUpdateChannelsItem,
+    t.whatsNewVolumeGridItem,
+    t.whatsNewWorkoutActionsItem,
+    t.whatsNewAdaptiveLayoutItem,
   ];
 
   return (
@@ -6838,8 +6771,7 @@ export function shouldShowSmartDecisionReason(summary = {}, workout = {}) {
 }
 
 function getSmartTrainingSelectionDisplayText(workout, t = translations.en) {
-  // Meet-readiness numbers are presented as explicitly named detail rows.
-  // The old combined “e1RM limiter / target” sentence was ambiguous.
+  // Strength comparisons belong on the Dashboard, not in the workout explanation.
   return null;
 }
 
@@ -7218,7 +7150,7 @@ export function getSmartModalDetailRows(
   if (isMeetDay) {
     return [
       {
-        label: t.smartMeetDayReadyLabel,
+        label: t.smartMeetDayExecutionLabel,
         value: t.smartMeetDayReadyText,
         kind: 'meet-day',
       },
@@ -7266,129 +7198,6 @@ export function getSmartModalDetailRows(
   const isFatigueRecovery =
     summary.dayType === SMART_DAY_TYPES.RECOVERY &&
     summary.reason === SMART_DECISION_REASONS.FATIGUE_RECOVERY;
-  const isTrainingFallback =
-    summary.dayType === SMART_DAY_TYPES.TRAINING &&
-    summary.reason === SMART_DECISION_REASONS.TRAINING_FALLBACK;
-  const hasMeetReadinessDetail = Boolean(
-    readiness.meetPlanWeakestLift ||
-    Object.keys(readiness.meetPlanReadiness || {}).length > 0
-  );
-
-  // The modal must show readiness detail wherever it is available. Rest and
-  // recovery days are still part of the route, so their per-lift progress is
-  // as useful as it is on a training day.
-  const showMeetReadinessDetail =
-    summary.dayType !== SMART_DAY_TYPES.MEET &&
-    (hasMeetReadinessDetail || isTrainingFallback);
-
-  if (showMeetReadinessDetail) {
-    const formatEstimate = value =>
-      `${formatDecimalDisplay(value, {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      })} kg`;
-    const oneRMBlockerText =
-      t.smartOneRMNotReached;
-    const meetReady = Boolean(
-      readiness.meetPlanReady || readiness.meetPlanFullyDemonstrated
-    );
-    const isIdealRouteTaper = workout?.smartIdealRoute?.stage === 'taper';
-    const phaseSeverity = { opener: 0, 'second-attempt': 1, 'third-attempt': 2 };
-    const meetPlanReadinessByLift = readiness.meetPlanReadiness || {};
-    const blockingLifts = Object.keys(meetPlanReadinessByLift)
-      .filter(lift => {
-        const phase = meetPlanReadinessByLift[lift]?.readinessPhase;
-        return phase && phase !== 'ready';
-      })
-      .sort((a, b) =>
-        (phaseSeverity[meetPlanReadinessByLift[a]?.readinessPhase] ?? 99) -
-        (phaseSeverity[meetPlanReadinessByLift[b]?.readinessPhase] ?? 99)
-      );
-    const statusText = meetReady
-      ? isIdealRouteTaper
-        ? (t.smartMeetFullyReadyTaper)
-        : (t.smartMeetFullyReady)
-      : blockingLifts.length > 0
-        ? `${blockingLifts.join(', ')} (${oneRMBlockerText})`
-        : (t.smartMeetPlanNotReady);
-
-    // Readiness is informative on the authoritative ideal route. It no
-    // longer blocks or reschedules Meet Day, so an unfinished lift must not
-    // be presented as a "current blocker". Keep the positive all-ready
-    // status and the useful per-lift readiness rows.
-    if (meetReady || !followsIdealRoute) {
-      rows.push({
-        label: meetReady
-          ? (t.smartMeetStatus)
-          : blockingLifts.length > 1
-            ? (t.smartCurrentBlockers)
-            : (t.smartCurrentBlocker),
-        value: statusText,
-      });
-    }
-
-    // One compact row per lift instead of three metric cells each (best e1RM
-    // this cycle / target / gap). The blockers row above can name more than one
-    // lift (e.g. Squat AND Deadlift), so every named blocker still needs its
-    // own visible numbers, but a lift that has already reached its target
-    // doesn't need three cells to say so.
-    ['Squat', 'Bench', 'Deadlift'].forEach(lift => {
-      const liftReadiness = meetPlanReadinessByLift[lift];
-      if (!liftReadiness) return;
-
-      // A workout snapshot can contain an older, coarser readiness value.
-      // That snapshot is intentionally stable, but it is not necessarily
-      // the live 2.5kg dashboard value and persisted workouts can keep it
-      // for days. The modal is presentation UI, so
-      // prefer the live dashboard source passed by App; fall back to the
-      // snapshot only for isolated helpers/tests that have no app state.
-      // This live source must itself be scoped to the active cycle - an
-      // all-time best from a previous cycle must never make this cycle's
-      // blocker look resolved while the blocker list above still names it.
-      const hasLiveCycleEstimate = Object.prototype.hasOwnProperty.call(
-        currentE1RMs || {},
-        lift
-      );
-      const liftCycleEstimate = hasLiveCycleEstimate
-        ? Number(currentE1RMs?.[lift]) || 0
-        : Number(liftReadiness.currentCycleBestE1RM) || 0;
-      const liftReadinessTarget = Number(
-        liftReadiness.oneRMTargetE1RM || liftReadiness.currentCycleTarget
-          || liftReadiness.readinessTargetAttempt
-      ) || 0;
-
-      if (!(liftReadinessTarget > 0)) return;
-
-      if (!(liftCycleEstimate > 0)) {
-        rows.push({
-          label: lift,
-          value: t.smartCycleNoDataYet,
-          kind: 'lift-readiness',
-        });
-        return;
-      }
-
-      const liftDisplayCycleEstimate = liftCycleEstimate;
-      const liftDisplayReadinessTarget = liftReadinessTarget;
-      // Compare the unrounded estimates. Formatting only limits the number
-      // of digits shown; it must not change meet readiness or the saved gap.
-      const liftReadinessGap = Math.max(
-        liftDisplayReadinessTarget - liftDisplayCycleEstimate,
-        0
-      );
-      const liftIsReady = liftReadinessGap <= 0;
-      const cycleEstimateLabel = t.smartCycleEstimateShort;
-
-      rows.push({
-        label: lift,
-        value: liftIsReady
-          ? `${t.smartLiftReady} (${cycleEstimateLabel} ${formatEstimate(liftDisplayCycleEstimate)})`
-          : `${cycleEstimateLabel} ${formatEstimate(liftDisplayCycleEstimate)} → ${formatEstimate(liftDisplayReadinessTarget)} (${t.smartOpenerGapShort} ${formatEstimate(liftReadinessGap)})`,
-        kind: 'lift-readiness',
-      });
-    });
-  }
-
   rows.push(...getSmartPrescriptionDetailRows(workout, t));
 
   const meetProjection = readiness.meetProjection || null;
@@ -7403,20 +7212,6 @@ export function getSmartModalDetailRows(
         : (t.smartProjectionUnavailable),
     });
 
-  }
-
-  if (showMeetReadinessDetail && hasMeetReadinessDetail) {
-    const readinessBasisText = followsIdealRoute
-      ? t.smartIdealRouteReadinessBasisText
-      : readiness.meetProjection?.available
-        ? (t.smartReadinessBasisTextWithProjection)
-        : (t.smartReadinessBasisText);
-
-    rows.push({
-      label: t.smartReadinessBasis,
-      value: readinessBasisText,
-      kind: 'note',
-    });
   }
 
   // A zero fatigue score and zero missed sets add no decision information.
@@ -7472,670 +7267,68 @@ export function getSmartModalDetailRows(
   return rows;
 }
 
-export function SmartDayTypeInline({
-  contentTitle = null,
-  workout,
-  t,
-  weightUnit = WEIGHT_UNITS.KG,
-  currentE1RMs = {},
-  meetProjectionDateLabel = '',
-  onChooseReturnTraining = null,
-  daysSinceLastWorkout = null,
-  canChangeReturnTraining = false,
-}) {
-  const [showSmartInfo, setShowSmartInfo] = useState(false);
-  const [smartCopyStatus, setSmartCopyStatus] = useState(null);
-  const label = getSmartDayTypeDisplayLabel(workout?.smartDayType, t) || (contentTitle
-    ? workout?.type === 'rest' ? t.restAndRecovery : t.training
-    : null);
-  if (!label) return null;
-
-  function formatSmartInfoText(value) {
-    if (!value) return null;
-
-    return String(value)
-      .replace(/\s+/g, ' ')
-      .trim()
-      .replace(/(^|[.!?]\s+)([a-z])/g, (_, prefix, letter) => `${prefix}${letter.toUpperCase()}`);
+export function getSmartWorkoutExplanation(workout = {}, t = translations.en) {
+  t = completeUiTranslations(t);
+  if (workout.smartReturnTraining) return t.smartReturnTrainingShort;
+  const summary = workout.smartDecisionSummary || {};
+  if (workout.smartIdealRoute?.adjustmentReason === 'too-hard-recovery') {
+    return t.smartReasonIdealRouteTooHardRecovery;
   }
-
-  const reasonText = shouldShowSmartDecisionReason(
-    workout?.smartDecisionSummary,
-    workout
-  )
-    ? formatSmartInfoText(
-      getSmartDecisionReasonDisplayText(workout?.smartDecisionSummary, t, workout)
-    )
-    : null;
-  const hasDedicatedPostMeetRecoveryExplanation = Boolean(
-    workout?.smartDecisionSummary?.reason === SMART_DECISION_REASONS.POST_MEET_RECOVERY ||
-    workout?.smartIdealRoute?.stage === 'post-meet'
-  );
-  const selectionText = formatSmartInfoText(getSmartTrainingSelectionDisplayText(workout, t));
-  const meetDayProjectedTotal = workout?.type === 'meet'
-    ? (workout.lifts || []).reduce(
-      (total, liftBlock) => total + (Number(liftBlock.sets?.[2]?.weight) || 0),
-      0
-    )
-    : 0;
-  const detailRows = [
-    ...getSmartModalDetailRows(workout, t, currentE1RMs, meetProjectionDateLabel),
-    ...(meetDayProjectedTotal > 0 ? [{
-      label: t.projectedTotal,
-      value: formatWeightFromKg(meetDayProjectedTotal, weightUnit),
-      kind: 'meet-day',
-    }] : []),
-  ];
-  const usesStructuredSmartDetails = detailRows.length > 0;
-  const showReasonWithStructuredDetails = shouldShowSmartReasonWithStructuredDetails(
-    workout?.smartDayType || workout?.smartDecisionSummary?.dayType
-  );
-
-  const limiterMatch = selectionText?.match(/^e1RM limiter:\s*(.+)$/i);
-  const infoRows = [
-    {
-      label: t.smartDecision,
-      value: label,
-      emphasis: true,
-    },
-    ...detailRows,
-    reasonText &&
-    !hasDedicatedPostMeetRecoveryExplanation &&
-    (!usesStructuredSmartDetails || showReasonWithStructuredDetails) ? {
-      label: t.smartReason,
-      value: reasonText,
-    } : null,
-    !usesStructuredSmartDetails && selectionText ? {
-      label: limiterMatch ? 'e1RM limit' : (t.smartSelection),
-      value: limiterMatch ? limiterMatch[1] : selectionText,
-    } : null,
-  ].filter(Boolean);
-  const decisionRow = infoRows.find(row => row.emphasis) || null;
-  // The headline blocker/status row can carry one of three labels depending
-  // on how many lifts are blocking (or none at all) - all three must be
-  // recognized here, or the headline silently drops out of the featured
-  // "Meet readiness" section and into the generic "Details" list whenever
-  // there is more than one blocker, or none.
-  const currentBlockerLabels = [
-    t.smartCurrentBlocker,
-    t.smartCurrentBlockers,
-    t.smartMeetStatus,
-  ];
-  const statusRows = infoRows.filter(
-    row => currentBlockerLabels.includes(row.label)
-  );
-  const liftReadinessRows = infoRows.filter(row => row.kind === 'lift-readiness');
-  const noteRows = infoRows.filter(row => row.kind === 'note');
-  const otherRows = infoRows.filter(row =>
-    !row.emphasis &&
-    !currentBlockerLabels.includes(row.label) &&
-    !['metric', 'note', 'lift-readiness'].includes(row.kind)
-  );
-  const prescriptionRows = otherRows.filter(
-    row => row.kind === 'prescription'
-  );
-  const projectedMeetLabels = [t.smartProjectedMeet, t.expectedMeetWindow];
-  const projectionRows = otherRows.filter(row =>
-    projectedMeetLabels.includes(row.label)
-  );
-  const generalRows = otherRows.filter(row =>
-    row.kind !== 'prescription' &&
-    !projectedMeetLabels.includes(row.label)
-  );
-  const meetDayRows = generalRows.filter(row => row.kind === 'meet-day');
-  const ordinaryGeneralRows = generalRows.filter(row => row.kind !== 'meet-day');
-
-  function getPrescriptionPresentation(row = {}) {
-    const lift = String(row.label || '').split(' (')[0] || row.label;
-    const parts = String(row.value || '')
-      .split(' · ')
-      .map(part => part.trim())
-      .filter(Boolean);
-    const reason = parts.length > 1 ? parts.at(-1) : '';
-    const plan = parts.length > 1
-      ? parts.slice(0, -1).join(' · ')
-      : parts[0] || '';
-    const color = ({
-      Squat: THEME.red,
-      Bench: THEME.primary,
-      Deadlift: THEME.yellow,
-    }[lift] || THEME.text);
-
-    return { lift, plan, reason, color };
+  if (workout.smartIdealRoute?.stage === 'post-meet' ||
+      summary.reason === SMART_DECISION_REASONS.POST_MEET_RECOVERY) {
+    return t.smartPostMeetStatusText;
   }
+  if (summary.reason === SMART_DECISION_REASONS.FATIGUE_RECOVERY) {
+    return t.smartReasonFatigueRecovery;
+  }
+  if ([SMART_DECISION_REASONS.FAILED_SET_DELOAD,
+    SMART_DECISION_REASONS.DEADLIFT_TAPER_RECOVERY,
+    SMART_DECISION_REASONS.FREQUENCY_RECOVERY].includes(summary.reason)) {
+    return getSmartDecisionReasonDisplayText(summary, t, workout);
+  }
+  return null;
+}
 
-  // THEME.muted is identical to THEME.text (no dimming) - a genuinely
-  // dimmed tone is needed here so labels visually recede behind values
-  // instead of shouting at the same brightness as the content itself.
-  const smartModalMutedText = 'rgba(255, 244, 230, 0.52)';
-  const smartModalDividerStyle = {
-    height: 1,
-    background: 'rgba(255, 244, 230, 0.09)',
-    margin: '16px 0',
-  };
-  const smartModalSectionTitleStyle = {
-    color: THEME.primary,
-    fontSize: 'clamp(11px, 2.7vw, 13px)',
-    fontWeight: 900,
-    lineHeight: 1.2,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    marginBottom: 10,
-  };
-  const smartModalLabelStyle = {
-    color: smartModalMutedText,
-    fontSize: 'clamp(10px, 2.5vw, 12px)',
-    fontWeight: 700,
-    lineHeight: 1.2,
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-    overflowWrap: 'anywhere',
-  };
-  const showReturnTrainingChoice = Boolean(
-    workout?.type === 'training' &&
-    !workout?.completed &&
-    onChooseReturnTraining &&
-    (canChangeReturnTraining || workout.smartReturnTraining)
-  );
-  const returnTrainingSuggested = daysSinceLastWorkout !== null &&
-    daysSinceLastWorkout >= SMART_RETURN_TRAINING.suggestedAfterDays;
-
+export function SmartWorkoutHeader({ contentTitle, workout, t = translations.en }) {
+  const explanation = getSmartWorkoutExplanation(workout, t);
   return (
-    <>
-      <div style={{
-        marginTop: 2,
-        marginBottom: 0,
-        textAlign: 'center',
-      }}>
-        <button
-          type="button"
-          aria-label={`${label}. ${t.smartWorkoutInfo}`}
-          data-kelani-button-size="contextual"
-          aria-expanded={showSmartInfo}
-          onClick={() => {
-            setSmartCopyStatus(null);
-            setShowSmartInfo(true);
-          }}
-          style={{
-            appearance: 'none',
-            position: 'relative',
-            zIndex: 2,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            minHeight: 'clamp(32px, 7vw, 38px)',
-            padding: '4px 10px',
-            margin: 0,
-            border: 'none',
-            borderRadius: 8,
-            background: 'transparent',
-            color: THEME.meet,
-            fontSize: 'clamp(22px, 5.8vw, 26px)',
-            fontWeight: 900,
-            lineHeight: 1.2,
-            cursor: 'pointer',
-            touchAction: 'manipulation',
-            textDecoration: 'none',
-          }}
-        >
-          <span role="heading" aria-level={1}>{contentTitle || label}</span>
-          <span
-            aria-hidden="true"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: RESPONSIVE_WORKOUT_UI.infoIconSize,
-              height: RESPONSIVE_WORKOUT_UI.infoIconSize,
-              flex: `0 0 ${RESPONSIVE_WORKOUT_UI.infoIconSize}`,
-              borderRadius: 999,
-              background: `${THEME.meet}26`,
-              border: `1px solid ${THEME.meet}`,
-              color: THEME.meet,
-              fontSize: RESPONSIVE_WORKOUT_UI.infoIconFontSize,
-              fontWeight: 900,
-              lineHeight: 1,
-            }}
-          >
-            i
-          </span>
-        </button>
-      </div>
-
-      {showSmartInfo && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={t.smartWorkoutDialogLabel}
-          onClick={() => setShowSmartInfo(false)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 2000,
-            background: 'rgba(0, 0, 0, 0.72)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 18,
-            boxSizing: 'border-box',
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              width: '100%',
-              maxWidth: 'clamp(390px, 88vw, 430px)',
-              maxHeight: 'calc(100vh - 28px)',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              background: `linear-gradient(180deg, ${THEME.card} 0%, #0d0d0d 100%)`,
-              border: `1px solid ${THEME.primary}`,
-              borderRadius: 18,
-              boxSizing: 'border-box',
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.62)',
-            }}
-          >
-            <div style={{
-              flex: '0 0 auto',
-              height: 3,
-              background: `linear-gradient(90deg, transparent, ${THEME.primary}, transparent)`,
-            }} />
-
-            <div style={{ padding: 'clamp(16px, 4vw, 20px)', overflowY: 'auto', minHeight: 0 }}>
-              <header style={{
-                marginBottom: 16,
-                textAlign: 'center',
-              }}>
-                <h2 style={{
-                  margin: 0,
-                  color: THEME.primary,
-                  fontSize: RESPONSIVE_WORKOUT_UI.liftHeaderFontSize,
-                  fontWeight: 900,
-                  lineHeight: 1.15,
-                  letterSpacing: -0.25,
-                }}>
-                  {t.smartWorkoutTitle}
-                </h2>
-                {decisionRow ? (
-                  <div style={{
-                    marginTop: 5,
-                    color: smartModalMutedText,
-                    fontSize: RESPONSIVE_WORKOUT_UI.smallTextFontSize,
-                    fontWeight: 700,
-                  }}>
-                    {decisionRow.value}
-                  </div>
-                ) : null}
-              </header>
-
-              {infoRows.length > 0 ? (
-                <div>
-                  {prescriptionRows.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {prescriptionRows.map(row => {
-                        const presentation = getPrescriptionPresentation(row);
-
-                        return (
-                          <section
-                            key={row.label}
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: 'clamp(64px, 15vw, 72px) minmax(0, 1fr)',
-                              gap: 'clamp(10px, 2.5vw, 14px)',
-                              minWidth: 0,
-                            }}
-                          >
-                            <div style={{
-                              color: presentation.color,
-                              fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
-                              fontWeight: 900,
-                              lineHeight: 1.3,
-                              textTransform: 'uppercase',
-                            }}>
-                              {presentation.lift}
-                            </div>
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{
-                                color: THEME.text,
-                                fontSize: RESPONSIVE_WORKOUT_UI.bodyFontSize,
-                                fontWeight: 800,
-                                lineHeight: 1.3,
-                                overflowWrap: 'anywhere',
-                              }}>
-                                {presentation.plan}
-                              </div>
-                              {presentation.reason ? (
-                                <div style={{
-                                  marginTop: 2,
-                                  color: smartModalMutedText,
-                                  fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
-                                  fontWeight: 600,
-                                  lineHeight: 1.3,
-                                  overflowWrap: 'anywhere',
-                                }}>
-                                  {presentation.reason}
-                                </div>
-                              ) : null}
-                            </div>
-                          </section>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {(statusRows.length > 0 || liftReadinessRows.length > 0 || projectionRows.length > 0) && (
-                    <>
-                      {prescriptionRows.length > 0 && <div style={smartModalDividerStyle} />}
-                      <div>
-                        <div style={smartModalSectionTitleStyle}>
-                          {t.smartMeetReadinessTitle}
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                          {statusRows.map(row => (
-                            <section key={row.label}>
-                              <div style={smartModalLabelStyle}>
-                                {row.label}
-                              </div>
-                              <div style={{
-                                marginTop: 2,
-                                color: THEME.text,
-                                fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
-                                fontWeight: 800,
-                                lineHeight: 1.3,
-                                overflowWrap: 'anywhere',
-                              }}>
-                                {row.value}
-                              </div>
-                            </section>
-                          ))}
-
-                          {liftReadinessRows.length > 0 && (
-                            <div
-                              data-testid="smartMeetLiftReadinessList"
-                              style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}
-                            >
-                              {liftReadinessRows.map(row => (
-                                <div
-                                  key={row.label}
-                                  style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: 'clamp(64px, 15vw, 72px) minmax(0, 1fr)',
-                                    gap: 'clamp(10px, 2.5vw, 14px)',
-                                    alignItems: 'baseline',
-                                    minWidth: 0,
-                                  }}
-                                >
-                                  <div style={{
-                                    color: ({
-                                      Squat: THEME.red,
-                                      Bench: THEME.primary,
-                                      Deadlift: THEME.yellow,
-                                    }[row.label] || THEME.text),
-                                    fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
-                                    fontWeight: 900,
-                                    lineHeight: 1.3,
-                                    textTransform: 'uppercase',
-                                  }}>
-                                    {liftLabel(row.label, t)}
-                                  </div>
-                                  <div style={{
-                                    minWidth: 0,
-                                    color: THEME.text,
-                                    fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
-                                    fontWeight: 700,
-                                    lineHeight: 1.3,
-                                    overflowWrap: 'anywhere',
-                                  }}>
-                                    {row.value}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {projectionRows.length > 0 && (
-                            <div style={{
-                              display: 'grid',
-                              gridTemplateColumns:
-                                projectionRows.length > 1
-                                  ? 'repeat(2, minmax(0, 1fr))'
-                                  : 'minmax(0, 1fr)',
-                              gap: 10,
-                              minWidth: 0,
-                            }}>
-                              {projectionRows.map(row => (
-                                <div key={row.label} style={{ minWidth: 0 }}>
-                                  <div style={smartModalLabelStyle}>
-                                    {row.label}
-                                  </div>
-                                  <div style={{
-                                    marginTop: 3,
-                                    color: THEME.text,
-                                    fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
-                                    fontWeight: 800,
-                                    lineHeight: 1.3,
-                                    overflowWrap: 'anywhere',
-                                  }}>
-                                    {row.value}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {meetDayRows.length > 0 && (
-                    <div>
-                      <div style={smartModalSectionTitleStyle}>
-                        {t.smartMeetDayFocusTitle}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {meetDayRows.map(row => (
-                          <section key={row.label}>
-                            <div style={smartModalLabelStyle}>{row.label}</div>
-                            <div style={{ marginTop: 3, color: THEME.text, fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize, fontWeight: 800, lineHeight: 1.35 }}>
-                              {row.value}
-                            </div>
-                          </section>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {ordinaryGeneralRows.length > 0 && (
-                    <>
-                      <div style={smartModalDividerStyle} />
-                      <div>
-                        <div style={smartModalSectionTitleStyle}>
-                          {t.smartDetailsTitle}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                          {ordinaryGeneralRows.map(row => (
-                            <div key={row.label} style={{
-                              display: 'grid',
-                              gridTemplateColumns: '96px minmax(0, 1fr)',
-                              gap: 10,
-                              minWidth: 0,
-                            }}>
-                              <div style={smartModalLabelStyle}>
-                                {row.label}
-                              </div>
-                              <div style={{
-                                minWidth: 0,
-                                color: THEME.text,
-                                fontSize: RESPONSIVE_WORKOUT_UI.smallTextFontSize,
-                                fontWeight: 700,
-                                lineHeight: 1.3,
-                                overflowWrap: 'anywhere',
-                              }}>
-                                {row.value}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {noteRows.length > 0 && (
-                    <div style={{
-                      marginTop: 16,
-                      color: smartModalMutedText,
-                      fontSize: 'clamp(10.5px, 2.6vw, 12.5px)',
-                      fontWeight: 600,
-                      lineHeight: 1.4,
-                    }}>
-                      {noteRows.map((row, index) => (
-                        <div key={row.label} style={{
-                          marginTop: index > 0 ? 4 : 0,
-                        }}>
-                          <strong style={{
-                            color: smartModalMutedText,
-                            fontWeight: 800,
-                          }}>
-                            {row.label}:
-                          </strong>{' '}
-                          {row.value}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p style={{
-                  margin: '0 0 14px',
-                  color: smartModalMutedText,
-                  fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
-                  fontWeight: 800,
-                  lineHeight: 1.35,
-                  textAlign: 'center',
-                }}>
-                  {t.smartInfoUnavailable}
-                </p>
-              )}
-
-              {showReturnTrainingChoice && (
-                <section aria-label={t.smartReturnTrainingTitle}>
-                  <div style={smartModalDividerStyle} />
-                  <div style={smartModalSectionTitleStyle}>
-                    {t.smartReturnTrainingTitle}
-                  </div>
-                  <div style={{
-                    color: THEME.text,
-                    fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
-                    fontWeight: 800,
-                    lineHeight: 1.3,
-                  }}>
-                    {workout.smartReturnTraining
-                      ? t.smartReturnTrainingActive
-                      : returnTrainingSuggested
-                        ? t.smartReturnTrainingSuggested.replace('{days}', String(daysSinceLastWorkout))
-                        : t.smartReturnTrainingAvailable}
-                  </div>
-                  <div style={{
-                    marginTop: 5,
-                    color: smartModalMutedText,
-                    fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
-                    fontWeight: 600,
-                    lineHeight: 1.4,
-                  }}>
-                    {t.smartReturnTrainingDetails}
-                  </div>
-                  {canChangeReturnTraining && (
-                    <button
-                      type="button"
-                      onClick={() => onChooseReturnTraining(!workout.smartReturnTraining)}
-                      style={{
-                        display: 'block',
-                        minHeight: 'var(--kelani-button-height)',
-                        margin: '12px auto 0',
-                        padding: '8px 14px',
-                        borderRadius: 9,
-                        border: `1px solid ${THEME.primary}`,
-                        background: `${THEME.primary}18`,
-                        color: THEME.primary,
-                        fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
-                        fontWeight: 900,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {workout.smartReturnTraining
-                        ? t.smartReturnTrainingRestore
-                        : t.smartReturnTrainingChoose}
-                    </button>
-                  )}
-                </section>
-              )}
-
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-                gap: 8,
-                marginTop: 18,
-              }}>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await copySmartDiagnosticText(
-                        buildSmartDiagnosticText(workout, t, currentE1RMs)
-                      );
-                      setSmartCopyStatus('copied');
-                    } catch {
-                      setSmartCopyStatus('failed');
-                    }
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: 9,
-                    borderRadius: 9,
-                    border: `1px solid ${THEME.primary}`,
-                    background: `${THEME.primary}18`,
-                    color: THEME.primary,
-                    fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
-                    fontWeight: 900,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {smartCopyStatus === 'copied'
-                    ? (t.smartDiagnosisCopied)
-                    : smartCopyStatus === 'failed'
-                      ? (t.smartCopyFailed)
-                      : (t.smartCopyDiagnosis)}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSmartCopyStatus(null);
-                    setShowSmartInfo(false);
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: 9,
-                    borderRadius: 9,
-                    border: `1px solid ${THEME.primary}`,
-                    background: 'transparent',
-                    color: THEME.text,
-                    fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
-                    fontWeight: 900,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {t.close}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+    <div>
+      <ScreenTitle title={contentTitle || getSmartDayTypeDisplayLabel(workout?.smartDayType, t)} />
+      {explanation && (
+        <p data-testid="smart-workout-explanation" style={{
+          margin: '0 auto 8px', maxWidth: 420, textAlign: 'center',
+          color: THEME.muted, fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
+          lineHeight: 1.4,
+        }}>{explanation}</p>
       )}
-    </>
+    </div>
+  );
+}
+
+export function WorkoutActions({ workout, smartModel, isReadOnly,
+  canChangeReturnTraining, onChooseReturnTraining, t, children }) {
+  const canChoose = Boolean(smartModel && !isReadOnly &&
+    workout?.type === 'training' && !workout.completed &&
+    canChangeReturnTraining && onChooseReturnTraining &&
+    !workoutHasUserProgress(workout));
+  if (!canChoose) return children;
+  return (
+    <div data-testid="workout-actions" style={{
+      display: 'flex', justifyContent: 'center', alignItems: 'stretch',
+      gap: 8, margin: workoutCompletionButtonMargin(), minWidth: 0,
+    }}>
+      {React.cloneElement(children, { style: {
+        ...children.props.style, margin: 0, padding: '10px 12px',
+        flex: '0 1 160px', minWidth: 0, maxWidth: 'calc(50% - 4px)',
+      } })}
+      <button type="button" onClick={() => onChooseReturnTraining(!workout.smartReturnTraining)}
+        style={{
+          ...workoutCompletionButtonStyle(), margin: 0, padding: '10px 12px',
+          flex: '0 1 160px', minWidth: 0, maxWidth: 'calc(50% - 4px)',
+        }}>
+        {workout.smartReturnTraining ? t.smartReturnTrainingRestore : t.smartReturnTrainingChoose}
+      </button>
+    </div>
   );
 }
 
@@ -8307,13 +7500,10 @@ export function CurrentWorkout({
         {!smartModel && <ScreenTitle title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />} />}
         {smartModel && (
           <div data-testid="workout-header-secondary" style={appHeaderSecondaryStyle()}>
-            <SmartDayTypeInline
+            <SmartWorkoutHeader
               contentTitle={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
               workout={workout}
               t={t}
-              weightUnit={weightUnit}
-              currentE1RMs={currentE1RMs}
-              meetProjectionDateLabel={meetProjectionDateLabel}
             />
           </div>
         )}
@@ -8369,7 +7559,7 @@ export function CurrentWorkout({
             onComplete('easy');
           }}
           data-testid="complete-rest-day-button"
-          style={{ margin: '14px auto 8px' }}
+          style={{ margin: '14px auto 0' }}
           disabled={isReadOnly}
           enabled={!isReadOnly}
           active={shouldFocusWorkoutCompletion({
@@ -8441,16 +7631,10 @@ export function CurrentWorkout({
         {!smartModel && <ScreenTitle title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />} />}
         {smartModel && (
           <div data-testid="workout-header-secondary" style={appHeaderSecondaryStyle()}>
-            <SmartDayTypeInline
+            <SmartWorkoutHeader
               contentTitle={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
               workout={workout}
               t={t}
-              weightUnit={weightUnit}
-              currentE1RMs={currentE1RMs}
-              meetProjectionDateLabel={meetProjectionDateLabel}
-              onChooseReturnTraining={isReadOnly ? null : onChooseReturnTraining}
-              daysSinceLastWorkout={daysSinceLastWorkout}
-              canChangeReturnTraining={canChangeReturnTraining}
             />
           </div>
         )}
@@ -8869,6 +8053,9 @@ export function CurrentWorkout({
           />
         )}
 
+      <WorkoutActions workout={workout} smartModel={smartModel} isReadOnly={isReadOnly}
+        canChangeReturnTraining={canChangeReturnTraining}
+        onChooseReturnTraining={onChooseReturnTraining} t={t}>
         <WorkoutCompletionButton
           onClick={() => {
             if (isReadOnly) return;
@@ -8883,6 +8070,7 @@ export function CurrentWorkout({
             ? t.previewNotCompletable
             : t.completeWorkout}
         </WorkoutCompletionButton>
+      </WorkoutActions>
         </div>
       </div>
     );
@@ -8924,13 +8112,10 @@ export function CurrentWorkout({
       {!smartModel && <ScreenTitle title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />} />}
       {smartModel && (
         <div data-testid="workout-header-secondary" style={appHeaderSecondaryStyle()}>
-          <SmartDayTypeInline
+          <SmartWorkoutHeader
               contentTitle={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
             workout={workout}
             t={t}
-            weightUnit={weightUnit}
-            currentE1RMs={currentE1RMs}
-            meetProjectionDateLabel={meetProjectionDateLabel}
           />
         </div>
       )}
@@ -9175,6 +8360,9 @@ export function CurrentWorkout({
       )}
 
 
+      <WorkoutActions workout={workout} smartModel={smartModel} isReadOnly={isReadOnly}
+        canChangeReturnTraining={canChangeReturnTraining}
+        onChooseReturnTraining={onChooseReturnTraining} t={t}>
       <WorkoutCompletionButton
         onClick={() => {
           if (isReadOnly) return;
@@ -9189,6 +8377,7 @@ export function CurrentWorkout({
             ? t.previewNotCompletable
           : t.completeWorkout}
       </WorkoutCompletionButton>
+      </WorkoutActions>
 
       {showNewCycle && !smartModel && (
         <NewCycleModal
@@ -10316,6 +9505,14 @@ export function fixedScreenHeaderStyle() {
   };
 }
 
+export function HiddenScreenTitle({ title }) {
+  // Keep an accessible screen name without a visible title or layout space.
+  return <h1 data-testid="screen-label" style={{
+    position: 'absolute', width: 1, height: 1, padding: 0, margin: -1,
+    overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap', border: 0,
+  }}>{title}</h1>;
+}
+
 export function ScreenTitle({ title }) {
   return <h1 data-testid="screen-title" style={{
     margin: '0 0 12px', padding: '4px 0', textAlign: 'center',
@@ -10891,47 +10088,9 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
         </SettingsModal>
       )}
 
-      <ScreenTitle title={
-          smartModel
-            ? getSmartProgramTitle(trainingFocus, t)
-            : (
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                flexWrap: 'wrap'
-              }}>
-                <span>{getProgramProfileTitle(programProfile, t)}</span>
-                <button
-                  type="button"
-                  aria-label={t.programTrainingFactors}
-                  data-kelani-button-size="contextual"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setShowProgramInfo(true);
-                  }}
-                  style={{
-                    width: 14,
-                    height: 14,
-                    minWidth: 14,
-                    padding: 0,
-                    borderRadius: 999,
-                    border: `1px solid ${THEME.primary}`,
-                    background: 'transparent',
-                    color: THEME.primary,
-                    fontSize: 9,
-                    fontWeight: 900,
-                    lineHeight: '12px',
-                    cursor: 'pointer',
-                    transform: 'translateY(-6px)'
-                  }}
-                >
-                  i
-                </button>
-              </span>
-            )
-        } />
+      <HiddenScreenTitle title={smartModel
+        ? getSmartProgramTitle(trainingFocus, t)
+        : getProgramProfileTitle(programProfile, t)} />
 
       <div ref={programListRef} data-testid="screen-scroll-content" data-kelani-program-list-spacer style={programWorkoutListContainerStyle({
         showAll: showAllWorkouts,
@@ -10939,7 +10098,16 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
         marginTop: workoutListVerticalSpacing.listMarginTop,
       })}>
 
-      {renderWorkoutListToggleButton('top')}
+      {(hasHiddenWorkouts || !smartModel) && <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexShrink: 0 }}>
+        {renderWorkoutListToggleButton('top')}
+        {!smartModel && (
+          <button type="button" data-kelani-button-size="contextual"
+            aria-label={t.programTrainingFactors} onClick={() => setShowProgramInfo(true)}
+            style={{ minHeight: 52, minWidth: 44, padding: 8, borderRadius: 8,
+              border: `1px solid ${THEME.primary}`, background: THEME.card,
+              color: THEME.primary, cursor: 'pointer' }}>i</button>
+        )}
+      </div>}
 
 {visibleWorkoutEntries.map(({ workout, idx }) => {
         const isCurrent = idx === currentIndex;
@@ -10957,6 +10125,7 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
               todayLabel: t.today,
               tomorrowLabel: t.tomorrow,
               compact: true,
+              omitTomorrowDate: true,
             })
           : '';
         const focusColor = workout.type === 'meet'
@@ -12030,14 +11199,6 @@ function App() {
   const t = translations[language];
   const [screen, setScreen] = useState(null);
   const appViewportRef = useRef(null);
-  const [adaptiveScreenDensity, setAdaptiveScreenDensity] = useState({
-    screen: null,
-    compact: false,
-  });
-  const [screenContentScroll, setScreenContentScroll] = useState({
-    screen: null,
-    enabled: true,
-  });
   const [workoutNeedsNavClearance, setWorkoutNeedsNavClearance] = useState(false);
   const [workouts, setWorkouts] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -12224,151 +11385,75 @@ function App() {
   useLayoutEffect(() => {
     const viewport = appViewportRef.current;
     if (!viewport) return undefined;
-
     let frameId = null;
-    const observedChildren = new Set();
-
+    let disposed = false;
+    let lastSignature = '';
+    const resizeObserver = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => scheduleMeasure()) : null;
+    const compact = enabled => {
+      viewport.style.setProperty('--kelani-content-row-gap', enabled ? '4px' : 'clamp(8px, 1.1dvh, 12px)');
+      viewport.style.setProperty('--kelani-dashboard-card-gap', enabled ? '4px' : '10px');
+      viewport.style.setProperty('--kelani-dashboard-card-padding', enabled ? '2px' : '5px');
+      viewport.style.setProperty('--kelani-dashboard-text-gap', enabled ? '3px' : '6px');
+      viewport.style.setProperty('--kelani-screen-padding', enabled ? COMPACT_SCREEN_PADDING : RESPONSIVE_SCREEN_PADDING);
+      viewport.style.setProperty('--kelani-settings-row-padding', enabled ? '0px' : 'clamp(3px, 0.55dvh, 6px) 0');
+      viewport.style.setProperty('--kelani-stats-card-gap', enabled ? '1px' : 'clamp(2px, 0.4dvh, 4px)');
+    };
     const measure = () => {
       frameId = null;
-      const contentBottom = measureActualScreenContentBottom(viewport);
-      const nextAllowsScroll = screenContentNeedsScroll({
-        contentBottom,
-        viewportHeight: viewport.clientHeight,
+      if (disposed) return;
+      const regions = [...viewport.querySelectorAll('[data-testid="screen-scroll-content"]')]
+        .filter(region => region.clientHeight > 0 && region.clientWidth > 0);
+      if (!regions.length) return;
+      // Ignore resize callbacks caused solely by distributing our own spare
+      // height. Content changes, viewport changes and font loading reset this.
+      const signature = () => [viewport.clientWidth, viewport.clientHeight,
+        ...regions.map(region => [region.clientWidth, region.clientHeight, region.scrollHeight, region.scrollWidth,
+          region.textContent, ...[...region.children].map(child => child.getBoundingClientRect().height)].join(':'))].join('|');
+      if (signature() === lastSignature) return;
+      fitScreenContent({
+        candidates: screenFontCandidates(screen, { width: viewport.clientWidth, height: viewport.clientHeight }),
+        apply: scale => viewport.style.setProperty('--kelani-content-font-scale', String(scale)),
+        compact,
+        fits: () => scrollRegionsFit(regions),
       });
-      setAdaptiveScreenDensity(previous => resolveAdaptiveScreenDensity(
-        previous,
-        screen,
-        nextAllowsScroll
-      ));
-    };
-
-    const scheduleMeasure = () => {
-      if (frameId !== null) return;
-      if (typeof window.requestAnimationFrame === 'function') {
-        frameId = window.requestAnimationFrame(measure);
-      } else {
-        measure();
-      }
-    };
-
-    const resizeObserver = typeof ResizeObserver === 'function'
-      ? new ResizeObserver(scheduleMeasure)
-      : null;
-
-    const observeDirectChildren = () => {
-      resizeObserver?.observe(viewport);
-      Array.from(viewport.children).forEach(child => {
-        if (observedChildren.has(child)) return;
-        observedChildren.add(child);
-        resizeObserver?.observe(child);
-      });
-    };
-
-    viewport.scrollTop = 0;
-    observeDirectChildren();
-    measure();
-
-    const mutationObserver = typeof MutationObserver === 'function'
-      ? new MutationObserver(mutations => {
-          if (!shouldMeasureScreenMutations(mutations)) return;
-          observeDirectChildren();
-          scheduleMeasure();
-        })
-      : null;
-    mutationObserver?.observe(viewport, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
-
-    window.addEventListener('resize', scheduleMeasure);
-    window.visualViewport?.addEventListener('resize', scheduleMeasure);
-
-    return () => {
-      if (frameId !== null && typeof window.cancelAnimationFrame === 'function') {
-        window.cancelAnimationFrame(frameId);
-      }
-      window.removeEventListener('resize', scheduleMeasure);
-      window.visualViewport?.removeEventListener('resize', scheduleMeasure);
-      mutationObserver?.disconnect();
+      lastSignature = signature();
       resizeObserver?.disconnect();
+      resizeObserver?.observe(viewport);
+      regions.forEach(region => {
+        resizeObserver?.observe(region);
+        [...region.children].forEach(child => resizeObserver?.observe(child));
+      });
+    };
+    function scheduleMeasure() {
+      if (disposed || frameId !== null) return;
+      frameId = window.requestAnimationFrame(measure);
+    }
+    const mutations = typeof MutationObserver === 'function'
+      ? new MutationObserver(changes => {
+        if (!shouldMeasureScreenMutations(changes)) return;
+        lastSignature = '';
+        scheduleMeasure();
+      }) : null;
+    mutations?.observe(viewport, { childList: true, subtree: true, characterData: true });
+    const resize = () => { lastSignature = ''; scheduleMeasure(); };
+    window.addEventListener('resize', resize);
+    window.visualViewport?.addEventListener('resize', resize);
+    document.fonts?.addEventListener?.('loadingdone', resize);
+    measure();
+    return () => {
+      disposed = true;
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+      resizeObserver?.disconnect();
+      mutations?.disconnect();
+      window.removeEventListener('resize', resize);
+      window.visualViewport?.removeEventListener('resize', resize);
+      document.fonts?.removeEventListener?.('loadingdone', resize);
+      ['--kelani-content-font-scale', '--kelani-content-row-gap', '--kelani-screen-padding',
+        '--kelani-settings-row-padding', '--kelani-stats-card-gap', '--kelani-dashboard-card-gap',
+        '--kelani-dashboard-card-padding', '--kelani-dashboard-text-gap'].forEach(key => viewport.style.removeProperty(key));
     };
   }, [screen]);
-
-  useLayoutEffect(() => {
-    const viewport = appViewportRef.current;
-    if (!viewport) return undefined;
-
-    let frameId = null;
-    let resizeObserver = null;
-
-    const measure = () => {
-      frameId = null;
-      const scrollRegions = Array.from(
-        viewport.querySelectorAll('[data-testid="screen-scroll-content"]')
-      );
-      const nextEnabled = scrollRegions.some(region => scrollRegionNeedsScroll({
-        scrollHeight: region.scrollHeight,
-        clientHeight: region.clientHeight,
-      }));
-
-      setScreenContentScroll(previous => (
-        previous.screen === screen && previous.enabled === nextEnabled
-          ? previous
-          : { screen, enabled: nextEnabled }
-      ));
-    };
-
-    const scheduleMeasure = () => {
-      if (frameId !== null) return;
-      if (typeof window.requestAnimationFrame === 'function') {
-        frameId = window.requestAnimationFrame(measure);
-      } else {
-        measure();
-      }
-    };
-
-    const observeScrollRegions = () => {
-      resizeObserver?.disconnect();
-      resizeObserver = typeof ResizeObserver === 'function'
-        ? new ResizeObserver(scheduleMeasure)
-        : null;
-
-      viewport.querySelectorAll('[data-testid="screen-scroll-content"]').forEach(region => {
-        resizeObserver?.observe(region);
-        Array.from(region.children).forEach(child => resizeObserver?.observe(child));
-      });
-    };
-
-    observeScrollRegions();
-    measure();
-
-    const mutationObserver = typeof MutationObserver === 'function'
-      ? new MutationObserver(mutations => {
-          if (!shouldMeasureScreenMutations(mutations)) return;
-          observeScrollRegions();
-          scheduleMeasure();
-        })
-      : null;
-    mutationObserver?.observe(viewport, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
-
-    window.addEventListener('resize', scheduleMeasure);
-    window.visualViewport?.addEventListener('resize', scheduleMeasure);
-
-    return () => {
-      if (frameId !== null && typeof window.cancelAnimationFrame === 'function') {
-        window.cancelAnimationFrame(frameId);
-      }
-      window.removeEventListener('resize', scheduleMeasure);
-      window.visualViewport?.removeEventListener('resize', scheduleMeasure);
-      mutationObserver?.disconnect();
-      resizeObserver?.disconnect();
-    };
-  }, [screen, adaptiveScreenDensity]);
 
   useEffect(() => {
     if (!workouts.length) return;
@@ -16351,19 +15436,12 @@ const displayedWorkoutNumber = screen === 'current'
   : screen === 'completed' ? (completedWorkout?.number || currentIndex + 1)
   : (workouts[currentIndex]?.number || currentIndex + 1);
 const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: displayedWorkoutNumber };
-const screenUsesCompactDensity =
-  adaptiveScreenDensity.screen === screen && adaptiveScreenDensity.compact;
-const screenAllowsContentScroll =
-  screenContentScroll.screen === screen ? screenContentScroll.enabled : true;
-
     return (
   <div
     ref={appViewportRef}
     data-testid="app-viewport"
     style={appViewportStyle({
       screen,
-      compactToFit: screenUsesCompactDensity,
-      allowContentScroll: screenAllowsContentScroll,
       workoutNeedsNavClearance: shouldReserveWorkoutBottomNavSpace({
         screen,
         workout: workouts[selectedIndex],
@@ -16372,7 +15450,6 @@ const screenAllowsContentScroll =
       allowVerticalScroll: shouldAllowAppVerticalScroll({
         screen,
         workout: workouts[selectedIndex],
-        measuredOverflow: screenUsesCompactDensity,
       }),
     })}
   >
@@ -16464,9 +15541,9 @@ const screenAllowsContentScroll =
       style={scrollableScreenContentStyle({ display: 'flex', flexDirection: 'column' })}
     >
 
-    <ScreenTitle title={t.dashboard} />
+    <HiddenScreenTitle title={t.dashboard} />
     <div style={{ ...regularDashboardContentStyle({ spreadContent: dashboardUsesExpandedLayout,
-      compact: dashboardUsesCompactLayout }), overflow: 'visible', flex: dashboardUsesCompactLayout ? '0 0 auto' : '1 0 auto' }}>
+      compact: dashboardUsesCompactLayout }), overflow: 'visible', flex: '1 0 auto' }}>
 
     {!dashboardMeetState.isMeetDay && workouts[currentIndex] && (() => {
       const nextWorkout = workouts[currentIndex];
@@ -16491,7 +15568,7 @@ const screenAllowsContentScroll =
         >
           <div style={{
             color: isNextMeetDay ? THEME.meet : THEME.text,
-            fontSize: 'clamp(28px, 7vw, 34px)',
+            fontSize: adaptiveFontSize('clamp(28px, 7vw, 34px)'),
             fontWeight: 900,
             marginBottom: dashboardScheduleDateLabel
               ? 4
@@ -16507,7 +15584,7 @@ const screenAllowsContentScroll =
               data-testid="dashboard-workout-schedule-date"
               style={{
                 color: THEME.muted,
-                fontSize: 'clamp(14px, 3.4vw, 17px)',
+                fontSize: adaptiveFontSize('clamp(14px, 3.4vw, 17px)'),
                 fontWeight: 800,
                 lineHeight: 1.3,
                 margin: planLines.length
@@ -16526,7 +15603,7 @@ const screenAllowsContentScroll =
               flexWrap: 'wrap',
               gap: 'clamp(8px, 2vw, 12px)',
               margin: dashboardUsesCompactLayout ? '0 0 4px' : '-3px 0 clamp(8px, 1.2dvh, 12px)',
-              fontSize: 'clamp(13px, 3.3vw, 16px)',
+              fontSize: adaptiveFontSize('clamp(13px, 3.3vw, 16px)'),
               fontWeight: 900,
             }}>
               {nextWorkout.lifts.map((liftBlock, index) => {
@@ -16551,8 +15628,8 @@ const screenAllowsContentScroll =
             <div style={{
               color: THEME.muted,
               fontSize: dashboardUsesExpandedLayout
-                ? 'clamp(16px, 3.8vw, 19px)'
-                : 'clamp(15px, 3.8vw, 19px)',
+                ? adaptiveFontSize('clamp(16px, 3.8vw, 19px)')
+                : adaptiveFontSize('clamp(15px, 3.8vw, 19px)'),
               fontWeight: 800,
               lineHeight: dashboardUsesCompactLayout ? 1.3 : 1.45
             }}>
@@ -16617,8 +15694,8 @@ const screenAllowsContentScroll =
               style={{
                 color: THEME.text,
                 fontSize: dashboardUsesExpandedLayout
-                  ? 'clamp(16px, 3.8vw, 19px)'
-                  : 'clamp(15px, 3.8vw, 19px)',
+                  ? adaptiveFontSize('clamp(16px, 3.8vw, 19px)')
+                  : adaptiveFontSize('clamp(15px, 3.8vw, 19px)'),
                 fontWeight: 800,
                 marginBottom: 6,
                 lineHeight: 1.35,
@@ -16705,11 +15782,7 @@ const screenAllowsContentScroll =
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              gap: dashboardUsesExpandedLayout
-                ? 'clamp(14px, 2.4dvh, 22px) clamp(12px, 3vw, 16px)'
-                : dashboardUsesCompactLayout
-                  ? '4px clamp(12px, 3vw, 16px)'
-                  : 'clamp(12px, 3vw, 16px)'
+              gap: 'var(--kelani-dashboard-card-gap, 8px) clamp(12px, 3vw, 16px)'
             }}>
               {cards.map(card => (
                 <div
@@ -16721,21 +15794,15 @@ const screenAllowsContentScroll =
                     if (e.key === 'Enter' || e.key === ' ') openStatsTab(card.statsTab);
                   }}
                   style={{
-                    padding: dashboardUsesExpandedLayout
-                      ? 'clamp(6px, 1dvh, 10px) 2px'
-                      : dashboardUsesCompactLayout
-                        ? '2px 2px'
-                        : 'clamp(5px, 0.8dvh, 8px) 2px',
+                    padding: 'var(--kelani-dashboard-card-padding, 2px) 2px',
                     cursor: 'pointer',
                   }}
                 >
                   <div style={{
                     color: card.color,
-                    fontSize: 'clamp(21px, 5vw, 25px)',
+                    fontSize: adaptiveFontSize('clamp(21px, 5vw, 25px)'),
                     fontWeight: 900,
-                    marginBottom: dashboardUsesCompactLayout
-                      ? '4px'
-                      : 'clamp(7px, 1dvh, 10px)',
+                    marginBottom: 'var(--kelani-dashboard-text-gap, 4px)',
                     lineHeight: 1.1
                   }}>
                     {card.label}
@@ -16744,14 +15811,12 @@ const screenAllowsContentScroll =
                   <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'auto 1fr',
-                    gap: dashboardUsesCompactLayout
-                      ? '3px 10px'
-                      : 'clamp(7px, 0.9dvh, 10px) 10px',
+                    gap: 'var(--kelani-dashboard-text-gap, 3px) 10px',
                     alignItems: 'baseline'
                   }}>
                     <span style={{
                       color: THEME.muted,
-                      fontSize: 'clamp(14px, 3.4vw, 17px)',
+                      fontSize: adaptiveFontSize('clamp(14px, 3.4vw, 17px)'),
                       fontWeight: 900
                     }}>
                       {t.oneRM}
@@ -16760,7 +15825,7 @@ const screenAllowsContentScroll =
                       <strong style={{
                         display: 'block',
                         color: card.color,
-                        fontSize: 'clamp(19px, 4.6vw, 23px)',
+                        fontSize: adaptiveFontSize('clamp(19px, 4.6vw, 23px)'),
                         fontWeight: 900,
                         whiteSpace: 'nowrap'
                       }}>
@@ -16769,7 +15834,7 @@ const screenAllowsContentScroll =
                       {card.recentPr?.oneRMGain > 0 && (
                         <div style={{
                           color: THEME.green,
-                          fontSize: 'clamp(11px, 2.7vw, 14px)',
+                          fontSize: adaptiveFontSize('clamp(11px, 2.7vw, 14px)'),
                           fontWeight: 900,
                           marginTop: 2,
                           whiteSpace: 'nowrap'
@@ -16781,7 +15846,7 @@ const screenAllowsContentScroll =
 
                     <span style={{
                       color: THEME.muted,
-                      fontSize: 'clamp(14px, 3.4vw, 17px)',
+                      fontSize: adaptiveFontSize('clamp(14px, 3.4vw, 17px)'),
                       fontWeight: 900
                     }}>
                       {t.e1RM}
@@ -16790,7 +15855,7 @@ const screenAllowsContentScroll =
                       <strong style={{
                         display: 'block',
                         color: card.color,
-                        fontSize: 'clamp(19px, 4.6vw, 23px)',
+                        fontSize: adaptiveFontSize('clamp(19px, 4.6vw, 23px)'),
                         fontWeight: 900,
                         whiteSpace: 'nowrap'
                       }}>
@@ -16799,7 +15864,7 @@ const screenAllowsContentScroll =
                       {card.recentPr?.e1RMGain > 0 && (
                         <div style={{
                           color: THEME.green,
-                          fontSize: 'clamp(11px, 2.7vw, 14px)',
+                          fontSize: adaptiveFontSize('clamp(11px, 2.7vw, 14px)'),
                           fontWeight: 900,
                           marginTop: 2,
                           whiteSpace: 'nowrap'
@@ -16866,7 +15931,7 @@ const screenAllowsContentScroll =
                 <span style={{
                   color: THEME.text,
                   fontWeight: 800,
-                  fontSize: 'clamp(18px, 4.2vw, 21px)'
+                  fontSize: adaptiveFontSize('clamp(18px, 4.2vw, 21px)')
                 }}>
                   {row.label}
                 </span>
@@ -16875,7 +15940,7 @@ const screenAllowsContentScroll =
                   <strong style={{
                     display: 'block',
                     whiteSpace: 'nowrap',
-                    fontSize: 'clamp(18px, 4.2vw, 21px)',
+                    fontSize: adaptiveFontSize('clamp(18px, 4.2vw, 21px)'),
                     color: row.status?.color || THEME.primary
                   }}>
                     {row.value}
@@ -16883,7 +15948,7 @@ const screenAllowsContentScroll =
                   {row.recentPrGain > 0 && (
                     <div style={{
                       color: THEME.green,
-                      fontSize: 'clamp(11px, 2.7vw, 14px)',
+                      fontSize: adaptiveFontSize('clamp(11px, 2.7vw, 14px)'),
                       fontWeight: 900,
                       marginTop: 2,
                       whiteSpace: 'nowrap',
@@ -16970,7 +16035,7 @@ const screenAllowsContentScroll =
           latestBodyWeight={latestBodyWeight}
           activescreen={statsTab}
           onChangeTab={setStatsTab}
-          HeaderComponent={ScreenTitle}
+          HeaderComponent={HiddenScreenTitle}
           LevelBadgeComponent={AthleteLevelBadge}
         />
       )}
@@ -16980,7 +16045,7 @@ const screenAllowsContentScroll =
 
 
   <div data-testid="screen-scroll-content" style={settingsContentLayoutStyle()}>
-    <ScreenTitle title={t.settings} />
+    <HiddenScreenTitle title={t.settings} />
     <div
       data-testid="regular-settings-cluster"
       style={regularSettingsClusterStyle()}

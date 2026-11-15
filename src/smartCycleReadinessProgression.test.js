@@ -176,7 +176,7 @@ test('keeps successful secondary work as an explicit volume anchor', () => {
   expect(prescription.plannedVolumePct).toBe(0.675);
 });
 
-test('names the cycle estimate and real 1RM target separately in the Smart modal', () => {
+test('keeps the projected meet without cycle estimate gaps in the Smart modal', () => {
   expect(
     getSmartModalDetailRows({
       smartDecisionSummary: {
@@ -212,23 +212,13 @@ test('names the cycle estimate and real 1RM target separately in the Smart modal
       },
     })
   ).toEqual([
-    {
-      label: 'Current blocker',
-      value: 'Squat (100% of the real 1RM not yet reached)',
-    },
-    { label: 'Squat', value: 'Best e1RM this cycle 116.17 kg → 145 kg (Gap 28.83 kg)', kind: 'lift-readiness' },
     { label: 'Projected meet', value: 'C3W27–C3W29' },
-    {
-      label: 'Readiness basis',
-      value: 'Your best e1RM this cycle shows readiness against your confirmed real 1RM. Training weights and automatic meet attempts use your best e1RM across all cycles. The projection assumes normal progress; automatic attempts follow your e1RM until the meet starts.',
-      kind: 'note',
-    },
   ]);
 });
 
 
 
-test('shows the real 1RM readiness target in the Smart modal', () => {
+test('omits internal real 1RM readiness targets from the Smart modal', () => {
   const rows = getSmartModalDetailRows({
     smartDecisionSummary: {
       dayType: 'training',
@@ -261,15 +251,7 @@ test('shows the real 1RM readiness target in the Smart modal', () => {
     },
   });
 
-  expect(rows[0]).toEqual({
-    label: 'Current blocker',
-    value: 'Deadlift (100% of the real 1RM not yet reached)',
-  });
-  expect(rows).toContainEqual({
-    label: 'Deadlift',
-    value: 'Best e1RM this cycle 167.5 kg → 180 kg (Gap 12.5 kg)',
-    kind: 'lift-readiness',
-  });
+  expect(rows.some(row => row.kind === 'lift-readiness')).toBe(false);
   expect(rows).toContainEqual({
     label: 'Projected meet',
     value: 'C3W29–C3W31',

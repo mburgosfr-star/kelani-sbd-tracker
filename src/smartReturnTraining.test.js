@@ -70,7 +70,7 @@ test('return choice lightens only the current Smart training and can be restored
   });
   lighter.lifts.forEach((block, index) => {
     expect(block.sets.length).toBeGreaterThanOrEqual(1);
-    expect(block.sets.filter(set => ['backoff', 'workSets'].includes(set.labelKey)).length).toBeLessThanOrEqual(6);
+    expect(block.sets.filter(set => ['backoff', 'workSets'].includes(set.labelKey)).length).toBeLessThanOrEqual(7);
     expect((block.sets.length + block.warmups.length) % 5).toBe(0);
     block.sets.slice(0, Math.min(block.sets.length, regular.lifts[index].sets.length)).forEach((set, setIndex) => {
       expect(set.weight).toBeLessThanOrEqual(regular.lifts[index].sets[setIndex].weight);
@@ -235,7 +235,7 @@ test('an easy return session advances the route without earning a TOO EASY credi
   expect(isSmartIdealRoutePristine({ history, currentCycle: 1 })).toBe(false);
 });
 
-test('the Smart modal offers a voluntary return choice without adding a workout-screen card', () => {
+test('the Workout screen places the reversible lighter choice beside completion', () => {
   const workout = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, options)[0];
   const choose = vi.fn();
   const props = {
@@ -253,18 +253,65 @@ test('the Smart modal offers a voluntary return choice without adding a workout-
   };
 
   const view = render(<CurrentWorkout {...props} />);
-  expect(screen.queryByText('Je laatste training was 7 dagen geleden. Wil je rustig hervatten?'))
-    .not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: `${translations.nl.training}. ${translations.nl.smartWorkoutInfo}` }));
-  const dialog = screen.getByRole('dialog', { name: translations.nl.smartWorkoutDialogLabel });
-  expect(dialog).toBeInTheDocument();
-  expect(dialog.querySelector('section[aria-label="Hervattraining"]')).not.toBeNull();
-  expect(screen.getByText('Je laatste training was 7 dagen geleden. Wil je rustig hervatten?'))
-    .toBeInTheDocument();
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /workoutinformatie/i })).not.toBeInTheDocument();
+  const actions = screen.getByTestId('workout-actions');
+  expect(actions).toContainElement(screen.getByRole('button', { name: translations.nl.completeWorkout }));
+  expect(actions).toContainElement(screen.getByRole('button', { name: translations.nl.smartReturnTrainingChoose }));
+  expect(actions).toHaveStyle({ display: 'flex', gap: '8px' });
   fireEvent.click(screen.getByRole('button', { name: translations.nl.smartReturnTrainingChoose }));
   expect(choose).toHaveBeenCalledWith(true);
 
   view.rerender(<CurrentWorkout {...props} workout={buildSmartReturnTraining(workout)} />);
+  expect(screen.getByTestId('smart-workout-explanation')).toHaveTextContent(translations.nl.smartReturnTrainingShort);
   fireEvent.click(screen.getByRole('button', { name: translations.nl.smartReturnTrainingRestore }));
   expect(choose).toHaveBeenCalledWith(false);
+});
+
+
+test.each(['nl', 'en', 'ca'])('lighter action is available in %s only for an untouched active Smart training workout', language => {
+  const t = translations[language];
+  const workout = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, options)[0];
+  const props = { trainingModel: TRAINING_MODELS.SMART, workout, currentCycle: 1,
+    totalWorkouts: 28, isReadOnly: false, canChangeReturnTraining: true,
+    onChooseReturnTraining: vi.fn(), onComplete: vi.fn(), preparationMode: 'off', t };
+  const view = render(<CurrentWorkout {...props} />);
+  expect(screen.getByRole('button', { name: t.smartReturnTrainingChoose })).toBeEnabled();
+  for (const override of [
+    { isReadOnly: true },
+    { canChangeReturnTraining: false },
+    { workout: { ...workout, completed: true } },
+    { workout: { ...workout, type: 'meet' } },
+    { workout: { ...workout, type: 'rest' } },
+    { trainingModel: TRAINING_MODELS.CLASSIC },
+    { workout: { ...workout, lifts: workout.lifts.map((block, index) => index ? block : {
+      ...block, sets: block.sets.map((set, si) => si ? set : { ...set, done: true }),
+    }) } },
+  ]) {
+    view.rerender(<CurrentWorkout {...props} {...override} />);
+    expect(screen.queryByRole('button', { name: t.smartReturnTrainingChoose })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: t.smartReturnTrainingRestore })).not.toBeInTheDocument();
+  }
+});
+
+
+test('upgrading a saved two-set return choice also upgrades the regular plan restored by its button', () => {
+  const baseline = { number: 1, type: 'training', smartIdealRoute: { workoutNumber: 1 },
+    lifts: [{ lift: 'Bench', warmups: [{ weight: 20 }, { weight: 50 }],
+      sets: [{ labelKey: 'topSingle', weight: 90, originalWeight: 90, reps: 1, pct: 0.9 },
+        ...Array.from({ length: 2 }, () => ({ labelKey: 'backoff', weight: 80, originalWeight: 80, reps: 3, pct: 0.8 }))],
+    }] };
+  const old = { ...baseline, smartReturnTraining: true, smartReturnTrainingVersion: 4,
+    smartReturnBaseline: baseline };
+  const restored = JSON.parse(JSON.stringify(old));
+  const upgraded = mergeGeneratedWorkoutStructure([restored], [baseline], [], 1)[0];
+  const regular = restoreSmartReturnTraining(upgraded);
+  expect(upgraded.smartReturnTrainingVersion).toBe(SMART_RETURN_TRAINING.version);
+  expect(regular.lifts[0].sets.filter(set => set.labelKey === 'backoff')).toHaveLength(7);
+  expect(regular.lifts[0].sets.filter(set => set.labelKey === 'backoff').every(set =>
+    set.weight === 80 && set.reps === 3 && set.pct === 0.8)).toBe(true);
+  const started = { ...restored, lifts: restored.lifts.map(block => ({ ...block,
+    sets: block.sets.map((set, index) => ({ ...set, done: index === 0 })),
+  })) };
+  expect(mergeGeneratedWorkoutStructure([started], [baseline], [], 1)[0]).toEqual(started);
 });

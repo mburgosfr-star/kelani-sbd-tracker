@@ -1,0 +1,3 @@
+- New back-off and work blocks use 3–7 sets. Full grids turn two-set blocks into seven; started workouts stay unchanged.
+- Choose a lighter Smart workout beside Complete workout before starting. Recovery explanations appear directly on the Workout screen.
+- Text and spacing adapt to the available room. Main screens no longer repeat their titles; Program shows Tomorrow without its date.

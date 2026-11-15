@@ -1,7 +1,7 @@
 // Shared by workout rendering and prescription generation.
 export const WORKOUT_GRID_COLUMNS = 5;
-export const WORKOUT_VOLUME_MIN_SETS = 2;
-export const WORKOUT_VOLUME_MAX_SETS = 6;
+export const WORKOUT_VOLUME_MIN_SETS = 3;
+export const WORKOUT_VOLUME_MAX_SETS = 7;
 
 export function reduceVolumeReps(reps) {
   const value = Number(reps);

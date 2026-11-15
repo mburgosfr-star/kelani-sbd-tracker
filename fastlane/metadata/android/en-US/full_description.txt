@@ -9,7 +9,7 @@ Smart Training follows a level-specific ideal route including SBD Meet Day and p
 - Plans heavy, medium and light Squat, Bench Press and Deadlift work for your current level
 - Prescribes warm-ups, top work, back-off work and accessories
 - Moves the meet closer after Too easy and adds recovery after Too hard or failed work
-- Tracks meet readiness without silently replacing route workouts or postponing Meet Day
+- Choose a lighter Smart workout before starting and see recovery explanations when relevant
 - Shows past, current and provisional future workouts through the meet and recovery
 - All Smart calculations run locally on your device
 

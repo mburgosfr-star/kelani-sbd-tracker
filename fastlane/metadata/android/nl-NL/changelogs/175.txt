@@ -1,0 +1,3 @@
+- Nieuwe werk- en backoffblokken bevatten 3–7 sets. Blokken van 2 sets worden 7 door het volle raster; begonnen workouts blijven behouden.
+- Kies vóór je begint een lichtere Smart-training naast Workout afronden. Hersteluitleg staat direct op het workoutscherm.
+- Tekst en tussenruimte passen zich aan de schermruimte aan. Hoofdschermen hebben geen dubbele titel; Programma toont Morgen zonder datum.
