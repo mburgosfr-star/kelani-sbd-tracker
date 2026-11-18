@@ -3832,9 +3832,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewVolumeGridItem,
-    t.whatsNewWorkoutActionsItem,
-    t.whatsNewAdaptiveLayoutItem,
+    t.whatsNewRoundingItem,
+    t.whatsNewContinuousProgramItem,
+    t.whatsNewLayoutSharingItem,
   ];
 
   return (

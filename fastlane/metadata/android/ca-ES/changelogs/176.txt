@@ -1,0 +1,3 @@
+- Tria l’arrodoniment automàtic a 0,5 o 2,5 kg a Pesos. Es conserva la configuració existent; els pesos manuals i els escalfaments fixos no canvien.
+- Programa i Calendari mostren la resta del cicle i almenys quatre setmanes endavant, també entre cicles. Els entrenaments tenen etiquetes CxWx.
+- El text, els camps i els botons inferiors s’ajusten millor. Les targetes estan centrades; ja no es comparteixen entrenaments normals ni dies de descans.

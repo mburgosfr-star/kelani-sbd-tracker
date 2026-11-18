@@ -54,7 +54,12 @@
     "desktop:package:windows": "npm run build && node scripts/package-desktop.cjs",
     "desktop:check-package": "node scripts/check-desktop-package.cjs",
     "desktop:package:ubuntu": "npm run build && node scripts/package-desktop.cjs linux && node scripts/check-desktop-package.cjs linux && node scripts/package-ubuntu.cjs && node scripts/check-ubuntu-package.cjs",
-    "ubuntu:release": "node scripts/ubuntu-release.cjs"
+    "ubuntu:release": "node scripts/ubuntu-release.cjs",
+    "play:status": "node scripts/play-publisher.cjs status",
+    "play:plan": "node scripts/play-publisher.cjs plan",
+    "play:stage": "node scripts/play-publisher.cjs stage",
+    "play:submit": "node scripts/play-publisher.cjs submit",
+    "play:self-check": "node scripts/test-play-publisher.cjs"
   },
   "browserslist": {
     "production": [

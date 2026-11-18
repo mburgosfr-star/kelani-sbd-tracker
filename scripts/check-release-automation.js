@@ -29,6 +29,11 @@ const expectedScripts = {
     'node scripts/check-public-repository-boundary.js',
   'release:build': 'node scripts/build-release-apk.js',
   'android:play-bundle': 'node scripts/build-play-bundle.cjs',
+  'play:status': 'node scripts/play-publisher.cjs status',
+  'play:plan': 'node scripts/play-publisher.cjs plan',
+  'play:stage': 'node scripts/play-publisher.cjs stage',
+  'play:submit': 'node scripts/play-publisher.cjs submit',
+  'play:self-check': 'node scripts/test-play-publisher.cjs',
   'release:install': 'node scripts/install-apk.js',
   'release:web-tested':
     'node scripts/mark-web-tested.js',
@@ -428,6 +433,9 @@ for (const requiredPath of [
   "scripts/stage-release.js",
   "scripts/install-apk.js",
   "scripts/play-release-proof.cjs",
+  "scripts/play-api-client.cjs",
+  "scripts/play-publisher.cjs",
+  "scripts/test-play-publisher.cjs",
   "scripts/check-release-automation.js",
   "scripts/ensure-desktop-validator.cjs",
   "scripts/test-desktop-validator.cjs",
@@ -466,6 +474,8 @@ for (const signal of [
     fail(`Release-notes format guard is missing: ${signal}`);
   }
 }
+
+require('node:child_process').execFileSync(process.execPath, ['scripts/test-play-publisher.cjs'], { cwd: root, stdio: 'inherit' });
 
 console.log('✅ Release safeguards are enforced by automation');
 console.log('✅ Release automation wiring is complete');

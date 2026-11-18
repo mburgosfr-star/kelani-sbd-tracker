@@ -1,0 +1,3 @@
+- Kies automatische afronding op 0,5 of 2,5 kg bij Gewichten. Bestaande instellingen blijven behouden; handmatige gewichten en vaste warm-ups veranderen niet.
+- Programma en Agenda tonen de resterende cyclus en minstens vier weken vooruit, ook over cyclusgrenzen heen. Workouts krijgen CxWx-labels.
+- Tekst, invoervelden en onderste knoppen passen beter. Deelkaarten zijn gecentreerd; delen na een gewone workout of rustdag vervalt.

@@ -1,0 +1,3 @@
+- Choose automatic rounding to 0.5 or 2.5 kg in Weights. Existing settings are preserved; manual weights and fixed warm-ups stay unchanged.
+- Program and Calendar show the remaining cycle and at least four weeks ahead, continuing across cycles. Workouts have CxWx labels.
+- Text, input fields and bottom buttons fit better. Share cards are centered; sharing after a regular workout or rest day is removed.
