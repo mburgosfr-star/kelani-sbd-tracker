@@ -373,3 +373,24 @@ test('provider failure during orphan discovery is reported without deleting or c
   expect(deleteEvent).not.toHaveBeenCalled();
   expect(upsertEvent).not.toHaveBeenCalled();
 });
+
+test('title migration updates each linked event once, preserving timing and deletion choices', async () => {
+  const desired = { ...event, title: 'C5W18 Kelani', titleFormatVersion: 1,
+    alternateTitle: 'C5W18 Kelani', generatedTitles: ['Kelani workout · C5W18', 'C5W18 Kelani'] };
+  const old = { cycleId: 5, workoutId: 18, calendarId: '7', eventId: '42',
+    syncedDate: event.dateKey, startTime: event.startTime, durationMinutes: event.durationMinutes,
+    reminderInitialized: true, identityVerified: true, duplicateReconciliationVersion: 2 };
+  const upsertEvent = vi.fn().mockResolvedValue('42');
+  const deleteEvent = vi.fn();
+  const result = await syncWorkoutCalendar({ settings: { ...settings, eventMappings: [old] },
+    desiredEvents: [desired], today, upsertEvent, deleteEvent });
+  expect(upsertEvent).toHaveBeenCalledWith(expect.objectContaining({ eventId: '42', title: 'C5W18 Kelani',
+    preserveTiming: true, generatedTitles: desired.generatedTitles }));
+  const restored = JSON.parse(JSON.stringify({ ...settings, eventMappings: result.mappings }));
+  await syncWorkoutCalendar({ settings: restored, desiredEvents: [desired], today, upsertEvent, deleteEvent });
+  expect(upsertEvent).toHaveBeenCalledTimes(1);
+  expect(deleteEvent).not.toHaveBeenCalled();
+  await syncWorkoutCalendar({ settings: { ...restored, eventMappings: [{ ...old, deletedExternally: true }] },
+    desiredEvents: [desired], today, upsertEvent, deleteEvent });
+  expect(upsertEvent).toHaveBeenCalledTimes(1);
+});

@@ -135,3 +135,14 @@ test.each([['nl', 'morgen', 'Morgen'], ['en', 'tomorrow', 'Tomorrow'], ['ca', 'd
       .toBe(formatWorkoutScheduleDate('2026-10-02', options));
   }
 );
+
+
+test.each([['nl', 'vandaag', 'Vandaag'], ['en', 'today', 'Today'], ['ca', 'avui', 'Avui']])(
+  'Program can omit today’s date in %s while Dashboard keeps it', (language, todayLabel, expected) => {
+    const options = { language, todayLabel, today: TODAY, compact: true };
+    expect(formatWorkoutScheduleDate('2026-09-30', { ...options, omitTodayDate: true })).toBe(expected);
+    expect(formatWorkoutScheduleDate('2026-09-30', options)).toMatch(new RegExp(`^${expected} · `));
+    expect(formatWorkoutScheduleDate('2026-10-02', { ...options, omitTodayDate: true }))
+      .toBe(formatWorkoutScheduleDate('2026-10-02', options));
+  }
+);

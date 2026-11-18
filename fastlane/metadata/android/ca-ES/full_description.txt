@@ -28,7 +28,7 @@ Funcions:
 - Exportació i importació local de dades, amb historial diari opcional i una còpia de seguretat verificada abans de restaurar
 - En completar un cicle, pots consultar els resultats, el progrés des del començament i un gràfic del millor total d’1RM registrat
 - Sincronització opcional dels entrenaments futurs amb un calendari d'Android seleccionat després de concedir-hi accés i iniciar la primera sincronització
-- La planificació del calendari inclou la resta del cicle actual i un cicle següent provisional; la previsió pot canviar
+- El programa i el calendari comparteixen la resta del cicle actual i almenys quatre setmanes endavant, amb cicles posteriors si cal; els plans futurs poden canviar
 - Eliminació opcional dels esdeveniments de Kelani del calendari quan es completen els entrenaments a l’aplicació
 - Els esdeveniments d’entrenament inclouen un recordatori a l’hora d’inici; es respecten els recordatoris que després canviïs o eliminis al calendari
 - Els esdeveniments d’entrenament que eliminis manualment del calendari continuen eliminats en les sincronitzacions posteriors

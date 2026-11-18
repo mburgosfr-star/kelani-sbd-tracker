@@ -809,8 +809,8 @@ test('meet workout keeps the standard top and lift spacing', () => {
     marginBottom: 4,
   });
   expect(meetWorkoutLiftBlockStyle().marginTop).toBeUndefined();
-  expect(workoutCompletionButtonMargin({ isMeetDay: true })).toBe('8px auto 0');
-  expect(workoutCompletionButtonMargin({ isMeetDay: false })).toBe('2px auto 0');
+  expect(workoutCompletionButtonMargin({ isMeetDay: true })).toBe('24px auto 0');
+  expect(workoutCompletionButtonMargin({ isMeetDay: false })).toBe('24px auto 0');
 });
 
 test('meet workout uses spare height between lift blocks instead of below completion', () => {
@@ -1455,8 +1455,8 @@ test('weight unit is a direct Settings choice without a demographic profile', ()
     />
   );
 
-  fireEvent.click(screen.getByRole('button', { name: 'kg' }));
-  expect(screen.getByRole('heading', { name: 'Change weight unit' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /kg ·/ }));
+  expect(screen.getByRole('heading', { name: 'Weights' })).toBeInTheDocument();
   expect(screen.queryByText(/date of birth/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/^sex/i)).not.toBeInTheDocument();
 
@@ -2564,9 +2564,15 @@ test('Smart workout dates appear on Dashboard and in the Program completion-labe
 
   fireEvent.click(screen.getByRole('button', { name: 'Program' }));
   expect(await screen.findByTestId('program-workout-schedule-date-1'))
-    .toHaveTextContent(/^Today · /);
+    .toHaveTextContent(/^Today$/);
   expect(screen.getByTestId('program-workout-schedule-date-2'))
     .toHaveTextContent(/^Tomorrow$/);
+  for (const number of [1, 2]) {
+    const badge = screen.getByTestId(`program-workout-schedule-date-${number}`);
+    expect(badge.tagName).toBe('SPAN');
+    expect(badge).toHaveStyle({ textTransform: 'uppercase' });
+  }
+  expect(screen.queryByText(translations.en.programNext)).not.toBeInTheDocument();
 });
 
 test('Smart practical route is available above beginner and immediately replaces an untouched workout', async () => {
@@ -2857,7 +2863,9 @@ test('Program keeps its accessible name outside the list without a visible title
   expect(screen.getByTestId('app-viewport').scrollTop).toBe(0);
   expect(screen.getAllByRole('button', { name: 'Show fewer workouts' })).toHaveLength(2);
   expect(list.lastElementChild).toHaveTextContent('Show fewer workouts');
-  expect(list).toHaveStyle({ overflowY: 'auto', rowGap: '9.5px', paddingBottom: '0px' });
+  expect(screen.getByTestId('program-top-actions')).toHaveStyle({ padding: '4px 0', flexShrink: 0 });
+  expect(screen.getByTestId('program-bottom-actions')).toHaveStyle({ padding: '4px 0', flexShrink: 0 });
+  expect(list).toHaveStyle({ overflowY: 'auto', rowGap: '9.5px', paddingBottom: '8px' });
   expect(list.previousElementSibling).toBe(title);
   currentCard.getBoundingClientRect = () => ({ top: -50, bottom: 50, height: 100 });
   fireEvent.click(screen.getAllByRole('button', { name: 'Show fewer workouts' })[1]);
@@ -3228,3 +3236,86 @@ test('Classic Program factors stay accessible after removing the visible route t
   fireEvent.click(screen.getByRole('button', { name: t.back }));
   expect(screen.queryByRole('heading', { level: 3 })).not.toBeInTheDocument();
 });
+
+test.each(['en', 'nl', 'ca'])('rest day uses its real scheduled day and keeps the full action inside padded space (%s)', language => {
+  const t = translations[language];
+  const onComplete = vi.fn();
+  const props = { workout: { type: 'rest', number: 4 }, trainingModel: 'smart', currentCycle: 1,
+    totalWorkouts: 28, isReadOnly: false, onComplete, t, language, scheduleToday: '2026-11-17' };
+  const view = render(<CurrentWorkout {...props} scheduledDateKey="2026-11-18" />);
+  const badge = screen.getByTestId('rest-workout-schedule-badge');
+  expect(badge.textContent.toLocaleLowerCase()).toBe(t.tomorrow.toLocaleLowerCase());
+  expect(badge).toHaveStyle({ textTransform: 'uppercase' });
+  expect(screen.queryByText(t.programNext)).not.toBeInTheDocument();
+  expect(screen.getByText(t.restReadyNextWorkout)).toBeInTheDocument();
+  const action = screen.getByTestId('rest-workout-actions');
+  expect(action).toHaveStyle({ padding: '8px 0', minHeight: 'calc(var(--kelani-button-height) + 16px)', flexShrink: 0 });
+  expect(screen.getByTestId('screen-scroll-content')).toHaveStyle({ gridTemplateRows: 'auto minmax(min-content, 1fr) auto' });
+  const button = screen.getByTestId('complete-rest-day-button');
+  expect(action).toContainElement(button);
+  expect(button).toHaveStyle({ margin: '0 auto' });
+  fireEvent.click(button);
+  expect(onComplete).toHaveBeenCalledExactlyOnceWith('easy');
+  view.rerender(<CurrentWorkout {...props} scheduledDateKey="2026-11-17" />);
+  expect(screen.getByTestId('rest-workout-schedule-badge').textContent.toLocaleLowerCase()).toBe(t.today.toLocaleLowerCase());
+  view.rerender(<CurrentWorkout {...props} scheduledDateKey="" />);
+  expect(screen.queryByTestId('rest-workout-schedule-badge')).not.toBeInTheDocument();
+  view.rerender(<CurrentWorkout {...props} scheduledDateKey="2026-11-18" isReadOnly />);
+  expect(screen.getByTestId('complete-rest-day-button')).toBeDisabled();
+  expect(screen.queryByTestId('rest-workout-schedule-badge')).not.toBeInTheDocument();
+});
+
+test.each(['en', 'nl', 'ca'])('body data keeps units inside a separate centered field column and saves decimal values (%s)', language => {
+  const t = translations[language];
+  const onSave = vi.fn();
+  render(<BodyDataSection t={t} bodyData={{ bodyWeight: 84.9, bodyFat: 17.4, bodyWater: 55.3, visceralFat: 7.5, physiqueRating: 6 }} onSave={onSave} weightUnit="kg" />);
+  fireEvent.click(screen.getByRole('button', { name: t.editBodyData || t.edit }));
+  const weight = screen.getByRole('spinbutton', { name: t.bodyweight });
+  const fat = screen.getByRole('spinbutton', { name: t.bodyFatPercent });
+  const water = screen.getByRole('spinbutton', { name: t.bodyWaterPercent });
+  expect(weight).toHaveAccessibleDescription('kg');
+  expect(fat).toHaveAccessibleDescription('%');
+  for (const [key, input] of [['bodyWeight', weight], ['bodyFat', fat], ['bodyWater', water]]) {
+    const field = screen.getByTestId(`body-data-field-${key}`);
+    expect(field).toContainElement(input);
+    expect(field).toHaveStyle({ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'center', padding: '0 10px' });
+    expect(field.querySelector('span').style.position).toBe('');
+  }
+  fireEvent.change(weight, { target: { value: '85.4' } });
+  fireEvent.change(fat, { target: { value: '17.2' } });
+  fireEvent.click(screen.getByRole('button', { name: t.save }));
+  expect(onSave).toHaveBeenCalledExactlyOnceWith({ bodyWeight: 85.4, bodyFat: 17.2, bodyWater: 55.3, visceralFat: 7.5, physiqueRating: 6, leanMass: 70.7112 });
+  expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+});
+
+test('Program opens earlier and next-cycle workouts read-only without replacing active progress', async () => {
+  localStorage.clear(); localStorage.setItem('language', 'en');
+  const key = 'kel-powerlifting-user-data-v1';
+  localStorage.setItem(key, JSON.stringify({ version: 1, trainingModel: 'smart', currentCycle: 2,
+    showWhatsNewAfterUpdates: false, smartIdealRouteStartCycle: 1,
+    bodyWeights: [{ bodyWeight: 80 }], prs: { Squat: 50, Bench: 30, Deadlift: 60 },
+    oneRMs: { Squat: 50, Bench: 30, Deadlift: 60 }, history: [{ cycle: 1, workoutNumber: 1, restDay: true,
+      workoutSnapshot: { number: 1, type: 'rest', completed: true } }] }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Program' }, { timeout: 5000 }));
+  const before = JSON.parse(localStorage.getItem(key));
+  fireEvent.click(screen.getAllByRole('button', { name: 'Show all workouts' })[0]);
+  expect(screen.getByTestId('program-bottom-actions')).toHaveStyle({ padding: '4px 0', flexShrink: 0 });
+  expect(screen.getByText('C1W1')).toBeInTheDocument();
+  fireEvent.click(screen.getByTestId('program-workout-C3W1'));
+  expect(screen.getByTestId('app-header')).toHaveTextContent('Cycle 3');
+  expect(screen.getByRole('button', { name: translations.en.previewNotCompletable })).toBeDisabled();
+  const after = JSON.parse(localStorage.getItem(key));
+  expect(after.currentCycle).toBe(before.currentCycle);
+  expect(after.inProgress.currentIndex).toBe(before.inProgress.currentIndex);
+  expect(after.inProgress.workouts).toEqual(before.inProgress.workouts);
+  expect(after.history).toEqual(before.history);
+  expect(after.prs).toEqual(before.prs);
+  fireEvent.click(screen.getByRole('button', { name: 'Workout' }));
+  expect(screen.getByTestId('app-header')).toHaveTextContent('Cycle 2');
+  fireEvent.click(screen.getByRole('button', { name: 'Program' }));
+  fireEvent.click(screen.getByTestId('program-workout-C1W1'));
+  expect(screen.getByTestId('app-header')).toHaveTextContent('Cycle 1');
+  expect(screen.getByTestId('complete-rest-day-button')).toBeDisabled();
+  expect(JSON.parse(localStorage.getItem(key)).history).toEqual(before.history);
+}, 15000);

@@ -8,8 +8,11 @@ export function adaptiveFontSize(value) {
 
 export function screenFontCandidates(screen, { width = 393, height = 873 } = {}) {
   // Long workout lists must stay readable rather than shrink to one page.
-  // Program gets the requested date-only change before further layout changes.
   if (screen === 'all') return [1];
+  // Dashboard already has a larger heading/value hierarchy. Spare height
+  // should spread its sections, not magnify every label by another 25%.
+  if (screen === 'dashboard') return [1.05, 1, 0.95, 0.9];
+  if (screen === 'settings') return [1.15, 1.1, 1.05, 1, 0.95, 0.9];
   if (screen === 'current') return width < 360 || height < 640 ? [1, 0.95, 0.9] : [1];
   return SCREEN_FONT_STEPS;
 }

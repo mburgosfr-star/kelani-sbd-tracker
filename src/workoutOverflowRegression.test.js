@@ -57,6 +57,13 @@ test('a tall lift centres the active set instead of hiding it to fit the whole l
   expect(region.scrollTo).toHaveBeenCalledWith({ top: 225, behavior: 'smooth' });
 });
 
+test('the active tail of a tall last lift keeps the full completion button visible when it fits', () => {
+  const { region, target } = focusGeometry({ targetTop: 650, targetBottom: 700,
+    liftTop: 100, liftBottom: 900, completionBottom: 980 });
+  scrollActiveWorkoutTarget(target);
+  expect(region.scrollTo).toHaveBeenCalledWith({ top: 515, behavior: 'smooth' });
+});
+
 test('centering stays within the available scroll range', () => {
   const { region, target } = focusGeometry({ targetTop: 1800, targetBottom: 1850 });
   scrollActiveWorkoutTarget(target);
@@ -69,10 +76,10 @@ test('the last meet lift stays the focus when the completion action cannot fit a
   expect(region.scrollTo).toHaveBeenCalledWith({ top: 300, behavior: 'smooth' });
 });
 
-test('moving from Bench to Deadlift centres the lift together with the completion action', async () => {
+test.each(['meet', 'training'])('moving from Bench to Deadlift includes the completion action on %s days', async type => {
   const makeWorkout = benchDone => ({
     number: 27,
-    type: 'meet',
+    type,
     lifts: [
       { lift: 'Squat', warmups: [], sets: [{ weight: 50, reps: 1, done: true }] },
       { lift: 'Bench', warmups: [], sets: [{ weight: 40, reps: 1, done: benchDone }] },

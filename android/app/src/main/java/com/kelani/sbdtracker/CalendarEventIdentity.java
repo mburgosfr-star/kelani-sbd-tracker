@@ -23,6 +23,17 @@ final class CalendarEventIdentity {
             && (candidate.equals(expected) || candidate.equals(alternate));
     }
 
+    static boolean sameGeneratedTitle(String retained, String candidate, String expected, String alternate, java.util.List<String> generated) {
+        return sameGeneratedTitle(retained, candidate, expected, alternate)
+            || (isGeneratedTitle(retained, expected, alternate, generated)
+                && isGeneratedTitle(candidate, expected, alternate, generated));
+    }
+
+    static boolean isGeneratedTitle(String retained, String expected, String alternate, java.util.List<String> generated) {
+        if (retained == null) return false;
+        return retained.equals(expected) || retained.equals(alternate) || (generated != null && generated.contains(retained));
+    }
+
     static int eventStatus(long actualCalendarId, long expectedCalendarId,
                            String description, String expectedMarker, boolean deleted) {
         if (deleted) return -1;

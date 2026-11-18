@@ -1,3 +1,4 @@
+import { roundingPoliciesEqual } from './weightRounding';
 import { getCompletedWorkoutNumbers, getEntryCycle } from './workoutHistoryStats';
 import { buildSmartReturnTraining, SMART_RETURN_TRAINING } from './smartReturnTraining';
 
@@ -154,8 +155,13 @@ export function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, hist
     if (workout.completed) return workout;
     const generated = generatedWorkouts[index];
     if (!generated) return workout;
+    if (workoutHasUserProgress(workout) && !roundingPoliciesEqual(workout.weightRounding, generated.weightRounding)) return workout;
     if (workout.smartReturnTraining && workout.type === generated.type &&
       workout.smartIdealRoute?.workoutNumber === generated.smartIdealRoute?.workoutNumber) {
+      if (!roundingPoliciesEqual(workout.weightRounding, generated.weightRounding) && !returnWorkoutHasLoadProgress(workout)) {
+        const refreshed = buildSmartReturnTraining(generated);
+        return { ...refreshed, prepItems: mergeWorkoutPrepItems(workout, refreshed) };
+      }
       if (workout.smartReturnTrainingVersion !== SMART_RETURN_TRAINING.version &&
         workout.smartReturnBaseline && !returnWorkoutHasLoadProgress(workout)) {
         const upgraded = buildSmartReturnTraining(workout.smartReturnBaseline);

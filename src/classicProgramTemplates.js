@@ -1,3 +1,4 @@
+import { normalizeWeightRounding, roundAccessoryLoads } from './weightRounding';
 import { roundTrainingWeight } from './workoutUnits';
 import { reduceVolumeReps, completeWorkoutVolumeGrid, WORKOUT_VOLUME_MAX_SETS } from './workoutGridPolicy';
 import { roundBarbellWeight } from './smartFrequencyPolicy';
@@ -39,9 +40,9 @@ export function generateCooldownItems(cooldownMode = 'upperBackFriendly') {
   ];
 }
 
-function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly', workoutSetup = null, programOverride = null) {
+function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly', workoutSetup = null, programOverride = null, weightRounding = null) {
   function roundTraining(w) {
-  return roundTrainingWeight(w);
+  return roundTrainingWeight(w, 'nearest', normalizeWeightRounding(weightRounding).training);
 }
 
   const oneRMs = {
@@ -160,6 +161,8 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
     }
 
 
+    sets = sets.map(set => ({ ...set,
+      weight: roundTraining(set.weight), originalWeight: roundTraining(set.originalWeight ?? set.weight) }));
     const warmups = generateWarmups(sets, liftConfig.lift);
     sets = completeWorkoutVolumeGrid({ sets, warmups });
 
@@ -237,21 +240,21 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
         labelKey: 'opener',
         reps: 1,
         pct: 0.90,
-        weight: roundBarbellWeight(oneRMs[lift] * 0.90, 'nearest', 2.5),
+        weight: roundBarbellWeight(oneRMs[lift] * 0.90, 'nearest', normalizeWeightRounding(weightRounding).meet),
         done: false,
       },
       {
         labelKey: 'secondAttempt',
         reps: 1,
         pct: 0.975,
-        weight: roundBarbellWeight(oneRMs[lift] * 0.975, 'nearest', 2.5),
+        weight: roundBarbellWeight(oneRMs[lift] * 0.975, 'nearest', normalizeWeightRounding(weightRounding).meet),
         done: false,
       },
       {
         labelKey: 'thirdAttempt',
         reps: 1,
         pct: 1.025,
-        weight: roundBarbellWeight(oneRMs[lift] * 1.025, 'nearest', 2.5),
+        weight: roundBarbellWeight(oneRMs[lift] * 1.025, 'nearest', normalizeWeightRounding(weightRounding).meet),
         done: false,
       },
     ];
@@ -268,10 +271,11 @@ function generateProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, prep
   accessories: [],
 });
 
-  return workouts;
+  return workouts.map(workout => ({ ...workout,
+    accessories: roundAccessoryLoads(workout.accessories, normalizeWeightRounding(weightRounding).training) }));
 }
 
-export function generateUltraProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly', workoutSetup = null) {
+export function generateUltraProgram(s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly', workoutSetup = null, weightRounding = null) {
   const ultraProgram = [
     // Ultra block 1: high-frequency base, all lifts practiced often.
     { type: 'training', label: 'Ultra Primary SBD', labelKey: 'practice', lifts: [{ lift: 'Squat', blocks: [{ sets: 1, reps: 3, pct: 0.725, labelKey: 'topTriple' }, { sets: 2, reps: 5, pct: 0.625, labelKey: 'backoff' }] }, { lift: 'Bench', blocks: [{ sets: 3, reps: 5, pct: 0.600, labelKey: 'workSets' }] }, { lift: 'Deadlift', blocks: [{ sets: 2, reps: 3, pct: 0.600, labelKey: 'workSets' }] }] },
@@ -323,14 +327,15 @@ export function generateUltraProgram(s, b, d, accessoryMode = 'off', accessoryPR
     squatVariant,
     cooldownMode,
     workoutSetup,
-    ultraProgram
+    ultraProgram,
+    weightRounding
   );
 }
 
-export function generateProgramForProfile(programProfile, s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly', workoutSetup = null) {
+export function generateProgramForProfile(programProfile, s, b, d, accessoryMode = 'off', accessoryPRs = {}, preparationMode = 'basicFirst', deadliftVariant = 'standard', benchPressVariant = 'standard', squatVariant = 'standard', cooldownMode = 'upperBackFriendly', workoutSetup = null, weightRounding = null) {
   if (normalizeProgramProfile(programProfile) === 'kelaniSbdUltra') {
-    return generateUltraProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode, workoutSetup);
+    return generateUltraProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode, workoutSetup, weightRounding);
   }
 
-  return generateProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode, workoutSetup);
+  return generateProgram(s, b, d, accessoryMode, accessoryPRs, preparationMode, deadliftVariant, benchPressVariant, squatVariant, cooldownMode, workoutSetup, null, weightRounding);
 }

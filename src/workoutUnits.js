@@ -1,12 +1,13 @@
 // Prescribed training loads only. Progression steps, meet attempts and
 // recorded/estimated maxima deliberately retain their own policies.
 export const TRAINING_WEIGHT_INCREMENT_KG = 0.5;
-export function roundTrainingWeight(weight, mode = 'nearest') {
+export function roundTrainingWeight(weight, mode = 'nearest', incrementKg = TRAINING_WEIGHT_INCREMENT_KG) {
   const value = Number(weight);
   if (!Number.isFinite(value) || value <= 0) return 0;
-  const steps = value / TRAINING_WEIGHT_INCREMENT_KG;
+  const step = incrementKg === 2.5 ? 2.5 : TRAINING_WEIGHT_INCREMENT_KG;
+  const steps = value / step;
   const rounded = mode === 'down' ? Math.floor(steps) : mode === 'up' ? Math.ceil(steps) : Math.round(steps);
-  return rounded * TRAINING_WEIGHT_INCREMENT_KG;
+  return rounded * step;
 }
 
 export const WEIGHT_UNITS = {

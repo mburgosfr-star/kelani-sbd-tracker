@@ -1,3 +1,4 @@
+import { normalizeWeightRounding, roundAccessoryLoads, roundingPoliciesEqual } from './weightRounding';
 import { roundTrainingWeight } from './workoutUnits';
 import { workoutHasUserProgress } from './workoutStateMerge';
 import { WORKOUT_GRID_COLUMNS, WORKOUT_VOLUME_MIN_SETS, completeWorkoutVolumeGrid } from './workoutGridPolicy';
@@ -919,6 +920,7 @@ export function buildSmartReadinessSignals(context = {}) {
     oneRMs: context.oneRMs || {},
     meetPlannerAttempts: context.meetPlannerAttempts || {},
     currentCycle: targetCycle,
+    weightRounding: context.weightRounding,
   });
 
   const isMeetLikeHistoryEntry = entry =>
@@ -1770,6 +1772,7 @@ export function buildSmartMeetPlanReadiness({
   oneRMs = {},
   meetPlannerAttempts = {},
   currentCycle = 1,
+  weightRounding = null,
 } = {}) {
   const bestMaxes = calculateBestMaxesFromHistory(history);
   const currentCycleEntries = (history || []).filter(entry =>
@@ -1794,7 +1797,7 @@ export function buildSmartMeetPlanReadiness({
       Number(prs?.[lift]) ||
       0;
 
-    const suggestedAttempts = buildMeetAttemptsFromE1RM(bestE1RM);
+    const suggestedAttempts = buildMeetAttemptsFromE1RM(bestE1RM, normalizeWeightRounding(weightRounding).meet);
     const attempts = MEET_ATTEMPT_KEYS.reduce((attemptAcc, key) => {
       const custom = Number(meetPlannerAttempts?.[lift]?.[key]);
       return {
@@ -2770,7 +2773,7 @@ export function buildSmartMeetWarmups(openerWeight = 0, lift = '') {
   }], lift);
 }
 
-export function buildSmartMeetAttemptSets(lift = '', readiness = {}, fallbackSets = []) {
+export function buildSmartMeetAttemptSets(lift = '', readiness = {}, fallbackSets = [], incrementKg = 2.5) {
   const plannedAttempts = readiness?.meetPlanReadiness?.[lift]?.attempts || {};
   const fallbackByKey = Object.fromEntries(
     (fallbackSets || []).map(set => [set.labelKey, Number(set.weight) || 0])
@@ -2784,9 +2787,9 @@ export function buildSmartMeetAttemptSets(lift = '', readiness = {}, fallbackSet
     // Automatic plans are already on the 2.5kg grid. Preserve manual
     // half-kilogram attempts instead of rounding them a second time.
     const isManual = readiness?.meetPlanReadiness?.[lift]?.manualAttemptKeys?.includes(labelKey);
-    let weight = roundBarbellWeight(plannedWeight, 'nearest', isManual ? 0.5 : 2.5);
+    let weight = roundBarbellWeight(plannedWeight, 'nearest', isManual ? 0.5 : incrementKg);
     if (weight > 0 && weight <= previousWeight) {
-      weight = roundBarbellWeight(previousWeight + 2.5, 'up', isManual ? 0.5 : 2.5);
+      weight = roundBarbellWeight(previousWeight + incrementKg, 'up', isManual ? 0.5 : incrementKg);
     }
     previousWeight = weight;
 
@@ -2802,14 +2805,15 @@ export function buildSmartMeetAttemptSets(lift = '', readiness = {}, fallbackSet
   });
 }
 
-function buildSmartMeetWorkout(sourceWorkout = {}, meetCandidate = null, readiness = {}) {
+function buildSmartMeetWorkout(sourceWorkout = {}, meetCandidate = null, readiness = {}, weightRounding = null) {
   const template = meetCandidate?.type === 'meet' ? meetCandidate : sourceWorkout;
 
   const lifts = (template.lifts || []).map(liftBlock => {
     const sets = buildSmartMeetAttemptSets(
       liftBlock.lift,
       readiness,
-      liftBlock.sets
+      liftBlock.sets,
+      normalizeWeightRounding(weightRounding).meet
     );
 
     return {
@@ -2841,6 +2845,7 @@ function buildSmartIdealRouteScaffold({
   squatVariant = 'standard',
   benchPressVariant = 'standard',
   deadliftVariant = 'standard',
+  weightRounding = null,
 } = {}) {
   const trainingMaxes = {
     Squat: Number(squat) || 0,
@@ -2850,10 +2855,10 @@ function buildSmartIdealRouteScaffold({
   const meetLifts = LIFT_ORDER.map((lift, index) => {
     const oneRM = trainingMaxes[lift];
     const sets = buildSmartMeetAttemptSets(lift, {}, [
-      { labelKey: 'opener', weight: buildMeetAttemptsFromE1RM(oneRM).opener },
-      { labelKey: 'secondAttempt', weight: buildMeetAttemptsFromE1RM(oneRM).secondAttempt },
-      { labelKey: 'thirdAttempt', weight: buildMeetAttemptsFromE1RM(oneRM).thirdAttempt },
-    ]);
+      { labelKey: 'opener', weight: buildMeetAttemptsFromE1RM(oneRM, normalizeWeightRounding(weightRounding).meet).opener },
+      { labelKey: 'secondAttempt', weight: buildMeetAttemptsFromE1RM(oneRM, normalizeWeightRounding(weightRounding).meet).secondAttempt },
+      { labelKey: 'thirdAttempt', weight: buildMeetAttemptsFromE1RM(oneRM, normalizeWeightRounding(weightRounding).meet).thirdAttempt },
+    ], normalizeWeightRounding(weightRounding).meet);
     const liftBlock = {
       lift,
       role: index === 0 ? 'primary' : index === 1 ? 'secondary' : 'tertiary',
@@ -3818,13 +3823,14 @@ function buildSmartIdealSet({
   groupKey,
   weightOverride = null,
   prescribedPct = null,
+  incrementKg = 0.5,
 } = {}) {
   const precisePct = Number(pct) || 0;
   const numericRealOneRM = Number(realOneRM) || 0;
   const explicitWeight = Number(weightOverride);
   const weight = Number.isFinite(explicitWeight) && explicitWeight > 0
     ? explicitWeight
-    : roundTrainingWeight(numericRealOneRM * precisePct);
+    : roundTrainingWeight(numericRealOneRM * precisePct, 'nearest', incrementKg);
   const displayPct = numericRealOneRM > 0
     ? roundPercent(weight / numericRealOneRM)
     : roundPercent(precisePct);
@@ -3852,9 +3858,10 @@ function getSmartIdealHeavyTopWeight({
   realOneRM = 0,
   routeWorkout = {},
   pct = 0,
+  incrementKg = 0.5,
 } = {}) {
   const numericRealOneRM = Number(realOneRM) || 0;
-  const target = roundTrainingWeight(numericRealOneRM * (Number(pct) || 0));
+  const target = roundTrainingWeight(numericRealOneRM * (Number(pct) || 0), 'nearest', incrementKg);
 
   if (routeWorkout.stage !== 'normal') return target;
 
@@ -3868,16 +3875,16 @@ function getSmartIdealHeavyTopWeight({
   if (phaseIndex <= 0) return target;
 
   let minimum = roundTrainingWeight(
-    numericRealOneRM * phasePctByKey[phaseOrder[0]]
+    numericRealOneRM * phasePctByKey[phaseOrder[0]], 'nearest', incrementKg
   );
   for (let index = 1; index <= phaseIndex; index += 1) {
     const phaseTarget = roundTrainingWeight(
-      numericRealOneRM * phasePctByKey[phaseOrder[index]]
+      numericRealOneRM * phasePctByKey[phaseOrder[index]], 'nearest', incrementKg
     );
     minimum = Math.max(phaseTarget, minimum + 2.5);
   }
 
-  const realOneRMCap = roundTrainingWeight(numericRealOneRM);
+  const realOneRMCap = roundTrainingWeight(numericRealOneRM, 'nearest', incrementKg);
   return Math.min(Math.max(target, minimum), realOneRMCap);
 }
 
@@ -3985,8 +3992,10 @@ export function buildSmartIdealTrainingWorkout({
   squatVariant = 'standard',
   history = [],
   workoutSetup = null,
+  weightRounding = null,
 } = {}) {
   if (routeWorkout?.type !== 'training') return null;
+  const incrementKg = normalizeWeightRounding(weightRounding).training;
 
   const trainingMaxes = {
     Squat: Number(squat) || 0,
@@ -4015,10 +4024,12 @@ export function buildSmartIdealTrainingWorkout({
         reps: topSet.reps,
         pct: topSet.pct,
         realOneRM: trainingMax,
+        incrementKg,
         groupKey: `${routeLift.lift}-top`,
         weightOverride: routeLift.intensityRole === 'heavy'
           ? getSmartIdealHeavyTopWeight({
             realOneRM: trainingMax,
+            incrementKg,
             routeWorkout,
             pct: topSet.pct,
           })
@@ -4033,6 +4044,7 @@ export function buildSmartIdealTrainingWorkout({
         reps: Number(volume.reps) || 4,
         pct: volume.pct,
         realOneRM: trainingMax,
+        incrementKg,
         groupKey: `${routeLift.lift}-${hasTopSet ? 'backoff' : 'worksets'}`,
         prescribedPct: isTaper ? volume.pct : null,
       })));
@@ -4803,6 +4815,7 @@ function generateSmartWorkouts({
   oneRMs = {},
   idealRouteEnabled = true,
   workoutSetup = null,
+  weightRounding = null,
   trainingFocus = 'standard',
   inProgressWorkout = null,
 }) {
@@ -4824,6 +4837,7 @@ function generateSmartWorkouts({
       squatVariant,
       benchPressVariant,
       deadliftVariant,
+      weightRounding,
     })
     : generateProgramForProfile(
       programProfile,
@@ -4865,6 +4879,7 @@ function generateSmartWorkouts({
     },
     oneRMs,
     meetPlannerAttempts,
+    weightRounding,
   }, generatedWorkouts);
   const visibleThroughIndex = Math.min(
     Math.max(smartDecision.index, 0),
@@ -5098,6 +5113,7 @@ function generateSmartWorkouts({
       squatVariant,
       history,
       workoutSetup,
+      weightRounding,
     });
   }
 
@@ -5356,7 +5372,7 @@ function generateSmartWorkouts({
         : shouldBlockSmartMeetDay && !fallbackTrainingCandidate
           ? buildSmartRecoveryWorkout(workout)
         : shouldBuildMeetDay
-          ? buildSmartMeetWorkout(workout, smartMeetCandidate, smartDecision.readiness)
+          ? buildSmartMeetWorkout(workout, smartMeetCandidate, smartDecision.readiness, weightRounding)
           : shouldBuildDeloadDay
             ? buildSmartDeloadWorkout(workout, fallbackTrainingCandidate, smartDecision.readiness)
             : shouldUseFallbackTraining
@@ -5425,13 +5441,15 @@ function generateSmartWorkouts({
         squatVariant,
         history,
         workoutSetup,
+        weightRounding,
       })
       : futureIdealRouteWorkout?.type === 'meet'
         ? applySmartIdealRouteMetadata(
           buildSmartMeetWorkout(
             workout,
             smartMeetCandidate,
-            smartDecision.readiness
+            smartDecision.readiness,
+            weightRounding
           ),
           futureIdealRouteWorkout,
           athleteLevel
@@ -5642,6 +5660,7 @@ export function generateWorkoutsForTrainingModelUnconstrained(model, args = {}) 
     // while the historical adaptive engine is retired safely.
     idealRouteEnabled: args.idealRouteEnabled !== false,
     workoutSetup: args.workoutSetup || null,
+    weightRounding: args.weightRounding || args.data?.weightRounding || null,
     trainingFocus: normalizeSmartTrainingFocus(args.trainingFocus),
     inProgressWorkout: args.inProgressWorkout || null,
   };
@@ -5662,7 +5681,7 @@ export function generateWorkoutsForTrainingModelUnconstrained(model, args = {}) 
     workoutArgs.benchPressVariant,
     workoutArgs.squatVariant,
     workoutArgs.cooldownMode
-    , workoutArgs.workoutSetup
+    , workoutArgs.workoutSetup, workoutArgs.weightRounding
   );
 }
 
@@ -5690,7 +5709,7 @@ function getSmartFrequencyCurrentIndex(workouts, options = {}) {
   return firstIncompleteIndex >= 0 ? firstIncompleteIndex : Math.max(0, workouts.length - 1);
 }
 
-function normalizeGeneratedMeetSet(set = {}) {
+function normalizeGeneratedMeetSet(set = {}, incrementKg = 2.5) {
   // Normalize automatic plans only. User-confirmed and recorded loads are
   // authoritative, including half-kilogram attempts.
   if (set.manualWeight || set.done || set.failed || set.skipped ||
@@ -5701,7 +5720,7 @@ function normalizeGeneratedMeetSet(set = {}) {
   const roundedWeight = roundBarbellWeight(
     currentWeight,
     'nearest',
-    2.5,
+    incrementKg,
   );
   const originalWeight =
     Number(set.originalWeight ?? set.weight) || currentWeight;
@@ -5712,12 +5731,12 @@ function normalizeGeneratedMeetSet(set = {}) {
     originalWeight: roundBarbellWeight(
       originalWeight,
       'nearest',
-      2.5,
+      incrementKg,
     ),
   };
 }
 
-export function normalizeSmartMeetWorkoutWeights(workouts = []) {
+export function normalizeSmartMeetWorkoutWeights(workouts = [], incrementKg = 2.5) {
   return (Array.isArray(workouts) ? workouts : []).map((workout) => {
     const isMeetWorkout = (
       workout?.type === 'meet'
@@ -5729,13 +5748,13 @@ export function normalizeSmartMeetWorkoutWeights(workouts = []) {
 
     const lifts = (workout.lifts || []).map((liftBlock) => ({
       ...liftBlock,
-      sets: (liftBlock.sets || []).map(normalizeGeneratedMeetSet),
+      sets: (liftBlock.sets || []).map(set => normalizeGeneratedMeetSet(set, incrementKg)),
     }));
 
     return {
       ...workout,
       lifts,
-      sets: (workout.sets || []).map(normalizeGeneratedMeetSet),
+      sets: (workout.sets || []).map(set => normalizeGeneratedMeetSet(set, incrementKg)),
     };
   });
 }
@@ -5805,7 +5824,7 @@ function generateWorkoutsForTrainingModelBase(trainingModel, options = {}) {
     return generatedWorkouts;
   }
 
-  const workouts = normalizeSmartMeetWorkoutWeights(generatedWorkouts);
+  const workouts = normalizeSmartMeetWorkoutWeights(generatedWorkouts, normalizeWeightRounding(options.weightRounding || options.data?.weightRounding).meet);
 
   // The ideal route has already applied every permitted calendar change.
   // Never run its selected workout through the historical frequency layer,
@@ -6052,14 +6071,13 @@ function projectedSmartHistoryEntries(workout, currentCycle) {
   });
 }
 
-// Calendar-only simulation. Synthetic success stays in this local history copy;
-// it must never be persisted as completed training or update the user's PRs.
-export function projectNextSmartCalendarCycle(options = {}) {
+// Read-only planning simulation. Synthetic successes never enter saved history.
+function createSmartPlanningSimulation(options) {
   let history = [...(options.history || [])];
   const currentCycle = Number(options.currentCycle) || 1;
-  function projectCycle(cycle, startIndex) {
+  return function projectCycle(cycle, startIndex, maximumDays = SMART_MEET_PROJECTION_MAX_FUTURE_WORKOUTS, partial = false) {
     const projected = [];
-    for (let index = startIndex; index < startIndex + SMART_MEET_PROJECTION_MAX_FUTURE_WORKOUTS; index += 1) {
+    for (let index = startIndex; index < startIndex + maximumDays; index += 1) {
       if (isSmartCycleCompleteAfterHistory(history, cycle)) return projected;
       const generated = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
         ...options, history, currentCycle: cycle, currentIndex: index,
@@ -6069,15 +6087,37 @@ export function projectNextSmartCalendarCycle(options = {}) {
         skipMeetProjectionSimulation: true,
       });
       const workout = generated[index];
-      if (!workout) throw new Error('Calendar cycle forecast is incomplete');
+      if (!workout) throw new Error('Program forecast is incomplete');
       projected.push(workout);
       history = [...history, ...projectedSmartHistoryEntries(workout, cycle)];
     }
-    if (isSmartCycleCompleteAfterHistory(history, cycle)) return projected;
-    throw new Error('Calendar cycle forecast exceeded its planning limit');
+    if (partial || isSmartCycleCompleteAfterHistory(history, cycle)) return projected;
+    throw new Error('Program forecast exceeded its planning limit');
+  };
+}
+
+export function projectNextSmartCalendarCycle(options = {}) {
+  const projectCycle = createSmartPlanningSimulation(options);
+  const cycle = Number(options.currentCycle) || 1;
+  projectCycle(cycle, Math.max(Number(options.currentIndex) || 0, 0));
+  return projectCycle(cycle + 1, 0);
+}
+
+// One read-only future for Program and Calendar: finish this cycle and cover
+// at least four weeks, crossing as many cycle boundaries as necessary.
+export function projectSmartPlanningHorizon(options = {}, minimumDays = 28) {
+  const days = Math.max(0, Math.min(28, Math.ceil(Number(minimumDays) || 0)));
+  const projectCycle = createSmartPlanningSimulation(options);
+  let cycle = Number(options.currentCycle) || 1;
+  const current = projectCycle(cycle, Math.max(Number(options.currentIndex) || 0, 0));
+  const result = current.map(workout => ({ cycle, workout }));
+  while (result.length < days) {
+    cycle += 1;
+    const workouts = projectCycle(cycle, 0, days - result.length, true);
+    if (!workouts.length) throw new Error('Program forecast contains an empty cycle');
+    result.push(...workouts.map(workout => ({ cycle, workout })));
   }
-  projectCycle(currentCycle, Math.max(Number(options.currentIndex) || 0, 0));
-  return projectCycle(currentCycle + 1, 0);
+  return result;
 }
 
 export function projectSmartMeetBySuccessfulSimulation(options = {}) {
@@ -6129,7 +6169,7 @@ export function projectSmartMeetBySuccessfulSimulation(options = {}) {
   return null;
 }
 
-export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
+function generateWorkoutsForTrainingModelWithProjection(trainingModel, options = {}) {
   const generatedWorkouts = generateWorkoutsForTrainingModelBase(trainingModel, options);
 
   if (!isSmartTrainingModel(trainingModel)) return generatedWorkouts;
@@ -6205,4 +6245,44 @@ export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
   };
 
   return nextWorkouts;
+}
+
+function roundGeneratedTrainingLoads(workout, policy) {
+  if (workout.type !== 'training') return workout;
+  let changed = false;
+  const blocks = workout.lifts?.length ? workout.lifts : [workout];
+  const lifts = blocks.map(block => {
+    let blockChanged = false;
+    let topWeight = null;
+    let sets = (block.sets || []).map(set => {
+      if (set.manualWeight || set.done || set.failed || set.skipped || set.adjustedFromOriginal) return set;
+      let weight = roundTrainingWeight(set.weight, 'nearest', policy.training);
+      if (set.labelKey === 'backoff' && topWeight > policy.training && weight >= topWeight) weight = topWeight - policy.training;
+      if (isTopSetLabel(set.labelKey)) topWeight = weight;
+      if (weight === Number(set.weight)) return set;
+      changed = blockChanged = true;
+      return { ...set, weight, originalWeight: weight };
+    });
+    if (!blockChanged) return block;
+    const warmups = generateWarmups(sets, block.lift || workout.lift, blocks.length === 1);
+    sets = completeSmartLiftGrid({ sets, warmups });
+    return { ...block, sets, warmups,
+      ...(block.smartPrescription ? { smartPrescription: { ...block.smartPrescription,
+        gridItemCount: sets.length + warmups.length, completeGrid: (sets.length + warmups.length) % 5 === 0 } } : {}) };
+  });
+  return !changed ? workout : { ...workout,
+    ...(workout.lifts?.length ? { lifts } : {}), sets: lifts[0].sets, warmups: lifts[0].warmups };
+}
+
+export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
+  const policy = normalizeWeightRounding(options.weightRounding || options.data?.weightRounding);
+  return generateWorkoutsForTrainingModelWithProjection(trainingModel, options).map((workout, index) => {
+    if (index === Number(options.currentIndex || 0) && workoutHasUserProgress(options.inProgressWorkout) &&
+        !roundingPoliciesEqual(policy, options.inProgressWorkout.weightRounding)) {
+      return { ...workout, ...options.inProgressWorkout, smartDecisionSummary: workout.smartDecisionSummary };
+    }
+    if (workout.completed) return workout;
+    return { ...roundGeneratedTrainingLoads(workout, policy), weightRounding: policy,
+      accessories: roundAccessoryLoads(workout.accessories, policy.training) };
+  });
 }

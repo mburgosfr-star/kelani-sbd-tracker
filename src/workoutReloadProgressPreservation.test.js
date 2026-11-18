@@ -247,3 +247,15 @@ test.each(['training', 'meet'])('manual half-kilograms survive reload and regene
   const [reloaded] = mergeGeneratedWorkoutStructure(JSON.parse(JSON.stringify([saved])), [generated], [], 1);
   expect(reloaded.lifts[0].sets[0]).toMatchObject({ weight: 89.5, originalWeight: 90, adjustedFromOriginal: true });
 });
+
+test.each([false, true])('warm-up rep correction respects a session already started: %s', started => {
+  const make = reps => ({ ...multiLiftWorkout({ done: false }), lifts: [{
+    ...multiLiftWorkout({ done: false }).lifts[0],
+    warmups: reps.map((count, index) => ({ reps: count, weight: [20, 60, 80][index], done: started && index === 0 })),
+  }] });
+  const old = make([5, 3, 3]);
+  const fresh = make([5, 5, 3]);
+  const [merged] = applyAccessoryPlanToWorkouts(JSON.parse(JSON.stringify([old])), [fresh], new Set(), old.number);
+  expect(merged.lifts[0].warmups.map(set => set.reps)).toEqual(started ? [5, 3, 3] : [5, 5, 3]);
+  expect(merged.lifts[0].warmups[0].done).toBe(started);
+});

@@ -30,6 +30,24 @@ public class CalendarEventIdentityTest {
     }
 
     @Test
+    public void titleMigrationRecognizesOnlyTheSameWorkoutsGeneratedNames() {
+        java.util.List<String> legacy = java.util.Arrays.asList(
+            "Kelani workout · C8W12", "Kelani training · C8W12", "Entrenament Kelani · C8W12");
+        assertTrue(CalendarEventIdentity.isGeneratedTitle("Kelani workout · C8W12", "C8W12 Kelani", null, legacy));
+        assertTrue(CalendarEventIdentity.isGeneratedTitle("C8W12 Kelani", "C8W12 Kelani", null, legacy));
+        assertFalse(CalendarEventIdentity.isGeneratedTitle("My meet", "C8W12 Kelani", null, legacy));
+        assertFalse(CalendarEventIdentity.isGeneratedTitle("Kelani workout · C8W13", "C8W12 Kelani", null, legacy));
+    }
+
+    @Test
+    public void migratedDuplicateNamesMustBothBelongToTheSameGeneratedWorkout() {
+        java.util.List<String> legacy = java.util.Arrays.asList("Kelani workout · C8W12", "Entrenament Kelani · C8W12");
+        assertTrue(CalendarEventIdentity.sameGeneratedTitle("C8W12 Kelani", "Kelani workout · C8W12", "C8W12 Kelani", null, legacy));
+        assertFalse(CalendarEventIdentity.sameGeneratedTitle("C8W12 Kelani", "Kelani workout · C8W13", "C8W12 Kelani", null, legacy));
+        assertFalse(CalendarEventIdentity.sameGeneratedTitle("C8W12 Kelani", "My meet", "C8W12 Kelani", null, legacy));
+    }
+
+    @Test
     public void deletedProviderRowsAreMissingEvenWhenTheirMarkerStillMatches() {
         assertEquals(-1, CalendarEventIdentity.eventStatus(7, 7, MARKER + " ", MARKER, true));
         assertEquals(1, CalendarEventIdentity.eventStatus(7, 7, MARKER + " ", MARKER, false));

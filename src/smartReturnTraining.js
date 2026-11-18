@@ -1,3 +1,4 @@
+import { normalizeWeightRounding } from './weightRounding';
 import { roundTrainingWeight } from './workoutUnits';
 import { WORKOUT_GRID_COLUMNS, WORKOUT_VOLUME_MIN_SETS, completeWorkoutVolumeGrid } from './workoutGridPolicy';
 import { generateWarmups } from './warmupAndPrepGeneration';
@@ -12,10 +13,10 @@ export const SMART_RETURN_TRAINING = Object.freeze({
   version: 5,
 });
 
-function roundedLoad(weight, factor) {
+function roundedLoad(weight, factor, incrementKg = 0.5) {
   const numericWeight = Number(weight);
   return Number.isFinite(numericWeight) && numericWeight > 0
-    ? Math.max(2.5, roundTrainingWeight(numericWeight * factor))
+    ? Math.max(2.5, roundTrainingWeight(numericWeight * factor, 'nearest', incrementKg))
     : weight;
 }
 
@@ -77,6 +78,7 @@ export function canChooseSmartReturnTraining(workout) {
 
 export function buildSmartReturnTraining(workout) {
   if (!canChooseSmartReturnTraining(workout)) return workout;
+  const incrementKg = normalizeWeightRounding(workout.weightRounding).training;
 
   // An older saved return choice may still contain a two-set baseline.
   // Upgrade its untouched regular plan too, so restoring it cannot bring
@@ -105,7 +107,7 @@ export function buildSmartReturnTraining(workout) {
     const trainingMax = trainingMaxForBlock(block);
     let topWeight = null;
     let sets = block.sets.map(set => {
-      let weight = roundedLoad(set.weight, SMART_RETURN_TRAINING.loadFactor);
+      let weight = roundedLoad(set.weight, SMART_RETURN_TRAINING.loadFactor, incrementKg);
       if (isTopSetLabel(set.labelKey)) {
         topWeight = Number(weight);
       } else if (set.labelKey === 'backoff' && topWeight > 2.5 && Number(weight) >= topWeight) {
@@ -151,7 +153,7 @@ export function buildSmartReturnTraining(workout) {
     accessories: (workout.accessories || []).map(accessory => {
       if (accessory.bodyweight) return accessory;
       const weights = (accessory.weights || []).map(weight =>
-        roundedLoad(weight, SMART_RETURN_TRAINING.accessoryLoadFactor)
+        roundedLoad(weight, SMART_RETURN_TRAINING.accessoryLoadFactor, incrementKg)
       );
       return { ...accessory, weights, originalWeights: [...weights] };
     }),

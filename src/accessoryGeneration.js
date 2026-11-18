@@ -1,3 +1,5 @@
+import { buildSmartReturnTraining } from './smartReturnTraining';
+import { roundingPoliciesEqual } from './weightRounding';
 import { normalizeAccessoryMode } from './workoutHistoryStats';
 import {
   accessoriesHaveUserProgress,
@@ -461,7 +463,8 @@ export function applyAccessoryPlanToWorkouts(
   function mergeLiftBlock(
     currentLiftBlock,
     generatedLiftBlock,
-    preserveMainLiftProgress = false
+    preserveMainLiftProgress = false,
+    preserveWarmupPlan = false
   ) {
     if (!currentLiftBlock) return generatedLiftBlock;
 
@@ -474,7 +477,9 @@ export function applyAccessoryPlanToWorkouts(
     return {
       ...generatedLiftBlock,
       prepItems: generatedLiftBlock.prepItems || [],
-      warmups: preserveMainLiftProgress
+      warmups: preserveMainLiftProgress && preserveWarmupPlan
+        ? currentLiftBlock.warmups || generatedLiftBlock.warmups || []
+        : preserveMainLiftProgress
         ? (generatedLiftBlock.warmups || []).map((warmup, index) =>
           mergeWarmup(currentLiftBlock.warmups?.[index], warmup)
         )
@@ -491,9 +496,11 @@ export function applyAccessoryPlanToWorkouts(
     const generated = generatedWorkouts[index];
     if (completedWorkoutNumbers.has(Number(generated?.number || workout.number))) return workout;
     if (!generated) return workout;
+    if (workoutHasUserProgress(workout) && !roundingPoliciesEqual(workout.weightRounding, generated.weightRounding)) return workout;
     if (workout.smartReturnTraining && workout.type === generated.type &&
       workout.smartIdealRoute?.workoutNumber === generated.smartIdealRoute?.workoutNumber) {
-      return workout;
+      return !roundingPoliciesEqual(workout.weightRounding, generated.weightRounding) && !workoutHasUserProgress(workout)
+        ? buildSmartReturnTraining(generated) : workout;
     }
 
     // A route change may replace a lift or its intensity in the active day.
@@ -547,7 +554,8 @@ export function applyAccessoryPlanToWorkouts(
       mergeLiftBlock(
         (workout.lifts || [])[liftIndex],
         generatedLiftBlock,
-        preserveMainLiftProgress
+        preserveMainLiftProgress,
+        workoutHasUserProgress(workout)
       )
     );
     const primaryLiftBlock = mergedLifts[0] || {};

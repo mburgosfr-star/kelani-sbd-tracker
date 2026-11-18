@@ -1,3 +1,6 @@
+import { buildProgramTimeline, getProgramForecastWindow } from './programTimeline';
+import AdaptiveDialogPanel from './AdaptiveDialogPanel';
+import { DEFAULT_WEIGHT_ROUNDING, normalizeWeightRounding, uniformWeightRounding, resolveStoredWeightRounding, isValidWeightRounding } from './weightRounding';
 import { adaptiveFontSize, fitScreenContent, screenFontCandidates, scrollRegionsFit } from './adaptiveScreenLayout';
 import { createBackupHistory, backupDay } from './backupHistory';
 import { getBackupHistoryIO, writeVerifiedNativeBackup } from './backupHistoryStorage';
@@ -138,7 +141,7 @@ import { generateCooldownItems } from './classicProgramTemplates';
 import {
   regenerateSmartWorkoutsAfterCompletion,
   generateWorkoutsForTrainingModel,
-  projectNextSmartCalendarCycle,
+  projectSmartPlanningHorizon,
   isSmartMeetdayReady,
   getSmartMeetCompletedTrainingDays,
   isSmartCycleCompleteAfterHistory,
@@ -185,6 +188,7 @@ import {
 } from './appUpdates';
 import { GOOGLE_PLAY_URL, initialUpdateChannel, resolveUpdateChannel, canCheckGitHubUpdates, fetchChannelReleaseVersion } from './updateChannel';
 import {
+  addLocalDays,
   buildWorkoutScheduleDateKeys,
   formatWorkoutScheduleDateRange,
   formatWorkoutScheduleDate,
@@ -192,8 +196,8 @@ import {
   localDateKey,
 } from './workoutScheduleDates';
 import {
-  buildCalendarPlanningEventSpecs,
-  getCalendarRestWorkoutKeys,
+  buildTimelineCalendarEventSpecs,
+  LEGACY_CALENDAR_TITLE_TEMPLATES,
   getCompletedCalendarWorkoutKeys,
   createCalendarIntegrationSettings,
   normalizeCalendarIntegrationSettings,
@@ -1285,6 +1289,7 @@ export function validateImportedBackup(backup) {
     const version = Number(data.oneRMStateVersion);
     if (!Number.isInteger(version) || version < 1) return false;
   }
+  if (data.weightRounding !== undefined && !isValidWeightRounding(data.weightRounding)) return false;
   if (data.bodyWeights !== undefined && !Array.isArray(data.bodyWeights)) return false;
   if (data.strengthRatioMaxes !== undefined) {
     if (
@@ -1914,8 +1919,8 @@ export function programWorkoutListContainerStyle({ showAll = false, marginTop = 
     // Retain the short window's actual distributed gap when adding rows.
     rowGap: showAll ? expandedGap : 4,
     marginTop: 0,
-    paddingTop: marginTop,
-    paddingBottom: marginTop,
+    paddingTop: Math.max(8, marginTop),
+    paddingBottom: Math.max(8, marginTop),
     borderTop: 'none',
     borderBottom: 'none',
     boxSizing: 'border-box',
@@ -2264,8 +2269,8 @@ export function WorkoutCompletionButton({
   );
 }
 
-export function workoutCompletionButtonMargin({ isMeetDay = false } = {}) {
-  return isMeetDay ? '8px auto 0' : '2px auto 0';
+export function workoutCompletionButtonMargin() {
+  return '24px auto 0';
 }
 
 // // const APP_TOP_BAR_HEIGHT = 50; // unused // unused after local black statusbar patch
@@ -2773,15 +2778,15 @@ export function scrollActiveWorkoutTarget(target) {
 
   if (liftRect?.height && liftRect.height <= availableHeight - 2 * margin) {
     focusRect = liftRect;
-    if (lift.dataset.workoutFocusEnd === 'true') {
-      const completion = region.querySelector('[data-workout-completion-action]');
-      const completionRect = completion?.getBoundingClientRect();
-      const bottom = Math.max(liftRect.bottom, completionRect?.bottom || liftRect.bottom);
-      // The last meet lift and its completion action form one overview,
-      // provided both fit. Otherwise keep the whole lift in view.
-      if (bottom - liftRect.top <= availableHeight - 2 * margin) {
-        focusRect = { top: liftRect.top, height: bottom - liftRect.top };
-      }
+  }
+  if (lift?.dataset.workoutFocusEnd === 'true') {
+    const completion = region.querySelector('[data-workout-completion-action]');
+    const completionRect = completion?.getBoundingClientRect();
+    const bottom = Math.max(liftRect?.bottom || targetRect.bottom, completionRect?.bottom || 0);
+    // Include the completion action with the last lift on ordinary days too.
+    // If the full lift is too tall, include its active tail when that fits.
+    if (bottom - focusRect.top <= availableHeight - 2 * margin) {
+      focusRect = { top: focusRect.top, height: bottom - focusRect.top };
     }
   }
 
@@ -2803,8 +2808,18 @@ function useActiveWorkoutAutoScroll(isActive) {
     // Wait for the new active-set controls and rest timer to receive layout
     // before measuring their position in the Android WebView or browser.
     if (region?.getBoundingClientRect().height && typeof window.requestAnimationFrame === 'function') {
-      const frame = window.requestAnimationFrame(() => scrollActiveWorkoutTarget(target));
-      return () => window.cancelAnimationFrame(frame);
+      let frame;
+      const schedule = () => {
+        window.cancelAnimationFrame(frame);
+        frame = window.requestAnimationFrame(() => scrollActiveWorkoutTarget(target));
+      };
+      schedule();
+      // Timer/action insertion and adaptive text layout may settle after the
+      // first frame. Follow actual size changes, without polling every tick.
+      const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
+      observer?.observe(region);
+      observer?.observe(target.closest('[data-workout-focus-section]') || target);
+      return () => { window.cancelAnimationFrame(frame); observer?.disconnect(); };
     }
 
     scrollActiveWorkoutTarget(target);
@@ -3607,10 +3622,10 @@ function SettingsModal({ title, onClose, children, zIndex = 650, inactive = fals
       boxSizing: 'border-box',
       overscrollBehavior: 'none',
     }}>
-      <div style={settingsModalPanelStyle()}>
-        <h3 style={{ margin: '0 0 clamp(12px, 2dvh, 18px)', textAlign: 'center', fontSize: RESPONSIVE_SETTINGS_UI.modalTitleFontSize }}>{title}</h3>
+      <AdaptiveDialogPanel style={settingsModalPanelStyle()}>
+        <h3 style={{ margin: '0 0 var(--kelani-dialog-title-gap, 16px)', textAlign: 'center', fontSize: RESPONSIVE_SETTINGS_UI.modalTitleFontSize }}>{title}</h3>
         {children}
-      </div>
+      </AdaptiveDialogPanel>
     </div>
   );
 }
@@ -3730,7 +3745,7 @@ export function CalendarSettingsModal({ t, settings, onChange, onSync, syncStatu
           )}
           {permission === 'granted' && (
             <>
-              <div style={{ display: 'grid', gap: 6, color: THEME.text, fontSize: 13, fontWeight: 800 }}>
+              <div data-dialog-body-text="true" style={{ display: 'grid', gap: 6, color: THEME.text, fontSize: 13, fontWeight: 800 }}>
                 <div>{t.calendarChoose}</div>
                 <button
                   type="button"
@@ -3824,7 +3839,7 @@ export function WhatsNewModal({
 
   return (
     <SettingsModal title={t.whatsNewTitle} onClose={onClose}>
-      <div style={{
+      <div data-dialog-body-text="true" style={{
         color: THEME.primary,
         fontSize: 13,
         fontWeight: 900,
@@ -3919,7 +3934,7 @@ export function UpdatesSettingsModal({
     <SettingsModal title={title || t.updatesTitle} onClose={onClose} inactive={inactive}>
       {children}
       {children && <h4 style={{ color: THEME.primary, textAlign: 'center', margin: '4px 0 14px' }}>{t.updatesTitle}</h4>}
-      <div style={{
+      <div data-dialog-body-text="true" style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr) auto',
         gap: 10,
@@ -4028,7 +4043,7 @@ export function UpdateAvailableModal({
         {t.updateAvailableIntro}
       </p>
 
-      <div style={{ display: 'grid', gap: 6, marginBottom: 14, fontSize: 13 }}>
+      <div data-dialog-body-text="true" style={{ display: 'grid', gap: 6, marginBottom: 14, fontSize: 13 }}>
         {[
           [t.installedVersion, currentVersion],
           [t.availableVersion, latestVersion],
@@ -4620,7 +4635,7 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
             {pendingImport.fromHistory ? t.backupHistoryRestoreWarning : t.importDataConfirm}
           </p>
 
-          <div style={{
+          <div data-dialog-body-text="true" style={{
             border: `1px solid ${THEME.border}`,
             borderRadius: 8,
             padding: 12,
@@ -4997,9 +5012,13 @@ function AboutSupportModals({
   );
 }
 
-export function WeightUnitSection({ weightUnit, setWeightUnit, t }) {
+export function WeightUnitSection({ weightUnit, setWeightUnit, weightRounding, setWeightRounding, t }) {
   const [isEditing, setIsEditing] = useState(false);
   const normalizedWeightUnit = normalizeWeightUnit(weightUnit);
+  const rounding = normalizeWeightRounding(weightRounding);
+  const roundingLabel = rounding.training === rounding.meet
+    ? formatDecimalDisplay(rounding.training)
+    : `${formatDecimalDisplay(rounding.training)} / ${formatDecimalDisplay(rounding.meet)}`;
   const unitLabel = normalizedWeightUnit === WEIGHT_UNITS.LB
     ? t.weightUnitLb
     : t.weightUnitKg;
@@ -5007,16 +5026,17 @@ export function WeightUnitSection({ weightUnit, setWeightUnit, t }) {
   return (
     <>
       <SettingsListRow
-        label={t.weightUnit}
-        actionLabel={unitLabel}
+        label={t.weightsSettingsTitle}
+        actionLabel={`${unitLabel} · ${roundingLabel}`}
         onAction={() => setIsEditing(true)}
       />
 
       {isEditing && (
         <SettingsModal
-          title={t.changeWeightUnit || t.weightUnit}
+          title={t.weightsSettingsTitle}
           onClose={() => setIsEditing(false)}
         >
+          <h4 style={{ margin: '0 0 10px' }}>{t.weightUnit}</h4>
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(2, minmax(0, 140px))',
@@ -5027,19 +5047,36 @@ export function WeightUnitSection({ weightUnit, setWeightUnit, t }) {
               <button
                 type="button"
                 key={unit}
+                data-kelani-button-layout="selection"
                 onClick={() => {
                   setWeightUnit(unit);
-                  setIsEditing(false);
                 }}
                 style={{
                   ...selectionModalButtonStyle(normalizedWeightUnit === unit),
                   margin: '0 auto',
+                  width: '100%', minWidth: 0, boxSizing: 'border-box',
                 }}
               >
                 {unit === WEIGHT_UNITS.KG ? t.weightUnitKg : t.weightUnitLb}
               </button>
             ))}
           </div>
+          <h4 style={{ margin: '20px 0 10px' }}>{t.automaticWeightRounding}</h4>
+          {rounding.training !== rounding.meet && <p style={{ margin: '0 0 10px' }}>
+            {t.weightRoundingExisting.replace('{training}', formatDecimalDisplay(rounding.training)).replace('{meet}', formatDecimalDisplay(rounding.meet))}
+          </p>}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 140px))', gap: 10, justifyContent: 'center' }}>
+            {[0.5, 2.5].map(step => <button key={step} type="button" data-kelani-button-layout="selection"
+              aria-pressed={rounding.training === step && rounding.meet === step}
+              style={{ ...selectionModalButtonStyle(rounding.training === step && rounding.meet === step),
+                width: '100%', minWidth: 0, boxSizing: 'border-box', margin: '0 auto' }}
+              onClick={() => setWeightRounding?.(uniformWeightRounding(step))}>
+              {formatDecimalDisplay(step)} kg
+            </button>)}
+          </div>
+          <p style={{ lineHeight: 1.4 }}>{t.weightRoundingHelp}</p>
+          <button type="button" onClick={() => setIsEditing(false)}
+            style={{ ...selectionModalButtonStyle(false), display: 'block', margin: '14px auto 0' }}>{t.close}</button>
         </SettingsModal>
       )}
     </>
@@ -5158,35 +5195,36 @@ export function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS
               key={field.key}
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(130px, 42%) minmax(0, 1fr)',
+                gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)',
                 gap: 10,
                 alignItems: 'center',
-                marginBottom: 10
+                marginBottom: 10,
               }}
             >
-              <label style={{ fontWeight: 800, fontSize: 14, lineHeight: 1.25 }}>
+              <label htmlFor={`body-data-${field.key}`} style={{ fontWeight: 800, lineHeight: 1.25, overflowWrap: 'anywhere' }}>
                 {field.label}
               </label>
 
-              <div style={{ position: 'relative' }}>
+              <div data-testid={`body-data-field-${field.key}`} style={{
+                ...modalInputStyle(),
+                display: 'grid', gridTemplateColumns: field.unit ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)',
+                alignItems: 'center', gap: 8, padding: '0 10px', minWidth: 0, fontSize: 'inherit',
+              }}>
                 <input
+                  id={`body-data-${field.key}`}
                   type="number"
+                  aria-describedby={field.unit ? `body-data-unit-${field.key}` : undefined}
                   value={form[field.key]}
                   onChange={e => updateField(field.key, e.target.value)}
                   placeholder={placeholderValue(field.key)}
                   style={{
-                    ...modalInputStyle(),
-                    paddingRight: field.unit ? 48 : 10
+                    ...modalInputStyle(), minWidth: 0, border: 0, padding: '10px 0',
+                    minHeight: 'calc(var(--kelani-button-height) - 2px)',
                   }}
                 />
                 {field.unit && (
-                  <span style={{
-                    position: 'absolute',
-                    right: 12,
-                    top: '50%',
-                    color: THEME.text,
-                    fontSize: 15,
-                    pointerEvents: 'none'
+                  <span id={`body-data-unit-${field.key}`} style={{
+                    color: THEME.text, lineHeight: 1.2, whiteSpace: 'nowrap', pointerEvents: 'none',
                   }}>
                     {field.unit}
                   </span>
@@ -5363,7 +5401,7 @@ function MobileRestTimeSection({ t }) {
           title={t.restTimerAlerts}
           onClose={() => setShowAlertHelp(false)}
         >
-          <div style={{
+          <div data-dialog-body-text="true" style={{
             color: THEME.text,
             fontSize: 13,
             fontWeight: 700,
@@ -5373,7 +5411,7 @@ function MobileRestTimeSection({ t }) {
             {t.restTimerHelp}
           </div>
 
-          <div style={{
+          <div data-dialog-body-text="true" style={{
             color: THEME.muted,
             fontSize: 12,
             fontWeight: 700,
@@ -5384,7 +5422,7 @@ function MobileRestTimeSection({ t }) {
           </div>
 
           {alertStatus?.native === true && (
-            <div style={{
+            <div data-dialog-body-text="true" style={{
               display: 'grid',
               gridTemplateColumns: '1fr auto',
               gap: '4px 10px',
@@ -5429,7 +5467,7 @@ function MobileRestTimeSection({ t }) {
           )}
 
           {doNotDisturbStatus?.active === true && (
-            <div style={{
+            <div data-dialog-body-text="true" style={{
               padding: 8,
               borderRadius: 8,
               border: `1px solid ${THEME.red}`,
@@ -5444,7 +5482,7 @@ function MobileRestTimeSection({ t }) {
           )}
 
           {alertStatus?.native === false && (
-            <div style={{
+            <div data-dialog-body-text="true" style={{
               padding: 8,
               borderRadius: 8,
               border: `1px solid ${THEME.border}`,
@@ -5459,7 +5497,7 @@ function MobileRestTimeSection({ t }) {
           )}
 
           {alertTestMessage && (
-            <div style={{
+            <div data-dialog-body-text="true" style={{
               color: alertTestKind === 'delivered'
                 ? THEME.primary
                 : alertTestKind === 'scheduled'
@@ -5674,7 +5712,7 @@ function NewCycleModal({ prs, onStart, t, weightUnit = WEIGHT_UNITS.KG }) {
       zIndex: 200,
       padding: 16
     }}>
-      <div style={{
+      <AdaptiveDialogPanel style={{
         background: THEME.card,
         borderRadius: 12,
         padding: 24,
@@ -5730,7 +5768,7 @@ function NewCycleModal({ prs, onStart, t, weightUnit = WEIGHT_UNITS.KG }) {
         >
           {t.startNewCycle} 🚀
         </button>
-      </div>
+      </AdaptiveDialogPanel>
     </div>
   );
 }
@@ -6295,7 +6333,7 @@ function ExerciseGuideModal({ lift, t, onClose }) {
       zIndex: 950,
       padding: 16
     }}>
-      <div style={{
+      <AdaptiveDialogPanel style={{
         background: THEME.card,
         border: `1px solid ${THEME.primary}`,
         borderRadius: 14,
@@ -6390,7 +6428,7 @@ function ExerciseGuideModal({ lift, t, onClose }) {
         >
           {t.close}
         </button>
-      </div>
+      </AdaptiveDialogPanel>
     </div>
   );
 }
@@ -7311,29 +7349,30 @@ export function WorkoutActions({ workout, smartModel, isReadOnly,
     workout?.type === 'training' && !workout.completed &&
     canChangeReturnTraining && onChooseReturnTraining &&
     !workoutHasUserProgress(workout));
-  if (!canChoose) return children;
   return (
     <div data-testid="workout-actions" style={{
       display: 'flex', justifyContent: 'center', alignItems: 'stretch',
       gap: 8, margin: workoutCompletionButtonMargin(), minWidth: 0,
+      flexShrink: 0, padding: '4px 0', boxSizing: 'border-box',
+      minHeight: 'calc(var(--kelani-button-height) + 8px)',
     }}>
       {React.cloneElement(children, { style: {
         ...children.props.style, margin: 0, padding: '10px 12px',
-        flex: '0 1 160px', minWidth: 0, maxWidth: 'calc(50% - 4px)',
+        flex: '0 1 160px', minWidth: 0, maxWidth: canChoose ? 'calc(50% - 4px)' : '100%',
       } })}
-      <button type="button" onClick={() => onChooseReturnTraining(!workout.smartReturnTraining)}
+      {canChoose && <button type="button" onClick={() => onChooseReturnTraining(!workout.smartReturnTraining)}
         style={{
           ...workoutCompletionButtonStyle(), margin: 0, padding: '10px 12px',
           flex: '0 1 160px', minWidth: 0, maxWidth: 'calc(50% - 4px)',
         }}>
         {workout.smartReturnTraining ? t.smartReturnTrainingRestore : t.smartReturnTrainingChoose}
-      </button>
+      </button>}
     </div>
   );
 }
 
 export function CurrentWorkout({
-  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetWarmup, onToggleMeetSet, onMarkLiftBlockSetFailed, onRestoreLiftBlockSetWeight, onLiftBlockWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, onChooseReturnTraining, daysSinceLastWorkout = null, canChangeReturnTraining = false, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', preparationMode = 'basicFirst', workoutSetup = null, timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight, currentE1RMs = {}, meetProjectionDateLabel = '' }) {
+  trainingModel = TRAINING_MODELS.CLASSIC, workout, currentCycle, totalWorkouts, onTogglePrepItem, onToggleWarmup, onToggleSet, onMarkSetFailed, onRestoreSetWeight, onToggleAccessorySet, onMarkAccessorySetFailed, onRestoreAccessoryWeight, onToggleCooldownItem, onToggleMeetWarmup, onToggleMeetSet, onMarkLiftBlockSetFailed, onRestoreLiftBlockSetWeight, onLiftBlockWeightChange, onWeightChange, onAccessoryWeightChange, onComplete, onViewAll, onActivateWorkout, onChooseReturnTraining, daysSinceLastWorkout = null, canChangeReturnTraining = false, showNewCycle, newCyclePRs, onStartNewCycle, isReadOnly, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard', preparationMode = 'basicFirst', workoutSetup = null, timer, setTimer, startTimer , onShowPlateCalculator, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight, currentE1RMs = {}, meetProjectionDateLabel = '', scheduledDateKey = '', scheduleToday = new Date(), language = 'en' }) {
   const smartModel = isSmartTrainingModel(trainingModel);
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
@@ -7485,6 +7524,10 @@ export function CurrentWorkout({
   }
 
   if (workout.type === 'rest') {
+    const scheduledLabel = formatWorkoutScheduleDate(scheduledDateKey, {
+      language, today: scheduleToday, todayLabel: t.today, tomorrowLabel: t.tomorrow,
+      omitTodayDate: true, omitTomorrowDate: true,
+    });
     return (
       <div style={restWorkoutScreenStyle()}>
 
@@ -7493,7 +7536,7 @@ export function CurrentWorkout({
           data-testid="screen-scroll-content"
           style={scrollableScreenContentStyle({
             display: 'grid',
-            gridTemplateRows: 'auto minmax(0, 1fr) auto',
+            gridTemplateRows: 'auto minmax(min-content, 1fr) auto',
             alignContent: 'stretch',
           })}
         >
@@ -7525,17 +7568,18 @@ export function CurrentWorkout({
               fontWeight: 900
             }}>
               {t.restAndRecovery || t.deload}
-              {!isReadOnly && (
-                <span style={{
+              {!isReadOnly && scheduledLabel && (
+                <span data-testid="rest-workout-schedule-badge" style={{
                   fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
                   background: THEME.primary,
                   color: '#ffffff',
                   padding: '1px 6px',
                   borderRadius: 3,
                   marginLeft: 8,
-                  verticalAlign: 'middle'
+                  verticalAlign: 'middle',
+                  textTransform: 'uppercase'
                 }}>
-                  {t.programNext}
+                  {scheduledLabel}
                 </span>
               )}
             </h2>
@@ -7553,24 +7597,30 @@ export function CurrentWorkout({
           </div>
         </div>
 
-        <WorkoutCompletionButton
-          onClick={() => {
-            if (isReadOnly) return;
-            onComplete('easy');
-          }}
-          data-testid="complete-rest-day-button"
-          style={{ margin: '14px auto 0' }}
-          disabled={isReadOnly}
-          enabled={!isReadOnly}
-          active={shouldFocusWorkoutCompletion({
-            isReadOnly,
-            restDay: true,
-          })}
-        >
-          {workout.completed ? t.restDayCompleted : isReadOnly
-            ? t.previewNotCompletable
-            : t.completeRestDay}
-        </WorkoutCompletionButton>
+        <div data-testid="rest-workout-actions" style={{
+          display: 'flex', justifyContent: 'center', flexShrink: 0,
+          marginTop: 14, padding: '8px 0',
+          minHeight: 'calc(var(--kelani-button-height) + 16px)',
+        }}>
+          <WorkoutCompletionButton
+            onClick={() => {
+              if (isReadOnly) return;
+              onComplete('easy');
+            }}
+            data-testid="complete-rest-day-button"
+            style={{ margin: '0 auto' }}
+            disabled={isReadOnly}
+            enabled={!isReadOnly}
+            active={shouldFocusWorkoutCompletion({
+              isReadOnly,
+              restDay: true,
+            })}
+          >
+            {workout.completed ? t.restDayCompleted : isReadOnly
+              ? t.previewNotCompletable
+              : t.completeRestDay}
+          </WorkoutCompletionButton>
+        </div>
         </div>
       </div>
     );
@@ -7691,7 +7741,8 @@ export function CurrentWorkout({
             key={liftBlock.lift}
               data-testid={`workout-lift-${liftBlock.lift}`}
               data-workout-focus-section="true"
-              data-workout-focus-end={isMeetDay && li === workout.lifts.length - 1 ? 'true' : undefined}
+              data-workout-focus-end={li === workout.lifts.length - 1 &&
+                (isMeetDay || (!(workout.accessories || []).length && !(workout.cooldownItems || []).length)) ? 'true' : undefined}
               style={isMeetDay
                 ? meetWorkoutLiftBlockStyle()
                 : activeWorkoutLiftBlockStyle()}
@@ -8392,12 +8443,10 @@ export function CurrentWorkout({
   );
 }
 
-// All automatic attempts use 2.5kg competition-barbell precision. At light
-// 1RMs two adjacent percentage targets can still collide after rounding, so
-// enforce the smallest valid 2.5kg increase instead of leaving equal or
-// decreasing attempts.
-export function ensureStrictMeetAttempts(attempts) {
-  const strict = ensureStrictMeetAttemptKeys(attempts);
+// Adjacent targets can collide after rounding. Keep attempts strictly
+// increasing at the chosen automatic increment; manual values keep 0.5kg precision.
+export function ensureStrictMeetAttempts(attempts, incrementKg = 2.5) {
+  const strict = ensureStrictMeetAttemptKeys(attempts, incrementKg);
   return { ...attempts, opener: strict.opener, second: strict.secondAttempt, third: strict.thirdAttempt };
 }
 
@@ -8407,7 +8456,9 @@ export function buildSuggestedMeetPlan(bestStatsByLift = {}, {
   trainingModel = TRAINING_MODELS.SMART,
   manualAttempts = {},
   startedMeet = null,
+  weightRounding = null,
 } = {}) {
+  const meetIncrement = normalizeWeightRounding(weightRounding).meet;
   const frozen = startedMeet?.type === 'meet' && workoutHasUserProgress(startedMeet);
   const basis = frozen
     ? startedMeet.meetAttemptBasis || 'real-1rm'
@@ -8416,8 +8467,8 @@ export function buildSuggestedMeetPlan(bestStatsByLift = {}, {
     const oneRM = Number(bestStatsByLift[lift]?.oneRM) || 0;
     const e1RM = Math.max(oneRM, Number(bestStatsByLift[lift]?.e1RM) || 0);
     const attempts = basis === 'e1rm'
-      ? buildMeetAttemptsFromE1RM(e1RM)
-      : buildMeetAttemptsFromOneRM(oneRM);
+      ? buildMeetAttemptsFromE1RM(e1RM, meetIncrement)
+      : buildMeetAttemptsFromOneRM(oneRM, meetIncrement);
     const savedSets = startedMeet?.lifts?.find(block => block.lift === lift)?.sets || [];
     const values = Object.fromEntries(['opener', 'secondAttempt', 'thirdAttempt'].map(key => {
       const saved = savedSets.find(set => set.labelKey === key);
@@ -8429,7 +8480,7 @@ export function buildSuggestedMeetPlan(bestStatsByLift = {}, {
       lift, oneRM, e1RM, basis, frozen,
       opener: values.opener, second: values.secondAttempt, third: values.thirdAttempt,
     };
-    return frozen ? row : ensureStrictMeetAttempts(row);
+    return frozen ? row : ensureStrictMeetAttempts(row, meetIncrement);
   });
 
   const meetTotals = {
@@ -9023,7 +9074,7 @@ function ProgramProfileSection({
           title={currentStep.title}
           onClose={closeWizard}
         >
-          <div style={{
+          <div data-dialog-body-text="true" style={{
             marginBottom: 10,
             color: THEME.muted,
             fontSize: 12,
@@ -9067,7 +9118,7 @@ function ProgramProfileSection({
             </button>
           </div>
 
-          <div style={{
+          <div data-dialog-body-text="true" style={{
             marginTop: 20,
             color: THEME.muted,
             fontSize: 12,
@@ -9681,14 +9732,14 @@ function AthleteLevelBadge({
   const modalDividerStyle = { height: 1, background: 'rgba(255, 244, 230, 0.09)', margin: '14px 0' };
   const modalLabelStyle = {
     color: modalMutedText,
-    fontSize: 10,
+    fontSize: adaptiveFontSize(14),
     fontWeight: 700,
     lineHeight: 1.2,
     letterSpacing: 0.3,
     textTransform: 'uppercase',
     marginBottom: 4,
   };
-  const modalValueStyle = { color: THEME.text, fontSize: 16, fontWeight: 800, lineHeight: 1.3 };
+  const modalValueStyle = { color: THEME.text, fontSize: adaptiveFontSize(16), fontWeight: 800, lineHeight: 1.3 };
 
   return (
     <>
@@ -9774,7 +9825,7 @@ function AthleteLevelBadge({
                 {`${ratioToNext.toFixed(2)}x → ${nextLevelLabel}`}
               </div>
               {recentWeighingMessage && (
-                <div style={{
+                <div data-dialog-body-text="true" style={{
                   color: THEME.green,
                   fontSize: 13,
                   fontWeight: 800,
@@ -9790,7 +9841,7 @@ function AthleteLevelBadge({
             <div>
               <div style={modalValueStyle}>{t.athleteLevelTopTier}</div>
               {recentWeighingMessage && (
-                <div style={{
+                <div data-dialog-body-text="true" style={{
                   color: THEME.green,
                   fontSize: 13,
                   fontWeight: 800,
@@ -9806,7 +9857,7 @@ function AthleteLevelBadge({
 
           <div style={modalDividerStyle} />
 
-          <div style={{ color: modalMutedText, fontSize: 12, fontWeight: 600, lineHeight: 1.4 }}>
+          <div data-dialog-body-text="true" style={{ color: modalMutedText, fontSize: 12, fontWeight: 600, lineHeight: 1.4 }}>
             {t.athleteLevelExplanation}
           </div>
 
@@ -9876,7 +9927,7 @@ export function getSmartProgramTitle(trainingFocus, t) {
   return t.trainingFocusBalanced;
 }
 
-export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = [], currentCycle, onSelect, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, trainingFocus = SMART_TRAINING_FOCUSES.STANDARD, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, language = 'en', scheduleDateKeys = [], scheduleToday = new Date(), weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
+export function AllWorkouts({ workouts, timeline = null, planningUnavailable = false, currentIndex, completedWorkoutNumbers = [], currentCycle = 1, onSelect, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, trainingFocus = SMART_TRAINING_FOCUSES.STANDARD, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, language = 'en', scheduleDateKeys = [], scheduleToday = new Date(), weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
   const currentWorkoutRef = useRef(null);
   const programListRef = useRef(null);
   const [showAllWorkouts, setShowAllWorkouts] = useState(false);
@@ -9891,7 +9942,7 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
   );
 
   const smartAllowedCurrentIndex = Math.max(Number(currentIndex) || 0, 0);
-  const allowedWorkoutEntries = smartModel
+  const allowedWorkoutEntries = timeline || (smartModel
     ? workouts
       .map((workout, idx) => ({ workout, idx }))
       .filter(({ workout, idx }) => {
@@ -9899,7 +9950,7 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
 
         return workout.smartVisible !== false;
       })
-    : workouts.map((workout, idx) => ({ workout, idx }));
+    : workouts.map((workout, idx) => ({ workout, idx })));
   const compactVisibleCount = 7;
   const visibleWorkoutEntries = getProgramWorkoutWindow({
     entries: allowedWorkoutEntries,
@@ -9988,7 +10039,7 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
           title={getProgramProfileTitle(programProfile, t)}
           onClose={() => setShowProgramInfo(false)}
         >
-          <div style={{
+          <div data-dialog-body-text="true" style={{
             color: THEME.muted,
             fontSize: 13,
             fontWeight: 800,
@@ -9999,7 +10050,7 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
             {getProgramProfileDescription(programProfile, t)}
           </div>
 
-          <div style={{
+          <div data-dialog-body-text="true" style={{
             display: 'grid',
             gridTemplateColumns: '1.15fr repeat(3, 1fr)',
             border: `1px solid ${THEME.primary}`,
@@ -10056,7 +10107,7 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
             ))}
           </div>
 
-          <div style={{
+          <div data-dialog-body-text="true" style={{
             marginTop: 10,
             color: THEME.muted,
             fontSize: 12,
@@ -10067,7 +10118,7 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
             {programSummary.trainingDays} {t.programTrainingDays} · {programSummary.restDays} {t.programRestDays}
           </div>
 
-          <div style={{
+          <div data-dialog-body-text="true" style={{
             marginTop: 6,
             color: THEME.muted,
             fontSize: 11,
@@ -10092,13 +10143,14 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
         ? getSmartProgramTitle(trainingFocus, t)
         : getProgramProfileTitle(programProfile, t)} />
 
+      {planningUnavailable && <p role="alert" style={{ color: THEME.red, fontSize: responsiveFontSize(14), margin: '4px 0 12px' }}>{t.programPlanningError}</p>}
       <div ref={programListRef} data-testid="screen-scroll-content" data-kelani-program-list-spacer style={programWorkoutListContainerStyle({
         showAll: showAllWorkouts,
         expandedGap: expandedProgramGap,
         marginTop: workoutListVerticalSpacing.listMarginTop,
       })}>
 
-      {(hasHiddenWorkouts || !smartModel) && <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexShrink: 0 }}>
+      {(hasHiddenWorkouts || !smartModel) && <div data-testid="program-top-actions" style={{ display: 'flex', justifyContent: 'center', gap: 8, flexShrink: 0, padding: '4px 0' }}>
         {renderWorkoutListToggleButton('top')}
         {!smartModel && (
           <button type="button" data-kelani-button-size="contextual"
@@ -10109,25 +10161,31 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
         )}
       </div>}
 
-{visibleWorkoutEntries.map(({ workout, idx }) => {
-        const isCurrent = idx === currentIndex;
-        const isFuture = smartModel && idx > currentIndex;
+{visibleWorkoutEntries.map(entry => {
+        const { workout, idx } = entry;
+        const entryCycle = entry.cycle || currentCycle;
+        const isCurrent = entryCycle === currentCycle && idx === currentIndex;
+        const isFuture = Boolean(entry.projected) || (smartModel && idx > currentIndex);
         // Future plans can be inspected without activating their training slot.
-        const isSelectable = !smartModel || (
+        const isSelectable = entry.projected || entryCycle !== currentCycle || !smartModel || (
           isFuture || workout.smartSelectable !== false
         );
-        const isDone = completedWorkoutNumberSet.has(Number(workout.number)) || Boolean(workout.completed);
+        const isDone = (entryCycle === currentCycle && completedWorkoutNumberSet.has(Number(workout.number))) || Boolean(workout.completed);
         const completedAtLabel = isDone ? formatCompletedAt(workout.completedAt, workout.completedDate || workout.date) : null;
         const scheduleDateLabel = smartModel && !isDone
-          ? formatWorkoutScheduleDate(scheduleDateKeys[idx], {
+          ? formatWorkoutScheduleDate(entry.dateKey || scheduleDateKeys[idx], {
               language,
               today: scheduleToday,
               todayLabel: t.today,
               tomorrowLabel: t.tomorrow,
               compact: true,
               omitTomorrowDate: true,
+              omitTodayDate: true,
             })
           : '';
+        const todayKey = localDateKey(scheduleToday);
+        const relativeDateBadge = Boolean(scheduleDateLabel &&
+          [todayKey, addLocalDays(todayKey, 1)].includes(entry.dateKey || scheduleDateKeys[idx]));
         const focusColor = workout.type === 'meet'
           ? THEME.meet
           : workout.type === 'rest'
@@ -10142,21 +10200,24 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
 
         return (
           <div
-            key={workout.number}
+            key={entry.key || `C${entryCycle}W${workout.number}`}
             ref={isCurrent ? currentWorkoutRef : null}
-            data-testid={`program-workout-${workout.number}`}
+            data-testid={entryCycle === currentCycle ? `program-workout-${workout.number}` : `program-workout-C${entryCycle}W${workout.number}`}
             role="button"
+            title={entry.projected ? t.programProjectedHelp : undefined}
             tabIndex={isSelectable ? 0 : -1}
             aria-disabled={!isSelectable}
             onKeyDown={event => {
               if (!isSelectable || !['Enter', ' '].includes(event.key)) return;
               event.preventDefault();
-              onSelect(idx);
+              if (timeline) onSelect(idx, entry);
+              else onSelect(idx);
               window.scrollTo({ top: 0, behavior: 'auto' });
             }}
             onClick={() => {
               if (!isSelectable) return;
-              onSelect(idx);
+              if (timeline) onSelect(idx, entry);
+              else onSelect(idx);
               window.scrollTo({ top: 0, behavior: 'auto' });
             }}
             style={{
@@ -10181,7 +10242,7 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
             }}
           >
             <div style={{
-              width: 'clamp(38px, 9vw, 44px)',
+              width: 'clamp(54px, 14vw, 66px)',
               height: 'clamp(38px, 9vw, 44px)',
               borderRadius: 8,
               background: '#000000',
@@ -10190,11 +10251,12 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
               justifyContent: 'center',
               color: '#ffffff',
               fontWeight: 700,
-              fontSize: 'clamp(16px, 3.8vw, 19px)',
-              marginRight: 'clamp(10px, 2.5vw, 14px)',
+              fontSize: 'clamp(12px, 3.3vw, 15px)',
+              overflowWrap: 'anywhere',
+              marginRight: 8,
               flexShrink: 0
             }}>
-              {workout.number}
+              {`C${entryCycle}W${workout.number}`}
             </div>
 
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -10216,20 +10278,24 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
                   showIntensityLabels={isSmartTrainingModel(trainingModel)}
                   preserveHistoricalIntensityLabels={isDone}
                 />
-                {isCurrent && (
-                  <span style={{
+                {relativeDateBadge && (
+                  <span data-testid={`program-workout-schedule-date-${workout.number}`} style={{
                     fontSize: RESPONSIVE_CONTENT_UI.compactFontSize,
                     background: focusColor,
                     color: '#ffffff',
                     padding: '1px 6px',
                     borderRadius: 3,
-                    marginLeft: 8
+                    marginLeft: 8,
+                    display: 'inline-block',
+                    textTransform: 'uppercase',
                   }}>
-                    {t.programNext}
+                    {scheduleDateLabel}
                   </span>
                 )}
               </div>
 
+              {entry.projected && entryCycle !== currentCycle && <div title={t.programProjectedHelp} style={{ color: THEME.muted,
+                fontSize: RESPONSIVE_CONTENT_UI.compactFontSize, marginTop: 3 }}>{t.programProjected}</div>}
               {completedAtLabel && (
                 <div style={{
                   fontSize: RESPONSIVE_CONTENT_UI.compactFontSize,
@@ -10240,7 +10306,7 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
                   ✓ {completedAtLabel}
                 </div>
               )}
-              {scheduleDateLabel && (
+              {scheduleDateLabel && !relativeDateBadge && (
                 <div
                   data-testid={`program-workout-schedule-date-${workout.number}`}
                   style={{
@@ -10306,7 +10372,7 @@ export function AllWorkouts({ workouts, currentIndex, completedWorkoutNumbers = 
         );
       })}
 
-      {renderWorkoutListToggleButton('bottom')}
+      {hasHiddenWorkouts && <div data-testid="program-bottom-actions" style={{ flexShrink: 0, display: 'flex', justifyContent: 'center', padding: '4px 0' }}>{renderWorkoutListToggleButton('bottom')}</div>}
 
       </div>
 
@@ -11071,6 +11137,7 @@ function App() {
     normalizeDeadliftVariant(localStorage.getItem('deadliftVariant'))
   );
   const [weightUnit, setWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
+  const [weightRounding, setWeightRounding] = useState(() => ({ ...DEFAULT_WEIGHT_ROUNDING }));
   const [hasLoadedData, setHasLoadedData] = useState(false);
   const [hasExistingProfile, setHasExistingProfile] = useState(false);
   const [showWhatsNewAfterUpdates, setShowWhatsNewAfterUpdates] = useState(true);
@@ -11198,6 +11265,8 @@ function App() {
 
   const t = translations[language];
   const [screen, setScreen] = useState(null);
+  const [programPreview, setProgramPreview] = useState(null);
+  useEffect(() => { if (screen !== 'current') setProgramPreview(null); }, [screen]);
   const appViewportRef = useRef(null);
   const [workoutNeedsNavClearance, setWorkoutNeedsNavClearance] = useState(false);
   const [workouts, setWorkouts] = useState([]);
@@ -11440,6 +11509,8 @@ function App() {
     window.addEventListener('resize', resize);
     window.visualViewport?.addEventListener('resize', resize);
     document.fonts?.addEventListener?.('loadingdone', resize);
+    resizeObserver?.observe(viewport);
+    document.fonts?.ready?.then(() => { if (!disposed) resize(); });
     measure();
     return () => {
       disposed = true;
@@ -11453,7 +11524,7 @@ function App() {
         '--kelani-settings-row-padding', '--kelani-stats-card-gap', '--kelani-dashboard-card-gap',
         '--kelani-dashboard-card-padding', '--kelani-dashboard-text-gap'].forEach(key => viewport.style.removeProperty(key));
     };
-  }, [screen]);
+  }, [screen, showLaunchSplash, hasLoadedData]);
 
   useEffect(() => {
     if (!workouts.length) return;
@@ -11514,11 +11585,12 @@ function App() {
       : [],
     [trainingModel, workouts, currentIndex, history, scheduleToday]
   );
-  const nextCycleCalendarWorkouts = useMemo(() => {
-    if (!calendarIntegration.enabled || !isSmartTrainingModel(trainingModel) ||
-        !prs.Squat || !prs.Bench || !prs.Deadlift) return [];
+  const programProjection = useMemo(() => {
+    if (!hasLoadedData || !isSmartTrainingModel(trainingModel) ||
+        !prs.Squat || !prs.Bench || !prs.Deadlift) return { workouts: [], error: false };
     const loadMaxes = resolveEstimatedOneRMs({ prs, oneRMs, history });
-    return projectNextSmartCalendarCycle({
+    try {
+      return { workouts: projectSmartPlanningHorizon({
       programProfile,
       squat: isSmartTrainingModel(trainingModel) ? loadMaxes.Squat : prs.Squat,
       bench: isSmartTrainingModel(trainingModel) ? loadMaxes.Bench : prs.Bench,
@@ -11527,6 +11599,7 @@ function App() {
       accessoryPRs,
       preparationMode,
       workoutSetup,
+      weightRounding,
       trainingFocus,
       athleteLevel,
       deadliftVariant,
@@ -11546,11 +11619,21 @@ function App() {
         currentCycle: currentCycle + 1,
         startCycle: smartIdealRouteStartCycle,
       }),
-    });
-  }, [calendarIntegration.enabled, trainingModel, prs, oneRMs, programProfile,
-    accessoryMode, accessoryPRs, preparationMode, workoutSetup, trainingFocus,
+      }, 28), error: false };
+    } catch (error) {
+      console.warn('Could not calculate the shared program forecast', error);
+      return { workouts: [], error: true };
+    }
+  }, [hasLoadedData, smartWorkoutScheduleDateKeys, scheduleToday, trainingModel, prs, oneRMs, programProfile,
+    accessoryMode, accessoryPRs, preparationMode, workoutSetup, weightRounding, trainingFocus,
     athleteLevel, deadliftVariant, benchPressVariant, squatVariant, cooldownMode,
     history, currentCycle, currentIndex, smartIdealRouteStartCycle]);
+  const futureProgramWorkouts = programProjection.workouts;
+  const programTimeline = useMemo(() => buildProgramTimeline({
+    workouts, history, currentCycle, currentIndex, scheduleDateKeys: smartWorkoutScheduleDateKeys,
+    forecast: futureProgramWorkouts,
+    forecastStartDate: smartWorkoutScheduleDateKeys[currentIndex] || getProgramForecastWindow({ scheduleDateKeys: smartWorkoutScheduleDateKeys, today: scheduleToday }).startDate,
+  }), [workouts, history, currentCycle, currentIndex, smartWorkoutScheduleDateKeys, futureProgramWorkouts, scheduleToday]);
   const syncCalendar = useCallback(async (automatic = false) => {
     if (!automatic) calendarFeedbackSessionRef.current = calendarModalSessionRef.current;
     if (calendarSyncInFlightRef.current) {
@@ -11583,16 +11666,10 @@ function App() {
           if (!matches) throw new Error('Selected calendar unavailable');
         }
 
-        const desiredEvents = buildCalendarPlanningEventSpecs({
-          workouts,
-          scheduleDateKeys: smartWorkoutScheduleDateKeys,
-          currentIndex,
-          currentCycle,
-          startTime: settings.defaultStartTime,
-          today: scheduleToday,
-          titleTemplate: t.calendarEventTitle,
-          provisionalTitleTemplate: t.calendarProvisionalEventTitle,
-          nextCycleWorkouts: nextCycleCalendarWorkouts,
+        if (settings.enabled && programProjection.error) throw new Error('Program forecast unavailable');
+        const desiredEvents = buildTimelineCalendarEventSpecs({
+          timeline: programTimeline, startTime: settings.defaultStartTime,
+          today: scheduleToday, titleTemplate: t.calendarEventTitle,
         });
         const completedWorkoutKeys = getCompletedCalendarWorkoutKeys(history);
         const result = await syncWorkoutCalendar({
@@ -11604,10 +11681,10 @@ function App() {
           deleteEvent: deleteDeviceWorkoutEvent,
           ensureReminder: ensureDeviceWorkoutEventReminder,
           readManagedEvents: getManagedDeviceWorkoutEvents,
-          restWorkoutKeys: getCalendarRestWorkoutKeys({ workouts, currentCycle, nextCycleWorkouts: nextCycleCalendarWorkouts }),
-          generatedTitleTemplates: Object.values(translations).flatMap(language => [
+          restWorkoutKeys: new Set(programTimeline.filter(entry => entry.workout.type === 'rest').map(entry => `${entry.cycle}:${entry.workout.number}`)),
+          generatedTitleTemplates: [...LEGACY_CALENDAR_TITLE_TEMPLATES, ...Object.values(translations).flatMap(language => [
             language.calendarEventTitle, language.calendarProvisionalEventTitle,
-          ]),
+          ])],
           onProgress: eventMappings => {
             calendarIntegrationRef.current = { ...calendarIntegrationRef.current, eventMappings };
             setCalendarIntegration(prev => ({ ...prev, eventMappings }));
@@ -11644,7 +11721,7 @@ function App() {
       calendarSyncPendingRef.current = null;
       if (pendingSync) void pendingSync();
     }
-  }, [calendarIntegration, workouts, smartWorkoutScheduleDateKeys, nextCycleCalendarWorkouts, currentIndex, currentCycle, history, scheduleToday, t]);
+  }, [calendarIntegration, workouts, smartWorkoutScheduleDateKeys, programTimeline, programProjection.error, currentIndex, currentCycle, history, scheduleToday, t]);
 
   useEffect(() => {
     if (!hasLoadedData || !calendarIntegration.hasSynced ||
@@ -11841,6 +11918,7 @@ function App() {
       const savedTrainingModel = normalizeTrainingModel(
         data.trainingModel || localStorage.getItem('trainingModel')
       );
+      const savedWeightRounding = resolveStoredWeightRounding(data);
       const savedWeightUnit = resolveStoredWeightUnit(
         data,
         localStorage.getItem('weightUnit')
@@ -11910,6 +11988,7 @@ function App() {
         accessoryPRs: data.accessoryPRs || {},
         preparationMode: savedPreparationMode,
         workoutSetup: savedWorkoutSetup,
+        weightRounding: savedWeightRounding,
         trainingFocus: savedTrainingFocus,
         athleteLevel: savedAthleteLevel,
         deadliftVariant: savedDeadliftVariant,
@@ -11961,6 +12040,7 @@ function App() {
       setBodyWeights(restoredBodyWeights);
       setRecordedStrengthRatioMaxes(restoredStrengthRatioMaxes);
       setWeightUnit(savedWeightUnit);
+      setWeightRounding(savedWeightRounding);
       setMeetPlannerAttempts(data.meetPlannerAttempts || {});
       setMeetPrepChecklist(savedMeetPrepChecklist);
       setRestTimeSeconds(normalizeRestTimeSeconds(data.restTimeSeconds));
@@ -12055,6 +12135,7 @@ function App() {
       accessoryMode,
       preparationMode,
       workoutSetup,
+      weightRounding,
       trainingFocus,
       cooldownMode,
       squatVariant,
@@ -12070,7 +12151,7 @@ function App() {
         selectedIndex,
         workouts,
       },
-  }), [history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, workoutSetup, trainingFocus, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, showWhatsNewAfterUpdates, checkForUpdatesAutomatically, calendarIntegration, selectedIndex, workouts]);
+  }), [history, prs, oneRMs, smartIdealRouteStartCycle, accessoryPRs, strengthRatioMaxes, currentCycle, currentIndex, bodyWeights, weightUnit, meetPlannerAttempts, meetPrepChecklist, restTimeSeconds, trainingModel, programProfile, accessoryMode, preparationMode, workoutSetup, weightRounding, trainingFocus, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, showWhatsNewAfterUpdates, checkForUpdatesAutomatically, calendarIntegration, selectedIndex, workouts]);
 
   // Screen navigation changes no training data. Keep serialization and the
   // synchronous storage write separate from completion-triggered backups.
@@ -12305,6 +12386,7 @@ function App() {
       accessoryPRs,
       preparationMode,
       workoutSetup,
+      weightRounding,
       trainingFocus,
       athleteLevel,
       deadliftVariant,
@@ -12334,7 +12416,7 @@ function App() {
         Number(currentIndex) + 1
       ));
     });
-  }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, workoutSetup, trainingFocus, athleteLevel, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, oneRMs.Squat, oneRMs.Bench, oneRMs.Deadlift, smartIdealRouteStartCycle, history, bodyWeights, currentIndex, currentCycle, meetPlannerAttempts]);
+  }, [hasLoadedData, trainingModel, accessoryMode, preparationMode, workoutSetup, weightRounding, trainingFocus, athleteLevel, cooldownMode, squatVariant, deadliftVariant, benchPressVariant, programProfile, accessoryPRs, prs.Squat, prs.Bench, prs.Deadlift, oneRMs.Squat, oneRMs.Bench, oneRMs.Deadlift, smartIdealRouteStartCycle, history, bodyWeights, currentIndex, currentCycle, meetPlannerAttempts]);
 
   useEffect(() => {
     // Keep the finished cycle available for its review. Navigation starts the next one.
@@ -12353,6 +12435,7 @@ function App() {
       accessoryPRs,
       preparationMode,
       workoutSetup,
+      weightRounding,
       trainingFocus,
       deadliftVariant,
       benchPressVariant,
@@ -12400,6 +12483,7 @@ function App() {
     accessoryPRs,
     preparationMode,
     workoutSetup,
+    weightRounding,
     trainingFocus,
     deadliftVariant,
     benchPressVariant,
@@ -12453,6 +12537,7 @@ function App() {
         : requestedTrainingFocus;
 
     setWeightUnit(selectedWeightUnit);
+    setWeightRounding({ ...DEFAULT_WEIGHT_ROUNDING });
     localStorage.setItem('weightUnit', selectedWeightUnit);
     localStorage.setItem('trainingModel', defaultTrainingModel);
     localStorage.setItem('programProfile', defaultProgramProfile);
@@ -12490,6 +12575,7 @@ function App() {
       accessoryPRs: {},
       preparationMode: defaultPreparationMode,
       workoutSetup: defaultWorkoutSetup,
+      weightRounding: DEFAULT_WEIGHT_ROUNDING,
       trainingFocus: startingTrainingFocus,
       athleteLevel: startingAthleteLevel,
       deadliftVariant: defaultDeadliftVariant,
@@ -12639,7 +12725,7 @@ function handleStartNewCycle() {
   const transition = buildNextTrainingCycle({
     trainingModel, currentCycle, history, prs, oneRMs, bodyWeights,
     strengthRatioMaxes, programProfile, accessoryMode, accessoryPRs,
-    preparationMode, workoutSetup, trainingFocus, deadliftVariant,
+    preparationMode, workoutSetup, weightRounding, trainingFocus, deadliftVariant,
     benchPressVariant, squatVariant, cooldownMode, smartIdealRouteStartCycle,
   });
 
@@ -13300,6 +13386,7 @@ function changeAccessoryWeight(accIndex, setIndex, val) {
         accessoryPRs: nextAccessoryPRs,
         preparationMode,
         workoutSetup,
+        weightRounding,
         trainingFocus,
         // Computed fresh from nextPrs/nextHistory (not the render-time
         // athleteLevel const) since this runs right after a workout
@@ -14292,6 +14379,7 @@ const __kelaniSmartPreviewNextDay = (options = {}) => {
     });
     const generated = generateWorkoutsForTrainingModel(data.trainingModel || TRAINING_MODELS.SMART, {
       programProfile: data.programProfile,
+      weightRounding: resolveStoredWeightRounding(data),
       e1RMs: data.prs,
       squat: previewOneRMs.Squat,
       bench: previewOneRMs.Bench,
@@ -14442,6 +14530,7 @@ const __kelaniSmartPreviewRegression = () => {
 
       const generated = generateWorkoutsForTrainingModel(data.trainingModel || TRAINING_MODELS.SMART, {
         programProfile: data.programProfile,
+      weightRounding: resolveStoredWeightRounding(data),
         e1RMs: prs,
         squat: previewOneRMs.Squat,
         bench: previewOneRMs.Bench,
@@ -14741,6 +14830,7 @@ const __kelaniSmartResetToW1 = () => {
       TRAINING_MODELS.SMART,
       {
         programProfile: data.programProfile || programProfile,
+        weightRounding: resolveStoredWeightRounding(data),
         e1RMs: resolvedPrs,
         squat: resetOneRMs.Squat,
         bench: resetOneRMs.Bench,
@@ -15166,6 +15256,7 @@ function saveBodyWeight(data) {
 }
 
 function changeScreen(nextScreen) {
+  setProgramPreview(null);
   setShowStartCycleConfirm(false);
   if (nextScreen === 'current') {
     const safeIndex = Math.min(currentIndex, workouts.length - 1);
@@ -15430,8 +15521,8 @@ const dashboardSuggestedMeetPlan = buildSuggestedMeetPlan({
   Squat: { oneRM: best1RMs.Squat, e1RM: bestE1RMs.Squat },
   Bench: { oneRM: best1RMs.Bench, e1RM: bestE1RMs.Bench },
   Deadlift: { oneRM: best1RMs.Deadlift, e1RM: bestE1RMs.Deadlift },
-}, { trainingModel, manualAttempts: meetPlannerAttempts, startedMeet: dashboardCurrentWorkout });
-const displayedWorkoutNumber = screen === 'current'
+}, { trainingModel, weightRounding, manualAttempts: meetPlannerAttempts, startedMeet: dashboardCurrentWorkout });
+const displayedWorkoutNumber = programPreview ? programPreview.workout.number : screen === 'current'
   ? (workouts[selectedIndex]?.number || currentIndex + 1)
   : screen === 'completed' ? (completedWorkout?.number || currentIndex + 1)
   : (workouts[currentIndex]?.number || currentIndex + 1);
@@ -15444,16 +15535,16 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
       screen,
       workoutNeedsNavClearance: shouldReserveWorkoutBottomNavSpace({
         screen,
-        workout: workouts[selectedIndex],
+        workout: programPreview?.workout || workouts[selectedIndex],
         measuredNeedsClearance: workoutNeedsNavClearance,
       }),
       allowVerticalScroll: shouldAllowAppVerticalScroll({
         screen,
-        workout: workouts[selectedIndex],
+        workout: programPreview?.workout || workouts[selectedIndex],
       }),
     })}
   >
-      <AppHeader t={t} currentCycle={currentCycle}
+      <AppHeader t={t} currentCycle={programPreview?.cycle || currentCycle}
         onOpenAbout={() => {
           setShowProjectVerification(false);
           prepareUpdatesSettings();
@@ -15464,10 +15555,10 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
         recentBodyRatioEvent={dashboardRecentPrEvents.ratioEvent} />
       {screen === 'current' && (
         <CurrentWorkout
-          workout={workouts[selectedIndex]}
-          currentCycle={currentCycle}
+          workout={programPreview?.workout || workouts[selectedIndex]}
+          currentCycle={programPreview?.cycle || currentCycle}
           totalWorkouts={workouts.length}
-          isReadOnly={selectedIndex > currentIndex || Boolean(workouts[selectedIndex]?.completed)}
+          isReadOnly={Boolean(programPreview) || selectedIndex > currentIndex || Boolean(workouts[selectedIndex]?.completed)}
           onShowPlateCalculator={(weightKg) => setPlateCalcWeightKg(weightKg)}
           onTogglePrepItem={togglePrepItem}
           onToggleWarmup={toggleWarmup}
@@ -15511,6 +15602,9 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
           latestBodyWeight={latestBodyWeight}
           currentE1RMs={currentCycleBestE1RMs}
           meetProjectionDateLabel={selectedMeetProjectionDateLabel}
+          scheduledDateKey={programPreview?.dateKey || smartWorkoutScheduleDateKeys[selectedIndex]}
+          scheduleToday={scheduleToday}
+          language={language}
         />
       )}
 
@@ -15985,11 +16079,14 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
       {screen === 'all' && (
         <AllWorkouts
           workouts={workouts}
+          timeline={isSmartTrainingModel(trainingModel) ? programTimeline : null}
+          planningUnavailable={programProjection.error}
           currentIndex={currentIndex}
           completedWorkoutNumbers={completedWorkoutNumbers}
           currentCycle={currentCycle}
-          onSelect={(idx) => {
-            setSelectedIndex(idx);
+          onSelect={(idx, entry) => {
+            setProgramPreview(entry?.projected || (entry && entry.cycle !== currentCycle) ? entry : null);
+            if (Number.isInteger(idx)) setSelectedIndex(idx);
             setScreen('current');
           }}
           programProfile={programProfile}
@@ -16053,6 +16150,8 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
       <WeightUnitSection
         weightUnit={weightUnit}
         setWeightUnit={setWeightUnit}
+        weightRounding={weightRounding}
+        setWeightRounding={setWeightRounding}
         t={t}
       />
 
@@ -16497,14 +16596,16 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
         )}
         {/* FORCE_MULTI_LIFT_COMPLETED_SETS_END */}
 
+        {completedWorkoutIsMeet && (
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
           <SupportActionButton onClick={() => setShareCard(buildAchievementCard({
-            ...shareContext, kind: completedWorkout?.type === 'rest' ? 'rest' : completedWorkoutIsMeet ? 'meet' : 'workout',
+            ...shareContext, kind: 'meet',
             workout: completedWorkout, t, weightUnit,
           }))}>
             {t.shareKelani}
           </SupportActionButton>
         </div>
+        )}
         </div>
 
       </div>
@@ -16524,7 +16625,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
 
       <AboutSupportModals
         t={t}
-        onShare={() => setShareCard(buildAchievementCard({ ...shareContext, dashboard: dashboardE1RMMetrics, weightUnit, t }))}
+        onShare={() => setShareCard(buildAchievementCard({ ...shareContext, cycle: currentCycle, workoutNumber: workouts[currentIndex]?.number || currentIndex + 1, dashboard: dashboardE1RMMetrics, weightUnit, t }))}
         shareOpen={Boolean(shareCard)}
         currentVersion={installedUpdateVersion}
         updateChannel={updateChannel}
@@ -16610,7 +16711,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
     zIndex: 650,
     padding: 16
   }}>
-    <div style={{
+    <AdaptiveDialogPanel style={{
       background: THEME.card,
       border: `1px solid ${THEME.primary}`,
       borderRadius: 12,
@@ -16673,7 +16774,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
       >
         {t.cancel}
       </button>
-    </div>
+    </AdaptiveDialogPanel>
   </div>
 )}
 
@@ -16681,6 +16782,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
   <React.Suspense fallback={null}>
     <PlateCalculator
       weightKg={plateCalcWeightKg}
+      incrementKg={normalizeWeightRounding(weightRounding)[(programPreview?.workout || workouts[selectedIndex])?.type === 'meet' ? 'meet' : 'training']}
       onClose={() => setPlateCalcWeightKg(null)}
       theme={THEME}
       t={t}
@@ -16698,7 +16800,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
     zIndex: 600,
     padding: 16
   }}>
-    <div style={{
+    <AdaptiveDialogPanel style={{
       background: THEME.card,
       border: `1px solid ${THEME.primary}`,
       borderRadius: 12,
@@ -16750,7 +16852,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
           {t.resetConfirmConfirm}
         </button>
       </div>
-    </div>
+    </AdaptiveDialogPanel>
   </div>
 )}
 

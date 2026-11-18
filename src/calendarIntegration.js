@@ -27,6 +27,7 @@ function normalizeEventMapping(mapping) {
     reminderInitialized: mapping.reminderInitialized === true,
     deletedExternally: mapping.deletedExternally === true,
     reminderMinutes: Math.max(0, Number(mapping.reminderMinutes) || 0),
+    ...(mapping.titleFormatVersion === 1 ? { titleFormatVersion: 1 } : {}),
     ...(mapping.provisional === true ? { provisional: true } : {}),
     ...(mapping.identityVerified === true ? { identityVerified: true } : {}),
     ...(mapping.duplicateReconciliationVersion === 2 ? { duplicateReconciliationVersion: 2 } : {}),
@@ -207,4 +208,23 @@ export function getCalendarRestWorkoutKeys({ workouts = [], currentCycle, nextCy
     ...workouts.filter(workout => workout?.type === 'rest').map(workout => `${Number(currentCycle)}:${Number(workout.number)}`),
     ...nextCycleWorkouts.filter(workout => workout?.type === 'rest').map(workout => `${Number(currentCycle) + 1}:${Number(workout.number)}`),
   ]);
+}
+
+
+// Historical generated names are only an ownership-safe migration allowlist.
+export const LEGACY_CALENDAR_TITLE_TEMPLATES = [
+  'Kelani training · C{cycle}W{workout}', 'Kelani training (voorlopig) · C{cycle}W{workout}',
+  'Kelani workout · C{cycle}W{workout}', 'Kelani workout (provisional) · C{cycle}W{workout}',
+  'Entrenament Kelani · C{cycle}W{workout}', 'Entrenament Kelani (provisional) · C{cycle}W{workout}',
+];
+
+export function buildTimelineCalendarEventSpecs({ timeline = [], ...options } = {}) {
+  return timeline.flatMap(entry => buildCalendarEventSpecs({
+    ...options, workouts: [entry.workout], currentIndex: 0, currentCycle: entry.cycle,
+    scheduleDateKeys: [entry.dateKey],
+  }).map(event => ({ ...event, titleFormatVersion: 1, alternateTitle: event.title,
+    ...(entry.projected ? { provisional: true } : {}),
+    generatedTitles: [...new Set([event.title, ...LEGACY_CALENDAR_TITLE_TEMPLATES.map(template => template
+      .replace('{cycle}', String(event.cycleId)).replace('{workout}', String(event.workoutId)))])],
+  })));
 }

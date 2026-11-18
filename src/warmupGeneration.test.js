@@ -80,7 +80,7 @@ test('applies the confirmed rep distribution to the reported 97.5kg and 102.5kg 
 
   expect(benchWarmups.map(({ reps, weight }) => [reps, weight])).toEqual([
     [5, 20],
-    [3, 60],
+    [5, 60],
     [3, 80],
   ]);
   expect(squatWarmups.map(({ reps, weight }) => [reps, weight])).toEqual([
@@ -155,7 +155,7 @@ test.each([
   [155, 1, [[20, 5], [70, 5], [100, 3], [130, 1]]],
   [102.5, 1, [[20, 5], [70, 3], [90, 1]]],
   [180, 1, [[20, 5], [70, 5], [120, 3], [150, 1]]],
-  [220, 2, [[20, 5], [70, 5], [120, 3], [160, 3], [190, 3]]],
+  [220, 2, [[20, 5], [70, 5], [120, 5], [160, 3], [190, 3]]],
   [300, 1, [[20, 5], [70, 5], [120, 3], [170, 3], [220, 1], [260, 1]]],
   [120, 5, [[20, 5], [70, 5], [100, 5]]],
 ])('uses the universal warm-up policy before %skg x %s', (weight, reps, expected) => {
@@ -196,4 +196,17 @@ test.each(['Squat', 'Bench', 'Deadlift'])('uses stable single warm-up reps for %
   expect(generateWarmups([{ weight: 165, reps: 1 }], lift).map(s => [s.weight, s.reps]))
     .toEqual([[20, 5], [70, 5], [110, 3], [140, 1]]);
   expect(distributeUniversalWarmupReps(2, 1)).toEqual([5, 3]);
+});
+
+
+test.each(['Squat', 'Bench', 'Deadlift'])('uses 5/5/3 before doubles and triples consistently for %s', lift => {
+  for (const targetReps of [2, 3]) {
+    for (const weight of [90, 97.5, 102.5, 135, 142.5]) {
+      const warmups = generateWarmups([{ weight, reps: targetReps }], lift);
+      expect(warmups.map(set => set.reps)).toEqual([5, 5, 3]);
+      expect(warmups.map(set => set.weight)).toEqual(generateUniversalWarmupWeights(weight));
+    }
+    expect(generateWarmups([{ weight: 70, reps: targetReps }], lift).map(set => set.reps)).toEqual([5, 3]);
+    expect(generateWarmups([{ weight: 175, reps: targetReps }], lift).map(set => set.reps)).toEqual([5, 5, 3, 3]);
+  }
 });

@@ -30,14 +30,15 @@ test('navigation does not rewrite training data; changed settings persist and su
     }
     expect(write.mock.calls.filter(([storageKey]) => storageKey === key)).toHaveLength(0);
     expect(localStorage.getItem(key)).toBe(previous);
-    fireEvent.click(screen.getByRole('button', { name: 'kg' }));
+    fireEvent.click(screen.getByRole('button', { name: /kg ·/ }));
     fireEvent.click(screen.getByRole('button', { name: 'lb' }));
     await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).weightUnit).toBe('lb'));
     expect(write.mock.calls.some(([storageKey]) => storageKey === key)).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     view.unmount();
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 5000 }));
-    expect(screen.getByRole('button', { name: 'lb' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /lb ·/ })).toBeInTheDocument();
   } finally {
     write.mockRestore();
   }

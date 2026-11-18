@@ -28,7 +28,7 @@ Functies:
 - Lokale data-export en -import, met optionele dagelijkse backupgeschiedenis en een gecontroleerde veiligheidskopie vóór herstel
 - Na een voltooide cyclus zie je de resultaten, vooruitgang sinds het begin en een grafiek van je beste geregistreerde 1RM-totaal
 - Optioneel toekomstige workouts synchroniseren met een gekozen Android-agenda nadat je toegang geeft en de eerste synchronisatie start
-- Agendaplanning omvat de resterende huidige cyclus en één voorlopige volgende cyclus; de verwachting kan veranderen
+- Programma en Agenda delen de resterende huidige cyclus en minimaal vier weken vooruit, zo nodig over meerdere cycli; toekomstige plannen kunnen veranderen
 - Optioneel Kelani-agenda-afspraken verwijderen wanneer workouts in de app zijn voltooid
 - Workoutafspraken krijgen een herinnering op de starttijd; herinneringen die je later in je agenda wijzigt of verwijdert blijven behouden
 - Workoutafspraken die je handmatig in je agenda verwijdert, blijven verwijderd bij latere synchronisaties

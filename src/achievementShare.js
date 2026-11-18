@@ -27,7 +27,7 @@ export function buildAchievementCard({ kind = 'about', workout, celebration, his
     };
   }
   let cycleSummary;
-  let title = kind === 'about' ? t.dashboard : t.shareAboutTitle;
+  let title = kind === 'about' ? 'Kelani SBD Tracker' : t.shareAboutTitle;
   let subtitle = kind === 'about' ? '' : t.shareAboutSubtitle;
   if (kind === 'milestone') {
     title = t.milestoneStrengthTitle;
@@ -112,14 +112,15 @@ export function buildAchievementCard({ kind = 'about', workout, celebration, his
     positiveInteger(cycle) ? `${t.cycle} ${Number(cycle)}` : null,
     positiveInteger(number) ? `${t.workout} ${Number(number)}` : null,
   ].filter(Boolean);
-  return { title, subtitle, context, rows, ...(dashboardSummary ? { dashboardSummary } : {}), ...(cycleSummary ? { cycleSummary } : {}), footer: t.shareCardFooter, downloadLabel: t.shareDownload, url: KELANI_DOWNLOAD_URL };
+  return { kind, title, subtitle, context, rows, ...(dashboardSummary ? { dashboardSummary } : {}), ...(cycleSummary ? { cycleSummary } : {}), ...(kind === 'rest' || workout?.type === 'rest' ? { restSummary: { message: t.restDayCompletedSaved } } : {}), footer: t.shareCardFooter, downloadLabel: t.shareDownload, url: KELANI_DOWNLOAD_URL };
 }
 
 export function achievementShareText(card) {
   return `${card.downloadLabel}: ${card.url}`;
 }
 
-// App-owned logo and explicit result fields only. All line heights are measured first.
+// Render a compact counterpart of the app's screens. Layout is measured before
+// drawing; no history object, UI screenshot or private field reaches the canvas.
 export async function renderAchievementCard(card) {
   await document.fonts?.ready;
   const logo = new Image();
@@ -130,127 +131,135 @@ export async function renderAchievementCard(card) {
   canvas.width = 1080;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas unavailable');
-  function lines(value, size, width = 920) {
-    ctx.font = `700 ${size}px sans-serif`;
+  const ink = '#fff4e6', muted = '#bdb5ad', orange = '#ff8a3d';
+  const commands = [];
+  const left = 56, width = 968;
+  function wrap(value, size, available = width, weight = 700) {
+    ctx.font = `${weight} ${size}px sans-serif`;
     const result = [];
-    let line = '';
-    for (const word of String(value).split(/\s+/)) {
-      const next = line ? `${line} ${word}` : word;
-      if (line && ctx.measureText(next).width > width) { result.push(line); line = word; }
-      else line = next;
+    for (const paragraph of String(value).split('\n')) {
+      let line = '';
+      for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+        const next = line ? `${line} ${word}` : word;
+        if (line && ctx.measureText(next).width > available) { result.push(line); line = word; }
+        else line = next;
+      }
+      if (line) result.push(line);
     }
-    if (line) result.push(line);
     return result;
   }
-  // Shared visual language with the result screens: colored lift names,
-  // readable values, restrained panels and the same cycle-review evidence.
-  const textColor = '#fff4e6';
-  const muted = '#bdb5ad';
-  const orange = '#ff8a3d';
-  const commands = [];
-  let y = 40;
-  function text(value, x, top, size, color = textColor, width = 920) {
-    const wrapped = lines(value, size, width);
+  function text(value, x, top, size, color = ink, available = width, align = 'center', weight = 700) {
+    const lines = wrap(value, size, available, weight);
     commands.push(() => {
-      ctx.textAlign = 'center'; ctx.fillStyle = color; ctx.font = `700 ${size}px sans-serif`;
-      wrapped.forEach((line, index) => ctx.fillText(line, x, top + size + index * size * 1.3));
+      ctx.textAlign = align; ctx.textBaseline = 'top'; ctx.fillStyle = color;
+      ctx.font = `${weight} ${size}px sans-serif`;
+      lines.forEach((line, index) => ctx.fillText(line, x, top + index * size * 1.25));
     });
-    return wrapped.length * size * 1.3;
+    return lines.length * size * 1.25;
   }
-  function panel(top, height) {
-    commands.push(() => {
-      ctx.fillStyle = '#111111'; ctx.fillRect(40, top, 1000, height);
-      ctx.fillStyle = '#493321'; ctx.fillRect(40, top, 1000, 2);
-    });
+  function rect(x, top, w, h, color) {
+    commands.push(() => { ctx.fillStyle = color; ctx.fillRect(x, top, w, h); });
   }
-  commands.push(() => ctx.drawImage(logo, 460, 40, 160, 160));
-  y = 216;
-  y += text('Kelani SBD Tracker', 540, y, 42);
-  y += 30;
-  y += text(card.title, 540, y, 64, orange);
-  if (card.subtitle) { y += 10; y += text(card.subtitle, 540, y, 36, muted); }
-  if (card.context?.length) { y += 24; y += text(card.context.join(' · '), 540, y, 36, '#ffd166'); }
-  y += 36;
+  function panel(x, top, w) {
+    rect(x, top, w, 1, '#493321');
+  }
+  function rule(top) {
+    rect(left, top, width, 2, '#493321');
+  }
+  // The same compact brand/context header across every kind of shared result.
+  commands.push(() => ctx.drawImage(logo, 484, 32, 112, 112));
+  text('Kelani SBD Tracker', 540, 160, 44, ink, width);
+  let y = 232;
+  if (card.context?.length) y += text(card.context.join(' · '), 540, y, 34, '#ffd166') + 22;
+  rule(y); y += 34;
+  if (!card.dashboardSummary) {
+    y += text(card.title, 540, y, 58, orange, width, 'center') + 12;
+    if (card.subtitle) y += text(card.subtitle, 540, y, 34, muted, width, 'center') + 12;
+    y += 16;
+  }
+
   if (card.dashboardSummary) {
-    const dashboard = card.dashboardSummary;
-    const tileWidth = 478;
-    const tileHeight = 294;
-    dashboard.tiles.forEach((tile, index) => {
-      const x = 50 + (index % 2) * 502;
-      const top = y + Math.floor(index / 2) * (tileHeight + 28);
-      // Black dashboard quadrants, lift-colored rules and generous internal
-      // spacing. No marketing block displacing the user's actual results.
-      commands.push(() => {
-        ctx.fillStyle = tile.color; ctx.fillRect(x, top, tileWidth, 4);
-      });
-      text(tile.label, x + tileWidth / 2, top + 26, 50, tile.color, tileWidth - 32);
-      dashboard.columns.forEach((column, row) => {
-        const rowTop = top + 118 + row * 82;
-        text(column, x + 78, rowTop + 6, 34, muted, 140);
-        const value = tile.values[row];
-        let size = 52;
-        ctx.font = `700 ${size}px sans-serif`;
-        while (size > 28 && ctx.measureText(value).width > 290) {
-          size -= 2; ctx.font = `700 ${size}px sans-serif`;
-        }
-        text(value, x + 318, rowTop, size, tile.color, 292);
+    // Same 2 x 2 lift/total structure and label/value alignment as Dashboard.
+    const tileWidth = (width - 40) / 2;
+    const valueWidth = tileWidth - 172;
+    const valueSize = value => {
+      let size = 54;
+      ctx.font = `700 ${size}px sans-serif`;
+      while (size > 42 && ctx.measureText(value).width > valueWidth) {
+        size -= 2; ctx.font = `700 ${size}px sans-serif`;
+      }
+      return size;
+    };
+    const rowHeights = card.dashboardSummary.columns.map((_, row) => Math.max(78,
+      ...card.dashboardSummary.tiles.map(tile => wrap(tile.values[row], valueSize(tile.values[row]), valueWidth).length * 68 + 14)));
+    const tileHeight = 106 + rowHeights.reduce((sum, height) => sum + height, 0);
+    card.dashboardSummary.tiles.forEach((tile, index) => {
+      const x = left + index % 2 * (tileWidth + 40);
+      const top = y + Math.floor(index / 2) * (tileHeight + 38);
+      text(tile.label, x + tileWidth / 2, top, 54, tile.color, tileWidth);
+      let rowTop = top + 100;
+      card.dashboardSummary.columns.forEach((label, row) => {
+        text(label, x + 72, rowTop + 4, 42, ink, 145);
+        text(tile.values[row], x + tileWidth - valueWidth / 2, rowTop, valueSize(tile.values[row]), tile.color, valueWidth);
+        rowTop += rowHeights[row];
       });
     });
-    y += tileHeight * 2 + 28;
+    y += tileHeight * 2 + 38;
   } else if (card.cycleSummary) {
     const review = card.cycleSummary;
-    const statHeight = Math.max(...review.stats.map(stat => lines(stat.label, 32, 420).length)) * 42 + 106;
-    panel(y, statHeight);
+    const statWidth = (width - 24) / 2;
+    const statHeight = 96 + Math.max(...review.stats.map(stat => wrap(stat.label, 34, statWidth - 40).length)) * 42.5;
     review.stats.forEach((stat, index) => {
-      const x = 290 + index * 500;
-      text(stat.value, x, y + 12, 64, orange, 420);
-      text(stat.label, x, y + 98, 32, textColor, 420);
+      const x = left + index * (statWidth + 24);
+      panel(x, y, statWidth);
+      text(stat.value, x + statWidth / 2, y + 14, 64, orange, statWidth - 44);
+      text(stat.label, x + statWidth / 2, y + 96, 34, muted, statWidth - 44);
     });
-    y += statHeight + 28;
-    const top = y;
-    // Reserve measured header space before laying out the results table.
-    const headingHeight = lines(review.title, 42).length * 55;
-    const comparisonHeight = lines(review.comparison, 28).length * 37;
-    const bodyHeight = 54 + review.lifts.length * 126 + (review.meet ? 80 : 0);
-    panel(top, 40 + headingHeight + comparisonHeight + bodyHeight);
-    y += 20;
-    y += text(review.title, 540, y, 42, orange);
-    y += text(review.comparison, 540, y, 28, muted) + 18;
-    review.columns.forEach((column, index) => text(column, 540 + index * 320, y, 34, muted, 290));
-    y += 54;
+    y += statHeight + 30;
+    y += text(review.title, 540, y, 38, orange) + 8;
+    y += text(review.comparison, 540, y, 32, muted) + 20;
+    const col = [210, 540, 870];
+    review.columns.forEach((label, index) => text(label, col[index + 1], y, 36, muted, 300, 'center'));
+    y += 58;
     review.lifts.forEach(lift => {
-      text(lift.label, 220, y + 12, 36, lift.color, 280);
+      const nameHeight = wrap(lift.label, 42, 230).length * 52.5;
+      const valuesHeight = Math.max(...lift.values.map(value => wrap(value, 44, 300).length)) * 55;
+      const gainHeight = Math.max(...lift.gains.map(value => wrap(value, 34, 300).length)) * 42.5;
+      const rowHeight = Math.max(nameHeight, valuesHeight + gainHeight + 8) + 28;
+      panel(left, y, width);
+      text(lift.label, col[0], y + 16, 42, lift.color, 230);
       lift.values.forEach((value, index) => {
-        const x = 540 + index * 320;
-        text(value, x, y, 38, textColor, 290);
-        text(lift.gains[index], x, y + 56, 30, lift.gainColors[index], 290);
+        text(value, col[index + 1], y + 14, 44, ink, 300, 'center');
+        text(lift.gains[index], col[index + 1], y + 22 + valuesHeight, 34, lift.gainColors[index], 300, 'center');
       });
-      y += 126;
+      y += rowHeight + 8;
     });
-    if (review.meet) y += text(`${review.meet.label}: ${review.meet.value}`, 540, y, 36, orange);
-    y = top + 40 + headingHeight + comparisonHeight + bodyHeight + 28;
-    const progressTop = y;
-    const progressTitleHeight = lines(review.progressTitle, 40).length * 52;
-    const chartHeight = review.points.length ? 240 : 0;
-    panel(y, 40 + progressTitleHeight + 110 + (review.total ? 64 : 0) + chartHeight);
+    if (review.meet) {
+      y += 12;
+      y += text(`${review.meet.label}: ${review.meet.value}`, 540, y, 34, orange) + 12;
+    }
     y += 20;
-    y += text(review.progressTitle, 540, y, 40, orange);
+    rule(y); y += 26;
+    y += text(review.progressTitle, 540, y, 38, orange) + 18;
+    const gainWidth = width / 3;
+    const gainHeight = Math.max(...review.lifts.map(lift => wrap(lift.label, 34, gainWidth - 20).length)) * 42.5;
     review.lifts.forEach((lift, index) => {
-      const x = 210 + index * 330;
-      text(lift.label, x, y + 10, 32, lift.color, 300);
-      text(lift.sinceStart, x, y + 60, 34, lift.sinceStartColor, 300);
+      const x = left + (index + 0.5) * gainWidth;
+      text(lift.label, x, y, 34, lift.color, gainWidth - 20);
+      text(lift.sinceStart, x, y + gainHeight + 8, 32, lift.sinceStartColor, gainWidth - 20);
     });
-    y += 110;
-    if (review.total) y += text(review.total, 540, y, 40);
+    y += gainHeight + 70;
+    if (review.total) y += text(review.total, 540, y, 38) + 16;
     if (review.points.length) {
-      const chartTop = y;
+      const chartTop = y + 12;
       const values = review.points.map(point => point.value);
       const min = Math.min(...values);
       const range = Math.max(Math.max(...values) - min, 10);
       const points = review.points.map((point, index) => ({ ...point,
-        x: review.points.length === 1 ? 540 : 170 + index * 740 / (review.points.length - 1),
-        y: chartTop + 150 - (point.value - min) / range * 90,
+        x: review.points.length === 1 ? 540 : 180 + index * 720 / (review.points.length - 1),
+        y: chartTop + 160 - (point.value - min) / range * 100,
       }));
+      [60, 110, 160].forEach(offset => rect(120, chartTop + offset, 840, 1, '#493321'));
       commands.push(() => {
         ctx.strokeStyle = orange; ctx.lineWidth = 5; ctx.beginPath();
         points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
@@ -258,32 +267,55 @@ export async function renderAchievementCard(card) {
         points.forEach(point => { ctx.fillStyle = orange; ctx.beginPath(); ctx.arc(point.x, point.y, 7, 0, Math.PI * 2); ctx.fill(); });
       });
       points.forEach((point, index) => {
-        text(point.label, point.x, chartTop + 185, 26, muted, 145);
-        if (index === 0 || index === points.length - 1) text(point.weight, point.x, point.y - 46, 28, textColor, 260);
+        text(point.label, point.x, chartTop + 186, 32, muted, 140, 'center');
+        if (index === 0 || index === points.length - 1) text(point.weight, point.x, point.y - 42, 30, ink, 240, 'center');
+      });
+      y = chartTop + 238;
+      y += text(review.chartLabel, 540, y, 30, muted) + 12;
+    }
+  } else if (card.rows.length) {
+    // Use the completion screens' centered results, with no decorative boxes.
+    const meetTotal = card.kind === 'meet' && card.rows.length === 4 ? card.rows.at(-1) : null;
+    if (meetTotal) {
+      y += text(meetTotal.label, 540, y, 38, muted, width, 'center') + 10;
+      y += text(meetTotal.value, 540, y, 100, orange, width, 'center') + 36;
+    }
+    const rows = card.rows.filter(row => row !== meetTotal);
+    if (card.kind === 'meet') {
+      const columnWidth = width / rows.length;
+      const labelHeight = Math.max(...rows.map(row => wrap(row.label, 42, columnWidth - 24).length)) * 52.5;
+      const valueHeight = Math.max(...rows.map(row => wrap(row.value, 54, columnWidth - 24).length)) * 67.5;
+      rows.forEach((row, index) => {
+        const x = left + columnWidth * (index + 0.5);
+        text(row.label, x, y, 42, row.color, columnWidth - 24, 'center');
+        text(row.value, x, y + labelHeight + 12, 54, ink, columnWidth - 24, 'center');
+      });
+      y += labelHeight + valueHeight + 40;
+    } else {
+      rows.forEach((row, index) => {
+        if (index) { rule(y); y += 32; }
+        y += text(row.label, 540, y, 48, row.color, width - 40, 'center') + 14;
+        const value = card.kind === 'workout' ? row.value.split(' · ').join('\n') : row.value;
+        y += text(value, 540, y, 54, ink, width - 40, 'center') + 38;
       });
     }
-    y = progressTop + 40 + progressTitleHeight + 110 + (review.total ? 64 : 0) + chartHeight;
-  } else if (card.rows.length) {
-    const contentHeights = card.rows.map(row => 44 + lines(row.label, 40).length * 52 + lines(row.value, 48, 880).length * 63);
-    const extra = Math.max(0, 1080 - y - 40 - contentHeights.reduce((sum, height) => sum + height + 24, 0)) / card.rows.length;
-    card.rows.forEach((row, index) => {
-      const labelHeight = lines(row.label, 40).length * 52;
-      const valueHeight = lines(row.value, 48, 880).length * 63;
-      const height = contentHeights[index] + extra;
-      panel(y, height);
-      const inset = (height - labelHeight - valueHeight) / 2;
-      text(row.label, 540, y + inset, 40, row.color);
-      text(row.value, 540, y + inset + labelHeight, 48, textColor, 880);
-      y += height + 24;
+
+  } else if (card.restSummary) {
+    // Same confirmation and recovery message as the actual rest-day screen.
+    const message = card.restSummary?.message || card.subtitle || card.title;
+    const messageHeight = wrap(message, 38, width - 96).length * 47.5;
+    const height = Math.max(380, messageHeight + 220);
+    const iconY = y + 96;
+    commands.push(() => {
+      ctx.strokeStyle = orange; ctx.lineWidth = 6; ctx.beginPath();
+      ctx.arc(540, iconY, 42, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(520, iconY); ctx.lineTo(535, iconY + 14);
+      ctx.lineTo(563, iconY - 16); ctx.stroke();
     });
-  } else {
-    const textHeight = lines(card.footer, 46, 840).length * 60;
-    const height = Math.max(textHeight + 100, 1080 - y - 40);
-    panel(y, height);
-    text(card.footer, 540, y + (height - textHeight) / 2, 46, textColor, 840);
+    text(message, 540, y + 188, 38, ink, width - 96, 'center');
     y += height;
   }
-  canvas.height = Math.max(1080, Math.ceil(y + 40));
+  canvas.height = Math.max(720, Math.ceil(y + 56));
   ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, 1080, canvas.height);
   commands.forEach(draw => draw());
   return canvas.toDataURL('image/png');

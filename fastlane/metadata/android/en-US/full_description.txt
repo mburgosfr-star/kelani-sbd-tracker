@@ -28,7 +28,7 @@ Features:
 - Local data export and import, with optional daily backup history and a verified safety copy before restoring
 - Completed cycles include a results review, progress since the start and a chart of your best recorded 1RM total
 - Optional sync of future workouts to a selected Android calendar after you grant calendar access and start the first sync
-- Calendar planning includes the remaining current cycle and one provisional next cycle; the forecast can change
+- Program and Calendar share the remaining current cycle and at least four weeks ahead, extending into later cycles when needed; future plans can change
 - Optionally remove Kelani calendar events when workouts are completed in the app
 - Workout calendar events include a reminder at the start time; reminders you later change or remove in your calendar are preserved
 - Workout events you manually delete in your calendar stay deleted during later syncs

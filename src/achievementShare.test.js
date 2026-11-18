@@ -53,7 +53,7 @@ test('weight-unit preference is respected without leaking the original workout o
   expect(card.rows[0].value).not.toContain('kg');
 });
 
-test('PNG renderer keeps full-size centered cards and sends the download footer only as separate text', async () => {
+test('PNG renderer keeps readable result cards and sends the download footer only as separate text', async () => {
   let source;
   const drawings = [];
   const ctx = { font: '', fillStyle: '', textAlign: '', drawImage: vi.fn(),
@@ -69,13 +69,14 @@ test('PNG renderer keeps full-size centered cards and sends the download footer 
     expect(await renderAchievementCard(card)).toBe('data:image/png;base64,PNG');
     expect(source).toBe('/icons/icon-512.webp');
     expect(ctx.fillRect.mock.calls[0].slice(0, 3)).toEqual([0, 0, 1080]);
-    expect(ctx.drawImage.mock.calls[0][2]).toBe(40);
+    expect(ctx.drawImage.mock.calls[0].slice(1)).toEqual([484, 32, 112, 112]);
     expect(ctx.fillRect.mock.calls[0][3]).toBeGreaterThanOrEqual(1080);
     const lastResult = drawings.filter(item => item.value.includes('kg')).at(-1);
     expect(lastResult.y).toBeLessThan(ctx.fillRect.mock.calls[0][3]);
     expect(drawings.some(item => item.value.includes('github.com') || item.value === card.downloadLabel)).toBe(false);
     expect(achievementShareText(card)).toBe(`${card.downloadLabel}: ${card.url}`);
-    expect(drawings.every(item => item.x === 540 && item.align === 'center')).toBe(true);
+    expect(drawings.every(item => item.x >= 56 && item.x <= 1024)).toBe(true);
+    expect(drawings.every(item => item.align === 'center')).toBe(true);
     expect(data).toHaveBeenCalledWith('image/png');
   } finally { context.mockRestore(); data.mockRestore(); vi.unstubAllGlobals(); }
 });
@@ -145,7 +146,8 @@ test.each(['en', 'nl', 'ca'])('About share is the real mini-dashboard in %s, wit
   }, total: { oneRM: 430, e1RM: 445.333333 }, bodyWeight: 85.6, email: 'PRIVATE' };
   const before = JSON.stringify(dashboard);
   const card = buildAchievementCard({ t, dashboard, athleteLevel: 'intermediate', cycle: 7, workoutNumber: 1 });
-  expect(card.title).toBe(t.dashboard);
+  expect(card.title).toBe('Kelani SBD Tracker');
+  expect(JSON.stringify(card)).not.toContain(t.dashboard);
   expect(card.subtitle).toBe('');
   expect(card.dashboardSummary.columns).toEqual([t.oneRM, t.e1RM]);
   expect(card.dashboardSummary.tiles.map(tile => tile.values)).toEqual([
@@ -175,5 +177,42 @@ test('mini-dashboard renderer has four colored quadrants and no advertising pane
     expect(drawings.some(item => item.value.includes('Plan your training') || item.value === t.shareAboutTitle)).toBe(false);
     const height = ctx.fillRect.mock.calls[0][3];
     expect(drawings.every(item => item.y > 0 && item.y < height)).toBe(true);
+  } finally { context.mockRestore(); data.mockRestore(); vi.unstubAllGlobals(); }
+});
+
+test.each(['en', 'nl', 'ca'])('all six share types stay inside their image with long localized lb results (%s)', async language => {
+  const drawings = [];
+  const ctx = { font: '', textAlign: '', drawImage: vi.fn(), fillRect: vi.fn(),
+    beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(), arc: vi.fn(), fill: vi.fn(),
+    measureText(value) { return { width: String(value).length * parseFloat(this.font.split(' ')[1]) * 0.58 }; },
+    fillText(value, x, y) { drawings.push({ value, x, y, size: parseFloat(this.font.split(' ')[1]), width: this.measureText(value).width, align: this.textAlign }); },
+  };
+  vi.stubGlobal('Image', class { set src(value) { queueMicrotask(() => this.onload()); } });
+  const context = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx);
+  const data = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/png;base64,PNG');
+  try {
+    const t = translations[language];
+    const lifts = ['Squat', 'Bench', 'Deadlift'];
+    for (const kind of ['about', 'workout', 'meet', 'cycle', 'milestone', 'rest']) {
+      drawings.length = 0; ctx.fillRect.mockClear();
+      const card = buildAchievementCard({ t, kind, weightUnit: 'lb', athleteLevel: 'intermediate', cycle: 12, workoutNumber: 28,
+        dashboard: { lifts: Object.fromEntries(lifts.map(lift => [lift, { oneRM: 225, e1RM: 227.3333 }])), total: { oneRM: 675, e1RM: 681.9999 } },
+        workout: { lifts: lifts.map(lift => ({ lift, sets: [set(225, 1), set(200, 3), set(200, 3)] })) },
+        history: lifts.map(lift => ({ lift, cycle: 0, workoutNumber: 0, topWeight: 200, e1rm: 200, seedMax: true })),
+        celebration: { achievements: [{ type: 'oneRM', lift: 'Squat', value: 225, gain: 2.5 }, { type: 'level', value: 'intermediate' }] },
+      });
+      await renderAchievementCard(card);
+      const height = ctx.fillRect.mock.calls[0][3];
+      for (const item of drawings) {
+        const left = item.x - (item.align === 'center' ? item.width / 2 : item.align === 'right' ? item.width : 0);
+        expect(left, `${kind}: ${item.value}`).toBeGreaterThanOrEqual(32);
+        expect(left + item.width, `${kind}: ${item.value}`).toBeLessThanOrEqual(1048);
+        expect(item.y + item.size, `${kind}: ${item.value}`).toBeLessThanOrEqual(height);
+      }
+      expect(drawings.every(item => item.align === 'center')).toBe(true);
+      expect(drawings.some(item => item.value === t.dashboard)).toBe(false);
+      expect(drawings.some(item => item.value.includes('github.com'))).toBe(false);
+      if (kind === 'workout') expect(drawings.some(item => item.value.includes(' · ') && item.value.includes('lb'))).toBe(false);
+    }
   } finally { context.mockRestore(); data.mockRestore(); vi.unstubAllGlobals(); }
 });

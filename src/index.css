@@ -25,7 +25,7 @@ button:not([data-kelani-button-size='contextual']):not([data-kelani-button-layou
   flex: 0 1 auto !important;
   justify-self: center;
   font-family: var(--kelani-button-font-family) !important;
-  font-size: var(--kelani-button-font-size) !important;
+  font-size: calc(var(--kelani-button-font-size) * var(--kelani-content-font-scale, 1)) !important;
   font-weight: var(--kelani-button-font-weight) !important;
   padding: 8px 12px !important;
   white-space: normal !important;
@@ -96,4 +96,20 @@ body,
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
   }
+}
+
+/* Dialog prose has its own readable baseline and never inherits screen fitting.
+   Titles and touch targets retain their shared geometry. Control text follows
+   the same local scale as labels and prose. */
+[data-adaptive-dialog] :is(p, li, label, td, th, dt, dd, small, [data-dialog-body-text]) {
+  font-size: var(--kelani-dialog-body-size) !important;
+}
+
+[data-adaptive-dialog] :is(input, select, textarea, button:not([data-kelani-button-size='contextual'])) {
+  font-size: var(--kelani-dialog-body-size) !important;
+}
+
+[data-adaptive-dialog] input::placeholder {
+  color: inherit;
+  opacity: 0.75;
 }

@@ -101,7 +101,8 @@ export async function syncWorkoutCalendar({
       mapping.startTime === event.startTime &&
       mapping.durationMinutes === event.durationMinutes;
     const unchanged = timingUnchanged && (!mapping.provisional || mapping.identityVerified === true) &&
-      Boolean(mapping.provisional) === Boolean(event.provisional);
+      Boolean(mapping.provisional) === Boolean(event.provisional) &&
+      (!event.titleFormatVersion || mapping.titleFormatVersion === event.titleFormatVersion);
     const reconcileDuplicates = Boolean(event.alternateTitle) && mapping?.duplicateReconciliationVersion !== 2;
     if (unchanged && mapping.reminderInitialized && !reconcileDuplicates) continue;
 
@@ -113,6 +114,7 @@ export async function syncWorkoutCalendar({
         cycleId: event.cycleId,
         workoutId: event.workoutId,
         title: event.title,
+        ...(event.generatedTitles ? { generatedTitles: event.generatedTitles } : {}),
         ...(event.alternateTitle ? { alternateTitle: event.alternateTitle, preserveTitle: Boolean(unchanged) } : {}),
         preserveTiming: Boolean(timingUnchanged),
         startMillis: event.startMillis,
@@ -147,6 +149,7 @@ export async function syncWorkoutCalendar({
       reminderInitialized: true,
       identityVerified: true,
       ...(event.alternateTitle ? { duplicateReconciliationVersion: 2 } : {}),
+      ...(event.titleFormatVersion ? { titleFormatVersion: event.titleFormatVersion } : {}),
       ...(event.provisional ? { provisional: true } : {}),
     };
     recordProgress([...mappings.filter(item => item !== mapping), nextMapping]);

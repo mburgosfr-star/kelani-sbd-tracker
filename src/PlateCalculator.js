@@ -1,6 +1,7 @@
+import AdaptiveDialogPanel from './AdaptiveDialogPanel';
 import {
   calculatePlateBreakdown,
-  DEFAULT_PLATE_SET_KG,
+  plateSetForLoad,
   DEFAULT_BARBELL_WEIGHT_KG,
 } from './plateMath';
 
@@ -17,11 +18,11 @@ const PLATE_COLORS = {
   0.25: '#95a5a6',
 };
 
-export default function PlateCalculator({ weightKg, onClose, theme, t }) {
+export default function PlateCalculator({ weightKg, incrementKg = 0.5, onClose, theme, t }) {
   const barWeightKg = DEFAULT_BARBELL_WEIGHT_KG;
   const breakdown = calculatePlateBreakdown(weightKg, {
     barWeightKg,
-    availablePlatesKg: DEFAULT_PLATE_SET_KG,
+    availablePlatesKg: plateSetForLoad(weightKg, incrementKg),
   });
 
   return (
@@ -38,7 +39,7 @@ export default function PlateCalculator({ weightKg, onClose, theme, t }) {
       }}
       onClick={onClose}
     >
-      <div
+      <AdaptiveDialogPanel
         onClick={(e) => e.stopPropagation()}
         style={{
           background: theme.card,
@@ -131,7 +132,7 @@ export default function PlateCalculator({ weightKg, onClose, theme, t }) {
         >
           {t.plateCalculatorClose || t.resetConfirmCancel}
         </button>
-      </div>
+      </AdaptiveDialogPanel>
     </div>
   );
 }

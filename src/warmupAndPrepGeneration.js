@@ -400,9 +400,10 @@ export function distributeUniversalWarmupReps(warmupCount = 0, targetReps = 1, w
     5
   );
   const allowedReps = [5, 3, 1].filter(reps => reps >= repetitionFloor);
-  // Singles use the same rep ladder at every load and for every lift.
-  // Keep the existing repetition floor for doubles and higher-rep work.
-  if ((repetitionFloor > 1 || count < 3) && warmupWeights.length === count && Number(targetWeight) > 0) {
+  // All longer ladders distribute reps evenly, assigning extra sets to
+  // the earlier group: doubles/triples use 5/5/3 and 5/5/3/3.
+  // Keep the established weight-zone rule for short one/two-set ladders.
+  if (count < 3 && warmupWeights.length === count && Number(targetWeight) > 0) {
     const minimumReps = allowedReps.at(-1);
     return warmupWeights.map(weight => {
       const ratio = Number(weight) / Number(targetWeight);

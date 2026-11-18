@@ -205,18 +205,22 @@ public class CalendarIntegrationPlugin extends Plugin {
                 }
             }
             ContentValues values = new ContentValues();
-            boolean preserveTitle = Boolean.TRUE.equals(call.getBoolean("preserveTitle", false))
-                && eventIdText != null && !eventIdText.isEmpty();
-            if (preserveTitle) {
+            java.util.List<String> generatedTitles = new java.util.ArrayList<>();
+            JSArray suppliedTitles = call.getArray("generatedTitles");
+            if (suppliedTitles != null) {
+                for (int index = 0; index < suppliedTitles.length(); index++) {
+                    generatedTitles.add(suppliedTitles.getString(index));
+                }
+            }
+            boolean preserveTitle = false;
+            if (eventIdText != null && !eventIdText.isEmpty()) {
                 try (Cursor cursor = getContext().getContentResolver().query(
                     ContentUris.withAppendedId(Events.CONTENT_URI, Long.parseLong(eventIdText)),
                     new String[] { Events.TITLE }, null, null, null
                 )) {
-                    // Repair a stale generated provisional label, while leaving
-                    // a user's custom title intact during identity reconciliation.
                     if (cursor == null) throw new IllegalStateException("Could not read workout title");
-                    if (cursor.moveToFirst()) preserveTitle = !CalendarEventIdentity.sameGeneratedTitle(
-                        cursor.getString(0), title, title, call.getString("alternateTitle"));
+                    if (cursor.moveToFirst()) preserveTitle = !CalendarEventIdentity.isGeneratedTitle(
+                        cursor.getString(0), title, call.getString("alternateTitle"), generatedTitles);
                 }
             }
             if (!preserveTitle) values.put(Events.TITLE, title);
@@ -268,7 +272,7 @@ public class CalendarIntegrationPlugin extends Plugin {
                 }
             }
 
-            removeIdenticalManagedDuplicates(eventId, calendarId, marker, title, call.getString("alternateTitle"));
+            removeIdenticalManagedDuplicates(eventId, calendarId, marker, title, call.getString("alternateTitle"), generatedTitles);
             JSObject result = new JSObject();
             result.put("eventId", String.valueOf(eventId));
             call.resolve(result);
@@ -292,7 +296,7 @@ public class CalendarIntegrationPlugin extends Plugin {
         return signature.toString();
     }
 
-    private void removeIdenticalManagedDuplicates(long retainedId, long calendarId, String marker, String expectedTitle, String alternateTitle) {
+    private void removeIdenticalManagedDuplicates(long retainedId, long calendarId, String marker, String expectedTitle, String alternateTitle, java.util.List<String> generatedTitles) {
         String title;
         long start;
         long end;
@@ -316,7 +320,7 @@ public class CalendarIntegrationPlugin extends Plugin {
         )) {
             if (cursor == null) throw new IllegalStateException("Could not check duplicate workout events");
             while (cursor.moveToNext()) {
-                if (CalendarEventIdentity.sameGeneratedTitle(title, cursor.getString(1), expectedTitle, alternateTitle))
+                if (CalendarEventIdentity.sameGeneratedTitle(title, cursor.getString(1), expectedTitle, alternateTitle, generatedTitles))
                     duplicates.add(cursor.getLong(0));
             }
         }

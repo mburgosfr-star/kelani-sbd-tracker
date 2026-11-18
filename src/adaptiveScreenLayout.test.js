@@ -12,9 +12,9 @@ function fit({ available, natural, compactSaving = 0, screen = 'dashboard', widt
   return { ...result, applied: scale };
 }
 
-test('uses spare height for larger text without forcing compact three-lift dashboards', () => {
-  expect(fit({ natural: 500, available: 650 })).toEqual({ scale: 1.25, applied: 1.25, compact: false, scroll: false });
-  expect(fit({ natural: 580, available: 650 }).scale).toBe(1.1);
+test('keeps Dashboard text restrained even when there is abundant spare space', () => {
+  expect(fit({ natural: 500, available: 650 })).toEqual({ scale: 1.05, applied: 1.05, compact: false, scroll: false });
+  expect(fit({ natural: 580, available: 650 }).scale).toBe(1.05);
 });
 
 test('reduces spacing before reducing type, then scrolls when readable content cannot fit', () => {
@@ -25,13 +25,15 @@ test('reduces spacing before reducing type, then scrolls when readable content c
 
 test('a resized or changed screen can expand again instead of retaining sticky compaction', () => {
   expect(fit({ natural: 700, available: 650 }).compact).toBe(true);
-  expect(fit({ natural: 700, available: 900 })).toMatchObject({ scale: 1.25, compact: false });
-  expect(fit({ natural: 500, available: 650 })).toMatchObject({ scale: 1.25, compact: false });
+  expect(fit({ natural: 700, available: 900 })).toMatchObject({ scale: 1.05, compact: false });
+  expect(fit({ natural: 500, available: 650 })).toMatchObject({ scale: 1.05, compact: false });
 });
 
 test('long workouts keep readable type and Program only gets its requested date change', () => {
   expect(fit({ screen: 'current', natural: 1500, available: 650 })).toMatchObject({ scale: 1, scroll: true });
   expect(screenFontCandidates('all')).toEqual([1]);
+  expect(screenFontCandidates('dashboard')[0]).toBe(1.05);
+  expect(screenFontCandidates('settings')[0]).toBe(1.15);
   expect(screenFontCandidates('current', { width: 320, height: 600 })).toEqual([1, 0.95, 0.9]);
 });
 
