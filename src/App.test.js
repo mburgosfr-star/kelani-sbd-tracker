@@ -2211,7 +2211,7 @@ test('onboarding uses the full viewport without reserving absent navigation', as
   render(<App />);
 
   const content = await screen.findByTestId('onboarding-content', {}, { timeout: 3000 });
-  expect(content.style.minHeight).toBe('100dvh');
+  expect(content.style.height).toBe('100dvh');
   expect(screen.queryByRole('button', { name: 'Dashboard' })).not.toBeInTheDocument();
 });
 
@@ -2240,12 +2240,12 @@ test('three-step onboarding persists beginner squat focus and previews calculate
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Bench Weight' }), { target: { value: '35' } });
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Deadlift Weight' }), { target: { value: '62.5' } });
   const onboardingContent = screen.getByTestId('onboarding-content');
-  expect(onboardingContent).toHaveStyle({ display: 'grid', alignContent: 'space-between', padding: '24px 20px 37px' });
+  expect(onboardingContent).toHaveStyle({ display: 'grid', alignContent: 'stretch', gridTemplateRows: 'auto auto minmax(0, 1fr) auto' });
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
   expect(screen.getByText('Step 2 of 3')).toBeInTheDocument();
-  expect(onboardingContent).toHaveStyle({ display: 'grid', gridTemplateRows: 'auto auto minmax(auto, 1fr) auto' });
-  expect(screen.getByTestId('onboarding-step-content')).toHaveStyle({ gridTemplateRows: 'minmax(auto, 1fr)' });
+  expect(onboardingContent).toHaveStyle({ display: 'grid', gridTemplateRows: 'auto auto minmax(0, 1fr) auto' });
+  expect(screen.getByTestId('onboarding-step-content')).toHaveStyle({ gridTemplateRows: 'minmax(min-content, 1fr)' });
   expect(screen.getByText('Calculated starting level')).toBeInTheDocument();
   expect(screen.getByText('Beginner')).toBeInTheDocument();
   expect(screen.getByText('3 / 6')).toBeInTheDocument();
@@ -2254,8 +2254,8 @@ test('three-step onboarding persists beginner squat focus and previews calculate
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
   expect(screen.getByText('Step 3 of 3')).toBeInTheDocument();
-  expect(onboardingContent).toHaveStyle({ display: 'grid', gridTemplateRows: 'auto auto minmax(auto, 1fr) auto' });
-  expect(screen.getByTestId('onboarding-step-content')).toHaveStyle({ gridTemplateRows: 'minmax(auto, 1fr)' });
+  expect(onboardingContent).toHaveStyle({ display: 'grid', gridTemplateRows: 'auto auto minmax(0, 1fr) auto' });
+  expect(screen.getByTestId('onboarding-step-content')).toHaveStyle({ gridTemplateRows: 'minmax(min-content, 1fr)' });
   expect(screen.getByText('Log your sets')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Back' }));
   expect(screen.getByRole('button', { name: /Squat and legs focus/ })).toHaveAttribute('aria-pressed', 'true');

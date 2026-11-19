@@ -20,7 +20,9 @@ function hasWorkoutSetRestoreTarget(set = {}) {
 export function changeOpenWorkoutSetWeight(set = {}, requestedWeight) {
   if (isWorkoutSetFinalized(set)) return set;
 
-  const nextWeight = Number(requestedWeight);
+  if (set.weightLimitUnavailable || !Number.isFinite(Number(requestedWeight))) return set;
+  const nextWeight = Math.min(Number(requestedWeight),
+    Number.isFinite(set.equipmentMaxWeight) ? Math.floor(set.equipmentMaxWeight / 0.5) * 0.5 : Infinity);
   if (!Number.isFinite(nextWeight) || nextWeight <= 0) return set;
 
   const originalWeight = Number(set.originalWeight ?? set.weight) || nextWeight;

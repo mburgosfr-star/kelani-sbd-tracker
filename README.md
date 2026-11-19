@@ -19,7 +19,7 @@ Existing users: export a JSON backup before updating. Official Android package: 
 
 ## How Smart Training Works
 
-Kelani builds an adaptive SBD route with heavy, medium and light workouts, followed by a taper, Meet Day and recovery. Your confirmed strength determines the weights; workout feedback adjusts the route.
+Kelani builds an adaptive SBD route with heavy, medium and light workouts, followed by a taper, an optional Meet Day and recovery. Your confirmed strength determines the weights; workout feedback adjusts the route.
 
 - Follow warm-ups, top sets and back-off work in a clear workout grid.
 - Record sets and use a rest timer with sound and Android notifications.

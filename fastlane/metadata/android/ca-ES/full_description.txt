@@ -4,17 +4,18 @@ T'ajuda a planificar, registrar i completar entrenaments SBD sense comptes, anun
 
 Smart Training:
 
-Smart Training segueix una ruta ideal adaptada al nivell, incloent-hi el SBD Meet Day i la recuperació posterior. Les rutes de principiants alternen entrenament i recuperació en un cicle predeterminat de 26 dies; els altres nivells fan servir 28 dies. Les valoracions poden ajustar el calendari. La ruta es manté visible per endavant, mentre que la teva millor 1RM estimada determina els pesos prescrits.
+Smart Training segueix una ruta ideal adaptada al nivell, amb un SBD Meet Day opcional i recuperació posterior. Les rutes de principiants alternen entrenament i recuperació en un cicle predeterminat de 26 dies; els altres nivells fan servir 28 dies. Les valoracions poden ajustar el calendari. La ruta es manté visible per endavant, mentre que la teva millor 1RM estimada determina els pesos prescrits.
 
 - Planifica treball pesant, mitjà i lleuger de Squat, Bench Press i Deadlift per al teu nivell actual
 - Prescriu escalfaments, treball principal, sèries de descens i accessoris
 - Apropa la competició després de Massa fàcil i afegeix recuperació després de Massa dur o de sèries fallides
 - Tria un entrenament Smart més lleuger abans de començar i consulta les explicacions de recuperació quan siguin rellevants
-- Mostra els entrenaments anteriors, l'actual i els futurs provisionals fins a la competició i la recuperació
+- Mostra els entrenaments anteriors, l'actual i els futurs provisionals entre cicles
 - Tots els càlculs de Smart es fan localment al teu dispositiu
 
 Funcions:
 
+- Tria Powerlifting o Powerbuilding, dies de competició opcionals i límits de pes
 - Cicles d'entrenament estructurats de Squat, Bench Press i Deadlift
 - Seguiment d'entrenaments amb escalfaments, treball principal, sèries de descens i accessoris opcionals
 - Progressió automàtica basada en l'entrenament completat

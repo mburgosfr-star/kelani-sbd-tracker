@@ -79,7 +79,7 @@ function entriesFor(catalog, keys) {
   }).filter(Boolean);
 }
 
-export function createWorkoutSetup({ preparationMode = 'basicFirst', accessoryMode = 'off' } = {}) {
+export function createWorkoutSetup({ preparationMode = 'basicFirst', accessoryMode = 'off', trainingApproach = 'powerlifting', meetDayEnabled = true } = {}) {
   const prep = preparationMode === 'off' ? {} : {
     Squat: entriesFor(PREPARATION_CATALOG, ['prepHipOpeners', 'prepBodyweightSquats']),
     Bench: entriesFor(PREPARATION_CATALOG, ['prepBandPullApart', 'prepBandExternalRotation']),
@@ -90,7 +90,7 @@ export function createWorkoutSetup({ preparationMode = 'basicFirst', accessoryMo
     Bench: entriesFor(ACCESSORY_CATALOG, accessoryMode === 'standard' ? ['hipThrust', 'row'] : ['lateralRaise', 'row']),
     Deadlift: entriesFor(ACCESSORY_CATALOG, accessoryMode === 'lowerBodyFriendly' ? ['legCurl', 'seatedCalfRaise'] : ['legExtension', 'plank']),
   };
-  return { version: 1, preparation: { enabled: preparationMode !== 'off', byLift: prep }, accessories: { enabled: accessoryMode !== 'off', byLift: accessories } };
+  return { version: 1, trainingApproach: trainingApproach === 'powerbuilding' ? 'powerbuilding' : 'powerlifting', meetDayEnabled: meetDayEnabled !== false, preparation: { enabled: preparationMode !== 'off', byLift: prep }, accessories: { enabled: accessoryMode !== 'off', byLift: accessories } };
 }
 
 function normalizeEntry(entry, template) {
@@ -121,6 +121,8 @@ export function normalizeWorkoutSetup(value, legacy = {}) {
   });
   return {
     version: 1,
+    trainingApproach: value.trainingApproach === 'powerbuilding' ? 'powerbuilding' : 'powerlifting',
+    meetDayEnabled: value.meetDayEnabled !== false,
     preparation: normalizeSection(value.preparation, PREPARATION_CATALOG, fallback.preparation),
     accessories: normalizeSection(value.accessories, ACCESSORY_CATALOG, fallback.accessories),
   };

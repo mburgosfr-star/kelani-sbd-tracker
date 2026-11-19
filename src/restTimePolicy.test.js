@@ -1,6 +1,6 @@
 import { getRecommendedRestTimeSeconds } from './workoutHistoryStats';
 
-const topLabels = ['heavySingle', 'topSingle', 'topDouble', 'topTriple'];
+const topLabels = ['heavySingle', 'topSingle', 'topDouble', 'topTriple', 'topSet'];
 
 function restFor({ multi = false, type = 'training', label = 'topSingle', index = 1, fallbackSeconds = 90, sets } = {}) {
   const block = {

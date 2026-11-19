@@ -155,6 +155,9 @@ export function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, hist
     if (workout.completed) return workout;
     const generated = generatedWorkouts[index];
     if (!generated) return workout;
+    if (workoutHasUserProgress(workout) && (workout.trainingApproach || 'powerlifting') !== (generated.trainingApproach || 'powerlifting')) return workout;
+    if (workoutHasUserProgress(workout) && (workout.type === 'meet' || workout.cycleClosingTaper) &&
+        (workout.type !== generated.type || Boolean(workout.cycleClosingTaper) !== Boolean(generated.cycleClosingTaper))) return workout;
     if (workoutHasUserProgress(workout) && !roundingPoliciesEqual(workout.weightRounding, generated.weightRounding)) return workout;
     if (workout.smartReturnTraining && workout.type === generated.type &&
       workout.smartIdealRoute?.workoutNumber === generated.smartIdealRoute?.workoutNumber) {

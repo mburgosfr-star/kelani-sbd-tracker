@@ -1,3 +1,4 @@
+import { applyWeightLimitsToWorkouts, applyWorkoutWeightLimits, latestLimitBodyWeight } from './weightLimits';
 import { normalizeWeightRounding, roundAccessoryLoads, roundingPoliciesEqual } from './weightRounding';
 import { roundTrainingWeight } from './workoutUnits';
 import { workoutHasUserProgress } from './workoutStateMerge';
@@ -57,6 +58,7 @@ import { generateProgramForProfile } from './classicProgramTemplates';
 import { buildMeetAttemptsFromE1RM } from './meetAttemptPlanning';
 import { resolveEstimatedOneRMs } from './oneRMState';
 import {
+  buildCycleClosingTaperRoute,
   SMART_IDEAL_MEET_WORKOUT_NUMBER,
   SMART_IDEAL_ROUTE_VERSION,
   normalizeSmartTrainingFocus,
@@ -420,6 +422,7 @@ export function shouldVaryRepeatedSmartPrescription(
 }
 
 function getSmartPostMeetRecoveryTarget(day = {}) {
+  if (day.cycleClosingTaper) return 1;
   const failedCount = Number(day?.failedOrSkippedSetCount) || 0;
   const effort = String(day?.workoutEffort || 'good').trim().toLowerCase();
 
@@ -572,7 +575,7 @@ function getSmartIdealRouteAdjustmentState({
     ? completed.slice(firstRouteIndex)
     : [];
   const earnedAccelerationCredits = activeRouteHistory.filter(({ snapshot }) => {
-    if (snapshot?.type !== 'training') return false;
+    if (snapshot?.type !== 'training' || snapshot.cycleClosingTaper) return false;
     // A deliberately lighter return session is expected to feel easy.
     if (snapshot?.smartReturnTraining) return false;
     if (hasAutomaticTooHardWorkoutOutcome(snapshot)) return false;
@@ -589,7 +592,7 @@ function getSmartIdealRouteAdjustmentState({
     0
   );
   const earnedDelayCredits = activeRouteHistory.filter(({ snapshot }) => (
-    snapshot?.type === 'training' && hasTooHardRouteOutcome(snapshot)
+    snapshot?.type === 'training' && !snapshot.cycleClosingTaper && hasTooHardRouteOutcome(snapshot)
   )).length;
   const consumedDelayCredits = activeRouteHistory.reduce(
     (total, { snapshot }) => total + Math.max(
@@ -600,7 +603,7 @@ function getSmartIdealRouteAdjustmentState({
   );
   const latestActiveRouteSnapshot = activeRouteHistory.at(-1)?.snapshot || null;
   const pendingDelayCredits = Boolean(
-    latestActiveRouteSnapshot?.type === 'training' &&
+    latestActiveRouteSnapshot?.type === 'training' && !latestActiveRouteSnapshot.cycleClosingTaper &&
     hasTooHardRouteOutcome(latestActiveRouteSnapshot)
   ) ? 1 : 0;
 
@@ -843,9 +846,9 @@ function getSmartIdealPostMeetCompletion(history = [], currentCycle = 1) {
     currentCycle
   );
   const idealMeet = completed.find(({ snapshot }) => (
-    snapshot?.type === 'meet' &&
+    snapshot?.cycleClosingTaper || (snapshot?.type === 'meet' &&
     snapshot?.smartIdealRoute?.stage === 'meet' &&
-    isSuccessfulSmartIdealRouteSnapshot(snapshot)
+    isSuccessfulSmartIdealRouteSnapshot(snapshot))
   ));
 
   if (!idealMeet) return null;
@@ -884,7 +887,7 @@ function hasCompletedSuccessfulSmartIdealMeet(
 function hasCompletedSmartMeetInCycle(history = [], currentCycle = 1) {
   return getUniqueCompletedSmartWorkoutSnapshots(history, currentCycle)
     .some(({ snapshot }) => (
-      snapshot?.type === 'meet' ||
+      snapshot?.cycleClosingTaper || snapshot?.type === 'meet' ||
       snapshot?.smartDayType === SMART_DAY_TYPES.MEET
     ));
 }
@@ -3891,7 +3894,7 @@ function getSmartIdealHeavyTopWeight({
 function getSmartIdealTopSetLabel(reps) {
   if (Number(reps) === 1) return 'topSingle';
   if (Number(reps) === 2) return 'topDouble';
-  return 'topTriple';
+  return Number(reps) === 3 ? 'topTriple' : 'topSet';
 }
 
 function buildSmartIdealRouteMetadata(routeWorkout, athleteLevel) {
@@ -4117,6 +4120,7 @@ export function buildSmartIdealTrainingWorkout({
     type: 'training',
     label: null,
     labelKey: 'practice',
+    trainingApproach: workoutSetup?.trainingApproach || 'powerlifting',
     smartLoadBasis: 'e1rm',
     smartLoadMaxes: { ...trainingMaxes },
     lift: primaryBlock?.lift || null,
@@ -4906,6 +4910,7 @@ function generateSmartWorkouts({
   });
   const adjustedIdealRoutePlan = idealRouteEnabled
     ? buildAdjustedSmartIdealRoutePlan({
+      trainingApproach: workoutSetup?.trainingApproach,
       athleteLevel,
       trainingFocus,
       startWorkoutNumber: idealRouteWorkoutNumber,
@@ -5635,7 +5640,7 @@ export function generateWorkoutsForTrainingModelUnconstrained(model, args = {}) 
     ? resolveEstimatedOneRMs({
       prs: { Squat: args.squat, Bench: args.bench, Deadlift: args.deadlift, ...args.e1RMs },
       oneRMs: args.oneRMs || args.data?.oneRMs,
-      history: args.history || args.data?.history,
+      history: args.planningStrengthHistory || args.history || args.data?.history,
     }) : { Squat: args.squat, Bench: args.bench, Deadlift: args.deadlift };
   const workoutArgs = {
     programProfile: normalizeProgramProfile(args.programProfile),
@@ -6081,6 +6086,8 @@ function createSmartPlanningSimulation(options) {
       if (isSmartCycleCompleteAfterHistory(history, cycle)) return projected;
       const generated = generateWorkoutsForTrainingModel(TRAINING_MODELS.SMART, {
         ...options, history, currentCycle: cycle, currentIndex: index,
+        // Simulate the route, not unearned strength records.
+        planningStrengthHistory: options.history || [],
         idealRouteEnabled: cycle === currentCycle ? options.idealRouteEnabled :
           (options.idealRouteEnabledForNextCycle ?? options.idealRouteEnabled),
         meetPlannerAttempts: cycle === currentCycle ? options.meetPlannerAttempts : {},
@@ -6121,6 +6128,7 @@ export function projectSmartPlanningHorizon(options = {}, minimumDays = 28) {
 }
 
 export function projectSmartMeetBySuccessfulSimulation(options = {}) {
+  if (options.workoutSetup?.meetDayEnabled === false) return null;
   const currentCycle = Number(options.currentCycle || options.data?.currentCycle) || 1;
   const startIndex = Math.max(Number(options.currentIndex) || 0, 0);
   let history = [...(options.history || options.data?.history || [])];
@@ -6132,11 +6140,13 @@ export function projectSmartMeetBySuccessfulSimulation(options = {}) {
   ) {
     const workouts = generateWorkoutsForTrainingModelBase(TRAINING_MODELS.SMART, {
       ...options,
+      planningStrengthHistory: options.history || options.data?.history || [],
       history,
       currentCycle,
       currentIndex,
     });
-    const workout = workouts[currentIndex];
+    const workout = applyWorkoutWeightLimits(workouts[currentIndex], options.weightLimits || options.data?.weightLimits,
+      latestLimitBodyWeight(options.bodyWeights || options.data?.bodyWeights || []), options.weightRounding);
 
     if (!workout) return null;
     if (workout.type === 'meet' || workout.smartDayType === SMART_DAY_TYPES.MEET) {
@@ -6178,7 +6188,7 @@ function generateWorkoutsForTrainingModelWithProjection(trainingModel, options =
   const accessoryMaxes = options.idealRouteEnabled !== false
     ? resolveEstimatedOneRMs({
       prs: { Squat: options.squat, Bench: options.bench, Deadlift: options.deadlift, ...options.e1RMs },
-      oneRMs: options.oneRMs, history: options.history || options.data?.history || [],
+      oneRMs: options.oneRMs, history: options.planningStrengthHistory || options.history || options.data?.history || [],
     }) : { Squat: options.squat, Bench: options.bench, Deadlift: options.deadlift };
   // Finalize after selection/frequency constraints so preparation and
   // accessories follow the actual lifts, including any replacement Bench.
@@ -6274,9 +6284,34 @@ function roundGeneratedTrainingLoads(workout, policy) {
     ...(workout.lifts?.length ? { lifts } : {}), sets: lifts[0].sets, warmups: lifts[0].warmups };
 }
 
+export function applyOptionalMeetDay(workout, options = {}) {
+  if (!workout || workout.completed || workoutHasUserProgress(workout) || workout.type !== 'meet' || options.workoutSetup?.meetDayEnabled !== false) return workout;
+  const loadMaxes = resolveEstimatedOneRMs({
+    prs: { Squat: options.squat, Bench: options.bench, Deadlift: options.deadlift, ...options.e1RMs },
+    oneRMs: options.oneRMs,
+    history: options.planningStrengthHistory || options.history || [],
+  });
+  const taper = buildSmartIdealTrainingWorkout({ ...options, sourceWorkout: workout,
+    squat: loadMaxes.Squat, bench: loadMaxes.Bench, deadlift: loadMaxes.Deadlift,
+    routeWorkout: buildCycleClosingTaperRoute(workout.smartIdealRoute?.workoutNumber),
+  });
+  return { ...taper, number: workout.number, cycleClosingTaper: true,
+    smartDayType: SMART_DAY_TYPES.TRAINING,
+    smartIdealRoute: { ...workout.smartIdealRoute, ...taper.smartIdealRoute },
+    smartDecisionSummary: workout.smartDecisionSummary ? { ...workout.smartDecisionSummary,
+      dayType: SMART_DAY_TYPES.TRAINING,
+      readiness: { ...workout.smartDecisionSummary.readiness, meetProjection: null } } : null };
+}
+
 export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
   const policy = normalizeWeightRounding(options.weightRounding || options.data?.weightRounding);
-  return generateWorkoutsForTrainingModelWithProjection(trainingModel, options).map((workout, index) => {
+  const generated = generateWorkoutsForTrainingModelWithProjection(trainingModel, options).map((workout, index) => {
+    if (index === Number(options.currentIndex || 0) && workoutHasUserProgress(options.inProgressWorkout) &&
+        ((options.inProgressWorkout.trainingApproach || 'powerlifting') !== (options.workoutSetup?.trainingApproach || 'powerlifting') ||
+         options.inProgressWorkout.type === 'meet' || options.inProgressWorkout.cycleClosingTaper)) {
+      return options.inProgressWorkout;
+    }
+    if (isSmartTrainingModel(trainingModel)) workout = applyOptionalMeetDay(workout, options);
     if (index === Number(options.currentIndex || 0) && workoutHasUserProgress(options.inProgressWorkout) &&
         !roundingPoliciesEqual(policy, options.inProgressWorkout.weightRounding)) {
       return { ...workout, ...options.inProgressWorkout, smartDecisionSummary: workout.smartDecisionSummary };
@@ -6285,4 +6320,6 @@ export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
     return { ...roundGeneratedTrainingLoads(workout, policy), weightRounding: policy,
       accessories: roundAccessoryLoads(workout.accessories, policy.training) };
   });
+  return applyWeightLimitsToWorkouts(generated, options.weightLimits || options.data?.weightLimits,
+    options.bodyWeights || options.data?.bodyWeights || [], policy);
 }

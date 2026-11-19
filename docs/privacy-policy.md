@@ -17,7 +17,7 @@ The app stores your training data locally on your device. This may include:
 - Bodyweight and body composition entries
 - Meet Planner attempts
 - Meet prep checklist state
-- App settings such as language and rest time
+- App settings such as language, rest time, training approach, meet-day preference and equipment weight limits
 - Optional calendar settings and links to calendar events created by Kelani
 
 This app data stays on your device unless you choose to export or share it. The optional Android calendar integration described below also writes brief workout events to the calendar you select.

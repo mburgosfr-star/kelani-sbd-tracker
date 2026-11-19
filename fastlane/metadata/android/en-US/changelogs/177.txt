@@ -1,0 +1,3 @@
+- Choose Powerlifting or Powerbuilding with any training route. Powerbuilding uses top sets of 1–6 reps and backoffs of 2–12. The existing approach stays the default.
+- Set maximum training weights per lift in Weights. Only sets above the limit become lighter, with more reps. Meet days remain unrestricted.
+- Make meet day optional in onboarding or Workout setup: without a meet, finish with light SBD taper training. Program, Calendar and screen layouts are improved.

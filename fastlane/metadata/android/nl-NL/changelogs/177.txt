@@ -1,0 +1,3 @@
+- Kies Powerlifting of Powerbuilding bij elke trainingsroute. Powerbuilding gebruikt topsets van 1–6 reps en backoffs van 2–12. De bestaande aanpak blijft standaard.
+- Stel maximale trainingsgewichten per lift in bij Gewichten. Alleen sets boven de grens worden lichter, met meer reps. Meetdagen blijven onbeperkt.
+- Maak de meetdag optioneel in onboarding of Trainingsopzet: zonder meet volgt een lichte SBD-tapertraining. Programma, Agenda en schermindeling zijn verbeterd.

@@ -44,7 +44,7 @@ All beginner routes alternate a training day and a recovery day, including durin
 
 Existing cycles keep their completed workouts and their numbering. Work already started keeps its saved prescription and set progress. The remaining plan adopts the new rhythm, so a cycle already underway can finish later than the default W26. No history or PRs are reset.
 
-The Program screen shows the route ahead. Completed workouts show recorded work-set results on the right instead of the plan: green ✓ for successful sets and red ✕ for missed sets, grouped by repetitions, weight and recorded percentage. Warm-ups are omitted, as in the planning preview. A question mark means an older record has no saved outcome for that set. Your precise best e1RM determines the prescribed weights and is updated after each completed workout when successful sets improve it. Future workouts open in view-only mode; choosing **Workout** in the navigation returns to your current session.
+The Program screen shows the route ahead. Future loads use your currently established e1RM, not assumed strength gains from workouts you have not completed. Completed workouts show recorded work-set results on the right instead of the plan: green ✓ for successful sets and red ✕ for missed sets, grouped by repetitions, weight and recorded percentage. Warm-ups are omitted, as in the planning preview. A question mark means an older record has no saved outcome for that set. Your precise best e1RM determines the prescribed weights and is updated after each completed workout when successful sets improve it. Future workouts open in view-only mode; choosing **Workout** in the navigation returns to your current session.
 
 **Too easy** shortens the route unless Meet Day is already next. **Too hard** or failed work can add recovery without scheduling more than two consecutive rest days. The Workout screen briefly explains extra recovery or an adjusted workout when relevant. Meet planning and strength progress are available on the Dashboard. Use **Choose lighter workout** beside **Complete workout** before starting an active Smart training session. You can restore the regular workout before recording progress; once you start, the choice is no longer available.
 
@@ -55,6 +55,37 @@ Automatic Smart meet attempts target **90%, 95% and 100% of e1RM**. The third at
 Future and untouched workouts adopt updated estimates. Started workouts, started meets and completed snapshots retain their saved weights and outcomes. Attempts stop updating once the meet has started, including when a successful attempt improves your records. Custom attempts are preserved, subject to the existing strictly increasing attempt rule.
 
 Classic retains its existing real-1RM programming and 90%, 97.5%, 102.5% meet defaults. Existing Classic users can continue their fixed programs or switch permanently to Smart using their existing history. Classic remains in maintenance mode.
+
+### Powerlifting and Powerbuilding
+
+Choose a **Training approach** during onboarding or in **Settings → Training route**. Powerlifting is the default, including for existing installations. Both approaches work with Balanced SBD, Practical SBD and the beginner-only Squat Priority route. The route determines session placement; the approach determines regular training prescriptions. Powerbuilding preserves each lift's frequency and assigns session types from the heaviest exposure to the lightest, using calendar order within the same intensity role.
+
+| Session type | Top set | Top percentages, phases 1 / 2 / 3 | Backoffs | Backoff percentages, phases 1 / 2 / 3 |
+| --- | --- | --- | --- | --- |
+| 1 | 1×1 | 90 / 95 / 100% | 3–7×2 | 85 / 80 / 75% |
+| 2 | 1×2 | 85 / 90 / 95% | 3–7×4 | 80 / 75 / 70% |
+| 3 | 1×3 | 80 / 85 / 90% | 3–7×6 | 75 / 70 / 65% |
+| 4 | 1×4 | 75 / 80 / 85% | 3–7×8 | 70 / 65 / 60% |
+| 5 | 1×5 | 70 / 75 / 80% | 3–7×10 | 65 / 60 / 55% |
+| 6 | 1×6 | 65 / 70 / 75% | 3–7×12 | 60 / 55 / 50% |
+
+A lift appearing F times receives session types 1 through F per period (six days for beginners, seven for other levels). Each regular Powerbuilding exposure has one top set. Warm-ups plus top set plus 3–7 backoff sets fill the complete grid. Percentages use the established e1RM; rounding and equipment limits still apply. Limits can increase repetitions above these base prescriptions. Higher-repetition top sets receive the same top-set rest policy and successful-history handling as other top sets.
+
+The existing taper, optional meet-day replacement and meet-attempt rules remain shared. Powerbuilding changes training volume substantially, especially at higher frequencies; the name does not promise superior strength or muscle growth. Switching approaches preserves started sessions and completed history; untouched sessions and future cycles use the new choice. The preference is stored locally and included in backups.
+
+### Optional Meet Day
+
+**Include meet day** is enabled by default for new and existing Smart Training profiles. Choose it during onboarding or change it in **Settings → Workout setup → Adjust**. When disabled, the planned meet becomes an **SBD Taper Workout**: work sets of 5 repetitions at 60% of e1RM, using the existing light taper rules and complete set grid. There are no top sets or competition attempts. Normal training rounding and equipment limits apply. The following recovery day and automatic transition to the next cycle remain.
+
+The choice changes only unstarted closing sessions and future cycles. Started and completed meets or closing taper workouts are preserved. Program and Calendar use the same chosen closing session; Dashboard hides Route to Meet when no meet is planned. The preference is saved locally and included in backups.
+
+### Equipment Weight Limits
+
+Open **Settings → Weights → Weight Limits** to enter an optional maximum for squat, bench and deadlift, including the barbell. Empty fields mean no limit. You can also enter a total bench capacity including body weight. Kelani subtracts the latest saved body weight and uses the lower of this result and the bench weight limit. Limits are disabled by default and included in backups.
+
+Only training sets above their lift's limit change. Kelani rounds the available load downward to the selected increment and increases repetitions individually, without a fixed repetition ceiling. The Epley load/repetition relationship approximates the prescribed effort; lighter repetitions do not reproduce heavy-load specificity, and estimates become less reliable at high repetitions. The number of sets stays the same. Warm-up repetitions and the complete grid are preserved; warm-up weights are reduced only when necessary and remain multiples of 10 kg. Manual weight adjustments remain available in 0.5 kg steps within the physical limit. Completed sets and history are preserved; newly lowered limits also apply to remaining sets of a started workout. Records use the weight and repetitions actually performed.
+
+Meet days, including attempts and warm-ups, are exempt. If a total bench capacity has no saved body weight or leaves less than the 20 kg barbell, Kelani blocks the affected training sets until the settings or body weight are corrected. The app uses your entered capacities; it does not certify equipment.
 
 ### Starting a New Cycle Early
 
@@ -78,7 +109,7 @@ Warm-ups prepare for the first work set or opening meet attempt. They use multip
 
 The five-column workout grid stays filled. Newly generated work-set and back-off blocks contain 3–7 volume sets, depending on the warm-up and top-set counts. With the five-column grid unchanged, a former two-set block becomes seven sets; blocks of three to six sets keep their count. Started workouts and completed history keep their saved prescriptions.
 
-Smart volume work uses these target percentages:
+Powerlifting volume work uses these target percentages:
 
 | Phase | Heavy: 3 reps | Medium: 4 reps | Light: 5 reps |
 |---|---|---|---|
@@ -97,7 +128,7 @@ The timer provides sound and Android notifications. After the final warm-up befo
 
 ## Workout Setup and Progress
 
-In **Settings → Workout setup**, choose whether preparation and accessories are enabled, which exercises belong to each lift, and their sets and reps. Kelani places the selected exercises into relevant workouts and chooses their training intensity. Meet Day contains only the competition lifts.
+In **Settings → Workout setup**, choose whether to include meet day, whether preparation and accessories are enabled, which exercises belong to each lift, and their sets and reps. Kelani places the selected exercises into relevant workouts and chooses their training intensity. Meet Day contains only the competition lifts.
 
 Statistics track 1RM, estimated 1RM, SBD totals, Strength, eStrength and body measurements. Completed cycles include a results review, progress since the start and a chart of the best recorded 1RM total. You can preview and share a cycle-results card from the review. Navigating to another screen continues into the next cycle automatically. Program retains the completed earlier cycles and adds the next cycle to the same timeline.
 

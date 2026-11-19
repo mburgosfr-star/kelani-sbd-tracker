@@ -113,3 +113,22 @@ body,
   color: inherit;
   opacity: 0.75;
 }
+
+/* Keep explanatory copy lighter than headings and actions. Summary values
+   share a compact size with their labels instead of looking like titles. */
+[data-adaptive-dialog] :is(p, li, td, dd, [data-dialog-body-text]) {
+  font-weight: 400 !important;
+}
+
+[data-adaptive-dialog] [data-dialog-body-text] :is(span, strong) {
+  font-weight: 500 !important;
+}
+
+[data-adaptive-dialog] [data-dialog-summary] {
+  font-size: calc(var(--kelani-dialog-body-size) * 0.88) !important;
+  line-height: 1.4;
+}
+
+[data-adaptive-dialog] [data-dialog-summary] strong {
+  font-weight: 600 !important;
+}

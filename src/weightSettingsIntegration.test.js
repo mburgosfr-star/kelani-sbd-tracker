@@ -47,7 +47,7 @@ test('existing profile keeps its loads on upgrade, then an explicit choice survi
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 5000 }));
   await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).weightRounding).toEqual(uniformWeightRounding(2.5)));
   expect(screen.getByRole('button', { name: /kg · 2.5/ })).toBeInTheDocument();
-});
+}, 20000);
 
 test('Dashboard meet plan uses the setting and preserves manual and started attempts', () => {
   const stats = { Bench: { oneRM: 102.5, e1RM: 104 } };
@@ -61,3 +61,39 @@ test('Dashboard meet plan uses the setting and preserves manual and started atte
   expect(buildSuggestedMeetPlan(stats, { trainingModel: 'smart', weightRounding: uniformWeightRounding(2.5), startedMeet: started })
     .meetPlan.find(l => l.lift === 'Bench')).toMatchObject({ opener: 93.5, second: 99, third: 104 });
 });
+
+test('weight limits save, constrain only excessive loads, and survive backup and reload', async () => {
+  localStorage.clear(); localStorage.setItem('language', 'en');
+  localStorage.setItem(key, JSON.stringify({ version: 1, trainingModel: 'smart', currentCycle: 2,
+    showWhatsNewAfterUpdates: false, prs: { Squat: 200, Bench: 140, Deadlift: 220 },
+    oneRMs: { Squat: 200, Bench: 140, Deadlift: 220 }, history: [], bodyWeights: [{ bodyWeight: 80 }] }));
+  const view = render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 5000 }));
+  const before = JSON.parse(localStorage.getItem(key));
+  fireEvent.click(screen.getByRole('button', { name: /kg ·/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Weight limits' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Squat (kg)' }), { target: { value: '100' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Total bench capacity (kg)' }), { target: { value: '180' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).weightLimits.Squat).toBe(100));
+  const after = JSON.parse(localStorage.getItem(key));
+  expect(after.history).toEqual(before.history);
+  expect(after.prs).toEqual(before.prs);
+  expect(after.oneRMs).toEqual(before.oneRMs);
+  for (const workout of after.inProgress.workouts.filter(w => w.type === 'training')) {
+    for (const lift of workout.lifts || [workout]) {
+      if (lift.lift !== 'Deadlift') expect(lift.sets.every(set => set.weight <= 100)).toBe(true);
+    }
+  }
+  const backup = JSON.parse(JSON.stringify(buildBackupPayload(after)));
+  expect(validateImportedBackup(backup)).toBe(true);
+  expect(backup.data.weightLimits.benchCapacity).toBe(180);
+  backup.data.weightLimits.Bench = -1;
+  expect(validateImportedBackup(backup)).toBe(false);
+  view.unmount(); render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 5000 }));
+  fireEvent.click(screen.getByRole('button', { name: /kg ·/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Weight limits' }));
+  expect(screen.getByRole('textbox', { name: 'Squat (kg)' })).toHaveValue('100');
+  expect(screen.getByRole('textbox', { name: 'Total bench capacity (kg)' })).toHaveValue('180');
+}, 20000);

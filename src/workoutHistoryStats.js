@@ -58,7 +58,7 @@ export function roundE1RM(value) {
 // generation, the smart engine) - kept here so nothing needs to import back
 // into a "later" module and create a cycle.
 export function isTopSetLabel(labelKey) {
-  return ['heavySingle', 'topSingle', 'topDouble', 'topTriple'].includes(labelKey);
+  return ['heavySingle', 'topSingle', 'topDouble', 'topTriple', 'topSet'].includes(labelKey);
 }
 
 export function isMainOrAttemptLabelKey(labelKey) {
@@ -66,7 +66,7 @@ export function isMainOrAttemptLabelKey(labelKey) {
     'heavySingle',
     'topSingle',
     'topDouble',
-    'topTriple',
+    'topTriple', 'topSet',
     'opener',
     'secondAttempt',
     'thirdAttempt',

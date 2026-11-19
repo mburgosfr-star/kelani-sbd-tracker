@@ -1,0 +1,3 @@
+- Tria Powerlifting o Powerbuilding amb qualsevol ruta. Powerbuilding: sèries principals d’1–6 repeticions i de descàrrega de 2–12. Es manté l’opció predeterminada.
+- Configura pesos màxims per aixecament a Pesos. Només les sèries per sobre del límit es fan més lleugeres, amb més repeticions. La competició queda exclosa.
+- Tria si vols competició a l’inici o a Configuració de l’entrenament. Sense competició, acaba amb SBD lleuger. Milloren Programa, Calendari i les pantalles.

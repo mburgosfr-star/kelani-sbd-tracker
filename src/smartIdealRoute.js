@@ -376,6 +376,13 @@ function buildTaperPrescription(intensityRole, includeTopSet) {
   });
 }
 
+// The optional cycle-ending session uses the established light taper policy.
+export function buildCycleClosingTaperRoute(workoutNumber = SMART_IDEAL_MEET_WORKOUT_NUMBER) {
+  return { workoutNumber, type: 'training', stage: 'taper', phase: null, accessoriesAllowed: false,
+    lifts: ['Squat', 'Bench', 'Deadlift'].map(lift => ({ lift, intensityRole: 'light',
+      prescription: buildTaperPrescription('light', false) })) };
+}
+
 function hasEarlierMatchingExposure({
   routeTable,
   firstWorkout,
@@ -433,6 +440,22 @@ function buildTrainingWorkout({
   };
 }
 
+// Session numbers follow intensity order, then calendar order within each role.
+// This retains each route's placement and exact per-lift frequency.
+function applyPowerbuildingPrescription(workout, routeTable, rowNumber, phase) {
+  const order = { heavy: 0, medium: 1, light: 2 };
+  const phaseIndex = SMART_IDEAL_NORMAL_PHASES.indexOf(phase);
+  return { ...workout, trainingApproach: 'powerbuilding', lifts: workout.lifts.map(item => {
+    const exposures = Object.entries(routeTable).flatMap(([row, lifts]) =>
+      lifts.filter(entry => entry.lift === item.lift).map(entry => ({ ...entry, row: Number(row) })))
+      .sort((a, b) => order[a.intensityRole] - order[b.intensityRole] || a.row - b.row);
+    const reps = exposures.findIndex(entry => entry.row === rowNumber) + 1;
+    const definition = { topSet: { reps, pct: (95 - 5 * reps + 5 * phaseIndex) / 100 },
+      volume: { reps: reps * 2, pct: (90 - 5 * reps - 5 * phaseIndex) / 100 } };
+    return { ...item, prescription: buildGridPrescription({ definition, includeTopSet: true }) };
+  }) };
+}
+
 function buildRestWorkout(workoutNumber, stage) {
   return {
     workoutNumber,
@@ -448,6 +471,7 @@ export function getSmartIdealRouteWorkout({
   workoutNumber,
   athleteLevel = 'intermediate',
   trainingFocus = SMART_TRAINING_FOCUSES.STANDARD,
+  trainingApproach = 'powerlifting',
 } = {}) {
   const number = Number(workoutNumber);
   if (!Number.isInteger(number) || number < 1) return null;
@@ -469,15 +493,11 @@ export function getSmartIdealRouteWorkout({
         : SMART_IDEAL_NORMAL_ROUTE[level];
     const lifts = routeTable[rowNumber];
 
-    return lifts.length > 0
-      ? buildTrainingWorkout({
-        workoutNumber: number,
-        stage: 'normal',
-        phase,
-        lifts,
-        routeTable,
-      })
-      : buildRestWorkout(number, 'normal');
+    if (!lifts.length) return buildRestWorkout(number, 'normal');
+    const workout = buildTrainingWorkout({ workoutNumber: number, stage: 'normal', phase, lifts, routeTable });
+    return trainingApproach === 'powerbuilding'
+      ? applyPowerbuildingPrescription(workout, routeTable, rowNumber, phase)
+      : workout;
   }
 
   if (number <= 25) {
@@ -802,6 +822,7 @@ function applyBeginnerCalendar(workouts, hasTrailingCompletedRest, preserveCurre
 export function buildAcceleratedSmartIdealRoutePlan({
   athleteLevel = 'intermediate',
   trainingFocus = SMART_TRAINING_FOCUSES.STANDARD,
+  trainingApproach = 'powerlifting',
   startWorkoutNumber = 1,
   accelerationCredits = 0,
   hasTrailingCompletedRest = false,
@@ -818,6 +839,7 @@ export function buildAcceleratedSmartIdealRoutePlan({
     const postMeetWorkout = getSmartIdealRouteWorkout({
       athleteLevel,
       trainingFocus,
+      trainingApproach,
       workoutNumber: start,
     });
     if (postMeetWorkout) workouts.push(postMeetWorkout);
@@ -831,6 +853,7 @@ export function buildAcceleratedSmartIdealRoutePlan({
     const workout = getSmartIdealRouteWorkout({
       athleteLevel,
       trainingFocus,
+      trainingApproach,
       workoutNumber,
     });
     if (workout) workouts.push(workout);
@@ -914,6 +937,7 @@ export function buildAcceleratedSmartIdealRoutePlan({
 export function buildAdjustedSmartIdealRoutePlan({
   athleteLevel = 'intermediate',
   trainingFocus = SMART_TRAINING_FOCUSES.STANDARD,
+  trainingApproach = 'powerlifting',
   startWorkoutNumber = 1,
   accelerationCredits = 0,
   delayCredits = 0,
@@ -923,6 +947,7 @@ export function buildAdjustedSmartIdealRoutePlan({
   const acceleratedPlan = buildAcceleratedSmartIdealRoutePlan({
     athleteLevel,
     trainingFocus,
+    trainingApproach,
     startWorkoutNumber,
     accelerationCredits,
     hasTrailingCompletedRest,

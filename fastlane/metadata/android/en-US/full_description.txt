@@ -4,17 +4,18 @@ It helps you plan, track and complete SBD workouts without accounts, ads, subscr
 
 Smart Training:
 
-Smart Training follows a level-specific ideal route including SBD Meet Day and post-meet recovery. Beginner routes alternate training and recovery over a default 26-day cycle; other levels use 28 days. Feedback can adjust the calendar. The route remains visible in advance, while your best estimated 1RM determines the prescribed weights.
+Smart Training follows a level-specific ideal route with an optional SBD Meet Day and recovery afterwards. Beginner routes alternate training and recovery over a default 26-day cycle; other levels use 28 days. Feedback can adjust the calendar. The route remains visible in advance, while your best estimated 1RM determines the prescribed weights.
 
 - Plans heavy, medium and light Squat, Bench Press and Deadlift work for your current level
 - Prescribes warm-ups, top work, back-off work and accessories
 - Moves the meet closer after Too easy and adds recovery after Too hard or failed work
 - Choose a lighter Smart workout before starting and see recovery explanations when relevant
-- Shows past, current and provisional future workouts through the meet and recovery
+- Shows past, current and provisional future workouts across training cycles
 - All Smart calculations run locally on your device
 
 Features:
 
+- Choose Powerlifting or Powerbuilding, optional meet days and equipment weight limits
 - Structured Squat, Bench Press and Deadlift training cycles
 - Workout tracking with warm-ups, main work, back-offs and optional accessories
 - Automatic progression based on completed training
