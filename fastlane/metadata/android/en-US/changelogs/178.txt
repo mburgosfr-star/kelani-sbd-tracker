@@ -1,0 +1,3 @@
+- Related buttons stay side by side in About and Updates, language selection and program navigation instead of stacking unnecessarily.
+- On Android, Do Not Disturb and test-alert buttons share the available space. Check and Close remain together in the same action group.
+- Body data fields use one clear orange focus outline around the complete field, including kg or %. The extra blue outline inside the field is removed.

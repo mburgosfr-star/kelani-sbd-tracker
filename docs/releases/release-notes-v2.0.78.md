@@ -1,0 +1,15 @@
+## What's new
+
+- Related actions stay side by side in About and Updates, language selection, desktop update help and program navigation. Android Do Not Disturb and test-alert controls share rows instead of taking a full row each. Labels wrap inside their buttons while touch targets remain large.
+- Body data fields show a single orange focus outline around the value and its unit instead of a second blue outline inside the field. Keyboard focus remains visible.
+- Choose Powerlifting or Powerbuilding in onboarding or Settings → Training route. Powerbuilding uses one top set of 1–6 reps and 3–7 backoff sets of twice as many reps in regular sessions. All three routes remain available; the existing approach stays the default. Started workouts and completed history are preserved, and taper rules stay shared.
+- Set optional maximum training weights per lift in Settings → Weights → Weight limits. Only sets above the limit change, using a lower load and more repetitions without a fixed repetition ceiling. Bench can also use total capacity minus saved body weight. Meet days are exempt.
+- Choose whether to include meet day in onboarding or Settings → Workout setup. When disabled, an unstarted meet becomes a light SBD taper workout, followed by recovery and the next cycle. Existing users keep meet day enabled.
+- Future planned loads use established strength rather than assuming gains from uncompleted workouts. Improve onboarding spacing, dialog text, route selection buttons and Today/Tomorrow contrast.
+- Choose automatic weight rounding to 0.5 or 2.5 kg in Settings → Weights, including meet attempts. Existing profiles retain their current settings until changed. Manual adjustments remain available in 0.5 kg steps, and warm-up loads remain fixed multiples of 10 kg.
+- Program and optional Android Calendar sync now share the remaining current cycle and at least four weeks ahead, extending into later cycles when needed. Program shows CxWx identifiers and saved history; calendar titles use CxWx Kelani. Future plans remain provisional and completed training is preserved.
+- Newly generated back-off and work-set blocks contain 3–7 sets while keeping every five-column grid filled. Former two-set blocks become seven; started workouts and completed history retain their saved prescriptions.
+- Choose a lighter Smart workout beside Complete workout before starting. Relevant recovery explanations appear directly on the Workout screen.
+- Three-set warm-ups before doubles and triples use 5/5/3 repetitions. Single warm-ups and saved sessions retain their existing prescriptions.
+- Text sizing is more consistent on startup, after navigation and in dialogs. Input values, units and buttons scale together, with clearer spacing and fully visible bottom actions. Today and Tomorrow labels avoid repeating their dates in Program.
+- Share cards use centered text and layout. Sharing remains available from About, meet and cycle completion, and milestones; regular workout and rest-day completion no longer offer sharing.

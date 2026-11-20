@@ -1,0 +1,3 @@
+- Els botons relacionats es mostren de costat a Quant a i actualitzacions, a la selecció d’idioma i a la navegació del programa.
+- A Android, els botons de No molestis i de prova de l’alerta comparteixen l’espai. Comprova i Tanca continuen junts al mateix grup.
+- Els camps de dades corporals tenen un únic contorn taronja quan s’editen, incloent-hi kg o %. S’elimina el contorn blau interior.

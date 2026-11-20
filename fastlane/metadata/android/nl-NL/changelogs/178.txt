@@ -1,0 +1,3 @@
+- Knoppen staan vaker naast elkaar in plaats van onder elkaar, onder andere bij Over en updates, taalkeuze en programmanavigatie.
+- Op Android delen de knoppen voor Niet storen en het testalarm de beschikbare ruimte. Controleer en Sluiten blijven samen bereikbaar.
+- Lichaamsgegevens bewerken heeft één duidelijke oranje focusrand rond het volledige veld, inclusief kg of %. De dubbele blauwe binnenrand is verwijderd.

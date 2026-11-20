@@ -3838,9 +3838,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewPowerbuildingItem,
-    t.whatsNewWeightLimitsItem,
-    t.whatsNewOptionalMeetItem,
+    t.whatsNewButtonLayoutItem,
+    t.whatsNewAndroidActionsItem,
+    t.whatsNewBodyDataFocusItem,
   ];
 
   return (
