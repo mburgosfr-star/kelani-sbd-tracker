@@ -132,3 +132,44 @@ body,
 [data-adaptive-dialog] [data-dialog-summary] strong {
   font-weight: 600 !important;
 }
+
+/* Related short actions share the available width, including on native-only
+   screens. Wrap labels within the button, not whole buttons onto another row.
+   Explanatory choice cards and separate destructive confirmations stay distinct. */
+.kelani-button-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  max-width: calc(2 * var(--kelani-button-width) + 8px);
+  margin-inline: auto;
+  align-items: stretch;
+}
+
+.kelani-button-grid > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.kelani-button-grid > button {
+  margin: 0 !important;
+  min-width: 0 !important;
+}
+
+.kelani-button-grid > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: calc((100% - 8px) / 2);
+}
+
+/* The value and unit form one field. Keep keyboard/touch focus on its outer
+   boundary instead of drawing the browser's second ring around the input. */
+.kelani-body-data-field:focus-within {
+  outline: 2px solid var(--kelani-field-focus-color);
+  outline-offset: 2px;
+}
+
+.kelani-body-data-field > input:focus {
+  outline: none;
+  box-shadow: none;
+}

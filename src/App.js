@@ -3916,10 +3916,12 @@ export function UpdatesSettingsModal({
       <SettingsModal title={t.desktopPrototypeTitle} onClose={onClose} inactive={inactive}>
         <p style={{ textAlign: 'center', lineHeight: 1.4 }}>{t.desktopPrototypeInfo}</p>
         <p style={{ textAlign: 'center', lineHeight: 1.4 }}>{t.desktopNoSync}</p>
-        <button type="button" style={compactModalActionButtonStyle()} onClick={() => onOpenLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/docs/windows-prototype.md')}>
-          {t.desktopOpenGuide}
-        </button>
-        <button type="button" style={compactModalActionButtonStyle('secondary')} onClick={onClose}>{t.close}</button>
+        <div className="kelani-button-grid">
+          <button type="button" style={compactModalActionButtonStyle()} onClick={() => onOpenLink('https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/docs/windows-prototype.md')}>
+            {t.desktopOpenGuide}
+          </button>
+          <button type="button" style={compactModalActionButtonStyle('secondary')} onClick={onClose}>{t.close}</button>
+        </div>
       </SettingsModal>
     );
   }
@@ -4892,6 +4894,7 @@ function AboutSupportModals({
     canCheckGitHubUpdates(updateChannel)
       ? { label: t.izzyOnDroid, onClick: () => openLink(IZZY_ON_DROID_URL) }
       : null,
+    { label: t.supportKelani, onClick: () => openLink('https://github.com/sponsors/mburgosfr-star') },
   ].filter(Boolean);
   const projectLinks = [
     {
@@ -4967,29 +4970,14 @@ function AboutSupportModals({
             {t.supportDescription}
           </p>
 
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-            gap: 8,
-          }}>
-            {actions.map((item, index) => (
-              <div key={item.label} style={index === actions.length - 1 && actions.length % 2 === 1 ? {
-                display: 'grid',
-                gridColumn: '1 / -1',
-                width: 'calc(50% - 4px)',
-                justifySelf: 'center',
-              } : { display: 'grid' }}>
+          <div className="kelani-button-grid">
+            {actions.map(item => (
+              <div key={item.label} style={{ display: 'grid', minWidth: 0 }}>
                 <SupportActionButton onClick={item.onClick}>
                   {item.label}
                 </SupportActionButton>
               </div>
             ))}
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
-            <SupportActionButton onClick={() => openLink('https://github.com/sponsors/mburgosfr-star')}>
-              {t.supportKelani}
-            </SupportActionButton>
           </div>
 
           <button data-kelani-button-layout="selection" type="button" onClick={onProjectOpen} style={{
@@ -5220,8 +5208,9 @@ export function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS
                 {field.label}
               </label>
 
-              <div data-testid={`body-data-field-${field.key}`} style={{
+              <div className="kelani-body-data-field" data-testid={`body-data-field-${field.key}`} style={{
                 ...modalInputStyle(),
+                '--kelani-field-focus-color': THEME.primary,
                 display: 'grid', gridTemplateColumns: field.unit ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)',
                 alignItems: 'center', gap: 8, padding: '0 10px', minWidth: 0, fontSize: 'inherit',
               }}>
@@ -5528,17 +5517,12 @@ function MobileRestTimeSection({ t }) {
             </div>
           )}
 
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-            gap: 8
-          }}>
+          <div className="kelani-button-grid">
             {alertStatus?.native === true && doNotDisturbStatus?.available === true && (
               <button
                 onClick={handleOpenDoNotDisturbSettings}
                 style={{
                   ...compactModalActionButtonStyle('primary', '0 auto'),
-                  gridColumn: '1 / -1',
                   justifySelf: 'center',
                 }}
               >
@@ -5551,7 +5535,6 @@ function MobileRestTimeSection({ t }) {
                 disabled={alertTestKind === 'scheduled'}
                 style={{
                   ...compactModalActionButtonStyle('primary', '0 auto'),
-                  gridColumn: '1 / -1',
                   justifySelf: 'center',
                   color: alertTestKind === 'scheduled' ? THEME.muted : THEME.text,
                   cursor: alertTestKind === 'scheduled' ? 'default' : 'pointer'
@@ -5643,19 +5626,21 @@ function LanguageSection({ language, setLanguage, t }) {
           title={t.changeLanguage}
           onClose={() => setIsEditing(false)}
         >
-          {['ca', 'en', 'nl'].map(l => (
-            <button
-              type="button"
-              key={l}
-              onClick={() => {
-                setLanguage(l);
-                setIsEditing(false);
-              }}
-              style={selectionModalButtonStyle(language === l)}
-            >
-              {languageNames[l]}
-            </button>
-          ))}
+          <div className="kelani-button-grid">
+            {['ca', 'en', 'nl'].map(l => (
+              <button
+                type="button"
+                key={l}
+                onClick={() => {
+                  setLanguage(l);
+                  setIsEditing(false);
+                }}
+                style={selectionModalButtonStyle(language === l)}
+              >
+                {languageNames[l]}
+              </button>
+            ))}
+          </div>
         </SettingsModal>
       )}
     </>
@@ -9159,13 +9144,7 @@ function ProgramProfileSection({
             }))}
           </div>
 
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            flexWrap: 'wrap',
-            gap: 8,
-            marginTop: 14
-          }}>
+          <div className="kelani-button-grid" style={{ marginTop: 14 }}>
             {step > 0 && (
               <button
                 type="button"
