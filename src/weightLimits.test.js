@@ -1,4 +1,4 @@
-import { applyWorkoutWeightLimits, getLiftWeightLimit, normalizeWeightLimits } from './weightLimits';
+import { createWorkoutWeightLimiter, applyWorkoutWeightLimits, getLiftWeightLimit, normalizeWeightLimits } from './weightLimits';
 import { changeOpenWorkoutSetWeight, restoreOpenWorkoutSetWeight } from './workoutSetActions';
 import { generateWorkoutsForTrainingModel, projectSmartPlanningHorizon } from './smartTrainingEngine';
 import { formatSetPercentDisplay } from './workoutHistoryStats';
@@ -88,4 +88,15 @@ test('future limited loads keep the same established strength basis instead of h
       .filter(set => set.weight === 170));
   expect(limitedSets.length).toBeGreaterThan(1);
   expect(new Set(limitedSets.map(set => formatSetPercentDisplay(set.pct)))).toEqual(new Set(['92.5']));
+});
+
+test('editing one workout reuses other prescriptions and keeps the new set state', () => {
+  const limit = createWorkoutWeightLimiter({ Squat: 169 }, [], policy);
+  const original = [training(), training()];
+  const first = limit(original);
+  const edited = { ...first[0], sets: first[0].sets.map(set => ({ ...set, done: true })) };
+  const next = limit([edited, original[1]]);
+  expect(next[0].sets.every(set => set.done)).toBe(true);
+  expect(next[1]).toBe(first[1]);
+  expect(createWorkoutWeightLimiter({ Squat: 100 }, [], policy)(original)[1].sets[0].weight).toBe(100);
 });

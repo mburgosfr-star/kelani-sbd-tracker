@@ -1,3 +1,4 @@
+import { readProfile } from './workoutPersistence';
 import React from 'react';
 import { render, fireEvent, screen, waitFor } from '@testing-library/react';
 import App, { buildBackupPayload, validateImportedBackup } from './App';
@@ -15,8 +16,8 @@ test('legacy default remains enabled; disabling in Settings survives backup and 
   expect(checkbox).toBeChecked();
   fireEvent.click(checkbox);
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-  await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).workoutSetup.meetDayEnabled).toBe(false));
-  const saved = JSON.parse(localStorage.getItem(key));
+  await waitFor(() => expect(readProfile(localStorage).workoutSetup.meetDayEnabled).toBe(false));
+  const saved = readProfile(localStorage);
   expect(saved.inProgress.workouts.some(workout => workout.type === 'meet')).toBe(false);
   expect(saved.inProgress.workouts.some(workout => workout.cycleClosingTaper)).toBe(true);
   const backup = buildBackupPayload(saved);
@@ -45,9 +46,9 @@ test('onboarding can start a profile without a meet day', async () => {
   fireEvent.click(screen.getByRole('checkbox', { name: 'Include meet day' }));
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
-  await waitFor(() => expect(JSON.parse(localStorage.getItem(key))?.workoutSetup.meetDayEnabled).toBe(false));
-  expect(JSON.parse(localStorage.getItem(key)).inProgress.workouts.some(workout => workout.type === 'meet')).toBe(false);
-  expect(JSON.parse(localStorage.getItem(key)).workoutSetup.trainingApproach).toBe('powerbuilding');
+  await waitFor(() => expect(readProfile(localStorage)?.workoutSetup.meetDayEnabled).toBe(false));
+  expect(readProfile(localStorage).inProgress.workouts.some(workout => workout.type === 'meet')).toBe(false);
+  expect(readProfile(localStorage).workoutSetup.trainingApproach).toBe('powerbuilding');
 }, 20000);
 
 
@@ -59,8 +60,8 @@ test('Settings changes approach and retains it in backups and reload', async () 
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 5000 }));
   fireEvent.click(screen.getByRole('button', { name: /^Balanced SBD Route$/ }));
   fireEvent.change(screen.getByRole('combobox', { name: 'Training approach' }), { target: { value: 'powerbuilding' } });
-  await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).workoutSetup.trainingApproach).toBe('powerbuilding'));
-  const saved = JSON.parse(localStorage.getItem(key));
+  await waitFor(() => expect(readProfile(localStorage).workoutSetup.trainingApproach).toBe('powerbuilding'));
+  const saved = readProfile(localStorage);
   expect(validateImportedBackup(buildBackupPayload(saved))).toBe(true);
   const invalid = buildBackupPayload(saved); invalid.data.workoutSetup.trainingApproach = 'unknown';
   expect(validateImportedBackup(invalid)).toBe(false);

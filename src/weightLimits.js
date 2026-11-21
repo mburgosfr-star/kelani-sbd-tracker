@@ -91,3 +91,20 @@ export function applyWeightLimitsToWorkouts(workouts, limits, bodyWeights, round
   const next = workouts.map(workout => applyWorkoutWeightLimits(workout, limits, bodyWeight, rounding));
   return next.every((workout, index) => workout === workouts[index]) ? workouts : next;
 }
+
+// A set edit replaces one workout. Reuse results for the other immutable workouts
+// until the limiter inputs change and the caller creates a fresh limiter.
+export function createWorkoutWeightLimiter(limits, bodyWeights, rounding) {
+  const bodyWeight = latestLimitBodyWeight(bodyWeights);
+  const cache = new WeakMap();
+  return workouts => {
+    const next = workouts.map(workout => {
+      if (!workout) return workout;
+      if (!cache.has(workout)) {
+        cache.set(workout, applyWorkoutWeightLimits(workout, limits, bodyWeight, rounding));
+      }
+      return cache.get(workout);
+    });
+    return next.every((workout, index) => workout === workouts[index]) ? workouts : next;
+  };
+}

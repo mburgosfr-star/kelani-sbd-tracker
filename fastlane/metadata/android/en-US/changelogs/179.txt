@@ -1,0 +1,3 @@
+- When you check off a set, Kelani saves workout progress separately so it can skip rewriting your training history with every tap.
+- All three onboarding steps share a title position. Route selection is shorter, and the last step shows what you can change later in Settings.
+- The Dashboard shares spare space between cards and their figures based on screen height and the information shown.

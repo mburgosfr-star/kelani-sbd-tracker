@@ -1,0 +1,3 @@
+- Quan marques una sèrie, Kelani desa el progrés de la sessió per separat i evita tornar a desar tot l’historial amb cada toc.
+- Els tres passos inicials tenen el títol al mateix lloc. La tria de ruta és més breu i l’últim pas mostra què pots canviar després a Configuració.
+- El tauler reparteix l’espai disponible entre les targetes i les xifres segons l’alçada de la pantalla i la informació que mostra.

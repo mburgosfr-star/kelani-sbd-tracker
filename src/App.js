@@ -1,5 +1,5 @@
 import WeightLimitsEditor from './WeightLimitsEditor';
-import { EMPTY_WEIGHT_LIMITS, normalizeWeightLimits, isValidWeightLimits, applyWeightLimitsToWorkouts } from './weightLimits';
+import { createWorkoutWeightLimiter, EMPTY_WEIGHT_LIMITS, normalizeWeightLimits, isValidWeightLimits } from './weightLimits';
 import { buildProgramTimeline, getProgramForecastWindow } from './programTimeline';
 import AdaptiveDialogPanel from './AdaptiveDialogPanel';
 import { DEFAULT_WEIGHT_ROUNDING, normalizeWeightRounding, uniformWeightRounding, resolveStoredWeightRounding, isValidWeightRounding } from './weightRounding';
@@ -226,7 +226,7 @@ import StatsScreen from './StatsScreen';
 
 const PlateCalculator = React.lazy(() => import('./PlateCalculator'));
 
-const STORAGE_KEY = 'kel-powerlifting-user-data-v1';
+import { PROFILE_KEY as STORAGE_KEY, readProfile, replaceProfile, saveProfile, clearProfile } from './workoutPersistence';
 const WORKOUT_EFFORT_OPTIONS = ['easy', 'good', 'hard'];
 export const AUTO_BACKUP_PATH = 'Kelani SBD Tracker/Automatic Backups/kelani-sbd-tracker-v2-autosave.json';
 const AUTO_BACKUP_STATUS_KEY = 'kelani-sbd-tracker-auto-backup-status';
@@ -1371,7 +1371,7 @@ export function isVerifiedManualBackupStatus(status) {
 }
 
 export function storeImportedBackup(storage, data) {
-  storage.setItem(STORAGE_KEY, JSON.stringify(data));
+  replaceProfile(storage, data);
   storage.removeItem(AUTO_BACKUP_STATUS_KEY);
 }
 
@@ -3838,9 +3838,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewButtonLayoutItem,
-    t.whatsNewAndroidActionsItem,
-    t.whatsNewBodyDataFocusItem,
+    t.whatsNewSetProgressItem,
+    t.whatsNewOnboardingItem,
+    t.whatsNewDashboardSpacingItem,
   ];
 
   return (
@@ -4245,7 +4245,7 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
     setNotice('');
 
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = readProfile(localStorage);
 
       if (!saved) {
         setNotice(t.exportDataNoData);
@@ -4254,7 +4254,7 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
 
       const exportedAtDate = new Date();
       const filename = buildManualBackupFilename(exportedAtDate);
-      const data = JSON.parse(saved);
+      const data = saved;
       const backup = buildBackupPayload(data, {
         now: exportedAtDate,
         appName: t.appName,
@@ -4353,7 +4353,7 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
     try {
       if (pendingImport.fromHistory) {
         await queueBackupOperation(async () => {
-          const current = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+          const current = readProfile(localStorage);
           const history = getBackupHistory();
           if (!history || !current) throw new Error('Safety backup unavailable');
           await history.saveSafety(buildBackupPayload(current));
@@ -10582,9 +10582,9 @@ function Onboarding({ onStart, t }) {
         background: '#000000',
         color: THEME.text,
         overflowX: 'hidden',
-        rowGap: 'clamp(8px, 1.2dvh, 12px)',
+        rowGap: step === 1 ? 0 : 'clamp(8px, 1.2dvh, 12px)',
       }}>
-      <div style={{ textAlign: 'center' }}>
+      <div style={{ textAlign: 'center', marginBottom: step === 1 ? 'clamp(8px, 1.2dvh, 12px)' : 0 }}>
         <img
           src="/icons/icon-512.webp"
           alt={t.appName}
@@ -10618,6 +10618,16 @@ function Onboarding({ onStart, t }) {
         <div aria-hidden="true" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
           {[1, 2, 3].map(part => <span key={part} style={{ height: 4, borderRadius: 4, background: part <= step ? THEME.primary : THEME.card }} />)}
         </div>
+        <h2 style={{
+          margin: 'clamp(8px, 1.2dvh, 12px) 0 0',
+          color: THEME.red,
+          fontSize: 'clamp(21px, 5.5vw, 27px)',
+          fontWeight: 700,
+          lineHeight: 1.2,
+          textAlign: 'start',
+        }}>
+          {step === 1 ? t.onboardingHeroTitle : step === 2 ? t.onboardingGoalTitle : t.onboardingGuideTitle}
+        </h2>
       </div>
 
       <div data-testid="onboarding-step-content" style={{
@@ -10627,11 +10637,28 @@ function Onboarding({ onStart, t }) {
         overflowX: 'hidden',
         alignContent: 'space-between',
         gridTemplateRows: step === 1 ? undefined : 'minmax(min-content, 1fr)',
-        rowGap: 'clamp(5px, 0.8dvh, 8px)',
+        rowGap: step === 1 ? 'clamp(10px, 2dvh, 20px)' : 'clamp(5px, 0.8dvh, 8px)',
       }}>
+
+        {step === 1 && <div style={{ display: 'contents' }}>
+            <div aria-hidden="true" />
+
+            <p style={{
+              margin: '0 auto',
+              maxWidth: 'none',
+              color: THEME.text,
+              fontSize: 16,
+              fontWeight: 500,
+              lineHeight: 1.45,
+              textAlign: 'center',
+            }}>
+              {t.onboardingHeroText}
+            </p>
+          </div>}
+
         {onboardingError && (
           <div style={{
-            margin: '0 0 16px',
+            margin: 0,
             padding: '10px 12px',
             borderRadius: 8,
             border: `1px solid ${THEME.red}`,
@@ -10646,32 +10673,6 @@ function Onboarding({ onStart, t }) {
           </div>
         )}
 
-          {step === 1 && <div style={{ display: 'contents' }}>
-            <h3 style={{
-              margin: 0,
-              color: THEME.red,
-              fontSize: 'clamp(20px, 6vw, 26px)',
-              fontWeight: 900,
-              lineHeight: 1.15,
-              textAlign: 'center',
-              whiteSpace: 'nowrap',
-            }}>
-              {t.onboardingHeroTitle}
-            </h3>
-
-            <p style={{
-              margin: '0 auto',
-              maxWidth: 'none',
-              color: THEME.text,
-              fontSize: 16,
-              fontWeight: 800,
-              lineHeight: 1.45,
-              textAlign: 'center',
-            }}>
-              {t.onboardingHeroText}
-            </p>
-          </div>}
-
         {step === 1 && <div style={{ display: 'contents' }}>
           <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 110px', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
             <label style={{ fontWeight: 800, color: THEME.text }}>
@@ -10683,7 +10684,7 @@ function Onboarding({ onStart, t }) {
               style={{
                 width: '100%',
                 padding: 8,
-                fontSize: 15,
+                fontSize: 16,
                 borderRadius: 5,
                 border: `1px solid ${THEME.primary}`,
                 boxSizing: 'border-box',
@@ -10713,7 +10714,7 @@ function Onboarding({ onStart, t }) {
                 style={{
                   width: '100%',
                   padding: '8px 38px 8px 9px',
-                  fontSize: 15,
+                  fontSize: 16,
                   borderRadius: 5,
                   border: `1px solid ${THEME.primary}`,
                   boxSizing: 'border-box',
@@ -10721,14 +10722,14 @@ function Onboarding({ onStart, t }) {
                   color: THEME.text,
                 }}
               />
-              <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: THEME.muted, fontSize: 13, pointerEvents: 'none' }}>
+              <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: THEME.muted, fontSize: 14, pointerEvents: 'none' }}>
                 {onboardingWeightUnit}
               </span>
             </div>
           </div>
 
           <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gap: 16 }}>
-          <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateColumns: '76px minmax(0, 1fr) 68px', gap: 8, color: THEME.muted, fontSize: 11, fontWeight: 800, textAlign: 'center' }}>
+          <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateColumns: '76px minmax(0, 1fr) 68px', gap: 8, color: THEME.muted, fontSize: 14, fontWeight: 800, textAlign: 'center' }}>
             <span />
             <span>{t.weight}</span>
             <span>{t.reps}</span>
@@ -10772,7 +10773,7 @@ function Onboarding({ onStart, t }) {
                 style={{
                   width: '100%',
                   padding: '8px 36px 8px 9px',
-                  fontSize: 15,
+                  fontSize: 16,
                   borderRadius: 5,
                   border: `1px solid ${liftColor}`,
                   boxSizing: 'border-box',
@@ -10786,7 +10787,7 @@ function Onboarding({ onStart, t }) {
                 top: '50%',
                 transform: 'translateY(-50%)',
                 color: THEME.muted,
-                fontSize: 13,
+                fontSize: 14,
                 pointerEvents: 'none'
               }}>
                 {onboardingWeightUnit}
@@ -10803,7 +10804,7 @@ function Onboarding({ onStart, t }) {
               style={{
                 width: '100%',
                 padding: '8px 7px',
-                fontSize: 15,
+                fontSize: 16,
                 textAlign: 'center',
                 borderRadius: 5,
                 border: `1px solid ${liftColor}`,
@@ -10818,13 +10819,10 @@ function Onboarding({ onStart, t }) {
           </div>
         </div>}
 
+        {/* The final grid gap separates the lift fields from the fixed action row. */}
+        {step === 1 && <div aria-hidden="true" />}
+
         {step === 2 && startingProfile && <section style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', alignContent: 'space-between', minHeight: '100%' }}>
-          <h2 style={{ color: THEME.red, fontSize: 'clamp(21px, 5.5vw, 27px)', margin: '0 0 8px' }}>
-            {t.onboardingGoalTitle}
-          </h2>
-          <p style={{ fontSize: 15, lineHeight: 1.4, margin: '0 0 10px' }}>
-            {t.onboardingGoalIntro}
-          </p>
           <TrainingApproachChoice value={onboardingTrainingApproach} onChange={setOnboardingTrainingApproach} t={t} />
           <div role="group" aria-label={t.onboardingGoalLabel} style={{ display: 'grid', gap: 8 }}>
             {[
@@ -10844,11 +10842,12 @@ function Onboarding({ onStart, t }) {
                 style={{ minHeight: 58, padding: '6px 12px', textAlign: 'left', borderRadius: 8, border: `1px solid ${selected ? THEME.primary : THEME.muted}`, background: selected ? THEME.primary : THEME.bg, color: THEME.text, opacity: available ? 1 : 0.55, cursor: available ? 'pointer' : 'not-allowed' }}
               >
                 <strong style={{ display: 'block', fontSize: 15 }}>{label}</strong>
-                <span style={{ display: 'block', fontSize: 12, lineHeight: 1.3, marginTop: 2 }}>{description}</span>
+                <span style={{ display: 'block', fontSize: 14, lineHeight: 1.3, marginTop: 2 }}>{description}</span>
               </button>;
             })}
           </div>
           <MeetDayOption onboarding enabled={onboardingMeetDayEnabled} onChange={setOnboardingMeetDayEnabled} t={t} />
+          <div>
           <dl style={{ display: 'grid', gap: 8, margin: '6px 0 0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
               <dt style={{ color: THEME.muted, fontWeight: 700 }}>{t.onboardingCalculatedLevel}</dt>
@@ -10863,22 +10862,21 @@ function Onboarding({ onStart, t }) {
               </dd>
             </div>
           </dl>
-          <p style={{ color: THEME.muted, fontSize: 12, lineHeight: 1.35, margin: '12px 0 0' }}>
-            {t.onboardingDaysExplanation.replace('{days}', startingProfile.periodDays)}
-          </p>
+          <details style={{ marginTop: 8 }}>
+            <summary style={{ cursor: 'pointer', color: THEME.primary, padding: '8px 0' }}>{t.onboardingCalculationHelp}</summary>
+            <p style={{ margin: '4px 0', fontSize: 15, lineHeight: 1.4 }}>{t.onboardingDaysExplanation.replace('{days}', startingProfile.periodDays)}</p>
+          </details>
+          </div>
         </section>}
 
-        {step === 3 && <section style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateRows: 'auto auto 1fr', minHeight: '100%' }}>
-          <h2 style={{ color: THEME.red, fontSize: 'clamp(21px, 5.5vw, 27px)', margin: '0 0 8px' }}>
-            {t.onboardingGuideTitle}
-          </h2>
-          <p style={{ fontSize: 15, lineHeight: 1.4, margin: '0 0 16px' }}>{t.onboardingGuideIntro}</p>
-          <ol style={{ paddingLeft: 25, margin: 0, display: 'grid', alignContent: 'center', gap: 'clamp(18px, 3.8dvh, 34px)' }}>
+        {step === 3 && <section style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', minHeight: '100%' }}>
+          <ol style={{ paddingLeft: 25, margin: 0, display: 'grid', margin: 0, paddingBlock: 8, alignContent: 'space-between', gap: 12 }}>
             {[
               [t.onboardingGuidePlanTitle, t.onboardingGuidePlanText],
               [t.onboardingGuideLogTitle, t.onboardingGuideLogText],
               [t.onboardingGuideFeedbackTitle, t.onboardingGuideFeedbackText],
               [t.onboardingGuideProgressTitle, t.onboardingGuideProgressText],
+              [t.onboardingGuideSettingsTitle, t.onboardingGuideSettingsText],
             ].map(([title, description]) => <li key={title} style={{ paddingLeft: 3, lineHeight: 1.35 }}>
               <strong style={{ color: THEME.primary, display: 'block', fontSize: 'clamp(16px, 2dvh, 18px)' }}>{title}</strong>
               <span style={{ fontSize: 'clamp(14px, 1.85dvh, 16px)', lineHeight: 1.45 }}>{description}</span>
@@ -11355,7 +11353,7 @@ function App() {
   const [currentCycle, setCurrentCycle] = useState(1);
   const [scheduleToday, setScheduleToday] = useState(() => localDateKey());
   const [bodyWeights, setBodyWeights] = useState([]);
-  const constrainWorkouts = useCallback(value => applyWeightLimitsToWorkouts(value, weightLimits, bodyWeights, weightRounding),
+  const constrainWorkouts = useMemo(() => createWorkoutWeightLimiter(weightLimits, bodyWeights, weightRounding),
     [weightLimits, bodyWeights, weightRounding]);
   const workouts = useMemo(() => constrainWorkouts(rawWorkouts), [rawWorkouts, constrainWorkouts]);
   const setWorkouts = useCallback(update => setRawWorkouts(previous => {
@@ -11554,12 +11552,26 @@ function App() {
         ...regions.map(region => [region.clientWidth, region.clientHeight, region.scrollHeight, region.scrollWidth,
           region.textContent, ...[...region.children].map(child => child.getBoundingClientRect().height)].join(':'))].join('|');
       if (signature() === lastSignature) return;
+      const dashboard = viewport.querySelector('[data-dashboard-sections]');
+      dashboard?.style.removeProperty('--dashboard-extra');
       fitScreenContent({
         candidates: screenFontCandidates(screen, { width: viewport.clientWidth, height: viewport.clientHeight }),
         apply: scale => viewport.style.setProperty('--kelani-content-font-scale', String(scale)),
         compact,
         fits: () => scrollRegionsFit(regions),
       });
+      if (dashboard) {
+        const sections = [...dashboard.children].filter(child => child.offsetHeight > 0);
+        const minGap = parseFloat(getComputedStyle(dashboard).rowGap) || 0;
+        const spare = sections.slice(1).reduce((sum, section, index) => sum + Math.max(0,
+          section.getBoundingClientRect().top - sections[index].getBoundingClientRect().bottom - minGap), 0);
+        // Share only measured surplus with the rows; reserve space between sections.
+        const extra = Math.min(16, Math.floor(spare / 20));
+        if (extra > 0) {
+          dashboard.style.setProperty('--dashboard-extra', extra + 'px');
+          if (!scrollRegionsFit(regions)) dashboard.style.removeProperty('--dashboard-extra');
+        }
+      }
       lastSignature = signature();
       resizeObserver?.disconnect();
       resizeObserver?.observe(viewport);
@@ -11606,7 +11618,7 @@ function App() {
     setWorkouts(prev => applyCompletedHistorySnapshotsToWorkouts(prev, history, currentCycle));
   }, [history, currentCycle, workouts.length]);
 
-  const completedWorkoutCount = getCompletedWorkoutCount(history, currentCycle);
+  const completedWorkoutCount = useMemo(() => getCompletedWorkoutCount(history, currentCycle), [history, currentCycle]);
   const completedWorkoutNumbers = useMemo(() => Array.from(new Set(
     (history || [])
       .filter(entry =>
@@ -11700,7 +11712,7 @@ function App() {
       console.warn('Could not calculate the shared program forecast', error);
       return { workouts: [], error: true };
     }
-  }, [hasLoadedData, smartWorkoutScheduleDateKeys, scheduleToday, trainingModel, prs, oneRMs, programProfile,
+  }, [hasLoadedData, trainingModel, prs, oneRMs, programProfile,
     accessoryMode, accessoryPRs, preparationMode, workoutSetup, weightRounding, weightLimits, trainingFocus,
     athleteLevel, deadliftVariant, benchPressVariant, squatVariant, cooldownMode,
     history, bodyWeights, currentCycle, currentIndex, smartIdealRouteStartCycle]);
@@ -11948,17 +11960,17 @@ function App() {
   }, [screen, shareCard, completedWorkoutIndex, activeMilestoneCelebration, showWhatsNew, showAboutUpdates, showProjectVerification, showUpdateAvailable, showCalendarSettings, showCalendarPicker, closeCalendarSettings, showStartCycleConfirm, showResetConfirm]);
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-
-    if (!saved) {
-      setHasExistingProfile(false);
-      setScreen('onboarding');
-      setHasLoadedData(true);
-      return;
-    }
-
     try {
-      const data = normalizeStrengthPrecision(JSON.parse(saved));
+      const saved = readProfile(localStorage);
+
+      if (!saved) {
+        setHasExistingProfile(false);
+        setScreen('onboarding');
+        setHasLoadedData(true);
+        return;
+      }
+
+      const data = normalizeStrengthPrecision(saved);
 
       const savedPrs = data.prs || {};
       const squat = savedPrs.Squat || 0;
@@ -11966,10 +11978,7 @@ function App() {
       const deadlift = savedPrs.Deadlift || 0;
 
       if (!squat || !bench || !deadlift) {
-        setHasExistingProfile(false);
-        setScreen('onboarding');
-        setHasLoadedData(true);
-        return;
+        throw new Error('Stored profile is missing starting strength');
       }
 
       const savedHistory = data.history || [];
@@ -12188,12 +12197,11 @@ function App() {
       setHasLoadedData(true);
     } catch (e) {
       console.error('Kon opgeslagen user data niet laden', e);
-      setHasExistingProfile(false);
-      setScreen('onboarding');
-      setHasLoadedData(true);
+      setScreen('profileLoadError');
     }
   }, []);
 
+  const persistedProfile = useRef(null);
   const storedData = useMemo(() => ({
       version: 1,
       strengthPrecisionVersion: STRENGTH_PRECISION_VERSION,
@@ -12245,7 +12253,7 @@ function App() {
     // quota. Browser persistence already is the canonical local record;
     // automatic backup files are a native-only feature.
     removeLegacyBrowserAutomaticBackup(localStorage);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(storedData));
+    persistedProfile.current = saveProfile(localStorage, storedData, persistedProfile.current);
   }, [hasLoadedData, storedData]);
 
   useEffect(() => {
@@ -12748,7 +12756,8 @@ function handleResetApp() {
   setShowResetConfirm(false);
   setShowStartCycleConfirm(false);
   stopTimer();
-  localStorage.removeItem(STORAGE_KEY);
+  clearProfile(localStorage);
+  persistedProfile.current = null;
   localStorage.removeItem(APP_NAVIGATION_STATE_KEY);
   localStorage.removeItem(REST_TIMER_NOTIFICATION_STATUS_KEY);
   localStorage.removeItem('kel-powerlifting');
@@ -14259,8 +14268,7 @@ if (showLaunchSplash) {
 }
 
 const __kelaniSmartDebug = () => {
-    const key = 'kel-powerlifting-user-data-v1';
-    const data = JSON.parse(localStorage.getItem(key) || '{}');
+    const data = readProfile(localStorage) || {};
     const workouts = data.inProgress?.workouts || [];
     const currentIndex = data.inProgress?.currentIndex ?? 0;
     const selectedIndex = data.inProgress?.selectedIndex ?? currentIndex;
@@ -14346,8 +14354,7 @@ const __kelaniSmartDebug = () => {
 };
 
 const __kelaniSmartPreviewNextDay = (options = {}) => {
-    const key = 'kel-powerlifting-user-data-v1';
-    const data = JSON.parse(localStorage.getItem(key) || '{}');
+    const data = readProfile(localStorage) || {};
     const inProgress = data.inProgress || {};
     const workouts = inProgress.workouts || [];
     const currentCycle = Number(data.currentCycle) || 1;
@@ -14549,8 +14556,7 @@ const __kelaniSmartPreviewRegression = () => {
     }
 
     const buildPeakPreview = (options = {}) => {
-      const key = 'kel-powerlifting-user-data-v1';
-      const data = JSON.parse(localStorage.getItem(key) || '{}');
+      const data = readProfile(localStorage) || {};
       const currentCycle = Number(data.currentCycle) || 1;
       const currentIndex = Number(options.currentIndex) || 5;
       const prs = data.prs || {};
@@ -14808,8 +14814,7 @@ const __kelaniSmartPreviewRegression = () => {
 };
 
 const __kelaniSmartSetCurrentEffort = (effort = 'good') => {
-    const key = 'kel-powerlifting-user-data-v1';
-    const data = JSON.parse(localStorage.getItem(key) || '{}');
+    const data = readProfile(localStorage) || {};
     const workouts = data.inProgress?.workouts || [];
     const currentIndex = data.inProgress?.currentIndex ?? data.inProgress?.selectedIndex ?? 0;
     const workout = workouts[currentIndex];
@@ -14828,7 +14833,7 @@ const __kelaniSmartSetCurrentEffort = (effort = 'good') => {
       workouts,
     };
 
-    localStorage.setItem(key, JSON.stringify(data));
+    replaceProfile(localStorage, data);
     window.location.reload();
 
     return {
@@ -14840,8 +14845,7 @@ const __kelaniSmartSetCurrentEffort = (effort = 'good') => {
 };
 
 const __kelaniSmartClearSmartHistoryToCurrentCycle = () => {
-    const key = 'kel-powerlifting-user-data-v1';
-    const data = JSON.parse(localStorage.getItem(key) || '{}');
+    const data = readProfile(localStorage) || {};
     const currentCycle = Number(data.currentCycle) || 1;
 
     data.history = (data.history || []).filter(entry =>
@@ -14892,7 +14896,7 @@ const __kelaniSmartClearSmartHistoryToCurrentCycle = () => {
       }));
     }
 
-    localStorage.setItem(key, JSON.stringify(data));
+    replaceProfile(localStorage, data);
     window.location.reload();
 
     return {
@@ -14902,8 +14906,7 @@ const __kelaniSmartClearSmartHistoryToCurrentCycle = () => {
 };
 
 const __kelaniSmartResetToW1 = () => {
-    const key = 'kel-powerlifting-user-data-v1';
-    const data = JSON.parse(localStorage.getItem(key) || '{}');
+    const data = readProfile(localStorage) || {};
 
     const resetCycle = 2;
     const resolvedPrs = {
@@ -15021,7 +15024,7 @@ const __kelaniSmartResetToW1 = () => {
     };
 
     localStorage.setItem('trainingModel', TRAINING_MODELS.SMART);
-    localStorage.setItem(key, JSON.stringify(data));
+    replaceProfile(localStorage, data);
     window.location.reload();
 
     return {
@@ -15047,10 +15050,9 @@ const __kelaniSmartQA = (options = {}) => {
     '__kelaniSmartQA',
   ];
 
-  const key = 'kel-powerlifting-user-data-v1';
   const data = (() => {
     try {
-      return JSON.parse(localStorage.getItem(key) || '{}');
+      return readProfile(localStorage) || {};
     } catch (error) {
       return { __parseError: error?.message || String(error) };
     }
@@ -15288,6 +15290,13 @@ if (screen === null) {
     }} />
   );
 }
+
+if (screen === 'profileLoadError') return (
+  <main role="alert" style={{ maxWidth: 420, margin: '15vh auto', padding: 20, textAlign: 'center' }}>
+    <p>{t.profileLoadError}</p>
+    <button onClick={() => window.location.reload()}>{t.profileRetry}</button>
+  </main>
+);
 
 if (screen === 'onboarding') return <Onboarding onStart={handleStart} t={t}/>;
 
@@ -15735,7 +15744,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
     >
 
     <HiddenScreenTitle title={t.dashboard} />
-    <div style={{ ...regularDashboardContentStyle({ spreadContent: dashboardUsesExpandedLayout,
+    <div data-dashboard-sections="" style={{ ...regularDashboardContentStyle({ spreadContent: dashboardUsesExpandedLayout,
       compact: dashboardUsesCompactLayout }), overflow: 'visible', flex: '1 0 auto' }}>
 
     {!dashboardMeetState.isMeetDay && workouts[currentIndex] && (() => {
@@ -15976,7 +15985,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              gap: 'var(--kelani-dashboard-card-gap, 8px) clamp(12px, 3vw, 16px)'
+              gap: 'calc(var(--kelani-dashboard-card-gap, 8px) + var(--dashboard-extra, 0px)) clamp(12px, 3vw, 16px)'
             }}>
               {cards.map(card => (
                 <div
@@ -15988,7 +15997,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
                     if (e.key === 'Enter' || e.key === ' ') openStatsTab(card.statsTab);
                   }}
                   style={{
-                    padding: 'var(--kelani-dashboard-card-padding, 2px) 2px',
+                    padding: 'calc(var(--kelani-dashboard-card-padding, 2px) + var(--dashboard-extra, 0px)) 2px',
                     cursor: 'pointer',
                   }}
                 >
@@ -15996,7 +16005,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
                     color: card.color,
                     fontSize: adaptiveFontSize('clamp(21px, 5vw, 25px)'),
                     fontWeight: 900,
-                    marginBottom: 'var(--kelani-dashboard-text-gap, 4px)',
+                    marginBottom: 'calc(var(--kelani-dashboard-text-gap, 4px) + var(--dashboard-extra, 0px))',
                     lineHeight: 1.1
                   }}>
                     {card.label}
@@ -16005,7 +16014,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
                   <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'auto 1fr',
-                    gap: 'var(--kelani-dashboard-text-gap, 3px) 10px',
+                    gap: 'calc(var(--kelani-dashboard-text-gap, 3px) + var(--dashboard-extra, 0px)) 10px',
                     alignItems: 'baseline'
                   }}>
                     <span style={{
@@ -16112,7 +16121,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
                   columnGap: 14,
                   padding: dashboardUsesCompactLayout
                     ? '3px 8px'
-                    : 'clamp(6px, 0.9dvh, 10px) 8px',
+                    : 'calc(clamp(6px, 0.9dvh, 10px) + var(--dashboard-extra, 0px)) 8px',
                   marginBottom: index === dashboardBodyRows.length - 1
                     ? 0
                     : dashboardUsesCompactLayout

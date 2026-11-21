@@ -1,0 +1,3 @@
+- Bij het afvinken van een set bewaart Kelani de workoutvoortgang apart. Je trainingshistorie hoeft daardoor niet bij elk vinkje opnieuw te worden opgeslagen.
+- De drie onboardingstappen hebben een vaste titelpositie. De routekeuze is korter en de laatste stap laat zien wat je later in Instellingen kunt aanpassen.
+- Het Dashboard verdeelt vrije ruimte tussen de kaarten en de cijfers erin, afhankelijk van de schermhoogte en de getoonde informatie.

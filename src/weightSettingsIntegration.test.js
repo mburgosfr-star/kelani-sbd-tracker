@@ -1,3 +1,4 @@
+import { readProfile } from './workoutPersistence';
 import React from 'react';
 import { render, fireEvent, screen, waitFor } from '@testing-library/react';
 import App, { WeightUnitSection, buildBackupPayload, validateImportedBackup, buildSuggestedMeetPlan } from './App';
@@ -28,13 +29,13 @@ test('existing profile keeps its loads on upgrade, then an explicit choice survi
     oneRMs: { Squat: 157.5, Bench: 102.5, Deadlift: 180 }, history: [] }));
   const view = render(<App />);
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 5000 }));
-  await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).weightRounding).toEqual(LEGACY_WEIGHT_ROUNDING));
-  const before = JSON.parse(localStorage.getItem(key));
+  await waitFor(() => expect(readProfile(localStorage).weightRounding).toEqual(LEGACY_WEIGHT_ROUNDING));
+  const before = readProfile(localStorage);
   const loadBefore = before.inProgress.workouts[0].lifts.find(l => l.lift === 'Bench')?.sets[0].weight;
   fireEvent.click(screen.getByRole('button', { name: /kg ·/ }));
   fireEvent.click(screen.getByRole('button', { name: '2.5 kg' }));
-  await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).weightRounding).toEqual(uniformWeightRounding(2.5)));
-  const after = JSON.parse(localStorage.getItem(key));
+  await waitFor(() => expect(readProfile(localStorage).weightRounding).toEqual(uniformWeightRounding(2.5)));
+  const after = readProfile(localStorage);
   expect(after.history).toEqual(before.history); expect(after.prs).toEqual(before.prs); expect(after.oneRMs).toEqual(before.oneRMs);
   expect(after.inProgress.workouts[0].lifts.every(l => l.sets.every(s => Number.isInteger(s.weight / 2.5)))).toBe(true);
   expect(loadBefore).toBeDefined();
@@ -45,7 +46,7 @@ test('existing profile keeps its loads on upgrade, then an explicit choice survi
   expect(validateImportedBackup(malformed)).toBe(false);
   view.unmount(); render(<App />);
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 5000 }));
-  await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).weightRounding).toEqual(uniformWeightRounding(2.5)));
+  await waitFor(() => expect(readProfile(localStorage).weightRounding).toEqual(uniformWeightRounding(2.5)));
   expect(screen.getByRole('button', { name: /kg · 2.5/ })).toBeInTheDocument();
 }, 20000);
 
@@ -69,14 +70,14 @@ test('weight limits save, constrain only excessive loads, and survive backup and
     oneRMs: { Squat: 200, Bench: 140, Deadlift: 220 }, history: [], bodyWeights: [{ bodyWeight: 80 }] }));
   const view = render(<App />);
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 5000 }));
-  const before = JSON.parse(localStorage.getItem(key));
+  const before = readProfile(localStorage);
   fireEvent.click(screen.getByRole('button', { name: /kg ·/ }));
   fireEvent.click(screen.getByRole('button', { name: 'Weight limits' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Squat (kg)' }), { target: { value: '100' } });
   fireEvent.change(screen.getByRole('textbox', { name: 'Total bench capacity (kg)' }), { target: { value: '180' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-  await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).weightLimits.Squat).toBe(100));
-  const after = JSON.parse(localStorage.getItem(key));
+  await waitFor(() => expect(readProfile(localStorage).weightLimits.Squat).toBe(100));
+  const after = readProfile(localStorage);
   expect(after.history).toEqual(before.history);
   expect(after.prs).toEqual(before.prs);
   expect(after.oneRMs).toEqual(before.oneRMs);

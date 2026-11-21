@@ -1,3 +1,4 @@
+import { readProfile } from './workoutPersistence';
 import { screenContentPadding } from './appChromeLayout';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsScrollableContentStyle, statsTabListStyle } from './StatsScreen';
@@ -2235,6 +2236,7 @@ test('three-step onboarding persists beginner squat focus and previews calculate
   render(<App />);
 
   await screen.findByText('Start with Smart Training', {}, { timeout: 3000 });
+  const title = screen.getByRole('heading', { level: 2, name: 'Start with Smart Training' });
   fireEvent.change(screen.getByLabelText('Body weight'), { target: { value: '55' } });
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Squat Weight' }), { target: { value: '45' } });
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Bench Weight' }), { target: { value: '35' } });
@@ -2243,6 +2245,7 @@ test('three-step onboarding persists beginner squat focus and previews calculate
   expect(onboardingContent).toHaveStyle({ display: 'grid', alignContent: 'stretch', gridTemplateRows: 'auto auto minmax(0, 1fr) auto' });
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
+  expect(screen.getByRole('heading', { level: 2, name: 'Choose Your Training Route' })).toBe(title);
   expect(screen.getByText('Step 2 of 3')).toBeInTheDocument();
   expect(onboardingContent).toHaveStyle({ display: 'grid', gridTemplateRows: 'auto auto minmax(0, 1fr) auto' });
   expect(screen.getByTestId('onboarding-step-content')).toHaveStyle({ gridTemplateRows: 'minmax(min-content, 1fr)' });
@@ -2253,6 +2256,7 @@ test('three-step onboarding persists beginner squat focus and previews calculate
   fireEvent.click(screen.getByRole('button', { name: /Squat and legs focus/ }));
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
+  expect(screen.getByRole('heading', { level: 2, name: /how to use kelani/i })).toBe(title);
   expect(screen.getByText('Step 3 of 3')).toBeInTheDocument();
   expect(onboardingContent).toHaveStyle({ display: 'grid', gridTemplateRows: 'auto auto minmax(0, 1fr) auto' });
   expect(screen.getByTestId('onboarding-step-content')).toHaveStyle({ gridTemplateRows: 'minmax(min-content, 1fr)' });
@@ -2263,7 +2267,7 @@ test('three-step onboarding persists beginner squat focus and previews calculate
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
   await waitFor(() => {
-    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    const saved = readProfile(localStorage);
     expect(saved.trainingFocus).toBe('beginnerSquat');
     expect(saved.inProgress.workouts[2].lifts.map(block => block.lift))
       .toEqual(['Deadlift', 'Squat']);
@@ -2289,7 +2293,7 @@ test('onboarding does not promise beginner-only squat focus at a higher starting
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
   await waitFor(() => {
-    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    const saved = readProfile(localStorage);
     expect(saved.trainingFocus).toBe('practical');
     expect(saved.inProgress.workouts[0].lifts.map(block => block.lift))
       .toEqual(['Squat', 'Bench', 'Deadlift']);
@@ -2340,7 +2344,7 @@ test('finishing the compact setup creates a Smart user with body weight and star
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
   await waitFor(() => {
-    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    const saved = readProfile(localStorage);
     expect(saved.trainingModel).toBe('smart');
     expect(saved.weightUnit).toBe('kg');
     expect(saved.userProfile).toBeUndefined();
@@ -2460,7 +2464,7 @@ test('a legacy Smart save ignores and removes its frozen cycle e1RM load basis',
   render(<App />);
 
   await waitFor(() => {
-    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    const saved = readProfile(localStorage);
     expect(saved.prs.Squat).toBe(112.5);
     expect(saved.oneRMs).toEqual({ Squat: 100, Bench: 75, Deadlift: 125 });
     expect(saved.cycleE1RMs).toBeUndefined();
@@ -2505,7 +2509,7 @@ test('an existing Classic user keeps Classic and can make the one-way switch to 
 
   await waitFor(() => {
     expect(screen.queryByText('Model')).not.toBeInTheDocument();
-    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    const saved = readProfile(localStorage);
     expect(saved.trainingModel).toBe('smart');
   });
 });
@@ -2531,7 +2535,7 @@ test('Smart squat priority is opt-in, persists, and changes the planned beginner
   fireEvent.click(screen.getByRole('button', { name: 'Squat Priority' }));
 
   await waitFor(() => {
-    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    const saved = readProfile(localStorage);
     expect(saved.trainingFocus).toBe('beginnerSquat');
     expect(saved.inProgress.workouts[2].lifts.map(block => block.lift))
       .toEqual(['Deadlift', 'Squat']);
@@ -2593,7 +2597,7 @@ test('Smart practical route is available above beginner and immediately replaces
   fireEvent.click(screen.getByRole('button', { name: 'Practical SBD Route' }));
 
   await waitFor(() => {
-    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    const saved = readProfile(localStorage);
     expect(saved.trainingFocus).toBe('practical');
     expect(saved.inProgress.workouts[0].lifts.map(block => [
       block.lift,
@@ -2627,7 +2631,7 @@ test('Smart squat priority is unavailable above beginner and stale focus is clea
   expect(screen.queryByText('Squat priority currently applies only at beginner level. Higher levels keep the balanced route.')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Squat Priority (beginners only)' })).toBeDisabled();
   await waitFor(() => {
-    expect(JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1')).trainingFocus).toBe('standard');
+    expect(readProfile(localStorage).trainingFocus).toBe('standard');
   });
 });
 
@@ -2750,7 +2754,7 @@ test.each(['training', 'rest', 'meet'])(
     }));
     const view = render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Program' }, { timeout: 3000 }));
-    const before = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    const before = readProfile(localStorage);
     const index = before.inProgress.workouts.findIndex((workout, i) =>
       i > before.inProgress.currentIndex && workout.type === type && workout.smartVisible !== false
     );
@@ -2771,7 +2775,7 @@ test.each(['training', 'rest', 'meet'])(
     });
     fireEvent.click(completion);
     await waitFor(() => {
-      const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+      const saved = readProfile(localStorage);
       expect(saved.inProgress.selectedIndex).toBe(index);
       expect(saved.inProgress.currentIndex).toBe(before.inProgress.currentIndex);
       expect(saved.inProgress.workouts).toEqual(before.inProgress.workouts);
@@ -2779,7 +2783,7 @@ test.each(['training', 'rest', 'meet'])(
     });
     fireEvent.click(screen.getByRole('button', { name: 'Workout', exact: true }));
     await waitFor(() => expect(screen.queryAllByText(translations.en.preview)).toHaveLength(0));
-    expect(JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1')).inProgress.selectedIndex)
+    expect(readProfile(localStorage).inProgress.selectedIndex)
       .toBe(before.inProgress.currentIndex);
     view.unmount();
   }
@@ -2849,7 +2853,7 @@ test('Program keeps its accessible name outside the list without a visible title
   list.children[0].getBoundingClientRect = () => ({ top: 0, bottom: 52, height: 52 });
   list.children[1].getBoundingClientRect = () => ({ top: 61.5, bottom: 161.5, height: 100 });
   list.getBoundingClientRect = () => ({ top: 0, bottom: 600, height: 600 });
-  const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+  const saved = readProfile(localStorage);
   const currentNumber = saved.inProgress.workouts[saved.inProgress.currentIndex].number;
   const currentCard = screen.getByTestId(`program-workout-${currentNumber}`);
   // Expanding inserts rows before the current workout. Simulate its new
@@ -3092,7 +3096,7 @@ test('header logo and centered version open About without changing workout data'
   fireEvent.click(screen.getByRole('button', { name: translations.en.close }));
   expect(dashboard).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: translations.en.aboutAndUpdates })).not.toBeInTheDocument();
-  const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+  const saved = readProfile(localStorage);
   expect(saved.currentCycle).toBe(2);
   expect(saved.prs).toEqual({ Squat: 100, Bench: 75, Deadlift: 125 });
 });
@@ -3116,7 +3120,7 @@ test('loading a Smart calendar of a different length preserves an already starte
   render(<App />);
   await screen.findByTestId('app-header', {}, { timeout: 3000 });
   await waitFor(() => {
-    const saved = JSON.parse(localStorage.getItem('kel-powerlifting-user-data-v1'));
+    const saved = readProfile(localStorage);
     expect(saved.inProgress.workouts).toHaveLength(28);
     expect(saved.inProgress.workouts[0].lifts[0].sets[0]).toMatchObject({ done: true, weight: 32.5 });
   });
