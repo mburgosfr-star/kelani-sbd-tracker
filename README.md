@@ -26,6 +26,8 @@ Kelani builds an adaptive SBD route with heavy, medium and light workouts, follo
 - Review past workouts, preview upcoming sessions and track records, estimated 1RM and body statistics.
 - Customize preparation and accessories, keep JSON backups and optionally add workouts to an Android calendar.
 
+[Watch the 54-second workout walkthrough](https://youtu.be/Mef-cURPMCI) to see how to log sets, rate a session and find your next workout.
+
 See the [user guide](docs/user-guide.md) for training rules and settings.
 
 ## Screenshots
