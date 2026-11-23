@@ -492,10 +492,16 @@ export function applyAccessoryPlanToWorkouts(
     };
   }
 
-  return (workouts || []).map((workout, index) => {
+  // A no-meet cycle can end before the old preview (especially for beginners).
+  const plannedWorkouts = generatedWorkouts.at(-1)?.smartIdealRoute?.endsCycle
+    ? workouts.slice(0, generatedWorkouts.length)
+    : workouts;
+  return (plannedWorkouts || []).map((workout, index) => {
     const generated = generatedWorkouts[index];
     if (completedWorkoutNumbers.has(Number(generated?.number || workout.number))) return workout;
     if (!generated) return workout;
+    if (workoutHasUserProgress(workout) &&
+        (workout.smartIdealRoute?.phase === 'lightWeek') !== (generated.smartIdealRoute?.phase === 'lightWeek')) return workout;
     if (workoutHasUserProgress(workout) && (workout.trainingApproach || 'powerlifting') !== (generated.trainingApproach || 'powerlifting')) return workout;
     if (workoutHasUserProgress(workout) && (workout.type === 'meet' || workout.cycleClosingTaper) &&
         (workout.type !== generated.type || Boolean(workout.cycleClosingTaper) !== Boolean(generated.cycleClosingTaper))) return workout;

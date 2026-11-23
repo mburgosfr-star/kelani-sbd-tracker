@@ -79,7 +79,7 @@ function entriesFor(catalog, keys) {
   }).filter(Boolean);
 }
 
-export function createWorkoutSetup({ preparationMode = 'basicFirst', accessoryMode = 'off', trainingApproach = 'powerlifting', meetDayEnabled = true } = {}) {
+export function createWorkoutSetup({ preparationMode = 'basicFirst', accessoryMode = 'off', trainingApproach = 'powerlifting', meetDayEnabled = false } = {}) {
   const prep = preparationMode === 'off' ? {} : {
     Squat: entriesFor(PREPARATION_CATALOG, ['prepHipOpeners', 'prepBodyweightSquats']),
     Bench: entriesFor(PREPARATION_CATALOG, ['prepBandPullApart', 'prepBandExternalRotation']),
@@ -103,7 +103,7 @@ function normalizeEntry(entry, template) {
 }
 
 export function normalizeWorkoutSetup(value, legacy = {}) {
-  const fallback = createWorkoutSetup(legacy);
+  const fallback = createWorkoutSetup({ ...legacy, meetDayEnabled: legacy.meetDayEnabled !== false });
   if (!value || typeof value !== 'object') return fallback;
   const normalizeSection = (section, catalog, fallbackSection) => ({
     enabled: Boolean(section?.enabled),

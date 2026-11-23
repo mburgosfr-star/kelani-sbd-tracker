@@ -60,8 +60,8 @@ export default function AdaptiveDialogPanel({ children, style, ...props }) {
   return <div {...props} ref={panelRef} data-adaptive-dialog="true" style={{
     ...style,
     '--kelani-content-font-scale': 1,
-    '--kelani-dialog-body-size': adaptiveFontSize(16),
-    fontSize: adaptiveFontSize(16),
+    '--kelani-dialog-body-size': adaptiveFontSize(15),
+    fontSize: 'var(--kelani-dialog-body-size)',
     maxHeight: 'calc(100dvh - 32px)',
     boxSizing: 'border-box',
     overflowY: 'auto',

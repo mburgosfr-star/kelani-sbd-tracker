@@ -288,19 +288,19 @@ test('the normal ideal route contains no single-lift gym days', () => {
 test('all normal intensity roles use the agreed phase loading', () => {
   const expected = [
     [1, 'triple', {
-      heavy: [1, 0.90, 3, 0.80],
-      medium: [2, 0.85, 4, 0.75],
-      light: [3, 0.80, 5, 0.70],
+      heavy: [1, 0.925, 3, 0.875],
+      medium: [2, 0.9, 4, 0.85],
+      light: [3, 0.875, 5, 0.825],
     }],
     [8, 'double', {
-      heavy: [1, 0.95, 3, 0.75],
-      medium: [2, 0.90, 4, 0.70],
-      light: [3, 0.85, 5, 0.65],
+      heavy: [1, 0.95, 3, 0.85],
+      medium: [2, 0.925, 4, 0.825],
+      light: [3, 0.9, 5, 0.8],
     }],
     [15, 'single', {
-      heavy: [1, 1.00, 3, 0.70],
-      medium: [2, 0.95, 4, 0.65],
-      light: [3, 0.90, 5, 0.60],
+      heavy: [1, 1, 3, 0.825],
+      medium: [2, 0.95, 4, 0.8],
+      light: [3, 0.925, 5, 0.775],
     }],
   ];
 

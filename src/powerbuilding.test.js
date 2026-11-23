@@ -15,6 +15,15 @@ test('legacy defaults and persistence retain the chosen approach', () => {
   expect(normalizeWorkoutSetup(JSON.parse(JSON.stringify(base.workoutSetup))).trainingApproach).toBe('powerbuilding');
 });
 
+const expectedTopPercentages = [
+  [92.5, 95, 100],
+  [90, 92.5, 95],
+  [87.5, 90, 92.5],
+  [85, 87.5, 90],
+  [82.5, 85, 87.5],
+  [80, 82.5, 85],
+];
+
 test.each(levels)('%s keeps route days, frequency, phase percentages and taper in every focus', athleteLevel => {
   for (const trainingFocus of focuses) {
     for (let phase = 0; phase < 3; phase++) {
@@ -29,8 +38,8 @@ test.each(levels)('%s keeps route days, frequency, phase percentages and taper i
           const { topSet, backoff } = block.prescription;
           seen[block.lift].push(topSet.reps);
           expect(backoff.reps).toBe(topSet.reps * 2);
-          expect(topSet.pct).toBeCloseTo((95 - topSet.reps * 5 + phase * 5) / 100);
-          expect(backoff.pct).toBeCloseTo((90 - topSet.reps * 5 - phase * 5) / 100);
+          expect(topSet.pct).toBeCloseTo(expectedTopPercentages[topSet.reps - 1][phase] / 100);
+          expect(backoff.pct).toBeCloseTo((95 - topSet.reps * 5 - phase * 2.5) / 100);
         }
       }
       for (const reps of Object.values(seen)) expect(reps.sort((a,b) => a-b)).toEqual(Array.from({length: reps.length}, (_,i)=>i+1));

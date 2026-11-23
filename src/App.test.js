@@ -2478,7 +2478,7 @@ test('a legacy Smart save ignores and removes its frozen cycle e1RM load basis',
       },
     });
     expect(saved.inProgress.workouts[1].lifts.find(block => block.lift === 'Deadlift').sets[0])
-      .toMatchObject({ weight: 112.5, reps: 1, pct: 0.9 });
+      .toMatchObject({ weight: 115.5, reps: 1, pct: 0.925 });
   });
 });
 

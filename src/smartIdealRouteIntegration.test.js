@@ -491,27 +491,27 @@ test('the live ideal route starts with the exact intermediate W1 prescription', 
   expect(squat.sets[0]).toMatchObject({
     labelKey: 'topSingle',
     reps: 1,
-    precisePct: 0.9,
-    weight: 135,
+    precisePct: 0.925,
+    weight: 139,
   });
   expect(squat.sets.slice(1).every(set => (
     set.labelKey === 'backoff' &&
     set.reps === 3 &&
-    set.precisePct === 0.80
+    set.precisePct === 0.875
   ))).toBe(true);
 
   const bench = workout.lifts[1];
   expect(bench.sets[0]).toMatchObject({
     labelKey: 'topTriple',
     reps: 3,
-    precisePct: 0.8,
-    weight: 80,
+    precisePct: 0.875,
+    weight: 87.5,
   });
   expect(bench.sets.slice(1).every(set => (
     set.labelKey === 'backoff' &&
     set.reps === 5 &&
-    set.precisePct === 0.70 &&
-    set.weight === 70
+    set.precisePct === 0.825 &&
+    set.weight === 82.5
   ))).toBe(true);
   expectFullLiftGrids(workout);
 });
@@ -1256,7 +1256,7 @@ test('the pristine route reaches the double phase and keeps every generated grid
     precisePct: 0.95,
   });
   expect(heavy.sets.slice(1).every(set => (
-    set.reps === 3 && set.precisePct === 0.75
+    set.reps === 3 && set.precisePct === 0.85
   ))).toBe(true);
   expectFullLiftGrids(w8);
 });
@@ -1280,7 +1280,7 @@ test('normal heavy phase changes guarantee a 2.5 kg rise when the cycle cap allo
     return workout.lifts[0].sets[0].weight;
   });
 
-  expect(topWeights).toEqual([36, 38.5, 40]);
+  expect(topWeights).toEqual([37, 39.5, 40]);
 });
 
 test('C4W18 top single and backoffs use the confirmed real Bench 1RM', () => {
@@ -1309,7 +1309,7 @@ test('C4W18 top single and backoffs use the confirmed real Bench 1RM', () => {
   });
   expect(backoffs.length).toBeGreaterThan(0);
   expect(backoffs.every(set => (
-    set.weight === 70 && set.pct === 0.70 && set.precisePct === 0.70
+    set.weight === 82.5 && set.pct === 0.825 && set.precisePct === 0.825
   ))).toBe(true);
 });
 

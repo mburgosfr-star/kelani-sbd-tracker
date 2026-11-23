@@ -8775,14 +8775,16 @@ function TrainingApproachChoice({ value, onChange, t }) {
   </label>;
 }
 
-function MeetDayOption({ enabled, onChange, t, onboarding = false }) {
+function MeetDayOption({ enabled, onChange, t }) {
   return <div style={{ margin: '10px 0' }}>
     <label style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, fontWeight: 700 }}>
-      <input type="checkbox" checked={enabled} onChange={event => onChange(event.target.checked)}
+      <input type="checkbox" checked={enabled} aria-describedby="meet-day-help" onChange={event => onChange(event.target.checked)}
         style={{ width: 20, height: 20, accentColor: THEME.primary, flexShrink: 0 }} />
       {t.includeMeetDay}
     </label>
-    <p style={{ fontSize: 13, lineHeight: 1.35, margin: '0 0 8px' }}>{onboarding ? t.onboardingMeetDayHelp : t.optionalMeetDayHelp}</p>
+    <p id="meet-day-help" style={{ fontSize: 13, lineHeight: 1.35, margin: '0 0 8px' }}>
+      {t.meetDayOffHelp}<br />{t.meetDayOnHelp}
+    </p>
   </div>;
 }
 
@@ -10459,7 +10461,7 @@ function Onboarding({ onStart, t }) {
   const [step, setStep] = useState(1);
   const [onboardingError, setOnboardingError] = useState('');
   const [selectedTrainingFocus, setSelectedTrainingFocus] = useState(SMART_TRAINING_FOCUSES.STANDARD);
-  const [onboardingMeetDayEnabled, setOnboardingMeetDayEnabled] = useState(true);
+  const [onboardingMeetDayEnabled, setOnboardingMeetDayEnabled] = useState(false);
   const [onboardingTrainingApproach, setOnboardingTrainingApproach] = useState('powerlifting');
   const [onboardingWeightUnit, setOnboardingWeightUnit] = useState(() => normalizeWeightUnit(localStorage.getItem('weightUnit')));
   const [bodyWeight, setBodyWeight] = useState('');
@@ -10846,7 +10848,7 @@ function Onboarding({ onStart, t }) {
               </button>;
             })}
           </div>
-          <MeetDayOption onboarding enabled={onboardingMeetDayEnabled} onChange={setOnboardingMeetDayEnabled} t={t} />
+          <MeetDayOption enabled={onboardingMeetDayEnabled} onChange={setOnboardingMeetDayEnabled} t={t} />
           <div>
           <dl style={{ display: 'grid', gap: 8, margin: '6px 0 0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
@@ -12645,7 +12647,7 @@ function App() {
     setAccessoryMode(defaultAccessoryMode);
     setPreparationMode(defaultPreparationMode);
     const defaultWorkoutSetup = createWorkoutSetup({
-      meetDayEnabled: profile.meetDayEnabled !== false,
+      meetDayEnabled: profile.meetDayEnabled === true,
       trainingApproach: profile.trainingApproach,
       preparationMode: defaultPreparationMode,
       accessoryMode: defaultAccessoryMode,

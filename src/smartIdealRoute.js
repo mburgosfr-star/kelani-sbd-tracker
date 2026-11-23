@@ -164,16 +164,16 @@ export const SMART_IDEAL_NORMAL_PHASES = Object.freeze([
     lastWorkout: 7,
     prescriptions: Object.freeze({
       [H]: Object.freeze({
-        topSet: Object.freeze({ reps: 1, pct: 0.90 }),
-        volume: Object.freeze({ reps: 3, pct: 0.80 }),
+        topSet: Object.freeze({ reps: 1, pct: 0.925 }),
+        volume: Object.freeze({ reps: 3, pct: 0.875 }),
       }),
       [M]: Object.freeze({
-        topSet: Object.freeze({ reps: 2, pct: 0.85 }),
-        volume: Object.freeze({ reps: 4, pct: 0.75 }),
+        topSet: Object.freeze({ reps: 2, pct: 0.9 }),
+        volume: Object.freeze({ reps: 4, pct: 0.85 }),
       }),
       [L]: Object.freeze({
-        topSet: Object.freeze({ reps: 3, pct: 0.80 }),
-        volume: Object.freeze({ reps: 5, pct: 0.70 }),
+        topSet: Object.freeze({ reps: 3, pct: 0.875 }),
+        volume: Object.freeze({ reps: 5, pct: 0.825 }),
       }),
     }),
   }),
@@ -184,15 +184,15 @@ export const SMART_IDEAL_NORMAL_PHASES = Object.freeze([
     prescriptions: Object.freeze({
       [H]: Object.freeze({
         topSet: Object.freeze({ reps: 1, pct: 0.95 }),
-        volume: Object.freeze({ reps: 3, pct: 0.75 }),
+        volume: Object.freeze({ reps: 3, pct: 0.85 }),
       }),
       [M]: Object.freeze({
-        topSet: Object.freeze({ reps: 2, pct: 0.90 }),
-        volume: Object.freeze({ reps: 4, pct: 0.70 }),
+        topSet: Object.freeze({ reps: 2, pct: 0.925 }),
+        volume: Object.freeze({ reps: 4, pct: 0.825 }),
       }),
       [L]: Object.freeze({
-        topSet: Object.freeze({ reps: 3, pct: 0.85 }),
-        volume: Object.freeze({ reps: 5, pct: 0.65 }),
+        topSet: Object.freeze({ reps: 3, pct: 0.9 }),
+        volume: Object.freeze({ reps: 5, pct: 0.8 }),
       }),
     }),
   }),
@@ -202,16 +202,16 @@ export const SMART_IDEAL_NORMAL_PHASES = Object.freeze([
     lastWorkout: 21,
     prescriptions: Object.freeze({
       [H]: Object.freeze({
-        topSet: Object.freeze({ reps: 1, pct: 1.00 }),
-        volume: Object.freeze({ reps: 3, pct: 0.70 }),
+        topSet: Object.freeze({ reps: 1, pct: 1 }),
+        volume: Object.freeze({ reps: 3, pct: 0.825 }),
       }),
       [M]: Object.freeze({
         topSet: Object.freeze({ reps: 2, pct: 0.95 }),
-        volume: Object.freeze({ reps: 4, pct: 0.65 }),
+        volume: Object.freeze({ reps: 4, pct: 0.8 }),
       }),
       [L]: Object.freeze({
-        topSet: Object.freeze({ reps: 3, pct: 0.90 }),
-        volume: Object.freeze({ reps: 5, pct: 0.60 }),
+        topSet: Object.freeze({ reps: 3, pct: 0.925 }),
+        volume: Object.freeze({ reps: 5, pct: 0.775 }),
       }),
     }),
   }),
@@ -376,13 +376,6 @@ function buildTaperPrescription(intensityRole, includeTopSet) {
   });
 }
 
-// The optional cycle-ending session uses the established light taper policy.
-export function buildCycleClosingTaperRoute(workoutNumber = SMART_IDEAL_MEET_WORKOUT_NUMBER) {
-  return { workoutNumber, type: 'training', stage: 'taper', phase: null, accessoriesAllowed: false,
-    lifts: ['Squat', 'Bench', 'Deadlift'].map(lift => ({ lift, intensityRole: 'light',
-      prescription: buildTaperPrescription('light', false) })) };
-}
-
 function hasEarlierMatchingExposure({
   routeTable,
   firstWorkout,
@@ -440,6 +433,16 @@ function buildTrainingWorkout({
   };
 }
 
+// Rows are ordered by session type; columns are the three regular phases.
+const POWERBUILDING_PERCENTAGES = [
+  { top: [92.5, 95, 100], volume: [90, 87.5, 85] },
+  { top: [90, 92.5, 95], volume: [85, 82.5, 80] },
+  { top: [87.5, 90, 92.5], volume: [80, 77.5, 75] },
+  { top: [85, 87.5, 90], volume: [75, 72.5, 70] },
+  { top: [82.5, 85, 87.5], volume: [70, 67.5, 65] },
+  { top: [80, 82.5, 85], volume: [65, 62.5, 60] },
+];
+
 // Session numbers follow intensity order, then calendar order within each role.
 // This retains each route's placement and exact per-lift frequency.
 function applyPowerbuildingPrescription(workout, routeTable, rowNumber, phase) {
@@ -450,8 +453,11 @@ function applyPowerbuildingPrescription(workout, routeTable, rowNumber, phase) {
       lifts.filter(entry => entry.lift === item.lift).map(entry => ({ ...entry, row: Number(row) })))
       .sort((a, b) => order[a.intensityRole] - order[b.intensityRole] || a.row - b.row);
     const reps = exposures.findIndex(entry => entry.row === rowNumber) + 1;
-    const definition = { topSet: { reps, pct: (95 - 5 * reps + 5 * phaseIndex) / 100 },
-      volume: { reps: reps * 2, pct: (90 - 5 * reps - 5 * phaseIndex) / 100 } };
+    const percentages = POWERBUILDING_PERCENTAGES[reps - 1];
+    const definition = {
+      topSet: { reps, pct: percentages.top[phaseIndex] / 100 },
+      volume: { reps: reps * 2, pct: percentages.volume[phaseIndex] / 100 },
+    };
     return { ...item, prescription: buildGridPrescription({ definition, includeTopSet: true }) };
   }) };
 }
@@ -472,6 +478,7 @@ export function getSmartIdealRouteWorkout({
   athleteLevel = 'intermediate',
   trainingFocus = SMART_TRAINING_FOCUSES.STANDARD,
   trainingApproach = 'powerlifting',
+  meetDayEnabled = true,
 } = {}) {
   const number = Number(workoutNumber);
   if (!Number.isInteger(number) || number < 1) return null;
@@ -482,6 +489,26 @@ export function getSmartIdealRouteWorkout({
     normalizedTrainingFocus === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT;
   const practicalRoute =
     normalizedTrainingFocus === SMART_TRAINING_FOCUSES.PRACTICAL;
+
+  if (!meetDayEnabled && number > 21) {
+    const lastDay = 21 + getSmartIdealNormalPeriodDays({ athleteLevel: level });
+    if (number > lastDay) return null;
+    const options = { athleteLevel, trainingFocus, trainingApproach };
+    const first = getSmartIdealRouteWorkout({ ...options, workoutNumber: number - 21 });
+    const third = getSmartIdealRouteWorkout({ ...options, workoutNumber: number - 7 });
+    return {
+      ...first,
+      workoutNumber: number,
+      phase: 'lightWeek',
+      endsCycle: number === lastDay,
+      lifts: first.lifts.map((block, index) => {
+        const volume = third.lifts[index].prescription;
+        return { ...block, prescription: block.prescription.topSet
+          ? { ...block.prescription, backoff: volume.backoff }
+          : volume };
+      }),
+    };
+  }
 
   if (number <= 21) {
     const phase = getSmartIdealNormalPhase(number);
@@ -675,7 +702,7 @@ function findRedundantRestIndex(plan, hasTrailingCompletedRest) {
   const candidates = [];
 
   plan.forEach((workout, index) => {
-    if (workout.type !== 'rest') return;
+    if (workout.type !== 'rest' || index === plan.length - 1) return;
 
     const previousIsRest = index === 0
       ? hasTrailingCompletedRest
@@ -823,6 +850,7 @@ export function buildAcceleratedSmartIdealRoutePlan({
   athleteLevel = 'intermediate',
   trainingFocus = SMART_TRAINING_FOCUSES.STANDARD,
   trainingApproach = 'powerlifting',
+  meetDayEnabled = true,
   startWorkoutNumber = 1,
   accelerationCredits = 0,
   hasTrailingCompletedRest = false,
@@ -835,11 +863,13 @@ export function buildAcceleratedSmartIdealRoutePlan({
   );
   let workouts = [];
 
-  if (start > SMART_IDEAL_MEET_WORKOUT_NUMBER) {
+  const finalRow = meetDayEnabled ? SMART_IDEAL_MEET_WORKOUT_NUMBER : 21 + getSmartIdealNormalPeriodDays({ athleteLevel });
+  if (start > finalRow) {
     const postMeetWorkout = getSmartIdealRouteWorkout({
       athleteLevel,
       trainingFocus,
       trainingApproach,
+      meetDayEnabled,
       workoutNumber: start,
     });
     if (postMeetWorkout) workouts.push(postMeetWorkout);
@@ -847,13 +877,14 @@ export function buildAcceleratedSmartIdealRoutePlan({
 
   for (
     let workoutNumber = start;
-    workoutNumber <= SMART_IDEAL_MEET_WORKOUT_NUMBER;
+    workoutNumber <= finalRow;
     workoutNumber += 1
   ) {
     const workout = getSmartIdealRouteWorkout({
       athleteLevel,
       trainingFocus,
       trainingApproach,
+      meetDayEnabled,
       workoutNumber,
     });
     if (workout) workouts.push(workout);
@@ -938,6 +969,7 @@ export function buildAdjustedSmartIdealRoutePlan({
   athleteLevel = 'intermediate',
   trainingFocus = SMART_TRAINING_FOCUSES.STANDARD,
   trainingApproach = 'powerlifting',
+  meetDayEnabled = true,
   startWorkoutNumber = 1,
   accelerationCredits = 0,
   delayCredits = 0,
@@ -948,6 +980,7 @@ export function buildAdjustedSmartIdealRoutePlan({
     athleteLevel,
     trainingFocus,
     trainingApproach,
+    meetDayEnabled,
     startWorkoutNumber,
     accelerationCredits,
     hasTrailingCompletedRest,

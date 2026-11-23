@@ -58,9 +58,9 @@ import { generateProgramForProfile } from './classicProgramTemplates';
 import { buildMeetAttemptsFromE1RM } from './meetAttemptPlanning';
 import { resolveEstimatedOneRMs } from './oneRMState';
 import {
-  buildCycleClosingTaperRoute,
   SMART_IDEAL_MEET_WORKOUT_NUMBER,
   SMART_IDEAL_ROUTE_VERSION,
+  SMART_IDEAL_NORMAL_PHASES,
   normalizeSmartTrainingFocus,
   buildAdjustedSmartIdealRoutePlan,
   getSmartIdealRouteEntryWorkoutNumber,
@@ -653,6 +653,7 @@ export function getNextSmartIdealRouteWorkoutNumber({
   currentCycle = 1,
   entryWorkoutNumber = 1,
   athleteLevel = 'intermediate',
+  meetDayEnabled = true,
 } = {}) {
   const completed = getUniqueCompletedSmartWorkoutSnapshots(
     history,
@@ -704,6 +705,7 @@ export function getNextSmartIdealRouteWorkoutNumber({
     const pendingRouteWorkout = getSmartIdealRouteWorkout({
       workoutNumber: nextRouteWorkoutNumber,
       athleteLevel,
+      meetDayEnabled,
     });
 
     // An adaptive recovery day delivers the same recovery as a planned
@@ -894,6 +896,8 @@ function hasCompletedSmartMeetInCycle(history = [], currentCycle = 1) {
 
 
 export function isSmartCycleCompleteAfterHistory(history = [], currentCycle = 1) {
+  if (getUniqueCompletedSmartWorkoutSnapshots(history, currentCycle).some(({ snapshot }) =>
+    snapshot.smartIdealRoute?.endsCycle && !snapshot.smartIdealRoute.transitionPending)) return true;
   const idealPostMeet = getSmartIdealPostMeetCompletion(history, currentCycle);
   if (idealPostMeet) return idealPostMeet.complete;
 
@@ -3868,21 +3872,16 @@ function getSmartIdealHeavyTopWeight({
 
   if (routeWorkout.stage !== 'normal') return target;
 
-  const phasePctByKey = {
-    triple: 0.90,
-    double: 0.95,
-    single: 1.00,
-  };
-  const phaseOrder = ['triple', 'double', 'single'];
-  const phaseIndex = phaseOrder.indexOf(routeWorkout.phase);
+  const phases = SMART_IDEAL_NORMAL_PHASES;
+  const phaseIndex = phases.findIndex(phase => phase.key === routeWorkout.phase);
   if (phaseIndex <= 0) return target;
 
   let minimum = roundTrainingWeight(
-    numericRealOneRM * phasePctByKey[phaseOrder[0]], 'nearest', incrementKg
+    numericRealOneRM * phases[0].prescriptions.heavy.topSet.pct, 'nearest', incrementKg
   );
   for (let index = 1; index <= phaseIndex; index += 1) {
     const phaseTarget = roundTrainingWeight(
-      numericRealOneRM * phasePctByKey[phaseOrder[index]], 'nearest', incrementKg
+      numericRealOneRM * phases[index].prescriptions.heavy.topSet.pct, 'nearest', incrementKg
     );
     minimum = Math.max(phaseTarget, minimum + 2.5);
   }
@@ -3906,6 +3905,7 @@ function buildSmartIdealRouteMetadata(routeWorkout, athleteLevel) {
     athleteLevel: normalizeAthleteLevel(athleteLevel),
     stage: routeWorkout.stage,
     phase: routeWorkout.phase,
+    ...(routeWorkout.endsCycle && { endsCycle: true }),
     postMeetRecoveryTarget:
       Number(routeWorkout.postMeetRecoveryTarget) || null,
     nextCycleWorkout: Number(routeWorkout.nextCycleWorkout) || null,
@@ -4902,6 +4902,7 @@ function generateSmartWorkouts({
     history,
     currentCycle,
     entryWorkoutNumber: idealRouteEntryWorkoutNumber,
+    meetDayEnabled: workoutSetup?.meetDayEnabled !== false,
     athleteLevel,
   });
   const idealRouteAdjustments = getSmartIdealRouteAdjustmentState({
@@ -4910,6 +4911,7 @@ function generateSmartWorkouts({
   });
   const adjustedIdealRoutePlan = idealRouteEnabled
     ? buildAdjustedSmartIdealRoutePlan({
+      meetDayEnabled: workoutSetup?.meetDayEnabled !== false || hasCompletedSmartMeetInCycle(history, currentCycle),
       trainingApproach: workoutSetup?.trainingApproach,
       athleteLevel,
       trainingFocus,
@@ -4973,6 +4975,9 @@ function generateSmartWorkouts({
     })()
     : [];
   const idealRoutePreviewLength = idealRoutePreviewPlan.length;
+  if (idealRoutePreviewPlan.at(-1)?.endsCycle) {
+    generatedWorkouts = generatedWorkouts.slice(0, visibleThroughIndex + idealRoutePreviewLength);
+  }
   const requiredPreviewLength = visibleThroughIndex + idealRoutePreviewLength;
   if (idealRouteEnabled && generatedWorkouts.length < requiredPreviewLength) {
     generatedWorkouts = buildSmartWorkoutPool(
@@ -5013,7 +5018,7 @@ function generateSmartWorkouts({
       ? 'rest'
       : null;
 
-    if (idealRouteWorkout.workoutNumber <= SMART_IDEAL_MEET_WORKOUT_NUMBER) {
+    if (workoutSetup?.meetDayEnabled !== false && idealRouteWorkout.workoutNumber <= SMART_IDEAL_MEET_WORKOUT_NUMBER) {
       const meetPlanIndex = adjustedIdealRoutePlan?.workouts
         ?.findIndex(workout => workout.type === 'meet');
       const workoutsBeforeMeet = meetPlanIndex >= 0
@@ -5555,7 +5560,7 @@ function generateSmartWorkouts({
             needsPreMeetHeavyDeadliftRecovery: Boolean(
               smartDecision.readiness.needsPreMeetHeavyDeadliftRecovery
             ),
-            meetProjection: smartDecision.readiness.meetProjection || null,
+            meetProjection: workoutSetup?.meetDayEnabled === false ? null : smartDecision.readiness.meetProjection || null,
             meetdayBlockers: smartDecision.readiness.meetdayBlockers || [],
             lastWorkoutNumber: smartDecision.readiness.lastWorkoutNumber || 0,
             lastMeetWorkoutNumber: smartDecision.readiness.lastMeetWorkoutNumber || 0,
@@ -5663,7 +5668,7 @@ export function generateWorkoutsForTrainingModelUnconstrained(model, args = {}) 
     // The ideal route is the Smart default and sole active product path.
     // `false` is retained only as an explicit legacy/testing escape hatch
     // while the historical adaptive engine is retired safely.
-    idealRouteEnabled: args.idealRouteEnabled !== false,
+    idealRouteEnabled: args.idealRouteEnabled !== false || args.workoutSetup?.meetDayEnabled === false,
     workoutSetup: args.workoutSetup || null,
     weightRounding: args.weightRounding || args.data?.weightRounding || null,
     trainingFocus: normalizeSmartTrainingFocus(args.trainingFocus),
@@ -6284,34 +6289,15 @@ function roundGeneratedTrainingLoads(workout, policy) {
     ...(workout.lifts?.length ? { lifts } : {}), sets: lifts[0].sets, warmups: lifts[0].warmups };
 }
 
-export function applyOptionalMeetDay(workout, options = {}) {
-  if (!workout || workout.completed || workoutHasUserProgress(workout) || workout.type !== 'meet' || options.workoutSetup?.meetDayEnabled !== false) return workout;
-  const loadMaxes = resolveEstimatedOneRMs({
-    prs: { Squat: options.squat, Bench: options.bench, Deadlift: options.deadlift, ...options.e1RMs },
-    oneRMs: options.oneRMs,
-    history: options.planningStrengthHistory || options.history || [],
-  });
-  const taper = buildSmartIdealTrainingWorkout({ ...options, sourceWorkout: workout,
-    squat: loadMaxes.Squat, bench: loadMaxes.Bench, deadlift: loadMaxes.Deadlift,
-    routeWorkout: buildCycleClosingTaperRoute(workout.smartIdealRoute?.workoutNumber),
-  });
-  return { ...taper, number: workout.number, cycleClosingTaper: true,
-    smartDayType: SMART_DAY_TYPES.TRAINING,
-    smartIdealRoute: { ...workout.smartIdealRoute, ...taper.smartIdealRoute },
-    smartDecisionSummary: workout.smartDecisionSummary ? { ...workout.smartDecisionSummary,
-      dayType: SMART_DAY_TYPES.TRAINING,
-      readiness: { ...workout.smartDecisionSummary.readiness, meetProjection: null } } : null };
-}
-
 export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
   const policy = normalizeWeightRounding(options.weightRounding || options.data?.weightRounding);
   const generated = generateWorkoutsForTrainingModelWithProjection(trainingModel, options).map((workout, index) => {
     if (index === Number(options.currentIndex || 0) && workoutHasUserProgress(options.inProgressWorkout) &&
         ((options.inProgressWorkout.trainingApproach || 'powerlifting') !== (options.workoutSetup?.trainingApproach || 'powerlifting') ||
+         (options.inProgressWorkout.smartIdealRoute?.phase === 'lightWeek') !== (workout.smartIdealRoute?.phase === 'lightWeek') ||
          options.inProgressWorkout.type === 'meet' || options.inProgressWorkout.cycleClosingTaper)) {
       return options.inProgressWorkout;
     }
-    if (isSmartTrainingModel(trainingModel)) workout = applyOptionalMeetDay(workout, options);
     if (index === Number(options.currentIndex || 0) && workoutHasUserProgress(options.inProgressWorkout) &&
         !roundingPoliciesEqual(policy, options.inProgressWorkout.weightRounding)) {
       return { ...workout, ...options.inProgressWorkout, smartDecisionSummary: workout.smartDecisionSummary };

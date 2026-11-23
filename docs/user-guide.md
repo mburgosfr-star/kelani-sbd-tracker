@@ -31,7 +31,7 @@ Your level uses lifetime eStrength Max. Protection against a precision correctio
 
 ### Training Calendar
 
-New users start with Smart Training. The default calendar depends on the athlete level:
+New users start with Smart Training. With meet day enabled, the default calendar depends on the athlete level:
 
 | Route | Beginner | Intermediate, Advanced and Elite |
 |---|---|---|
@@ -39,6 +39,8 @@ New users start with Smart Training. The default calendar depends on the athlete
 | Taper | W19–W24 | W22–W26 |
 | SBD Meet Day | W25 | W27 |
 | Planned post-meet recovery | W26 | W28 |
+
+With meet day off and standard feedback, the fourth training period covers W19–W24 for beginners and W22–W28 for the other levels. The final scheduled day completes the cycle.
 
 All beginner routes alternate a training day and a recovery day, including during taper. Each normal six-day block contains three sessions; the prescribed exercises, weights and volume per session remain the same. Feedback can adjust the calendar as described below.
 
@@ -60,24 +62,29 @@ Classic retains its existing real-1RM programming and 90%, 97.5%, 102.5% meet de
 
 Choose a **Training approach** during onboarding or in **Settings → Training route**. Powerlifting is the default, including for existing installations. Both approaches work with Balanced SBD, Practical SBD and the beginner-only Squat Priority route. The route determines session placement; the approach determines regular training prescriptions. Powerbuilding preserves each lift's frequency and assigns session types from the heaviest exposure to the lightest, using calendar order within the same intensity role.
 
-| Session type | Top set | Top percentages, phases 1 / 2 / 3 | Backoffs | Backoff percentages, phases 1 / 2 / 3 |
-| --- | --- | --- | --- | --- |
-| 1 | 1×1 | 90 / 95 / 100% | 3–7×2 | 85 / 80 / 75% |
-| 2 | 1×2 | 85 / 90 / 95% | 3–7×4 | 80 / 75 / 70% |
-| 3 | 1×3 | 80 / 85 / 90% | 3–7×6 | 75 / 70 / 65% |
-| 4 | 1×4 | 75 / 80 / 85% | 3–7×8 | 70 / 65 / 60% |
-| 5 | 1×5 | 70 / 75 / 80% | 3–7×10 | 65 / 60 / 55% |
-| 6 | 1×6 | 65 / 70 / 75% | 3–7×12 | 60 / 55 / 50% |
+Regular training targets are percentages of e1RM, in phase 1 / 2 / 3 order.
 
-A lift appearing F times receives session types 1 through F per period (six days for beginners, seven for other levels). Each regular Powerbuilding exposure has one top set. Warm-ups plus top set plus 3–7 backoff sets fill the complete grid. Percentages use the established e1RM; rounding and equipment limits still apply. Limits can increase repetitions above these base prescriptions. Higher-repetition top sets receive the same top-set rest policy and successful-history handling as other top sets.
+| Reps per set | Powerlifting top set | Powerlifting volume | Powerbuilding top set | Powerbuilding volume |
+| ---: | --- | --- | --- | --- |
+| 1 | 92.5 / 95 / 100% | — | 92.5 / 95 / 100% | — |
+| 2 | 90 / 92.5 / 95% | — | 90 / 92.5 / 95% | 90 / 87.5 / 85% |
+| 3 | 87.5 / 90 / 92.5% | 87.5 / 85 / 82.5% | 87.5 / 90 / 92.5% | — |
+| 4 | — | 85 / 82.5 / 80% | 85 / 87.5 / 90% | 85 / 82.5 / 80% |
+| 5 | — | 82.5 / 80 / 77.5% | 82.5 / 85 / 87.5% | — |
+| 6 | — | — | 80 / 82.5 / 85% | 80 / 77.5 / 75% |
+| 8 | — | — | — | 75 / 72.5 / 70% |
+| 10 | — | — | — | 70 / 67.5 / 65% |
+| 12 | — | — | — | 65 / 62.5 / 60% |
 
-The existing taper, optional meet-day replacement and meet-attempt rules remain shared. Powerbuilding changes training volume substantially, especially at higher frequencies; the name does not promise superior strength or muscle growth. Switching approaches preserves started sessions and completed history; untouched sessions and future cycles use the new choice. The preference is stored locally and included in backups.
+In Powerbuilding, the session type gives the top-set rep count. Each backoff set uses twice as many reps. A lift appearing F times receives session types 1 through F per period (six days for beginners, seven for other levels). Each regular Powerbuilding exposure has one top set. Warm-ups plus top set plus 3–7 backoff sets fill the complete grid. Percentages use the established e1RM; rounding and equipment limits still apply. Limits can increase repetitions above these base prescriptions. Higher-repetition top sets receive the same top-set rest policy and successful-history handling as other top sets.
+
+The existing taper, lighter fourth period and meet-attempt rules remain shared. Powerbuilding changes training volume substantially, especially at higher frequencies; the name does not promise superior strength or muscle growth. Switching approaches preserves started sessions and completed history; untouched sessions and future cycles use the new choice. The preference is stored locally and included in backups.
 
 ### Optional Meet Day
 
-**Include meet day** is enabled by default for new and existing Smart Training profiles. Choose it during onboarding or change it in **Settings → Workout setup → Adjust**. When disabled, the planned meet becomes an **SBD Taper Workout**: work sets of 5 repetitions at 60% of e1RM, using the existing light taper rules and complete set grid. There are no top sets or competition attempts. Normal training rounding and equipment limits apply. The following recovery day and automatic transition to the next cycle remain.
+**Include meet day and taper week** starts unchecked during onboarding. Select it to taper before a meet. Existing profiles keep their saved choice, and older profiles without this setting keep their meet. Choose it during onboarding or change it in **Settings → Workout setup → Adjust**. With meet day off, a fourth training period follows the usual lift order and rest days for your route. It uses phase 1 top-set percentages and phase 3 volume percentages for your approach. Beginners keep their six-day rhythm. After the final scheduled day, the usual cycle review and transition to the next cycle follow.
 
-The choice changes only unstarted closing sessions and future cycles. Started and completed meets or closing taper workouts are preserved. Program and Calendar use the same chosen closing session; Dashboard hides Route to Meet when no meet is planned. The preference is saved locally and included in backups.
+Started sessions and completed history are preserved. Program and Calendar show the lighter period and Dashboard hides Route to Meet. The preference is saved locally and included in backups.
 
 ### Equipment Weight Limits
 
@@ -113,9 +120,9 @@ Powerlifting volume work uses these target percentages:
 
 | Phase | Heavy: 3 reps | Medium: 4 reps | Light: 5 reps |
 |---|---|---|---|
-| Triple | 80% | 75% | 70% |
-| Double | 75% | 70% | 65% |
-| Single | 70% | 65% | 60% |
+| Triple | 87.5% | 85% | 82.5% |
+| Double | 85% | 82.5% | 80% |
+| Single | 82.5% | 80% | 77.5% |
 | Taper | 70% | 65% | 60% |
 
 During the Smart taper, the middle Bench session is omitted while the other lifts in that session remain. The final Bench session has no top single: it contains 3–7 work sets of 3 repetitions at 70% of e1RM, with the count determined by the full five-column grid. The earlier Bench taper session and the percentages for all other work remain unchanged. This applies to every Smart route and level; started and completed workouts retain their saved prescriptions.

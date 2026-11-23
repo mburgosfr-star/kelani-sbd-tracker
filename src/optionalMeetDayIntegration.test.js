@@ -12,14 +12,14 @@ test('legacy default remains enabled; disabling in Settings survives backup and 
   const view = render(<App />);
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 5000 }));
   fireEvent.click(screen.getByRole('button', { name: 'Adjust' }));
-  const checkbox = screen.getByRole('checkbox', { name: 'Include meet day' });
+  const checkbox = screen.getByRole('checkbox', { name: 'Include meet day and taper week' });
   expect(checkbox).toBeChecked();
   fireEvent.click(checkbox);
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(readProfile(localStorage).workoutSetup.meetDayEnabled).toBe(false));
   const saved = readProfile(localStorage);
   expect(saved.inProgress.workouts.some(workout => workout.type === 'meet')).toBe(false);
-  expect(saved.inProgress.workouts.some(workout => workout.cycleClosingTaper)).toBe(true);
+  expect(saved.inProgress.workouts.some(workout => workout.smartIdealRoute?.endsCycle)).toBe(true);
   const backup = buildBackupPayload(saved);
   expect(validateImportedBackup(backup)).toBe(true);
   const invalid = structuredClone(backup); invalid.data.workoutSetup.meetDayEnabled = 'false';
@@ -29,10 +29,10 @@ test('legacy default remains enabled; disabling in Settings survives backup and 
   expect(screen.queryByTestId('dashboard-expected-meet-date')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
   fireEvent.click(screen.getByRole('button', { name: 'Adjust' }));
-  expect(screen.getByRole('checkbox', { name: 'Include meet day' })).not.toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'Include meet day and taper week' })).not.toBeChecked();
 }, 20000);
 
-test('onboarding can start a profile without a meet day', async () => {
+test.each([false, true])('onboarding saves the meet and taper choice (%s)', async enabled => {
   localStorage.clear(); localStorage.setItem('language', 'en');
   render(<App />);
   await screen.findByText('Start with Smart Training', {}, { timeout: 5000 });
@@ -42,12 +42,13 @@ test('onboarding can start a profile without a meet day', async () => {
   }
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
   fireEvent.change(screen.getByRole('combobox', { name: 'Training approach' }), { target: { value: 'powerbuilding' } });
-  expect(screen.getByRole('checkbox', { name: 'Include meet day' })).toBeChecked();
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Include meet day' }));
+  const checkbox = screen.getByRole('checkbox', { name: 'Include meet day and taper week' });
+  expect(checkbox).not.toBeChecked();
+  if (enabled) fireEvent.click(checkbox);
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
-  await waitFor(() => expect(readProfile(localStorage)?.workoutSetup.meetDayEnabled).toBe(false));
-  expect(readProfile(localStorage).inProgress.workouts.some(workout => workout.type === 'meet')).toBe(false);
+  await waitFor(() => expect(readProfile(localStorage)?.workoutSetup.meetDayEnabled).toBe(enabled));
+  expect(readProfile(localStorage).inProgress.workouts.some(workout => workout.type === 'meet')).toBe(enabled);
   expect(readProfile(localStorage).workoutSetup.trainingApproach).toBe('powerbuilding');
 }, 20000);
 

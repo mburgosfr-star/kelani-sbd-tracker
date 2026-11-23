@@ -44,7 +44,7 @@ test.each(['default','practical'])('%s route uses 3–7 sets and 3–4–5 reps 
     const phaseOffset=['triple','double','single'].indexOf(phase);
     expect(i).toBeGreaterThanOrEqual(0);
     expect(volume.every(s=>s.reps===3+i)).toBe(true);
-    const expectedPct=(80-5*i-5*phaseOffset)/100;
+    const expectedPct=(87.5 - 2.5 * i - 2.5 * phaseOffset)/100;
     expect(volume.every(s=>s.originalWeight===Math.round(options[{Squat:'squat',Bench:'bench',Deadlift:'deadlift'}[b.lift]]*expectedPct/0.5)*0.5)).toBe(true);
    }
   }
