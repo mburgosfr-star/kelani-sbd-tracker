@@ -1,0 +1,3 @@
+- Powerlifting i Powerbuilding fan servir nous percentatges de la teva e1RM per a les sèries principals i les de volum.
+- Sense competició, el cicle acaba amb una setmana més lleugera que segueix el teu esquema habitual.
+- En els perfils nous, el dia de competició i la setmana de taper estan desactivats per defecte. Activa’ls durant la configuració inicial o més endavant a Configuració. Els perfils existents conserven la seva tria.

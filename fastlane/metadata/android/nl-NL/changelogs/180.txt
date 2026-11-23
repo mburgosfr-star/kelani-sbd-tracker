@@ -1,0 +1,3 @@
+- Powerlifting en Powerbuilding gebruiken nieuwe percentages van je e1RM voor topsets en volumesets.
+- Zonder meetdag sluit je de cyclus af met een lichtere trainingsweek volgens je gewone schema.
+- Meetdag en taperweek staan bij nieuwe profielen standaard uit. Je kunt ze samen aanzetten in de onboarding of later in Instellingen. Bestaande profielen behouden hun keuze.

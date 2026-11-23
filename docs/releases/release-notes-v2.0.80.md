@@ -1,0 +1,6 @@
+## What's new
+
+- Powerlifting and Powerbuilding use new percentages of your e1RM for top sets and volume sets.
+- Without a meet, your cycle ends with a lighter training week that follows your regular schedule.
+- Meet day and taper week are off by default for new profiles. Turn them on together during onboarding or later in Settings. Existing profiles keep their choice.
+- Dialog text is slightly smaller in Workout setup and other dialogs.

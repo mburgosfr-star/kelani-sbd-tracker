@@ -24,9 +24,9 @@ describe('WhatsNewModal', () => {
     expect(screen.getByText(t.whatsNewTitle)).toBeInTheDocument();
     expect(screen.getByText(`v${LATEST_WHATS_NEW_VERSION}`)).toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
-    expect(screen.getByText(t.whatsNewSetProgressItem)).toBeInTheDocument();
-    expect(screen.getByText(t.whatsNewOnboardingItem)).toBeInTheDocument();
-    expect(screen.getByText(t.whatsNewDashboardSpacingItem)).toBeInTheDocument();
+    expect(screen.getByText(t.whatsNewTrainingIntensityItem)).toBeInTheDocument();
+    expect(screen.getByText(t.whatsNewLightWeekItem)).toBeInTheDocument();
+    expect(screen.getByText(t.whatsNewMeetPreferenceItem)).toBeInTheDocument();
 
     const checkbox = screen.getByLabelText(
       t.whatsNewShowAutomatically

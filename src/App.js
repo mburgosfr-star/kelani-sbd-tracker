@@ -3838,9 +3838,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewSetProgressItem,
-    t.whatsNewOnboardingItem,
-    t.whatsNewDashboardSpacingItem,
+    t.whatsNewTrainingIntensityItem,
+    t.whatsNewLightWeekItem,
+    t.whatsNewMeetPreferenceItem,
   ];
 
   return (
