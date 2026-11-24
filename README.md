@@ -14,6 +14,7 @@ Google Play is Kelani’s primary distribution channel, currently available thro
 
 - [GitHub Releases](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases/latest): open **Assets**, download the `.apk` and follow Android’s installation prompts.
 - [IzzyOnDroid](https://apt.izzysoft.de/packages/com.kelani.sbdtracker): install and update through a compatible F-Droid client, such as Neo Store.
+- [itch.io](https://kelburgos.itch.io/kelani-sbd-tracker-android) — Download the Android app for free or choose your own price to support development.
 
 Existing users: export a JSON backup before updating. Official Android package: `com.kelani.sbdtracker`. See [installation, updates and migration](docs/user-guide.md#installation-and-backups) and [download verification](VERIFY.md).
 
