@@ -56,7 +56,7 @@ Core training works offline. Kelani has no automatic analytics or cloud sync. Op
 
 [Report a problem or suggest an improvement](https://github.com/mburgosfr-star/kelani-sbd-tracker/issues). Please do not post personal training backups publicly.
 
-[Volunteer for the upcoming Google Play test](docs/user-guide.md#google-play-testing) or [support development through GitHub Sponsors](https://github.com/sponsors/mburgosfr-star). Contributions are optional and unlock no app features.
+[Volunteer for the upcoming Google Play test](docs/user-guide.md#google-play-testing) or [support development through GitHub Sponsors](https://github.com/sponsors/mburgosfr-star?frequency=one-time). Contributions are optional and unlock no app features.
 
 Experimental desktop versions have separate data: [Ubuntu](docs/ubuntu-prototype.md) · [Windows](docs/windows-prototype.md).
 

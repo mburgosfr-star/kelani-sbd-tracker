@@ -2686,7 +2686,7 @@ test('settings combines About and Updates in one modal', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Email Kelani' }));
   expect(openSpy).toHaveBeenCalledWith('mailto:mburgosfr@gmail.com?subject=Kelani', '_blank', 'noopener,noreferrer');
   fireEvent.click(screen.getByRole('button', { name: 'Support Kelani' }));
-  expect(openSpy).toHaveBeenCalledWith('https://github.com/sponsors/mburgosfr-star', '_blank', 'noopener,noreferrer');
+  expect(openSpy).toHaveBeenCalledWith('https://github.com/sponsors/mburgosfr-star?frequency=one-time', '_blank', 'noopener,noreferrer');
 
   const projectButton = screen.getByRole('button', { name: 'Project & Verification' });
   expect(projectButton.querySelector('[aria-hidden="true"]')).toHaveTextContent('i');

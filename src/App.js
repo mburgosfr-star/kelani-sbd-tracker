@@ -4920,7 +4920,7 @@ function AboutSupportModals({
     canCheckGitHubUpdates(updateChannel)
       ? { label: t.izzyOnDroid, onClick: () => openLink(IZZY_ON_DROID_URL) }
       : null,
-    { label: t.supportKelani, onClick: () => openLink('https://github.com/sponsors/mburgosfr-star') },
+    { label: t.supportKelani, onClick: () => openLink('https://github.com/sponsors/mburgosfr-star?frequency=one-time') },
   ].filter(Boolean);
   const projectLinks = [
     {
