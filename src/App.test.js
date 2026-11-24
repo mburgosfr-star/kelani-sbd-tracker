@@ -2559,7 +2559,7 @@ test('Smart workout dates appear on Dashboard and in the Program completion-labe
 
   fireEvent.click(await screen.findByRole('button', { name: 'Dashboard' }, { timeout: 3000 }));
   expect(screen.getByTestId('dashboard-workout-schedule-date'))
-    .toHaveTextContent(/^Today · /);
+    .toHaveTextContent(/^TODAY$/);
   expect(screen.getByTestId('dashboard-expected-meet-date'))
     .toHaveTextContent(/^Expected meet: .+ · C\d+W\d+$/);
   expect(screen.getByTestId('dashboard-expected-meet-date')).toHaveStyle({

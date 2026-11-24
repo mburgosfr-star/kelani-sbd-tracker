@@ -1,7 +1,7 @@
 import { applyWeightLimitsToWorkouts, applyWorkoutWeightLimits, latestLimitBodyWeight } from './weightLimits';
 import { normalizeWeightRounding, roundAccessoryLoads, roundingPoliciesEqual } from './weightRounding';
 import { roundTrainingWeight } from './workoutUnits';
-import { workoutHasUserProgress } from './workoutStateMerge';
+import { closingWeekChanged, workoutHasUserProgress } from './workoutStateMerge';
 import { WORKOUT_GRID_COLUMNS, WORKOUT_VOLUME_MIN_SETS, completeWorkoutVolumeGrid } from './workoutGridPolicy';
 import {
   buildSmartLiftPrescription,
@@ -6294,7 +6294,7 @@ export function generateWorkoutsForTrainingModel(trainingModel, options = {}) {
   const generated = generateWorkoutsForTrainingModelWithProjection(trainingModel, options).map((workout, index) => {
     if (index === Number(options.currentIndex || 0) && workoutHasUserProgress(options.inProgressWorkout) &&
         ((options.inProgressWorkout.trainingApproach || 'powerlifting') !== (options.workoutSetup?.trainingApproach || 'powerlifting') ||
-         (options.inProgressWorkout.smartIdealRoute?.phase === 'lightWeek') !== (workout.smartIdealRoute?.phase === 'lightWeek') ||
+         closingWeekChanged(options.inProgressWorkout, workout) ||
          options.inProgressWorkout.type === 'meet' || options.inProgressWorkout.cycleClosingTaper)) {
       return options.inProgressWorkout;
     }

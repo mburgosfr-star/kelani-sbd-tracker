@@ -71,6 +71,15 @@ export function mergeWorkoutPrepItems(
 // preserved during a merge, or whether it's safe to replace with a freshly
 // generated prescription. Handles both the multi-lift shape (`workout.lifts`)
 // and the flat single-lift shape (sets/warmups directly on the workout).
+// Older saved cycles used a lighter prescription for their fourth period.
+export function closingWeekChanged(previous, next) {
+  const closingPhase = workout => {
+    const phase = workout?.smartIdealRoute?.phase;
+    return phase === 'transitionWeek' || phase === 'lightWeek' ? phase : null;
+  };
+  return closingPhase(previous) !== closingPhase(next);
+}
+
 export function workoutHasUserProgress(workout) {
   const liftBlocks = (workout?.lifts && workout.lifts.length > 0)
     ? workout.lifts
@@ -156,7 +165,7 @@ export function mergeGeneratedWorkoutStructure(workouts, generatedWorkouts, hist
     const generated = generatedWorkouts[index];
     if (!generated) return workout;
     if (workoutHasUserProgress(workout) &&
-        (workout.smartIdealRoute?.phase === 'lightWeek') !== (generated.smartIdealRoute?.phase === 'lightWeek')) return workout;
+        closingWeekChanged(workout, generated)) return workout;
     if (workoutHasUserProgress(workout) && (workout.trainingApproach || 'powerlifting') !== (generated.trainingApproach || 'powerlifting')) return workout;
     if (workoutHasUserProgress(workout) && (workout.type === 'meet' || workout.cycleClosingTaper) &&
         (workout.type !== generated.type || Boolean(workout.cycleClosingTaper) !== Boolean(generated.cycleClosingTaper))) return workout;

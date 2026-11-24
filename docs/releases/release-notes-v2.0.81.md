@@ -1,0 +1,5 @@
+## What's new
+
+- Without a meet, the final training week uses the same top-set and backoff percentages as week 2.
+- The dashboard shows TODAY or TOMORROW above the workout. Each set shows its percentage without a lift-wide intensity label.
+- Weights adjusted to your equipment limit appear in orange. Tap the plate icon for details.

@@ -332,7 +332,7 @@ test('explains genuinely light secondary lifts from their dose', () => {
 
   expect(rows).toHaveLength(2);
   rows.forEach(row => {
-    expect(row.value).toContain('Light intensity.');
+    expect(row.value).not.toContain('Light intensity.');
     expect(row.value).not.toContain('Lower volume for the secondary lift');
   });
 });
@@ -357,7 +357,7 @@ test('C3W43 secondary roles are both explained as medium from their prescribed d
 
   expect(rows).toHaveLength(2);
   rows.forEach(row => {
-    expect(row.value).toContain('Medium intensity.');
+    expect(row.value).not.toContain('Medium intensity.');
     expect(row.value).not.toContain('Light work');
   });
 });
@@ -383,12 +383,12 @@ test('C4W9 primary and secondary medium lifts use the same intensity explanation
   expect(getSmartPrescriptionDetailRows(workoutWith([deadlift, bench]))).toEqual([
     {
       label: 'Deadlift (Plan)',
-      value: '5×4×70% · Medium intensity.',
+      value: '5×4×70%',
       kind: 'prescription',
     },
     {
       label: 'Bench (Plan)',
-      value: '6×4×70% · Medium intensity.',
+      value: '6×4×70%',
       kind: 'prescription',
     },
   ]);
@@ -436,14 +436,14 @@ test('ideal-route modal keeps planned intensities and presents every lift consis
 
   expect(rows).toHaveLength(3);
   expect(rows[0].value).toBe(
-    'Top single: 90% · 5×4×72.5% · Heavy intensity.'
+    'Top single: 90% · 5×4×72.5%'
   );
-  expect(rows[1].value).toContain('Light intensity.');
-  expect(rows[2].value).toContain('Light intensity.');
+  expect(rows[1].value).not.toContain('Light intensity.');
+  expect(rows[2].value).not.toContain('Light intensity.');
   rows.forEach(row => {
     expect(row.value).not.toContain('Primary work was selected');
     expect(row.value).not.toContain(' kg');
-    expect(row.value.split(' · ').at(-1)).toMatch(/^(Heavy|Light) intensity\./);
+    expect(row.value).not.toMatch(/(Heavy|Medium|Light) intensity\./);
   });
 
   const diagnosis = buildSmartDiagnosticText(workout);
@@ -553,7 +553,7 @@ test('explains secondary volume without inventing top-set progress', () => {
   );
 
   expect(row.value).toContain('4×4×75%');
-  expect(row.value).toContain(
+  expect(row.value).not.toContain(
     'Medium intensity.'
   );
   expect(row.value).not.toContain('→');
@@ -569,7 +569,7 @@ test('explains W41-style secondary squat from its measured light intensity, not 
 
   const [row] = getSmartPrescriptionDetailRows(workoutWith([squat, bench]));
 
-  expect(row.value).toContain('Light intensity.');
+  expect(row.value).not.toContain('Light intensity.');
   expect(row.value).not.toContain('Lower volume');
 });
 
@@ -602,7 +602,7 @@ test("a lift forced light on a single-lift day (heavy weekly slot already used) 
   );
 
   expect(row.value).not.toContain('Lower volume for the secondary lift.');
-  expect(row.value).toBe('6×4×60% · Light intensity.');
+  expect(row.value).toBe('6×4×60%');
   expect(row.value).not.toContain('heavy work');
 });
 

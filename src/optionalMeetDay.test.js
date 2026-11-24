@@ -16,7 +16,7 @@ test('new profiles default off, legacy profiles keep their meet and explicit off
   expect(normalizeWorkoutSetup(JSON.parse(JSON.stringify(withoutMeet.workoutSetup))).meetDayEnabled).toBe(false);
 });
 
-test.each(['beginner', 'intermediate', 'advanced', 'elite'])('%s repeats the regular period with the lowest percentages', athleteLevel => {
+test.each(['beginner', 'intermediate', 'advanced', 'elite'])('%s repeats the regular period with the second-period prescription', athleteLevel => {
   for (const trainingApproach of ['powerlifting', 'powerbuilding']) {
     for (const trainingFocus of ['standard', 'practical', 'beginnerSquat']) {
       const plan = generateWorkoutsForTrainingModel('smart', { ...withoutMeet, athleteLevel, trainingFocus,
@@ -27,16 +27,11 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])('%s repeats the reg
       for (let i = 0; i < period; i++) {
         const fourth = plan[3 * period + i];
         expect(fourth.type).toBe(plan[i].type);
-        expect(fourth.smartIdealRoute.phase).toBe('lightWeek');
+        expect(fourth.smartIdealRoute.phase).toBe('transitionWeek');
         expect(fourth.lifts.map(b => b.lift)).toEqual(plan[i].lifts.map(b => b.lift));
         fourth.lifts.forEach((block, j) => {
-          const first = plan[i].lifts[j].sets;
-          const third = plan[2 * period + i].lifts[j].sets;
-          for (const set of block.sets) {
-            const source = set.labelKey === 'workSets' || set.labelKey === 'backoff' ? third : first;
-            expect(source).toContainEqual(expect.objectContaining({ labelKey: set.labelKey,
-              reps: set.reps, prescribedPct: set.prescribedPct }));
-          }
+          const prescription = sets => sets.map(({ labelKey, reps, prescribedPct }) => ({ labelKey, reps, prescribedPct }));
+          expect(prescription(block.sets)).toEqual(prescription(plan[period + i].lifts[j].sets));
         });
       }
       expect(plan.at(-1).smartIdealRoute.endsCycle).toBe(true);
@@ -78,7 +73,7 @@ test('four-week planning crosses the cycle boundary without a meet, and Calendar
   expect(forecast.length).toBeGreaterThanOrEqual(28);
   expect(forecast.some(entry => entry.cycle === 2)).toBe(true);
   expect(forecast.some(entry => entry.workout.type === 'meet')).toBe(false);
-  const closing = { cycle: 1, workout: initial.filter(w => w.smartIdealRoute?.phase === 'lightWeek' && w.type === 'training').at(-1) };
+  const closing = { cycle: 1, workout: initial.filter(w => w.smartIdealRoute?.phase === 'transitionWeek' && w.type === 'training').at(-1) };
   const events = buildTimelineCalendarEventSpecs({ timeline: [{ ...closing, dateKey: '2026-12-01' }],
     today: '2026-11-19', titleTemplate: 'C{cycle}W{workout} Kelani' });
   expect(forecast[0]).toMatchObject({ cycle: 2, workout: { number: 1 } });

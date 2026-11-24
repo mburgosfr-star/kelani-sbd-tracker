@@ -494,19 +494,12 @@ export function getSmartIdealRouteWorkout({
     const lastDay = 21 + getSmartIdealNormalPeriodDays({ athleteLevel: level });
     if (number > lastDay) return null;
     const options = { athleteLevel, trainingFocus, trainingApproach };
-    const first = getSmartIdealRouteWorkout({ ...options, workoutNumber: number - 21 });
-    const third = getSmartIdealRouteWorkout({ ...options, workoutNumber: number - 7 });
+    const secondPeriodDay = getSmartIdealRouteWorkout({ ...options, workoutNumber: number - 14 });
     return {
-      ...first,
+      ...secondPeriodDay,
       workoutNumber: number,
-      phase: 'lightWeek',
+      phase: 'transitionWeek',
       endsCycle: number === lastDay,
-      lifts: first.lifts.map((block, index) => {
-        const volume = third.lifts[index].prescription;
-        return { ...block, prescription: block.prescription.topSet
-          ? { ...block.prescription, backoff: volume.backoff }
-          : volume };
-      }),
     };
   }
 

@@ -18,7 +18,7 @@ const PLATE_COLORS = {
   0.25: '#95a5a6',
 };
 
-export default function PlateCalculator({ weightKg, incrementKg = 0.5, onClose, theme, t }) {
+export default function PlateCalculator({ weightKg, adjustmentNote, incrementKg = 0.5, onClose, theme, t }) {
   const barWeightKg = DEFAULT_BARBELL_WEIGHT_KG;
   const breakdown = calculatePlateBreakdown(weightKg, {
     barWeightKg,
@@ -57,6 +57,8 @@ export default function PlateCalculator({ weightKg, incrementKg = 0.5, onClose, 
         <h3 style={{ margin: '0 0 10px', color: theme.brown || '#a67c52' }}>
           {t.plateCalculatorTitle}
         </h3>
+
+        {adjustmentNote && <p style={{ margin: '0 0 8px', fontSize: 14, color: theme.primary }}>{adjustmentNote}</p>}
 
         <p style={{ margin: '0 0 4px', fontSize: 14, color: theme.muted }}>
           {t.plateCalculatorTotal}: <strong style={{ color: theme.text }}>{breakdown.requestedTotalKg} kg</strong>

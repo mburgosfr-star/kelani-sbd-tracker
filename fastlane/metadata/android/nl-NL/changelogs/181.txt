@@ -1,0 +1,3 @@
+- Zonder meetdag gebruikt de laatste trainingsweek dezelfde percentages als week 2 voor topsets en backoffs.
+- Op het dashboard staat VANDAAG of MORGEN boven de training. De sets tonen hun eigen percentages, zonder intensiteitslabel per lift.
+- Een gewicht dat door je gewichtslimiet is aangepast, verschijnt in oranje. Tik op het schijfsymbool voor uitleg.

@@ -1,0 +1,3 @@
+- Sense competició, la darrera setmana utilitza els mateixos percentatges que la segona per a les sèries principals i les de volum.
+- Al tauler, AVUI o DEMÀ apareix damunt de la sessió. Cada sèrie mostra el seu percentatge sense una etiqueta d’intensitat per a tot l’exercici.
+- El pes ajustat al límit del teu equipament apareix en taronja. Toca la icona del disc per veure’n el motiu.

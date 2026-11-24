@@ -5,7 +5,7 @@ import {
   accessoriesHaveUserProgress,
   mergeWorkoutPrepItems,
   setHasUserState,
-  workoutHasUserProgress,
+  closingWeekChanged, workoutHasUserProgress,
 } from './workoutStateMerge';
 import { roundTrainingWeight } from './workoutUnits';
 import { getWorkoutAccessories } from './workoutSetup';
@@ -501,7 +501,7 @@ export function applyAccessoryPlanToWorkouts(
     if (completedWorkoutNumbers.has(Number(generated?.number || workout.number))) return workout;
     if (!generated) return workout;
     if (workoutHasUserProgress(workout) &&
-        (workout.smartIdealRoute?.phase === 'lightWeek') !== (generated.smartIdealRoute?.phase === 'lightWeek')) return workout;
+        closingWeekChanged(workout, generated)) return workout;
     if (workoutHasUserProgress(workout) && (workout.trainingApproach || 'powerlifting') !== (generated.trainingApproach || 'powerlifting')) return workout;
     if (workoutHasUserProgress(workout) && (workout.type === 'meet' || workout.cycleClosingTaper) &&
         (workout.type !== generated.type || Boolean(workout.cycleClosingTaper) !== Boolean(generated.cycleClosingTaper))) return workout;
