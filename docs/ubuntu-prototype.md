@@ -7,6 +7,8 @@ without switching to Windows. It does not prove Windows-specific behavior.
 
 ## Install and Open
 
+Download the [Kelani Ubuntu test package on itch.io](https://kelburgos.itch.io/kelani-sbd-tracker-ubuntu) for free, or choose your own price to support development.
+
 Ubuntu test downloads are published separately from Android, as GitHub
 prereleases titled **Kelani Ubuntu Test** on the
 [official releases page](https://github.com/mburgosfr-star/kelani-sbd-tracker/releases).
