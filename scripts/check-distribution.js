@@ -17,6 +17,7 @@ const {
 const defaultRepository = 'mburgosfr-star/kelani-sbd-tracker';
 const trustedSourceRepository = 'mburgosfr-star/kelani-sbd-tracker';
 const izzyBaseUrl = 'https://apt.izzysoft.de';
+const itchPageUrl = new URL('https://kelburgos.itch.io/kelani-sbd-tracker-android');
 const izzyPropagationGraceMs = 24 * 60 * 60 * 1000;
 
 function parseArguments(argv, { localVersion } = {}) {
@@ -162,10 +163,10 @@ function assertIzzyPage(html, version, repository) {
   return new URL(apkPath, izzyBaseUrl).toString();
 }
 
-function assertSameMetadata(githubMetadata, izzyMetadata, version) {
+function assertSameMetadata(githubMetadata, mirrorMetadata, version, mirror = 'IzzyOnDroid') {
   for (const [label, metadata] of [
     ['GitHub', githubMetadata],
-    ['IzzyOnDroid', izzyMetadata],
+    [mirror, mirrorMetadata],
   ]) {
     if (
       metadata.name !== packageName ||
@@ -176,12 +177,121 @@ function assertSameMetadata(githubMetadata, izzyMetadata, version) {
     }
   }
 
-  if (githubMetadata.versionCode !== izzyMetadata.versionCode) {
+  if (githubMetadata.versionCode !== mirrorMetadata.versionCode) {
     fail(
       `versionCode differs: GitHub ${githubMetadata.versionCode}, ` +
-      `IzzyOnDroid ${izzyMetadata.versionCode}.`
+      `${mirror} ${mirrorMetadata.versionCode}.`
     );
   }
+}
+
+function parseItchDownloads(html) {
+  const files = [...html.matchAll(/<a\b[^>]*\bdata-upload_id="(\d+)"[^>]*>[^<]*<\/a>\s*<div class="info_column">\s*<div class="upload_name">\s*<strong\b[^>]*\btitle="([^"]+)"/g)];
+  const apk = files.filter(file => file[2].endsWith('.apk'));
+  const checksum = files.filter(file => file[2].endsWith('.apk.sha256'));
+  const version = apk[0]?.[2].match(/^kelani-sbd-tracker-v(\d+\.\d+\.\d+)\.apk$/)?.[1];
+  if (!version || apk.length !== 1 || checksum.length !== 1 || checksum[0][2] !== `${apk[0][2]}.sha256` ||
+      apk[0][1] === checksum[0][1]) {
+    fail('itch.io must offer exactly one matching Kelani APK and checksum pair.');
+  }
+  return { version, apkId: apk[0][1], checksumId: checksum[0][1] };
+}
+
+async function getItchDownloads() {
+  const cookies = new Map();
+  let csrf;
+  async function request(url, page) {
+    const headers = { 'User-Agent': 'kelani-distribution-integrity-check' };
+    if (cookies.size) headers.Cookie = [...cookies.values()].join('; ');
+    if (page) {
+      headers.Origin = itchPageUrl.origin;
+      headers.Referer = page.href;
+      headers['X-Requested-With'] = 'XMLHttpRequest';
+    }
+    const response = await fetch(url, {
+      headers, redirect: 'error', signal: AbortSignal.timeout(30000),
+      ...(page && { method: 'POST', body: new URLSearchParams({ csrf_token: csrf }) }),
+    });
+    if (!response.ok) fail(`itch.io download flow returned HTTP ${response.status}.`);
+    for (const value of response.headers.getSetCookie()) {
+      const cookie = value.split(';', 1)[0];
+      cookies.set(cookie.split('=', 1)[0], cookie);
+    }
+    if (page) return response.json();
+    const html = await response.text();
+    csrf = html.match(/<meta name="csrf_token" value="([^"]+)"/)?.[1];
+    if (!csrf) fail('itch.io download flow is missing its CSRF token.');
+    return html;
+  }
+
+  await request(itchPageUrl);
+  const session = await request(new URL(`${itchPageUrl.href}/download_url`), itchPageUrl);
+  if (typeof session.url !== 'string') fail('itch.io did not offer a free download page.');
+  const page = new URL(session.url, itchPageUrl);
+  if (page.origin !== itchPageUrl.origin || !page.pathname.startsWith(`${itchPageUrl.pathname}/download/`)) {
+    fail('itch.io returned an unexpected download page.');
+  }
+  const files = parseItchDownloads(await request(page));
+
+  async function resolveUpload(id) {
+    const response = await request(new URL(`${itchPageUrl.href}/file/${id}?source=game_download&as_props=1`), page);
+    if (!response.url || response.external || response.lightbox || response.errors) {
+      fail('itch.io did not offer a direct public file download.');
+    }
+    const url = new URL(response.url);
+    if (url.protocol !== 'https:' || !/^itchio-mirror\.[a-f0-9]+\.r2\.cloudflarestorage\.com$/.test(url.hostname)) {
+      fail('itch.io returned an unexpected file storage host.');
+    }
+    return url;
+  }
+
+  const [apk, checksum] = await Promise.all([resolveUpload(files.apkId), resolveUpload(files.checksumId)]);
+  return { version: files.version, apk, checksum };
+}
+
+async function checkItchDistribution({ workDir, version, release, githubRepository }) {
+  const itch = await getItchDownloads();
+  const itchTag = `v${itch.version}`;
+  const official = itch.version === version ? release : await (
+    await fetchResponse(`https://api.github.com/repos/${githubRepository}/releases/tags/${itchTag}`)
+  ).json();
+  if (official.tag_name !== itchTag || official.draft || official.prerelease) {
+    fail(`itch.io version ${itch.version} does not have a final public GitHub release.`);
+  }
+  const assets = expectedGithubAssets(official, itch.version);
+  const referenceName = itch.version === version ? 'github.apk' : 'itch-reference.apk';
+  const githubApk = path.join(workDir, referenceName);
+  const githubChecksum = path.join(workDir, `${referenceName}.sha256`);
+  const itchApk = path.join(workDir, 'itch.apk');
+  const itchChecksum = path.join(workDir, 'itch.apk.sha256');
+
+  async function downloadItch(url, destination) {
+    const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(60000) });
+    if (!response.ok) fail(`itch.io file download returned HTTP ${response.status}.`);
+    fs.writeFileSync(destination, Buffer.from(await response.arrayBuffer()));
+  }
+
+  await Promise.all([
+    download(assets.apk.browser_download_url, githubApk),
+    download(assets.checksum.browser_download_url, githubChecksum),
+    downloadItch(itch.apk, itchApk),
+    downloadItch(itch.checksum, itchChecksum),
+  ]);
+  const githubHash = sha256File(githubApk);
+  const referenceChecksum = fs.readFileSync(githubChecksum);
+  if (referenceChecksum.toString().match(/^([a-f0-9]{64})\s+/i)?.[1]?.toLowerCase() !== githubHash ||
+      !referenceChecksum.equals(fs.readFileSync(itchChecksum)) || sha256File(itchApk) !== githubHash) {
+    fail('itch.io APK or checksum differs from the official GitHub release.');
+  }
+  const sdkDir = findAndroidSdk();
+  const metadata = getApkMetadata(itchApk, sdkDir);
+  assertSameMetadata(getApkMetadata(githubApk, sdkDir), metadata, itch.version, 'itch.io');
+  assertSignedV2(itchApk, sdkDir);
+  console.log(`✅ itch.io: ${itch.version} (${metadata.versionCode}), checksum and release certificate verified`);
+  if (itch.version !== version) {
+    console.warn(`⚠️ itch.io offers ${itch.version}; this run targets ${version}.`);
+  }
+  return { version: itch.version, versionCode: metadata.versionCode, apkSha256: githubHash };
 }
 
 async function checkDistribution({
@@ -208,6 +318,7 @@ async function checkDistribution({
     }
 
     const assets = expectedGithubAssets(release, version);
+    const itch = await checkItchDistribution({ workDir, version, release, githubRepository });
     assertIzzyIdentity(izzyHtml, trustedSourceRepository);
 
     if (!izzyListsVersion(izzyHtml, version)) {
@@ -231,6 +342,7 @@ async function checkDistribution({
           version,
           packageName,
           status: 'pending-izzy-propagation',
+          itch,
         };
       }
 
@@ -246,11 +358,14 @@ async function checkDistribution({
     const githubChecksumPath = path.join(workDir, 'github.apk.sha256');
     const izzyApkPath = path.join(workDir, 'izzy.apk');
 
-    await Promise.all([
-      download(assets.apk.browser_download_url, githubApkPath),
-      download(assets.checksum.browser_download_url, githubChecksumPath),
-      download(izzyApkUrl, izzyApkPath),
-    ]);
+    const downloads = [download(izzyApkUrl, izzyApkPath)];
+    if (itch.version !== version) {
+      downloads.push(
+        download(assets.apk.browser_download_url, githubApkPath),
+        download(assets.checksum.browser_download_url, githubChecksumPath),
+      );
+    }
+    await Promise.all(downloads);
 
     const githubHash = sha256File(githubApkPath);
     const izzyHash = sha256File(izzyApkPath);
@@ -286,6 +401,7 @@ async function checkDistribution({
       packageName,
       apkSha256: githubHash,
       certificateSha256: releaseCertificateSha256,
+      itch,
     };
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
@@ -312,5 +428,6 @@ module.exports = {
   isWithinIzzyPropagationGrace,
   assertIzzyPage,
   assertSameMetadata,
+  parseItchDownloads,
   checkDistribution,
 };

@@ -1,3 +1,4 @@
+import { applyAccessoryPlanToWorkouts } from './accessoryGeneration';
 import { generateProgramForProfile } from './classicProgramTemplates';
 import { completeWorkoutVolumeGrid, reduceVolumeReps } from './workoutGridPolicy';
 import { generateWorkoutsForTrainingModel } from './smartTrainingEngine';
@@ -36,9 +37,10 @@ test.each(['default','practical'])('%s route uses 3–7 sets and 3–4–5 reps 
    const phase=w.smartIdealRoute.phase;
    for (const b of w.lifts) {
     const volume=b.sets.filter(s=>['backoff','workSets'].includes(s.labelKey));
-    expect(volume.length).toBeGreaterThanOrEqual(3);
+    if (volume[0].labelKey === 'backoff') expect(volume).toHaveLength(volume[0].reps - 2);
+    else expect(volume.length).toBeGreaterThanOrEqual(3);
     expect(volume.length).toBeLessThanOrEqual(7);
-    expect((b.warmups.length+b.sets.length)%5).toBe(0);
+    if (volume[0].labelKey === 'workSets') expect((b.warmups.length+b.sets.length)%5).toBe(0);
     const role=b.smartPrescription.intensityRole;
     const i=['heavy','medium','light'].indexOf(role);
     const phaseOffset=['triple','double','single'].indexOf(phase);
@@ -55,6 +57,7 @@ test('new prescriptions preserve completed snapshots and started workouts while 
  const generated=generateWorkoutsForTrainingModel('smart',options);
  const saved=structuredClone(generated);
  saved[0].lifts[0].sets[0].done=true;
+ saved[0].lifts[0].sets.push({ ...saved[0].lifts[0].sets[1], failed: true });
  Object.assign(saved[0].lifts[0].sets[1], {
    reps: 4, pct: .85, precisePct: .85, weight: 132.5, originalWeight: 132.5,
  });
@@ -65,6 +68,7 @@ test('new prescriptions preserve completed snapshots and started workouts while 
  saved[1]={...saved[1],completed:true};
  const history=[{cycle:1,workoutNumber:saved[1].number,workoutSnapshot:saved[1]}];
  const merged=mergeGeneratedWorkoutStructure(saved,generated,history,1);
+ expect(applyAccessoryPlanToWorkouts(saved, generated, new Set(), saved[0].number)[0].lifts[0].sets).toEqual(saved[0].lifts[0].sets);
  expect(merged[0].lifts[0].sets).toEqual(saved[0].lifts[0].sets);
  expect(merged[1]).toEqual(saved[1]);
  expect(merged[3]).toEqual(generated[3]);

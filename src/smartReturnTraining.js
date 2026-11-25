@@ -84,7 +84,7 @@ export function buildSmartReturnTraining(workout) {
   // Upgrade its untouched regular plan too, so restoring it cannot bring
   // back the retired volume range. Loads and recorded state are unchanged.
   const baselineLifts = workout.lifts.map(block => {
-    const sets = completeWorkoutVolumeGrid(block);
+    const sets = block.smartPrescription?.fixedBackoffCount ? block.sets : completeWorkoutVolumeGrid(block);
     const gridItemCount = (block.warmups || []).length + sets.length;
     return {
       ...block,
@@ -128,7 +128,7 @@ export function buildSmartReturnTraining(workout) {
       };
     });
     const warmups = generateWarmups(sets, block.lift);
-    sets = completeWorkoutVolumeGrid({ sets, warmups });
+    if (!block.smartPrescription?.fixedBackoffCount) sets = completeWorkoutVolumeGrid({ sets, warmups });
     return {
       ...block,
       sets,

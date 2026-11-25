@@ -6,9 +6,32 @@ const {
   isWithinIzzyPropagationGrace,
   assertIzzyPage,
   assertSameMetadata,
+  parseItchDownloads,
 } = require('../scripts/check-distribution');
 
 const repository = 'mburgosfr-star/kelani-sbd-tracker';
+
+test('resolves one Android APK and its checksum from the itch.io download page', () => {
+  const apk = 'kelani-sbd-tracker-v2.0.80.apk';
+  const upload = (id, name) => `
+    <div class="upload">
+      <a class="button download_btn" data-upload_id="${id}" href="javascript:void(0);">Download</a>
+      <div class="info_column"><div class="upload_name"><strong class="name" title="${name}">${name}</strong></div></div>
+    </div>`;
+  const packageUpload = upload(24, apk);
+  const checksumUpload = upload(25, `${apk}.sha256`);
+  expect(parseItchDownloads(packageUpload + checksumUpload)).toEqual({
+    version: '2.0.80', apkId: '24', checksumId: '25',
+  });
+  for (const html of [
+    packageUpload,
+    packageUpload + upload(25, 'kelani-sbd-tracker-v2.0.79.apk.sha256'),
+    packageUpload + upload(24, `${apk}.sha256`),
+    packageUpload + checksumUpload + upload(26, 'other.apk'),
+  ]) {
+    expect(() => parseItchDownloads(html)).toThrow(/matching Kelani APK and checksum pair/);
+  }
+});
 
 test('uses the trusted repository for every local version', () => {
   expect(parseArguments([], { localVersion: '2.0.0' })).toEqual({

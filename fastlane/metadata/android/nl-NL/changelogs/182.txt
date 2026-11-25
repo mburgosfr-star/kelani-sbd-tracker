@@ -1,0 +1,3 @@
+- Als je gewichtslimiet de eerste werkset verandert, past Kelani ook de resterende warming-upsets aan.
+- Bij Smart Training bepaalt het voorgeschreven aantal herhalingen hoeveel backoffsets op de topset volgen.
+- Op rustdagen zie je een foto op het dashboard en het rustscherm.

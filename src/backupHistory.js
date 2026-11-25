@@ -28,7 +28,7 @@ export function createBackupHistory({ io, validate, storage, now = () => new Dat
   }
   async function write(name, backup) {
     if (!validate(backup)) throw new Error('Invalid backup');
-    const json = JSON.stringify(backup, null, 2);
+    const json = JSON.stringify(backup);
     await io.write(name, json);
     if (JSON.stringify(await read(name)) !== JSON.stringify(backup)) throw new Error('Backup verification failed');
   }

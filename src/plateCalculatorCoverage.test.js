@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { AccessoryGroup, SetRow, WarmupGrid } from './App';
+import { AccessoryGroup, BackoffGroup, SetRow, WarmupGrid } from './App';
+import { translations } from './translations';
 
 const appSource = fs.readFileSync(
   path.join(__dirname, 'App.js'),
@@ -19,6 +20,38 @@ const t = {
 };
 
 const noop = () => {};
+
+test('only weight-limited backoffs show the arrow and explain it in the calculator label', () => {
+  const t = translations.en;
+  const onShowPlateCalculator = jest.fn();
+  const backoff = { labelKey: 'backoff', weight: 80, reps: 5, pct: 0.8 };
+
+  render(
+    <BackoffGroup
+      compactGrid
+      entries={[
+        { index: 0, set: { ...backoff, weightLimitPrescription: { weight: 90, reps: 3 } } },
+        { index: 1, set: { ...backoff, adjustedFromOriginal: true } },
+        { index: 2, set: backoff },
+      ]}
+      activeIndex={-1}
+      isReadOnly={false}
+      onToggle={noop}
+      onShowPlateCalculator={onShowPlateCalculator}
+      t={t}
+      lift="Squat"
+    />
+  );
+
+  const baseLabel = `${t.plateCalculatorTitle}: 80 kg`;
+  const limited = screen.getByRole('button', { name: `${baseLabel}. ${t.weightLimitAdjusted}` });
+  expect(limited).toHaveTextContent('↓');
+  const ordinary = screen.getAllByRole('button', { name: baseLabel });
+  expect(ordinary).toHaveLength(2);
+  ordinary.forEach(trigger => expect(trigger).not.toHaveTextContent('↓'));
+  fireEvent.click(limited);
+  expect(onShowPlateCalculator).toHaveBeenCalledWith(80, t.weightLimitAdjusted);
+});
 
 function componentBlock(startMarker, endMarker) {
   const start = appSource.indexOf(startMarker);
@@ -205,7 +238,6 @@ test('all workout weight paths use the shared full-label trigger and inline icon
 
 test('the calculator uses one 20 kg bar and shows the microplates without bar-selection buttons', async () => {
   const { default: PlateCalculator } = await import('./PlateCalculator');
-  const { translations } = await import('./translations');
   render(<PlateCalculator weightKg={83} onClose={noop} theme={{}} t={translations.en} />);
   expect(screen.getAllByRole('button')).toHaveLength(1);
   expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();

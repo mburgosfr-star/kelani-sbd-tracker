@@ -149,12 +149,25 @@ test('lets universal warmup counts determine normal workout-grid volume', () => 
   expect(warmups.length + completedSets.length).toBe(10);
 });
 
+test('a 47.5 kg double fills a single row with one warmup and three backoffs', () => {
+  const top = { labelKey: 'topDouble', weight: 47.5, reps: 2 };
+  const backoff = { labelKey: 'backoff', weight: 40, reps: 4 };
+  const sets = [top, ...Array.from({ length: 7 }, () => ({ ...backoff }))];
+  const warmups = generateWarmups(sets);
+  expect(warmups).toMatchObject([{ weight: 20, reps: 5 }]);
+  expect(completeSmartLiftGrid({ sets, warmups })).toEqual([top, backoff, backoff, backoff]);
+});
+
 // Rounded rungs may vary with the target, but the same policy applies to every lift.
 test.each([
+  [30, 6, [[20, 5]]],
   [40, 3, [[20, 5], [30, 3]]],
+  [47.5, 2, [[20, 5]]],
+  [91, 4, [[20, 5], [70, 5]]],
   [155, 1, [[20, 5], [70, 5], [100, 3], [130, 1]]],
   [102.5, 1, [[20, 5], [70, 3], [90, 1]]],
   [180, 1, [[20, 5], [70, 5], [120, 3], [150, 1]]],
+  [170, 2, [[20, 5], [70, 5], [120, 3], [150, 3]]],
   [220, 2, [[20, 5], [70, 5], [120, 5], [160, 3], [190, 3]]],
   [300, 1, [[20, 5], [70, 5], [120, 3], [170, 3], [220, 1], [260, 1]]],
   [120, 5, [[20, 5], [70, 5], [100, 5]]],

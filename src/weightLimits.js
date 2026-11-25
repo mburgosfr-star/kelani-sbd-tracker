@@ -1,4 +1,8 @@
 import { normalizeWeightRounding } from './weightRounding';
+import { generateWarmups } from './warmupAndPrepGeneration';
+import { isTopSetLabel } from './workoutHistoryStats';
+import { setHasUserState } from './workoutStateMerge';
+import { completeWorkoutVolumeGrid, WORKOUT_GRID_COLUMNS } from './workoutGridPolicy';
 
 const KEYS = ['Squat', 'Bench', 'Deadlift', 'benchCapacity'];
 export const EMPTY_WEIGHT_LIMITS = { Squat: null, Bench: null, Deadlift: null, benchCapacity: null };
@@ -40,7 +44,7 @@ export function applyWorkoutWeightLimits(workout, limits, bodyWeight, rounding) 
     const trainingMax = Number(workout.smartLoadMaxes?.[lift]) || 0;
     const cappedWeight = Math.floor(maximum / step) * step;
     let blockChanged = false;
-    const sets = (block.sets || []).map(set => {
+    let sets = (block.sets || []).map(set => {
       if (finalized(set)) return set;
       const unavailable = maximum < 20;
       const metadata = Number.isFinite(maximum) ? maximum : undefined;
@@ -66,24 +70,49 @@ export function applyWorkoutWeightLimits(workout, limits, bodyWeight, rounding) 
         equipmentMaxWeight: metadata, weightLimitUnavailable: unavailable,
         weightLimitPrescription: source };
     });
-    // Preserve the raster and warm-up repetitions. Only lower warm-ups that
-    // would reach/exceed their new work target or exceed available equipment.
-    const firstWork = sets.find(set => set.labelKey === 'topSet') || sets[0];
-    const warmupMaximum = Math.min(maximum, Math.max(20, Math.ceil(Number(firstWork?.weight) / 10) * 10 - 10));
-    const warmups = (block.warmups || []).map(set => {
-      if (finalized(set) || (!Number.isFinite(maximum) && !set.weightLimitUnavailable)) return set;
-      const sourceWeight = set.weightLimitUnavailable ? set.weightLimitWarmupWeight : set.weight;
-      const weight = maximum < 20 ? 0 : Math.min(Number(sourceWeight), Math.floor(warmupMaximum / 10) * 10);
-      if (weight === set.weight && Boolean(set.weightLimitUnavailable) === (maximum < 20)) return set;
+    const firstWork = sets.find(set => isTopSetLabel(set.labelKey)) || sets[0];
+    const previousWarmups = block.warmups || [];
+    let warmups = previousWarmups;
+    if (maximum < 20) {
+      warmups = previousWarmups.map(set => finalized(set) || set.weightLimitUnavailable ? set : {
+        ...set, weight: 0, originalWeight: 0, weightLimitWarmupWeight: set.weight, weightLimitUnavailable: true,
+      });
+    } else if ((firstWork?.weightLimitPrescription || previousWarmups.some(set => set.weightLimitUnavailable)) &&
+        !sets.some(finalized)) {
+      // Use the effective load and rep count, even if the cap was applied
+      // earlier and this workout is now being restored from storage.
+      const recorded = previousWarmups.filter(finalized);
+      const lastRecordedWeight = Number(recorded.at(-1)?.weight) || 0;
+      const open = generateWarmups(sets).filter(set => set.weight > lastRecordedWeight);
+      warmups = [...recorded, ...open.map(set => previousWarmups.find(previous =>
+        !finalized(previous) && !previous.weightLimitUnavailable &&
+        previous.weight === set.weight && previous.reps === set.reps
+      ) || set)];
+
+      if (!block.smartPrescription?.fixedBackoffCount && block.smartPrescription?.completeGrid && !sets.some(setHasUserState) &&
+          (sets.length + warmups.length) % WORKOUT_GRID_COLUMNS !== 0) {
+        sets = completeWorkoutVolumeGrid({ sets, warmups });
+        blockChanged = true;
+      }
+    }
+    if (warmups.length !== previousWarmups.length || warmups.some((set, index) => set !== previousWarmups[index])) {
       blockChanged = true;
-      return { ...set, weight, originalWeight: weight, weightLimitWarmupWeight: sourceWeight, weightLimitUnavailable: maximum < 20 };
-    });
+    } else {
+      warmups = previousWarmups;
+    }
     if (!blockChanged) return block;
     changed = true;
-    return { ...block, sets, warmups };
+    const gridItemCount = sets.length + warmups.length;
+    return { ...block, sets, warmups, ...(block.smartPrescription && {
+      smartPrescription: {
+        ...block.smartPrescription, gridItemCount,
+        completeGrid: gridItemCount % WORKOUT_GRID_COLUMNS === 0,
+      },
+    }) };
   });
   if (!changed) return workout;
-  return { ...workout, ...(workout.lifts?.length ? { lifts } : {}), sets: lifts[0].sets, warmups: lifts[0].warmups };
+  if (!workout.lifts?.length) return lifts[0];
+  return { ...workout, lifts, sets: lifts[0].sets, warmups: lifts[0].warmups };
 }
 
 export function applyWeightLimitsToWorkouts(workouts, limits, bodyWeights, rounding) {

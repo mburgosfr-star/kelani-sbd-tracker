@@ -61,10 +61,8 @@ test('generated prescriptions retain high reps, valid grids, labels and lower wa
   for (const workout of regular) for (const block of workout.lifts) {
     expect(isTopSetLabel(block.sets[0].labelKey)).toBe(true);
     const backoffs = block.sets.slice(1);
-    expect(backoffs.length).toBeGreaterThanOrEqual(3);
-    expect(backoffs.length).toBeLessThanOrEqual(7);
+    expect(backoffs).toHaveLength(block.sets[0].reps);
     expect(backoffs.every(s => s.reps === block.sets[0].reps * 2 && s.labelKey === 'backoff')).toBe(true);
-    expect((block.warmups.length + block.sets.length) % 5).toBe(0);
     expect(block.warmups.every(s => s.weight < block.sets[0].weight)).toBe(true);
     expect(block.sets.every(s => Number.isInteger(s.weight * 2))).toBe(true);
   }

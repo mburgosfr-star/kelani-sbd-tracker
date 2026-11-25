@@ -4,6 +4,8 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsScrollableContentStyle, statsTabListStyle } from './StatsScreen';
 import App, { StartNewCycleSection, AllWorkouts, ProgramCompletedSetSummary, AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartWorkoutHeader, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
 import { translations } from './translations';
+import { createWorkoutSetup } from './workoutSetup';
+import { localDateKey } from './workoutScheduleDates';
 
 test('a failed Squat set uses the darker SBD status color instead of the Squat lift color', () => {
   render(
@@ -1907,7 +1909,7 @@ test.each(['nl', 'en', 'ca'])('TOO HARD route recovery explains the one-day adju
     workout.smartDecisionSummary,
     t,
     workout
-  )).toBe(t.smartReasonIdealRouteTooHardRecovery);
+  )).toBe(t.smartReasonTooHardExtraRest);
   expect(getSmartModalDetailRows(workout, t)).toEqual([
     { label: t.expectedMeetWindow, value: 'C4W29' },
   ]);
@@ -2047,11 +2049,14 @@ test.each(['nl', 'en', 'ca'])('Smart workout titles are static and routine train
 
 test.each(['nl', 'en', 'ca'])('extra recovery has a brief visible explanation without readiness claims in %s', language => {
   const t = translations[language];
-  render(<SmartWorkoutHeader workout={{
+  const workout = {
     type: 'rest', smartDayType: 'recovery',
     smartIdealRoute: { stage: 'normal', adjustmentReason: 'too-hard-recovery' },
     smartDecisionSummary: { reason: 'ideal-route', dayType: 'recovery' },
-  }} t={t} />);
+  };
+  const { rerender } = render(<SmartWorkoutHeader workout={workout} meetDayEnabled={false} t={t} />);
+  expect(screen.getByTestId('smart-workout-explanation')).toHaveTextContent(t.smartReasonTooHardExtraRest);
+  rerender(<SmartWorkoutHeader workout={workout} meetDayEnabled t={t} />);
   expect(screen.getByTestId('smart-workout-explanation')).toHaveTextContent(t.smartReasonIdealRouteTooHardRecovery);
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
@@ -2380,15 +2385,19 @@ test('every Smart set has a phase label without breaking the five-column grid', 
   fireEvent.click(await screen.findByRole('button', { name: 'Workout' }));
 
   const squatGrid = await screen.findByTestId('workout-lift-grid-0');
-  expect(squatGrid).toHaveStyle({ gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' });
-  expect(squatGrid.querySelectorAll('[data-workout-circle-item="true"]')).toHaveLength(10);
+  expect(squatGrid).toHaveStyle({ gridTemplateColumns: 'repeat(10, minmax(0, 1fr))' });
+  expect(squatGrid.querySelectorAll('[data-workout-circle-item="true"]')).toHaveLength(3);
   expect(squatGrid.children[0]).toHaveStyle({ display: 'contents' });
   expect(squatGrid.children[1]).toHaveAttribute('data-testid', 'workout-set-group');
   expect(Array.from(squatGrid.querySelectorAll('[data-testid="workout-phase-tag"]')).map(tag => tag.textContent))
-    .toEqual(['WU', 'WU', 'TOP', ...Array(7).fill('BO')]);
+    .toEqual(['WU', 'TOP', 'BO']);
   const benchGrid = screen.getByTestId('workout-lift-grid-1');
   expect(Array.from(benchGrid.querySelectorAll('[data-testid="workout-phase-tag"]')).map(tag => tag.textContent))
-    .toEqual(['TOP', 'BO', 'BO', 'BO', 'BO']);
+    .toEqual(['TOP', 'BO', 'BO', 'BO']);
+  const [warmup, top, backoff] = squatGrid.querySelectorAll('[data-workout-circle-item="true"]');
+  expect(warmup).toHaveStyle({ gridColumn: '5 / span 2', gridRow: '1' });
+  expect(top).toHaveStyle({ gridColumn: '4 / span 2', gridRow: '2' });
+  expect(backoff).toHaveStyle({ gridColumn: '6 / span 2', gridRow: '2' });
   expect(screen.queryByTestId('workout-warmup-label-0')).not.toBeInTheDocument();
   expect(screen.queryByTestId('workout-work-sets-label-0')).not.toBeInTheDocument();
 });
@@ -2577,6 +2586,93 @@ test('Smart workout dates appear on Dashboard and in the Program completion-labe
     expect(badge).toHaveStyle({ textTransform: 'uppercase' });
   }
   expect(screen.queryByText(translations.en.programNext)).not.toBeInTheDocument();
+});
+
+test('the Dashboard shows only the Tomorrow badge for the next rest day after training today', async () => {
+  localStorage.clear();
+  localStorage.setItem('language', 'en');
+  const { generateWorkoutsForTrainingModel } = await import('./smartTrainingEngine');
+  const prs = { Squat: 160, Bench: 100, Deadlift: 200 };
+  const workoutSetup = createWorkoutSetup({ meetDayEnabled: false });
+  const plan = generateWorkoutsForTrainingModel('smart', {
+    squat: prs.Squat, bench: prs.Bench, deadlift: prs.Deadlift,
+    athleteLevel: 'intermediate', currentCycle: 1, history: [], workoutSetup,
+  });
+  const restIndex = plan.findIndex(workout => workout.type === 'rest');
+  const history = plan.slice(0, restIndex).map(workout => ({
+    cycle: 1, workoutNumber: workout.number, date: localDateKey(),
+    workoutSnapshot: { ...workout, completed: true, workoutEffort: 'good' },
+  }));
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1, trainingModel: 'smart', currentCycle: 1, prs, oneRMs: prs,
+    bodyWeights: [{ bodyWeight: 100 }], history, workoutSetup,
+  }));
+
+  render(<App />);
+  const badge = await screen.findByTestId('dashboard-workout-schedule-date', {}, { timeout: 3000 });
+  expect(badge).toHaveTextContent(/^TOMORROW$/);
+  expect(badge.querySelector('span')).toHaveStyle({ textTransform: 'uppercase' });
+  expect(screen.getByText(translations.en.restAndRecovery)).toBeVisible();
+});
+
+test.each(['en', 'nl', 'ca'])('meet Dashboard distinguishes relative badges and full dates in %s', language => {
+  const t = translations[language];
+  const props = { t, meetPlan: [], meetTotals: {} };
+  const renderCard = (scheduleDateLabel, relativeDate) => (
+    <div style={{ width: 280 }}>
+      <MeetDayDashboardPlan {...props} scheduleDateLabel={scheduleDateLabel} relativeDate={relativeDate} />
+    </div>
+  );
+  const view = render(renderCard(t.today, true));
+  const schedule = () => screen.getByTestId('dashboard-workout-schedule-date');
+  expect(schedule().textContent).toBe(t.today);
+  expect(schedule().querySelector('span')).toHaveStyle({ textTransform: 'uppercase' });
+
+  const longLabel = `${t.tomorrow} ${t.sbdMeetDay || t.meetDay} ${t.restAndRecovery}`;
+  view.rerender(renderCard(longLabel, true));
+  expect(schedule().textContent).toBe(longLabel);
+  expect(schedule().querySelector('span')).toHaveStyle({
+    maxWidth: '100%', boxSizing: 'border-box', overflowWrap: 'anywhere',
+  });
+  view.rerender(renderCard(longLabel, false));
+  expect(schedule().textContent).toBe(longLabel);
+  expect(schedule().querySelector('span')).toBeNull();
+});
+
+test('the plate calculator shows the current weight-limit note every time it opens', async () => {
+  localStorage.clear();
+  localStorage.setItem('language', 'en');
+  const t = translations.en;
+  const prs = { Squat: 160, Bench: 100, Deadlift: 200 };
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1, trainingModel: 'smart', currentCycle: 1, prs, oneRMs: prs,
+    bodyWeights: [{ bodyWeight: 100 }], history: [], weightLimits: { Squat: 70 },
+    workoutSetup: createWorkoutSetup({ preparationMode: 'off' }),
+  }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: t.workout }, { timeout: 3000 }));
+  const adjustedWeight = screen.getAllByRole('button', {
+    name: `${t.plateCalculatorTitle}: 70 kg. ${t.weightLimitAdjusted}`,
+  })[0];
+  const ordinaryWeight = screen.getAllByRole('button', { name: `${t.plateCalculatorTitle}: 20 kg` })[0];
+  const openCalculator = async weight => {
+    fireEvent.click(weight);
+    await screen.findByRole('heading', { name: t.plateCalculatorTitle });
+  };
+  const closeCalculator = () => {
+    const panel = screen.getByRole('heading', { name: t.plateCalculatorTitle }).parentElement;
+    fireEvent.click(within(panel).getByRole('button', { name: t.plateCalculatorClose }));
+  };
+
+  await openCalculator(adjustedWeight);
+  expect(screen.getByText(t.weightLimitAdjusted)).toBeVisible();
+  closeCalculator();
+  expect(screen.queryByText(t.weightLimitAdjusted)).not.toBeInTheDocument();
+  await openCalculator(ordinaryWeight);
+  expect(screen.queryByText(t.weightLimitAdjusted)).not.toBeInTheDocument();
+  closeCalculator();
+  await openCalculator(adjustedWeight);
+  expect(screen.getByText(t.weightLimitAdjusted)).toBeVisible();
 });
 
 test('Smart practical route is available above beginner and immediately replaces an untouched workout', async () => {
@@ -3126,6 +3222,74 @@ test('loading a Smart calendar of a different length preserves an already starte
   });
 });
 
+test('reloading a legacy light week preserves started work and upgrades untouched workouts', async () => {
+  localStorage.clear();
+  localStorage.setItem('language', 'en');
+  const { generateWorkoutsForTrainingModel } = await import('./smartTrainingEngine');
+  const prs = { Squat: 160, Bench: 100, Deadlift: 200 };
+  const workoutSetup = createWorkoutSetup({
+    preparationMode: 'off', accessoryMode: 'standard', meetDayEnabled: false,
+  });
+  const plan = generateWorkoutsForTrainingModel('smart', {
+    squat: prs.Squat, bench: prs.Bench, deadlift: prs.Deadlift,
+    athleteLevel: 'intermediate', currentCycle: 1, history: [],
+    preparationMode: 'off', accessoryMode: 'standard', workoutSetup,
+  });
+  const [startedIndex, untouchedIndex] = plan.map((workout, index) =>
+    workout.type === 'training' && workout.smartIdealRoute?.phase === 'transitionWeek' ? index : -1
+  ).filter(index => index >= 0);
+  const history = plan.slice(0, startedIndex).map(workout => ({
+    cycle: 1, workoutNumber: workout.number,
+    workoutSnapshot: { ...workout, completed: true, workoutEffort: 'good' },
+  }));
+  const savedWorkouts = structuredClone(plan);
+  const started = savedWorkouts[startedIndex];
+  const untouched = savedWorkouts[untouchedIndex];
+  started.smartIdealRoute.phase = 'lightWeek';
+  untouched.smartIdealRoute.phase = 'lightWeek';
+  const lift = started.lifts[0];
+  lift.warmups[0].done = true;
+  lift.sets[0].done = true;
+  lift.sets[1].weight -= 2.5;
+  lift.sets[1].adjustedFromOriginal = true;
+  const accessory = started.accessories[0];
+  accessory.done[0] = true;
+  untouched.lifts[0].sets[0].weight -= 2.5;
+  untouched.lifts[0].sets[0].originalWeight = untouched.lifts[0].sets[0].weight;
+
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1, programProfile: 'kelaniSbd', trainingModel: 'smart', currentCycle: 1,
+    prs, oneRMs: prs, history, bodyWeights: [{ bodyWeight: 100 }],
+    preparationMode: 'off', accessoryMode: 'standard', workoutSetup,
+    showWhatsNewAfterUpdates: false,
+    inProgress: {
+      programVersion: 'kelani-program-profiles-v6', currentCycle: 1,
+      currentIndex: startedIndex, selectedIndex: startedIndex, workouts: savedWorkouts,
+    },
+  }));
+
+  const expectSavedProgress = () => {
+    const { currentIndex, workouts } = readProfile(localStorage).inProgress;
+    expect(currentIndex).toBe(startedIndex);
+    const restored = workouts[startedIndex];
+    expect(restored.smartIdealRoute.phase).toBe('lightWeek');
+    expect(restored.lifts[0].warmups).toEqual(lift.warmups);
+    expect(restored.lifts[0].sets).toEqual(lift.sets);
+    expect(restored.accessories).toEqual(started.accessories);
+    expect(workouts[untouchedIndex].smartIdealRoute.phase).toBe('transitionWeek');
+    expect(workouts[untouchedIndex].lifts[0].sets[0].weight)
+      .toBe(plan[untouchedIndex].lifts[0].sets[0].weight);
+  };
+  const view = render(<App />);
+  await screen.findByTestId('app-header', {}, { timeout: 3000 });
+  await waitFor(expectSavedProgress);
+  view.unmount();
+
+  render(<App />);
+  await screen.findByTestId('app-header', {}, { timeout: 3000 });
+  await waitFor(expectSavedProgress);
+});
+
 
 test.each([
   [3.5, undefined, 'intermediate'],
@@ -3248,10 +3412,12 @@ test.each(['en', 'nl', 'ca'])('rest day uses its real scheduled day and keeps th
     totalWorkouts: 28, isReadOnly: false, onComplete, t, language, scheduleToday: '2026-11-17' };
   const view = render(<CurrentWorkout {...props} scheduledDateKey="2026-11-18" />);
   const badge = screen.getByTestId('rest-workout-schedule-badge');
+  expect(screen.getAllByRole('heading')).toHaveLength(1);
+  expect(screen.getByRole('heading', { level: 1 }).nextElementSibling).toBe(badge);
   expect(badge.textContent.toLocaleLowerCase()).toBe(t.tomorrow.toLocaleLowerCase());
   expect(badge).toHaveStyle({ textTransform: 'uppercase' });
   expect(screen.queryByText(t.programNext)).not.toBeInTheDocument();
-  expect(screen.getByText(t.restReadyNextWorkout)).toBeInTheDocument();
+  expect(screen.getByText(t.restDayNoLifting + ' ' + t.restReadyNextWorkout)).toBeInTheDocument();
   const action = screen.getByTestId('rest-workout-actions');
   expect(action).toHaveStyle({ padding: '8px 0', minHeight: 'calc(var(--kelani-button-height) + 16px)', flexShrink: 0 });
   expect(screen.getByTestId('screen-scroll-content')).toHaveStyle({ gridTemplateRows: 'auto minmax(min-content, 1fr) auto' });

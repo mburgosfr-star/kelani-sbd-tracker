@@ -35,7 +35,8 @@ test.each([0.5, 2.5].flatMap(step => ['standard', 'practical', 'beginnerSquat'].
       checked += 1;
       const workout = buildSmartIdealTrainingWorkout({ ...options, athleteLevel, routeWorkout, weightRounding: uniformWeightRounding(step) });
       for (const lift of workout.lifts) {
-        expect((lift.warmups.length + lift.sets.length) % 5).toBe(0);
+        if (lift.sets[1]?.labelKey === 'backoff') expect(lift.sets.length - 1).toBe((lift.sets[1].reps) - 2);
+        else expect((lift.warmups.length + lift.sets.length) % 5).toBe(0);
         for (const set of lift.sets) expect(set.weight / step).toBeCloseTo(Math.round(set.weight / step));
         for (const warmup of lift.warmups) {
           expect(warmup.weight % 10).toBe(0);

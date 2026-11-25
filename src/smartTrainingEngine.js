@@ -3873,7 +3873,8 @@ function getSmartIdealHeavyTopWeight({
   if (routeWorkout.stage !== 'normal') return target;
 
   const phases = SMART_IDEAL_NORMAL_PHASES;
-  const phaseIndex = phases.findIndex(phase => phase.key === routeWorkout.phase);
+  const prescriptionPhase = routeWorkout.prescriptionPhase ?? routeWorkout.phase;
+  const phaseIndex = phases.findIndex(phase => phase.key === prescriptionPhase);
   if (phaseIndex <= 0) return target;
 
   let minimum = roundTrainingWeight(
@@ -3959,7 +3960,7 @@ function applySmartIdealRouteMetadata(
       smartPrescription: {
         ...(liftBlock.smartPrescription || {}),
         ...(usesCombinedWorkoutGrid ? {
-          completeGrid: true,
+          completeGrid: (warmups.length + (liftBlock.sets || []).length) % WORKOUT_GRID_COLUMNS === 0,
           gridItemCount: warmups.length + (liftBlock.sets || []).length,
         } : {}),
       },
@@ -4041,7 +4042,7 @@ export function buildSmartIdealTrainingWorkout({
       }));
     }
 
-    sets.push(...Array.from({ length: minimumVolumeSets }, () => buildSmartIdealSet({
+    sets.push(...Array.from({ length: hasTopSet ? volume.setCount : minimumVolumeSets }, () => buildSmartIdealSet({
         lift: routeLift.lift,
         labelKey: hasTopSet ? 'backoff' : 'workSets',
         reps: Number(volume.reps) || 4,
@@ -4058,7 +4059,7 @@ export function buildSmartIdealTrainingWorkout({
       routeWorkout.lifts.length === 1
     );
 
-    if (sets.some(set => ['backoff', 'workSets'].includes(set.labelKey))) {
+    if (!hasTopSet) {
       sets = completeSmartLiftGrid({
         sets,
         warmups,
@@ -4088,7 +4089,8 @@ export function buildSmartIdealTrainingWorkout({
         intensityRole: routeLift.intensityRole,
         idealRouteStage: routeWorkout.stage,
         idealRoutePhase: routeWorkout.phase,
-        completeGrid: true,
+        fixedBackoffCount: hasTopSet ? volume.setCount : undefined,
+        completeGrid: (warmups.length + sets.length) % WORKOUT_GRID_COLUMNS === 0,
         gridItemCount: warmups.length + sets.length,
       },
     };
@@ -6280,7 +6282,7 @@ function roundGeneratedTrainingLoads(workout, policy) {
     });
     if (!blockChanged) return block;
     const warmups = generateWarmups(sets, block.lift || workout.lift, blocks.length === 1);
-    sets = completeSmartLiftGrid({ sets, warmups });
+    if (!block.smartPrescription?.fixedBackoffCount) sets = completeSmartLiftGrid({ sets, warmups });
     return { ...block, sets, warmups,
       ...(block.smartPrescription ? { smartPrescription: { ...block.smartPrescription,
         gridItemCount: sets.length + warmups.length, completeGrid: (sets.length + warmups.length) % 5 === 0 } } : {}) };

@@ -3,8 +3,40 @@
 export const PROFILE_KEY = 'kel-powerlifting-user-data-v1';
 const progressKey = PROFILE_KEY + ':progress';
 
+// A multi-lift completion records the same snapshot on several history
+// entries. Keep the portable backup format intact. If a local checkpoint
+// exceeds the quota, reference only byte-identical snapshots within it.
+function writeCheckpoint(storage, profile) {
+  try {
+    storage.setItem(PROFILE_KEY, JSON.stringify(profile));
+    return;
+  } catch (error) {
+    if (error.name !== 'QuotaExceededError' || !Array.isArray(profile.history)) throw error;
+  }
+  const originals = new Map();
+  const snapshotLinks = [];
+  const history = profile.history.map((entry, index) => {
+    if (!entry?.workoutSnapshot) return entry;
+    const serialized = JSON.stringify(entry.workoutSnapshot);
+    if (!originals.has(serialized)) {
+      originals.set(serialized, index);
+      return entry;
+    }
+    snapshotLinks.push([index, originals.get(serialized)]);
+    const { workoutSnapshot, ...rest } = entry;
+    return rest;
+  });
+  storage.setItem(PROFILE_KEY, JSON.stringify({ ...profile, history, snapshotLinks }));
+}
+
 export function readProfile(storage) {
   const base = JSON.parse(storage.getItem(PROFILE_KEY));
+  if (Array.isArray(base?.snapshotLinks)) {
+    for (const [index, source] of base.snapshotLinks) {
+      base.history[index].workoutSnapshot = base.history[source].workoutSnapshot;
+    }
+    delete base.snapshotLinks;
+  }
   if (!base || !base.progressRevision) return base;
   const { progressRevision, ...data } = base;
   const progress = JSON.parse(storage.getItem(progressKey));
@@ -22,7 +54,7 @@ export function readProfile(storage) {
 
 export function replaceProfile(storage, data) {
   const { progressRevision, ...profile } = data;
-  storage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  writeCheckpoint(storage, profile);
   storage.removeItem(progressKey);
 }
 
@@ -44,7 +76,7 @@ export function saveProfile(storage, data, previous) {
     }
   }
   const revision = Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-');
-  storage.setItem(PROFILE_KEY, JSON.stringify({ ...data, progressRevision: revision }));
+  writeCheckpoint(storage, { ...data, progressRevision: revision });
   storage.removeItem(progressKey);
   return { revision, data, workouts: data.inProgress.workouts };
 }

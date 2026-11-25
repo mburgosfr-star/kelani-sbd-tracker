@@ -17,7 +17,7 @@ concurrency:
 jobs:
   verify-public-distribution:
     if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')
-    name: Compare GitHub and IzzyOnDroid APKs
+    name: Compare GitHub, IzzyOnDroid and itch.io APKs
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 

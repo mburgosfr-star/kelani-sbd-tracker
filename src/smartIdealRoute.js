@@ -331,7 +331,7 @@ export function getSmartIdealNormalPhase(workoutNumber) {
   ) || null;
 }
 
-function buildGridPrescription({ definition, includeTopSet, taper = false }) {
+function buildGridPrescription({ definition, includeTopSet, taper = false, powerbuilding = false }) {
   const volume = {
     ...definition.volume,
     setCount: 'grid-dependent',
@@ -344,8 +344,8 @@ function buildGridPrescription({ definition, includeTopSet, taper = false }) {
       kind: 'top-set-with-backoffs',
       basis: SMART_IDEAL_LOAD_POLICY.basis,
       topSet: { ...definition.topSet },
-      backoff: volume,
-      fullGridRequired: true,
+      backoff: { ...definition.volume, setCount: powerbuilding ? definition.volume.reps / 2 : definition.volume.reps - 2 },
+      fullGridRequired: false,
     };
   }
 
@@ -458,7 +458,7 @@ function applyPowerbuildingPrescription(workout, routeTable, rowNumber, phase) {
       topSet: { reps, pct: percentages.top[phaseIndex] / 100 },
       volume: { reps: reps * 2, pct: percentages.volume[phaseIndex] / 100 },
     };
-    return { ...item, prescription: buildGridPrescription({ definition, includeTopSet: true }) };
+    return { ...item, prescription: buildGridPrescription({ definition, includeTopSet: true, powerbuilding: true }) };
   }) };
 }
 
@@ -498,6 +498,7 @@ export function getSmartIdealRouteWorkout({
     return {
       ...secondPeriodDay,
       workoutNumber: number,
+      prescriptionPhase: secondPeriodDay.phase,
       phase: 'transitionWeek',
       endsCycle: number === lastDay,
     };

@@ -469,8 +469,7 @@ test('taper uses the agreed role-specific top sets and reduced grid volume', () 
         backoff: {
           reps: volumeReps,
           pct: volumePct,
-          minimumSetCount: 3,
-          maximumSetCount: 7,
+          setCount: volumeReps - 2,
         },
       });
     } else {
@@ -484,7 +483,7 @@ test('taper uses the agreed role-specific top sets and reduced grid volume', () 
     }
     expect(item.prescription).toMatchObject({
       basis: 'e1rm',
-      fullGridRequired: true,
+      fullGridRequired: !item.prescription.topSet,
     });
   });
   Object.entries(topSetCounts).forEach(([key, count]) => {
@@ -829,7 +828,7 @@ test('every prescribed lift keeps the full-grid invariant and heavy-medium-light
       const roles = workout.lifts.map(item => item.intensityRole);
 
       workout.lifts.forEach(item => {
-        expect(item.prescription.fullGridRequired).toBe(true);
+        expect(item.prescription.fullGridRequired).toBe(!item.prescription.topSet);
       });
       expect(roles).toEqual([...roles].sort((a, b) =>
         intensityOrder[a] - intensityOrder[b]

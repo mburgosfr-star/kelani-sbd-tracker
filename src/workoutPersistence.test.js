@@ -29,3 +29,32 @@ test('restores the earlier complete progress record before the next incremental 
   saveProfile(localStorage, readProfile(localStorage));
   expect(readProfile(localStorage)).toEqual({ ...profile, inProgress });
 });
+
+test('completion at the quota preserves distinct snapshots and pending progress on failed retry', () => {
+  const values = new Map();
+  let limit = Infinity;
+  const storage = {
+    getItem: key => values.get(key) ?? null,
+    removeItem: key => values.delete(key),
+    setItem(key, value) {
+      const other = [...values].reduce((n, [k, v]) => n + (k === key ? 0 : v.length), 0);
+      if (other + value.length > limit) throw new DOMException('Full', 'QuotaExceededError');
+      values.set(key, value);
+    },
+  };
+  const snapshot = { note: 'x'.repeat(1000), completed: true };
+  const data = { history: [snapshot, { ...snapshot }, { ...snapshot, completed: false }].map(
+    workoutSnapshot => ({ workoutSnapshot })), inProgress: { workouts: [{}] } };
+  limit = 2700;
+  const checkpoint = saveProfile(storage, data);
+  expect(readProfile(storage)).toEqual(data);
+  const edited = { ...data, inProgress: { workouts: [{ done: true }] } };
+  saveProfile(storage, edited, checkpoint);
+  expect(readProfile(storage)).toEqual(edited);
+  limit = 1;
+  expect(() => replaceProfile(storage, data)).toThrow();
+  expect(readProfile(storage)).toEqual(edited);
+  limit = 2700;
+  replaceProfile(storage, data);
+  expect(readProfile(storage)).toEqual(data);
+});

@@ -30,13 +30,28 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])('%s repeats the reg
         expect(fourth.smartIdealRoute.phase).toBe('transitionWeek');
         expect(fourth.lifts.map(b => b.lift)).toEqual(plan[i].lifts.map(b => b.lift));
         fourth.lifts.forEach((block, j) => {
-          const prescription = sets => sets.map(({ labelKey, reps, prescribedPct }) => ({ labelKey, reps, prescribedPct }));
+          const prescription = sets => sets.map(({ labelKey, reps, prescribedPct, weight, pct }) => ({
+            labelKey, reps, prescribedPct, weight, pct,
+          }));
           expect(prescription(block.sets)).toEqual(prescription(plan[period + i].lifts[j].sets));
         });
       }
       expect(plan.at(-1).smartIdealRoute.endsCycle).toBe(true);
     }
   }
+});
+
+test('transition week retains the week-two heavy topset floor with 2.5 kg increments', () => {
+  const plan = generateWorkoutsForTrainingModel('smart', {
+    ...withoutMeet, squat: 50, bench: 50, deadlift: 50,
+  });
+  const topSet = weekIndex => plan[weekIndex * 7].lifts[0].sets[0];
+
+  expect(topSet(1)).toMatchObject({ weight: 50, pct: 1 });
+  expect(topSet(3)).toMatchObject({
+    weight: topSet(1).weight,
+    pct: topSet(1).pct,
+  });
 });
 
 const legacyTaper = { type: 'training', number: 27, cycleClosingTaper: true,

@@ -335,6 +335,8 @@ function universalWarmupLadderIsValid(weights = [], targetWeight = 0) {
   if (target < 30) return weights.length === 0;
   if (!weights.length || weights[0] !== UNIVERSAL_WARMUP_START_KG) return false;
   if (weights.some(weight => weight % 10 !== 0 || weight >= target)) return false;
+  // Once the final rung reaches 40 kg, leave a full 10 kg step to the work.
+  if (weights.at(-1) >= 40 && target - weights.at(-1) < 10) return false;
 
   const ladder = [...weights, target];
   let previousJump = UNIVERSAL_WARMUP_MAX_JUMP_KG;
@@ -370,7 +372,7 @@ function generateBalancedUniversalWarmupWeights(targetWeight, finalWeight = null
   return [];
 }
 
-export function generateUniversalWarmupWeights(targetWeight = 0) {
+export function generateUniversalWarmupWeights(targetWeight = 0, targetReps = 1) {
   const target = Number(targetWeight) || 0;
   if (!Number.isFinite(target) || target < 30) return [];
 
@@ -378,6 +380,23 @@ export function generateUniversalWarmupWeights(targetWeight = 0) {
     Math.round(target * UNIVERSAL_WARMUP_TARGET_RATIO / 10) * 10,
     Math.floor(target * UNIVERSAL_WARMUP_MAX_RATIO / 10) * 10
   );
+  const firstAnchor = UNIVERSAL_WARMUP_START_KG + UNIVERSAL_WARMUP_ANCHOR_STEP_KG;
+  // Four or more work reps would put five reps on both warm-up rungs.
+  // Skip the extra set when the first anchor already leaves a short jump.
+  if (targetReps >= 4 && desiredFinal > firstAnchor &&
+      target - firstAnchor <= UNIVERSAL_WARMUP_MAX_JUMP_KG / 2) {
+    return [UNIVERSAL_WARMUP_START_KG, firstAnchor];
+  }
+
+  const desired = buildDesiredUniversalWarmupWeights(target, desiredFinal);
+  const higherFinal = desiredFinal + WARMUP_REBALANCE_STEP_KG;
+  const higherLadder = buildDesiredUniversalWarmupWeights(target, higherFinal);
+  // Try the next safe rung before moving all the intermediate plate anchors.
+  if (!universalWarmupLadderIsValid(desired, target) &&
+      higherFinal <= target * UNIVERSAL_WARMUP_MAX_RATIO &&
+      universalWarmupLadderIsValid(higherLadder, target)) {
+    return higherLadder;
+  }
   // First try the preferred 85% ladder with all normal jump constraints.
   const preferred = target - desiredFinal <= UNIVERSAL_WARMUP_MAX_JUMP_KG
     ? generateBalancedUniversalWarmupWeights(target, desiredFinal)
@@ -443,7 +462,7 @@ export function generateWarmups(workPlan, lift = '', isSingleLiftWorkout = false
   const targetSet = workSets.find(isFirstMainSet) || workSets[0];
   const targetWeight = Number(targetSet?.weight) || 0;
   const targetReps = Math.max(Number(targetSet?.reps) || 1, 1);
-  const weights = generateUniversalWarmupWeights(targetWeight);
+  const weights = generateUniversalWarmupWeights(targetWeight, targetReps);
   const reps = distributeUniversalWarmupReps(weights.length, targetReps, weights, targetWeight);
 
   return weights.map((weight, index) => ({

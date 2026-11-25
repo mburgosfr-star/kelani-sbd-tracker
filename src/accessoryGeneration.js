@@ -500,6 +500,12 @@ export function applyAccessoryPlanToWorkouts(
     const generated = generatedWorkouts[index];
     if (completedWorkoutNumbers.has(Number(generated?.number || workout.number))) return workout;
     if (!generated) return workout;
+    // A partially logged session keeps its original dose, including failed
+    // backoffs that would fall beyond the end of the shorter prescription.
+    if (workoutHasUserProgress(workout) && generated.lifts?.some((block, i) =>
+      block.smartPrescription?.fixedBackoffCount &&
+      workout.lifts?.[i]?.sets?.length !== block.sets.length
+    )) return workout;
     if (workoutHasUserProgress(workout) &&
         closingWeekChanged(workout, generated)) return workout;
     if (workoutHasUserProgress(workout) && (workout.trainingApproach || 'powerlifting') !== (generated.trainingApproach || 'powerlifting')) return workout;
@@ -564,7 +570,7 @@ export function applyAccessoryPlanToWorkouts(
         (workout.lifts || [])[liftIndex],
         generatedLiftBlock,
         preserveMainLiftProgress,
-        workoutHasUserProgress(workout)
+        workoutHasUserProgress((workout.lifts || [])[liftIndex])
       )
     );
     const primaryLiftBlock = mergedLifts[0] || {};

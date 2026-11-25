@@ -1,3 +1,4 @@
+import restDayImage from './assets/rest-day.webp';
 import WeightLimitsEditor from './WeightLimitsEditor';
 import { createWorkoutWeightLimiter, EMPTY_WEIGHT_LIMITS, normalizeWeightLimits, isValidWeightLimits } from './weightLimits';
 import { buildProgramTimeline, getProgramForecastWindow } from './programTimeline';
@@ -1540,7 +1541,7 @@ export function writeAutomaticBackup(data) {
 }
 async function performAutomaticBackup(data) {
   const backup = buildBackupPayload(data);
-  const json = JSON.stringify(backup, null, 2);
+  const json = JSON.stringify(backup);
 
   try {
     let storedJson = null;
@@ -1975,15 +1976,18 @@ function workoutDateColor(workout) {
   return getLiftThemeColor(workout.lift);
 }
 
-function WorkoutDateBadge({ color, children, testId, inline = false }) {
+function WorkoutDateBadge({ color, children, testId, inline = false, fontSize = RESPONSIVE_CONTENT_UI.compactFontSize }) {
   return <span data-testid={testId} style={{
-    fontSize: RESPONSIVE_CONTENT_UI.compactFontSize,
+    fontSize,
     background: color,
     color: '#000000',
     padding: '1px 6px',
     borderRadius: 3,
     marginLeft: inline ? 8 : 0,
     display: 'inline-block',
+    boxSizing: 'border-box',
+    maxWidth: '100%',
+    overflowWrap: 'anywhere',
     textTransform: 'uppercase',
   }}>{children}</span>;
 }
@@ -2662,6 +2666,7 @@ function WorkoutWeightPercentLabel({
   color = THEME.muted,
   showPlateCalculatorIcon = false,
   phaseTag = null,
+  weightLimitNote = null,
 }) {
   return (
     <span
@@ -2694,7 +2699,12 @@ function WorkoutWeightPercentLabel({
           {phaseTag}
         </span>
       ) : null}
-      <span>{weightText}</span>
+      <span>
+        {weightText}
+        {weightLimitNote && (
+          <span role="img" aria-label={weightLimitNote} style={{ marginInlineStart: 2 }}>↓</span>
+        )}
+      </span>
       {(percentText || showPlateCalculatorIcon) ? (
         <span
           style={{
@@ -3864,9 +3874,9 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewTransitionWeekItem,
-    t.whatsNewDashboardSetsItem,
-    t.whatsNewWeightLimitColorItem,
+    t.whatsNewWarmupLimitItem,
+    t.whatsNewBackoffCountItem,
+    t.whatsNewRestPhotoItem,
   ];
 
   return (
@@ -5834,7 +5844,7 @@ function hasActionAfterMainLift(workout, liftIndex) {
       ['done', 'failed', 'skipped'].some(key => (accessory[key] || []).some(Boolean)));
 }
 
-export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = false, showPhaseTags = false, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator, isLastGroupOfWorkout = false, workoutCompleted = false, hasLaterSetAction = false }) {
+export function BackoffGroup({ entries, workSetPosition, activeIndex, isReadOnly, compactGrid = false, showPhaseTags = false, onToggle, onEditAll, onRestoreAll, onMarkFailed, renderTimer, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard' , onShowPlateCalculator, isLastGroupOfWorkout = false, workoutCompleted = false, hasLaterSetAction = false }) {
   const [editing, setEditing] = useState(false);
   const firstSet = entries?.[0]?.set || {};
   const firstOpenEntry = entries.find(({ set }) => !set.done && !set.skipped) || entries[0];
@@ -6022,12 +6032,14 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
             benchPressVariant
           )}${set.perSide ? ` ${t.perSideSuffix}` : ''}`;
           const canShowPlateCalculator = Boolean(onShowPlateCalculator && !set.perSide && !set.weightLimitUnavailable);
-          const plateCalculatorLabel = `${t.plateCalculatorTitle}: ${setWeightText}`;
+          const weightLimitNote = set.weightLimitPrescription && !set.weightLimitUnavailable
+            ? t.weightLimitAdjusted : null;
+          const plateCalculatorLabel = `${t.plateCalculatorTitle}: ${setWeightText}${weightLimitNote ? `. ${weightLimitNote}` : ''}`;
           const setDescription = (
             <WorkoutWeightCalculatorTrigger
               onShowPlateCalculator={canShowPlateCalculator ? onShowPlateCalculator : null}
               weightKg={set.weight}
-              adjustmentNote={set.weightLimitPrescription && t.weightLimitAdjusted}
+              adjustmentNote={weightLimitNote}
               label={plateCalculatorLabel}
             >
               <WorkoutWeightPercentLabel
@@ -6036,6 +6048,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
                 color={setIsAdjusted ? '#f39c12' : THEME.muted}
                 showPlateCalculatorIcon={canShowPlateCalculator}
                 phaseTag={showPhaseTags ? getWorkoutSetPhaseTag(set, t) : null}
+                weightLimitNote={weightLimitNote}
               />
             </WorkoutWeightCalculatorTrigger>
           );
@@ -6044,6 +6057,7 @@ export function BackoffGroup({ entries, activeIndex, isReadOnly, compactGrid = f
             <WorkoutCircleItem
               key={index}
               testId={`workout-set-group-item-${index}`}
+              gridPosition={workSetPosition?.(index)}
               autoScrollActive={index === activeIndex}
               label={setDescription}
             >
@@ -6621,7 +6635,7 @@ function getKelaniWarmupJumpIssues(workout = {}) {
   });
 }
 
-export function getSmartDecisionReasonDisplayText(summary, t = translations.en, workout = {}) {
+export function getSmartDecisionReasonDisplayText(summary, t = translations.en, workout = {}, meetDayEnabled = false) {
   t = completeUiTranslations(t);
   if (workout?.smartReturnTraining) return t.smartReturnTrainingDetails;
   if (!summary?.reason) return null;
@@ -6672,7 +6686,7 @@ export function getSmartDecisionReasonDisplayText(summary, t = translations.en, 
         workout?.smartIdealRoute?.adjustmentReason ===
         'too-hard-recovery'
       ) {
-        return t.smartReasonIdealRouteTooHardRecovery;
+        return meetDayEnabled ? t.smartReasonIdealRouteTooHardRecovery : t.smartReasonTooHardExtraRest;
       }
 
       return t.smartReasonIdealRouteRecovery;
@@ -7315,12 +7329,12 @@ export function getSmartModalDetailRows(
   return rows;
 }
 
-export function getSmartWorkoutExplanation(workout = {}, t = translations.en) {
+export function getSmartWorkoutExplanation(workout = {}, t = translations.en, meetDayEnabled = false) {
   t = completeUiTranslations(t);
   if (workout.smartReturnTraining) return t.smartReturnTrainingShort;
   const summary = workout.smartDecisionSummary || {};
   if (workout.smartIdealRoute?.adjustmentReason === 'too-hard-recovery') {
-    return t.smartReasonIdealRouteTooHardRecovery;
+    return meetDayEnabled ? t.smartReasonIdealRouteTooHardRecovery : t.smartReasonTooHardExtraRest;
   }
   if (workout.smartIdealRoute?.stage === 'post-meet' ||
       summary.reason === SMART_DECISION_REASONS.POST_MEET_RECOVERY) {
@@ -7332,13 +7346,13 @@ export function getSmartWorkoutExplanation(workout = {}, t = translations.en) {
   if ([SMART_DECISION_REASONS.FAILED_SET_DELOAD,
     SMART_DECISION_REASONS.DEADLIFT_TAPER_RECOVERY,
     SMART_DECISION_REASONS.FREQUENCY_RECOVERY].includes(summary.reason)) {
-    return getSmartDecisionReasonDisplayText(summary, t, workout);
+    return getSmartDecisionReasonDisplayText(summary, t, workout, meetDayEnabled);
   }
   return null;
 }
 
-export function SmartWorkoutHeader({ contentTitle, workout, t = translations.en }) {
-  const explanation = getSmartWorkoutExplanation(workout, t);
+export function SmartWorkoutHeader({ contentTitle, workout, t = translations.en, meetDayEnabled = false }) {
+  const explanation = getSmartWorkoutExplanation(workout, t, meetDayEnabled);
   return (
     <div>
       <ScreenTitle title={contentTitle || getSmartDayTypeDisplayLabel(workout?.smartDayType, t)} />
@@ -7546,6 +7560,7 @@ export function CurrentWorkout({
       language, today: scheduleToday, todayLabel: t.today, tomorrowLabel: t.tomorrow,
       omitTodayDate: true, omitTomorrowDate: true,
     });
+    const reason = smartModel && getSmartWorkoutExplanation(workout, t, workoutSetup?.meetDayEnabled === true);
     return (
       <div style={restWorkoutScreenStyle()}>
 
@@ -7558,63 +7573,26 @@ export function CurrentWorkout({
             alignContent: 'stretch',
           })}
         >
-        {!smartModel && <ScreenTitle title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />} />}
-        {smartModel && (
-          <div data-testid="workout-header-secondary" style={appHeaderSecondaryStyle()}>
-            <SmartWorkoutHeader
-              contentTitle={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
-              workout={workout}
-              t={t}
-            />
+          <div data-testid="workout-header-secondary" style={{ textAlign: 'center' }}>
+            <ScreenTitle fontSize="clamp(26px, 7vw, 34px)" title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />} />
+            {!isReadOnly && scheduledLabel && (
+              <WorkoutDateBadge fontSize="0.875rem" testId="rest-workout-schedule-badge" color={THEME.primary}>{scheduledLabel}</WorkoutDateBadge>
+            )}
           </div>
-        )}
 
-        <div style={restWorkoutContentStyle()}>
-          {renderActivateWorkoutCard()}
-
-
-          <div style={{
-            padding: '8px 0 10px',
-            background: 'transparent',
-            border: 'none',
-            color: THEME.text,
-            textAlign: 'center'
-          }}>
-            <h2 style={{
-              margin: '0 0 8px',
-              color: THEME.text,
-              fontSize: 'clamp(22px, 5.2vw, 27px)',
-              fontWeight: 900
-            }}>
-              {t.restAndRecovery || t.deload}
-              {!isReadOnly && scheduledLabel && (
-                <span data-testid="rest-workout-schedule-badge" style={{
-                  fontSize: RESPONSIVE_WORKOUT_UI.compactTextFontSize,
-                  background: THEME.primary,
-                  color: '#000000',
-                  padding: '1px 6px',
-                  borderRadius: 3,
-                  marginLeft: 8,
-                  verticalAlign: 'middle',
-                  textTransform: 'uppercase'
-                }}>
-                  {scheduledLabel}
-                </span>
-              )}
-            </h2>
-
-            <p style={{
-              margin: '0 auto',
-              maxWidth: 360,
-              color: THEME.muted,
-              fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
-              fontWeight: 700,
-              lineHeight: 1.4
-            }}>
-              {t.restReadyNextWorkout}
-            </p>
+          <div style={restWorkoutContentStyle()}>
+            {renderActivateWorkoutCard()}
+            <div style={{ display: 'grid', justifyItems: 'center', gap: 16, padding: '16px 8px', textAlign: 'center' }}>
+              <img src={restDayImage} alt="" width="760" height="380" style={{
+                display: 'block', width: '100%', maxWidth: 440, height: 'auto',
+                maxHeight: '28vh', objectFit: 'cover', borderRadius: 12,
+              }} />
+              <p style={{ margin: 0, maxWidth: '34ch', color: THEME.text,
+                fontSize: 'clamp(17px, 4.6vw, 21px)', lineHeight: 1.5 }}>
+                {reason || t.restDayNoLifting}{!isReadOnly && ` ${t.restReadyNextWorkout}`}
+              </p>
+            </div>
           </div>
-        </div>
 
         <div data-testid="rest-workout-actions" style={{
           display: 'flex', justifyContent: 'center', flexShrink: 0,
@@ -7627,7 +7605,7 @@ export function CurrentWorkout({
               onComplete('easy');
             }}
             data-testid="complete-rest-day-button"
-            style={{ margin: '0 auto' }}
+            style={{ margin: '0 auto', fontSize: '1rem' }}
             disabled={isReadOnly}
             enabled={!isReadOnly}
             active={shouldFocusWorkoutCompletion({
@@ -7701,6 +7679,7 @@ export function CurrentWorkout({
         {smartModel && (
           <div data-testid="workout-header-secondary" style={appHeaderSecondaryStyle()}>
             <SmartWorkoutHeader
+              meetDayEnabled={workoutSetup?.meetDayEnabled === true}
               contentTitle={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
               workout={workout}
               t={t}
@@ -7754,6 +7733,10 @@ export function CurrentWorkout({
           const firstIncompleteWarmup = (liftBlock.warmups || []).findIndex(w => !w.done);
           const firstIncompleteSet = (liftBlock.sets || []).findIndex(s => !s.done);
           const allWarmupsDone = (liftBlock.warmups || []).every(w => w.done);
+          const separateSetRows = isMeetDay || Boolean(liftBlock.smartPrescription?.idealRouteStage);
+          const workSetPosition = index => separateSetRows ? centeredMeetItemStyle(
+              liftBlock.sets.length, index, Math.ceil((liftBlock.warmups || []).length / WORKOUT_GRID_COLUMNS) + 1
+            ) : undefined;
           const hasActionInLaterLift = hasActionAfterMainLift(workout, li);
 
           return (
@@ -7833,13 +7816,13 @@ export function CurrentWorkout({
 
               <WorkoutLiftGrid
                 testId={`workout-lift-grid-${li}`}
-                columnCount={isMeetDay ? WORKOUT_GRID_COLUMNS * 2 : WORKOUT_GRID_COLUMNS}
+                columnCount={separateSetRows ? WORKOUT_GRID_COLUMNS * 2 : WORKOUT_GRID_COLUMNS}
               >
                 <WarmupGrid
                   compactGrid
                   showPhaseTags
                   warmups={liftBlock.warmups || []}
-                  centeredMeetRow={isMeetDay}
+                  centeredMeetRow={separateSetRows}
                   gridSpan={null}
                   referenceSets={liftBlock.sets || []}
                   onShowPlateCalculator={onShowPlateCalculator}
@@ -7886,6 +7869,7 @@ export function CurrentWorkout({
                         compactGrid
                         showPhaseTags
                         entries={secondarySetEntries}
+                        workSetPosition={workSetPosition}
                         onShowPlateCalculator={onShowPlateCalculator}
                         activeIndex={
                           !isReadOnly &&
@@ -7925,6 +7909,7 @@ export function CurrentWorkout({
                         compactGrid
                         showPhaseTags
                         entries={groupedSetEntries}
+                        workSetPosition={workSetPosition}
                         onShowPlateCalculator={onShowPlateCalculator}
                         activeIndex={
                           !isReadOnly &&
@@ -8020,10 +8005,7 @@ export function CurrentWorkout({
                     compactGrid
                     phaseTag={getWorkoutSetPhaseTag(set, t)}
                     gridSpan={null}
-                    gridPosition={isMeetDay ? centeredMeetItemStyle(
-                      liftBlock.sets.length, si,
-                      Math.ceil((liftBlock.warmups || []).length / WORKOUT_GRID_COLUMNS) + 1
-                    ) : null}
+                    gridPosition={workSetPosition(si)}
                     set={set}
                     index={si}
                     label={set.labelKey ? t[set.labelKey] : `${t.set} ${si + 1}`}
@@ -8184,6 +8166,7 @@ export function CurrentWorkout({
       {smartModel && (
         <div data-testid="workout-header-secondary" style={appHeaderSecondaryStyle()}>
           <SmartWorkoutHeader
+            meetDayEnabled={workoutSetup?.meetDayEnabled === true}
               contentTitle={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />}
             workout={workout}
             t={t}
@@ -9617,10 +9600,10 @@ export function HiddenScreenTitle({ title }) {
   }}>{title}</h1>;
 }
 
-export function ScreenTitle({ title }) {
+export function ScreenTitle({ title, fontSize = 'clamp(22px, 5.8vw, 26px)' }) {
   return <h1 data-testid="screen-title" style={{
     margin: '0 0 12px', padding: '4px 0', textAlign: 'center',
-    color: THEME.meet, fontSize: 'clamp(22px, 5.8vw, 26px)',
+    color: THEME.meet, fontSize,
     fontWeight: 900, lineHeight: 1.25, flex: '0 0 auto', overflowWrap: 'anywhere',
   }}>{title}</h1>;
 }
@@ -12185,6 +12168,8 @@ function App() {
   }, []);
 
   const persistedProfile = useRef(null);
+  const [profileSaveFailed, setProfileSaveFailed] = useState(false);
+  const [profileSaveAttempt, setProfileSaveAttempt] = useState(0);
   const storedData = useMemo(() => ({
       version: 1,
       strengthPrecisionVersion: STRENGTH_PRECISION_VERSION,
@@ -12236,8 +12221,14 @@ function App() {
     // quota. Browser persistence already is the canonical local record;
     // automatic backup files are a native-only feature.
     removeLegacyBrowserAutomaticBackup(localStorage);
-    persistedProfile.current = saveProfile(localStorage, storedData, persistedProfile.current);
-  }, [hasLoadedData, storedData]);
+    try {
+      persistedProfile.current = saveProfile(localStorage, storedData, persistedProfile.current);
+      setProfileSaveFailed(false);
+    } catch (error) {
+      console.error('Local profile save failed', error);
+      setProfileSaveFailed(true);
+    }
+  }, [hasLoadedData, storedData, profileSaveAttempt]);
 
   useEffect(() => {
     if (!hasLoadedData || !storedData.prs.Squat || !storedData.prs.Bench || !storedData.prs.Deadlift) return;
@@ -15640,6 +15631,9 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
       }),
     })}
   >
+      {profileSaveFailed && <div role="alert" style={{ textAlign: 'center', padding: 8 }}>
+        {t.localSaveFailed} <button onClick={() => setProfileSaveAttempt(attempt => attempt + 1)}>{t.retryProfileSave}</button>
+      </div>}
       <AppHeader t={t} currentCycle={programPreview?.cycle || currentCycle}
         onOpenAbout={() => {
           setShowProjectVerification(false);
@@ -15751,7 +15745,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
             if (e.key === 'Enter' || e.key === ' ') changeScreen('current');
           }}
           style={{
-            padding: 0,
+            paddingBlock: 'var(--dashboard-extra, 0px)',
             margin: 0,
             textAlign: 'center',
             cursor: 'pointer',
@@ -15765,7 +15759,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
                 fontSize: adaptiveFontSize('clamp(14px, 3.4vw, 17px)'),
                 fontWeight: 800,
                 lineHeight: 1.3,
-                marginBottom: 4,
+                marginBottom: 'calc(4px + var(--dashboard-extra, 0px))',
               }}
             >
               {dashboardRelativeDate ? <WorkoutDateBadge color={workoutDateColor(nextWorkout)}>{dashboardScheduleDateLabel}</WorkoutDateBadge> : dashboardScheduleDateLabel}
@@ -15780,6 +15774,13 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
           }}>
             <WorkoutTitle workout={nextWorkout} t={t} benchPressVariant={benchPressVariant} />
           </div>
+
+          {nextWorkout.type === 'rest' && (
+            <img src={restDayImage} alt="" width="760" height="380" style={{
+              display: 'block', width: '100%', height: 'clamp(72px, 14dvh, 140px)',
+              marginTop: 10, borderRadius: 10, objectFit: 'cover', objectPosition: 'center 60%',
+            }} />
+          )}
 
           {planLines.length > 0 && (
             <div style={{
@@ -15942,7 +15943,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              gap: 'calc(var(--kelani-dashboard-card-gap, 8px) + var(--dashboard-extra, 0px)) clamp(12px, 3vw, 16px)'
+              gap: 'calc(var(--kelani-dashboard-card-gap, 8px) + var(--dashboard-extra, 0px) * 0.6) clamp(12px, 3vw, 16px)'
             }}>
               {cards.map(card => (
                 <div
@@ -15954,7 +15955,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
                     if (e.key === 'Enter' || e.key === ' ') openStatsTab(card.statsTab);
                   }}
                   style={{
-                    padding: 'calc(var(--kelani-dashboard-card-padding, 2px) + var(--dashboard-extra, 0px)) 2px',
+                    padding: 'calc(var(--kelani-dashboard-card-padding, 2px) + var(--dashboard-extra, 0px) * 0.6) 2px',
                     cursor: 'pointer',
                   }}
                 >
@@ -15962,7 +15963,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
                     color: card.color,
                     fontSize: adaptiveFontSize('clamp(21px, 5vw, 25px)'),
                     fontWeight: 900,
-                    marginBottom: 'calc(var(--kelani-dashboard-text-gap, 4px) + var(--dashboard-extra, 0px))',
+                    marginBottom: 'calc(var(--kelani-dashboard-text-gap, 4px) + var(--dashboard-extra, 0px) * 0.6)',
                     lineHeight: 1.1
                   }}>
                     {card.label}
@@ -15971,7 +15972,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
                   <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'auto 1fr',
-                    gap: 'calc(var(--kelani-dashboard-text-gap, 3px) + var(--dashboard-extra, 0px)) 10px',
+                    gap: 'calc(var(--kelani-dashboard-text-gap, 3px) + var(--dashboard-extra, 0px) * 0.6) 10px',
                     alignItems: 'baseline'
                   }}>
                     <span style={{
@@ -16077,8 +16078,8 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
                   alignItems: 'center',
                   columnGap: 14,
                   padding: dashboardUsesCompactLayout
-                    ? 'calc(3px + var(--dashboard-extra, 0px)) 8px'
-                    : 'calc(clamp(6px, 0.9dvh, 10px) + var(--dashboard-extra, 0px)) 8px',
+                    ? 'calc(3px + var(--dashboard-extra, 0px) * 0.6) 8px'
+                    : 'calc(clamp(6px, 0.9dvh, 10px) + var(--dashboard-extra, 0px) * 0.6) 8px',
                   marginBottom: index === dashboardBodyRows.length - 1
                     ? 0
                     : dashboardUsesCompactLayout
@@ -16301,7 +16302,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
         t={t}
         weightUnit={weightUnit}
         theme={THEME}
-        header={<CompletedScreenHeader title={t.cycleCompleted} message={t.cycleCompletedSaved} />}
+        header={<CompletedScreenHeader title={t.cycleCompleted} message={profileSaveFailed ? '' : t.cycleCompletedSaved} />}
         containerStyle={completedWorkoutScreenStyle()}
         contentStyle={scrollableScreenContentStyle()}
         buttonStyle={compactModalActionButtonStyle}
@@ -16321,7 +16322,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
           title={completedWorkoutIsMeet ? t.meetCompleted
             : completedWorkoutCanStartNewCycle ? t.cycleCompleted
             : t.workoutCompleted}
-          message={completedWorkoutIsMeet ? t.meetCompletedSaved
+          message={profileSaveFailed ? '' : completedWorkoutIsMeet ? t.meetCompletedSaved
             : completedWorkoutCanStartNewCycle ? t.workoutAndCycleSaved
             : t.goodJobSaved}
         />

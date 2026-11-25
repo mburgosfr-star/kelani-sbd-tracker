@@ -1,0 +1,3 @@
+- Si el límit de pes modifica la primera sèrie de treball, Kelani també ajusta les sèries d’escalfament pendents.
+- En l’entrenament intel·ligent, les repeticions prescrites per sèrie de volum determinen quantes sèries de volum es fan després de la sèrie principal.
+- Els dies de descans, el tauler i la pantalla de descans mostren una fotografia.

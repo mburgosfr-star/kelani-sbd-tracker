@@ -9,15 +9,47 @@ const training = () => ({ type: 'training', lift: 'Squat', warmups: [
 ], sets: [{ weight: 180, originalWeight: 180, pct: 90, reps: 1, labelKey: 'topSet' },
   { weight: 150, originalWeight: 150, pct: 75, reps: 5, labelKey: 'backoff' }] });
 
-test('only over-limit sets change; warmup repetitions and raster size are preserved', () => {
+test('the cap regenerates warmups from the effective top set while keeping the lighter work set', () => {
   const original = training();
   const limited = applyWorkoutWeightLimits(original, { Squat: 169 }, null, policy);
   expect(limited.sets[0]).toMatchObject({ weight: 167.5, reps: 3, originalWeight: 167.5 });
   expect(limited.sets[1]).toMatchObject(original.sets[1]);
-  expect(limited.warmups.map(set => set.reps)).toEqual([5, 5, 3]);
-  expect(limited.warmups.map(set => set.weight)).toEqual([20, 100, 160]);
-  expect(limited.sets.length + limited.warmups.length).toBe(5);
+  expect(limited.warmups.map(set => set.reps)).toEqual([5, 5, 3, 3]);
+  expect(limited.warmups.map(set => set.weight)).toEqual([20, 70, 120, 150]);
   expect(applyWorkoutWeightLimits(limited, { Squat: 169 }, null, policy)).toBe(limited);
+});
+
+test('updates the pending warmup before a capped double and keeps every recorded warmup', () => {
+  const warmups = [[20, 5], [70, 5], [120, 3], [150, 1]].map(([weight, reps], index) => ({
+    weight, reps, done: index < 3,
+  }));
+  const workout = { type: 'training', lift: 'Deadlift', warmups, sets: [
+    { labelKey: 'topSingle', weight: 175, reps: 1, pct: 0.95 },
+    ...Array.from({ length: 5 }, () => ({ labelKey: 'backoff', weight: 161, reps: 2, pct: 0.875 })),
+  ], smartPrescription: { completeGrid: true } };
+  const limited = applyWorkoutWeightLimits(workout, { Deadlift: 170 }, null, policy);
+  expect(limited.sets[0]).toMatchObject({ weight: 170, reps: 2 });
+  expect(limited.warmups.slice(0, 3)).toEqual(warmups.slice(0, 3));
+  expect(limited.warmups.at(-1)).toMatchObject({ weight: 150, reps: 3, done: false });
+  expect(limited.sets.slice(1)).toMatchObject(workout.sets.slice(1));
+
+  const saved = JSON.parse(JSON.stringify(limited));
+  saved.warmups[3].reps = 1;
+  expect(applyWorkoutWeightLimits(saved, { Deadlift: 170 }, null, policy).warmups[3].reps).toBe(3);
+});
+
+test('a 30 kg capped top set takes one empty-bar warmup and three backoffs in Smart Training', () => {
+  const workout = { type: 'training', lift: 'Bench',
+    warmups: [{ weight: 20, reps: 5 }, { weight: 30, reps: 1 }],
+    sets: [{ labelKey: 'topSingle', weight: 35, reps: 1, pct: 1 },
+      ...Array.from({ length: 7 }, () => ({ labelKey: 'backoff', weight: 30, reps: 2, pct: 0.85 }))],
+    smartPrescription: { completeGrid: true, gridItemCount: 10 },
+  };
+  const limited = applyWorkoutWeightLimits(workout, { Bench: 30 }, null, policy);
+  expect(limited.warmups.map(set => [set.weight, set.reps])).toEqual([[20, 5]]);
+  expect(limited.sets[0]).toMatchObject({ weight: 30, reps: 6 });
+  expect(limited.sets.slice(1)).toHaveLength(3);
+  expect(limited.smartPrescription.gridItemCount).toBe(5);
 });
 
 test('no rep ceiling; every over-limit work set gets its own conversion', () => {
@@ -71,7 +103,8 @@ test('generated workouts and persistence roundtrip preserve the limit without ch
     for (const lift of workout.lifts || [workout]) {
       checked++;
       expect(lift.sets.every(set => set.weight <= options.weightLimits[lift.lift])).toBe(true);
-      expect((lift.sets.length + lift.warmups.length) % 5).toBe(0);
+      if (lift.sets[1]?.labelKey === 'backoff') expect(lift.sets.length - 1).toBe((lift.sets[1].weightLimitPrescription?.reps ?? lift.sets[1].reps) - 2);
+        else expect((lift.sets.length + lift.warmups.length) % 5).toBe(0);
     }
   }
   expect(checked).toBeGreaterThan(0);

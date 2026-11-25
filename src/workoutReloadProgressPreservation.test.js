@@ -74,6 +74,25 @@ test('still adopts the freshly generated workout when the slot has never been to
   expect(result[0].label).toBe('Freshly Regenerated');
 });
 
+test('refreshes an untouched lift without replacing warmups recorded for another lift', () => {
+  const saved = multiLiftWorkout({ done: true });
+  const generated = multiLiftWorkout({ done: false });
+  saved.lifts.push({
+    lift: 'Bench',
+    warmups: [{ weight: 20, reps: 5 }, { weight: 60, reps: 5 }, { weight: 80, reps: 5 }],
+    sets: [{ labelKey: 'topSet', weight: 91, reps: 4 }],
+  });
+  generated.lifts.push({
+    ...saved.lifts[1],
+    warmups: [{ weight: 20, reps: 5 }, { weight: 70, reps: 5 }],
+  });
+
+  const [updated] = applyAccessoryPlanToWorkouts([saved], [generated], new Set(), saved.number);
+  expect(updated.lifts[0].warmups).toEqual(saved.lifts[0].warmups);
+  expect(updated.lifts[0].sets[0].done).toBe(true);
+  expect(updated.lifts[1].warmups).toEqual(generated.lifts[1].warmups);
+});
+
 test.each(['training', 'meet'])('migrates preparation-only progress into the shared section across a %s reload', type => {
   const saved = multiLiftWorkout({ done: false });
   saved.type = type;

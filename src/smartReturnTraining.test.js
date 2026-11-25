@@ -71,7 +71,8 @@ test('return choice lightens only the current Smart training and can be restored
   lighter.lifts.forEach((block, index) => {
     expect(block.sets.length).toBeGreaterThanOrEqual(1);
     expect(block.sets.filter(set => ['backoff', 'workSets'].includes(set.labelKey)).length).toBeLessThanOrEqual(7);
-    expect((block.sets.length + block.warmups.length) % 5).toBe(0);
+    if (block.sets[1]?.labelKey === 'backoff') expect(block.sets.length - 1).toBe((block.sets[1].reps) - 2);
+        else expect((block.sets.length + block.warmups.length) % 5).toBe(0);
     block.sets.slice(0, Math.min(block.sets.length, regular.lifts[index].sets.length)).forEach((set, setIndex) => {
       expect(set.weight).toBeLessThanOrEqual(regular.lifts[index].sets[setIndex].weight);
       expect(set.weight % 0.5).toBe(0);

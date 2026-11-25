@@ -401,7 +401,7 @@ function legacyWorkoutEntries({
   }));
 }
 
-function expectFullLiftGrids(workout) {
+function expectLiftSetCounts(workout) {
   (workout.lifts || []).forEach(liftBlock => {
     expect(liftBlock.warmups.length + liftBlock.sets.length).toBeGreaterThan(0);
 
@@ -415,8 +415,11 @@ function expectFullLiftGrids(workout) {
       return;
     }
 
-    expect((liftBlock.warmups.length + liftBlock.sets.length) % 5).toBe(0);
-    expect(liftBlock.smartPrescription?.completeGrid).toBe(true);
+    const backoffs = liftBlock.sets.filter(set => set.labelKey === 'backoff');
+    const fillsGrid = (liftBlock.warmups.length + liftBlock.sets.length) % 5 === 0;
+    if (backoffs.length) expect(backoffs).toHaveLength(backoffs[0].reps - 2);
+    else expect(fillsGrid).toBe(true);
+    expect(liftBlock.smartPrescription?.completeGrid).toBe(fillsGrid);
   });
 }
 
@@ -513,7 +516,7 @@ test('the live ideal route starts with the exact intermediate W1 prescription', 
     set.precisePct === 0.825 &&
     set.weight === 82.5
   ))).toBe(true);
-  expectFullLiftGrids(workout);
+  expectLiftSetCounts(workout);
 });
 
 test('GOOD completion advances to W2 and the current level changes the route immediately', () => {
@@ -536,7 +539,7 @@ test('GOOD completion advances to W2 and the current level changes the route imm
       ['Deadlift', 'medium'],
       ['Bench', 'medium'],
     ]);
-  expectFullLiftGrids(eliteW2);
+  expectLiftSetCounts(eliteW2);
 });
 
 test('an ideal rest remains part of the pristine GOOD route', () => {
@@ -1242,7 +1245,7 @@ test('the pristine route reaches the double phase and keeps every generated grid
 
   for (let index = 0; index < 7; index += 1) {
     const workout = generateCurrent({ history, currentIndex: index });
-    expectFullLiftGrids(workout);
+    expectLiftSetCounts(workout);
     history = completeWorkout(history, workout);
   }
 
@@ -1258,7 +1261,7 @@ test('the pristine route reaches the double phase and keeps every generated grid
   expect(heavy.sets.slice(1).every(set => (
     set.reps === 3 && set.precisePct === 0.85
   ))).toBe(true);
-  expectFullLiftGrids(w8);
+  expectLiftSetCounts(w8);
 });
 
 test('normal heavy phase changes guarantee a 2.5 kg rise when the cycle cap allows it', () => {
@@ -1335,7 +1338,7 @@ test('beginner W22 keeps taper intensities and five-rep light work on a full gri
       { weight: 20, reps: 5 },
       { weight: 30, reps: 1 },
     ]);
-  expect(squat.sets).toHaveLength(8);
+  expect(squat.sets).toHaveLength(2);
   expect(squat.sets[0]).toMatchObject({
     weight: 38.5,
     reps: 1,
@@ -1344,7 +1347,7 @@ test('beginner W22 keeps taper intensities and five-rep light work on a full gri
     prescribedPct: 0.9,
   });
   expect(squat.sets.slice(1)).toEqual(
-    expect.arrayContaining(Array.from({ length: 7 }, () => expect.objectContaining({
+    expect.arrayContaining(Array.from({ length: 1 }, () => expect.objectContaining({
       labelKey: 'backoff',
       weight: 29.5,
       reps: 3,
@@ -1352,15 +1355,15 @@ test('beginner W22 keeps taper intensities and five-rep light work on a full gri
       prescribedPct: 0.70,
     })))
   );
-  expect(squat.warmups.length + squat.sets.length).toBe(10);
+  expect(squat.warmups.length + squat.sets.length).toBe(4);
 
   expect(bench.warmups).toHaveLength(0);
   expect(bench.sets.map(({ weight, reps }) => ({ weight, reps })))
     .toEqual(expect.arrayContaining([
       { weight: 26, reps: 3 },
-      ...Array.from({ length: 4 }, () => ({ weight: 19.5, reps: 5 })),
+      ...Array.from({ length: 3 }, () => ({ weight: 19.5, reps: 5 })),
     ]));
-  expect(bench.warmups.length + bench.sets.length).toBe(5);
+  expect(bench.warmups.length + bench.sets.length).toBe(4);
 });
 
 test('beginner W24 uses a useful five-column deadlift ladder and preserves the prescribed taper percentage', () => {
@@ -1384,7 +1387,7 @@ test('beginner W24 uses a useful five-column deadlift ladder and preserves the p
       { weight: 20, reps: 5 },
       { weight: 40, reps: 3 },
     ]);
-  expect(deadlift.sets).toHaveLength(8);
+  expect(deadlift.sets).toHaveLength(2);
   expect(deadlift.sets[0]).toMatchObject({
     weight: 54,
     reps: 1,
@@ -1399,7 +1402,7 @@ test('beginner W24 uses a useful five-column deadlift ladder and preserves the p
     precisePct: 0.70,
     prescribedPct: 0.70,
   });
-  expect(deadlift.warmups.length + deadlift.sets.length).toBe(10);
+  expect(deadlift.warmups.length + deadlift.sets.length).toBe(4);
 
   expect(workout.lifts.map(block => block.lift)).toEqual(['Deadlift']);
 });
@@ -1434,14 +1437,14 @@ test('C4W22 preserves intermediate taper weights in five-column grids', () => {
     prescribedPct: 0.9,
   });
   expect(squat.sets.slice(1)).toEqual(
-    Array.from({ length: 6 }, () => expect.objectContaining({
+    Array.from({ length: 1 }, () => expect.objectContaining({
       labelKey: 'backoff',
       weight: 103.5,
       reps: 3,
       prescribedPct: 0.70,
     }))
   );
-  expect(squat.warmups.length + squat.sets.length).toBe(10);
+  expect(squat.warmups.length + squat.sets.length).toBe(5);
 
   expect(bench.warmups.map(({ weight, reps }) => ({ weight, reps })))
     .toEqual([
@@ -1452,11 +1455,11 @@ test('C4W22 preserves intermediate taper weights in five-column grids', () => {
     labelKey: 'topTriple', weight: 80, reps: 3, prescribedPct: 0.8,
   });
   expect(bench.sets.slice(1)).toEqual(
-    Array.from({ length: 7 }, () => expect.objectContaining({
+    Array.from({ length: 3 }, () => expect.objectContaining({
       labelKey: 'backoff', weight: 60, reps: 5, prescribedPct: 0.60,
     }))
   );
-  expect(bench.warmups.length + bench.sets.length).toBe(10);
+  expect(bench.warmups.length + bench.sets.length).toBe(6);
 });
 
 test('beginner W25 uses the minimum taper volume needed to fill its grid', () => {
@@ -1524,10 +1527,7 @@ test('every ideal-route taper day preserves its role dose and reduced grid volum
             lift: liftBlock.lift,
           };
 
-          expect({
-            ...diagnostic,
-            gridRemainder: (warmups.length + workSets.length) % 5,
-          }).toMatchObject({ gridRemainder: 0 });
+          if (workSets[0].labelKey === 'workSets') expect((warmups.length + workSets.length) % 5).toBe(0);
           warmups.forEach(warmup => {
             expect({
               ...diagnostic,
@@ -1553,7 +1553,8 @@ test('every ideal-route taper day preserves its role dose and reduced grid volum
           const volumeSets = workSets.filter(set => (
             set.labelKey === 'backoff' || set.labelKey === 'workSets'
           ));
-          expect(volumeSets.length).toBeGreaterThanOrEqual(3);
+          if (volumeSets[0].labelKey === 'backoff') expect(volumeSets).toHaveLength(volumeSets[0].reps - 2);
+          else expect(volumeSets.length).toBeGreaterThanOrEqual(3);
           expect(volumeSets.length).toBeLessThanOrEqual(7);
           expect(topSets.length).toBeLessThanOrEqual(1);
           topSets.forEach(set => {
@@ -1603,7 +1604,7 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
           const volumeSets = liftBlock.sets.filter(set => (
             set.labelKey === 'backoff' || set.labelKey === 'workSets'
           ));
-          const expectedCount = Array.from(
+          const expectedCount = topCount ? volumeSets[0].reps - 2 : Array.from(
             { length: maximum - minimum + 1 },
             (_, index) => minimum + index
           ).find(count => (
@@ -1632,7 +1633,7 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
         options: { accessoryMode: 'standard' },
       });
 
-      expectFullLiftGrids(workout);
+      expectLiftSetCounts(workout);
       const rows = (workout.accessories || []).filter(item => item.key === 'row');
       const needsRow = workout.type === 'training' && workout.lifts.some(block => block.lift === 'Bench');
       expect(rows).toHaveLength(needsRow ? 1 : 0);
@@ -1678,7 +1679,8 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
           const volumeSets = workSets.filter(set => (
             set.labelKey === 'backoff' || set.labelKey === 'workSets'
           ));
-          expect(volumeSets.length).toBeGreaterThanOrEqual(3);
+          if (volumeSets[0].labelKey === 'backoff') expect(volumeSets).toHaveLength(volumeSets[0].reps - 2);
+          else expect(volumeSets.length).toBeGreaterThanOrEqual(3);
           expect(volumeSets.length).toBeLessThanOrEqual(7);
         }
 
@@ -1686,7 +1688,8 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
           const volumeSets = workSets.filter(set => (
             set.labelKey === 'backoff' || set.labelKey === 'workSets'
           ));
-          expect(volumeSets.length).toBeGreaterThanOrEqual(3);
+          if (volumeSets[0].labelKey === 'backoff') expect(volumeSets).toHaveLength(volumeSets[0].reps - 2);
+          else expect(volumeSets.length).toBeGreaterThanOrEqual(3);
           expect(volumeSets.length).toBeLessThanOrEqual(7);
         }
 
@@ -1700,7 +1703,7 @@ test.each(['beginner', 'intermediate', 'advanced', 'elite'])(
             reps: 1,
             precisePct: 0.9,
           });
-          expect(workSets.length).toBeGreaterThanOrEqual(3);
+          expect(workSets).toHaveLength(2);
           workSets.slice(1).forEach(set => {
             expect(set).toMatchObject({
               labelKey: 'backoff',
@@ -1742,7 +1745,7 @@ test('elite ideal route reaches W27 meet and requires one post-meet recovery wor
         postMeetRecoveryTarget: 1,
         nextCycleWorkout: 29,
       });
-      expectFullLiftGrids(workout);
+      expectLiftSetCounts(workout);
     }
 
     history = completeWorkout(history, workout);
@@ -1809,7 +1812,7 @@ test.each(['standard', 'practical', 'beginnerSquat'])(
         athleteLevel: 'beginner', options: { trainingFocus } });
       expect(workout.number).toBe(currentIndex + 1);
       expect(workout.type).toBe(currentIndex === 24 ? 'meet' : currentIndex % 2 ? 'rest' : 'training');
-      if (workout.type === 'training') expectFullLiftGrids(workout);
+      if (workout.type === 'training') expectLiftSetCounts(workout);
       history = completeWorkout(history, workout);
       expect(isSmartCycleCompleteAfterHistory(history, 1)).toBe(currentIndex === 25);
     }
@@ -1984,7 +1987,7 @@ test('half-kilogram training precision applies at every level and focus, while w
         const workout = buildSmartIdealTrainingWorkout({ routeWorkout, athleteLevel,
           squat: 157.5, bench: 104, deadlift: 184, accessoryMode: 'standard' });
         workout.lifts.forEach(block => {
-          expect((block.warmups.length + block.sets.length) % 5).toBe(0);
+          expectLiftSetCounts({ lifts: [block] });
           block.sets.forEach(set => expect(set.weight % 0.5).toBe(0));
           block.warmups.forEach(set => {
             expect(set.weight % 10).toBe(0);
