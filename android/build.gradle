@@ -27,6 +27,13 @@ allprojects {
     }
 }
 
+// Capacitor declares its own buildscript dependencies in its Android modules.
+subprojects {
+    buildscript.repositories {
+        maven { url "https://maven-central.storage-download.googleapis.com/maven2/" }
+    }
+}
+
 task clean(type: Delete) {
     delete rootProject.buildDir
 }
