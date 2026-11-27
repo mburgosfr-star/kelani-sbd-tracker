@@ -72,7 +72,7 @@ export default function AchievementShareModal({ card, t, onClose, Modal, buttonS
     <p style={{ fontSize: responsiveFontSize(14), margin: '14px 0' }}><a href={card.url} target="_blank" rel="noopener noreferrer" style={{ color: '#ff8a3d', fontWeight: 700 }}>{card.downloadLabel}</a></p>
     {error && <p role="alert">{error}</p>}
     {notice && <p role="status">{notice}</p>}
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, maxWidth: 328, margin: '0 auto' }}>
+    <div className="kelani-button-grid">
       <button type="button" disabled={!image || busy} onClick={share} style={{ ...buttonStyle('secondary', '0'), width: '100%', minWidth: 0, maxWidth: 160 }}>{t.shareAction}</button>
       <button type="button" onClick={onClose} style={{ ...buttonStyle('secondary', '0'), width: '100%', minWidth: 0, maxWidth: 160 }}>{t.close}</button>
     </div>

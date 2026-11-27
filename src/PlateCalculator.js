@@ -125,9 +125,6 @@ export default function PlateCalculator({ weightKg, adjustmentNote, incrementKg 
             padding: 12,
             fontSize: 14,
             fontWeight: 700,
-            background: 'transparent',
-            color: theme.text,
-            border: `1px solid ${theme.primary}`,
             borderRadius: 8,
             cursor: 'pointer',
           }}

@@ -56,31 +56,42 @@ export async function readVerifiedNativeBackup(path, validate) {
   throw originalError;
 }
 export async function writeVerifiedNativeBackup(path, json, { keepPrevious = true } = {}) {
-  const temporary = `${path}.tmp`;
+  const temporary = `${path}.${crypto.randomUUID()}.tmp`;
   const options = { directory: Directory.Documents, encoding: Encoding.UTF8 };
-  await Filesystem.writeFile({ ...options, path: temporary, data: json, recursive: true });
-  if ((await Filesystem.readFile({ ...options, path: temporary })).data !== json) throw new Error('Backup verification failed');
-  if (keepPrevious) {
-    let previous;
-    try {
-      previous = (await Filesystem.readFile({ ...options, path })).data;
-    } catch (error) { if (!backupFileMissing(error)) throw error; }
-    // Never replace a previous recovery copy with damaged primary data.
-    let usable = false;
-    try {
-      const backup = JSON.parse(previous);
-      usable = backup?.storageKey === 'kel-powerlifting-user-data-v1' && Boolean(backup.data) &&
-        typeof backup.exportedAt === 'string' && Number.isFinite(Date.parse(backup.exportedAt));
-    } catch { /* Invalid primary data is not a recovery copy. */ }
-    if (usable) {
-      await Filesystem.writeFile({ ...options, path: `${path}.previous`, data: previous, recursive: true });
-      if ((await Filesystem.readFile({ ...options, path: `${path}.previous` })).data !== previous) throw new Error('Previous backup verification failed');
+  let moved = false;
+  try {
+    await Filesystem.writeFile({ ...options, path: temporary, data: json, recursive: true });
+    if ((await Filesystem.readFile({ ...options, path: temporary })).data !== json) throw new Error('Backup verification failed');
+    if (keepPrevious) {
+      let previous;
+      try {
+        previous = (await Filesystem.readFile({ ...options, path })).data;
+      } catch (error) { if (!backupFileMissing(error)) throw error; }
+      // Never replace a previous recovery copy with damaged primary data.
+      let usable = false;
+      try {
+        const backup = JSON.parse(previous);
+        usable = backup?.storageKey === 'kel-powerlifting-user-data-v1' && Boolean(backup.data) &&
+          typeof backup.exportedAt === 'string' && Number.isFinite(Date.parse(backup.exportedAt));
+      } catch { /* Invalid primary data is not a recovery copy. */ }
+      if (usable) {
+        await Filesystem.writeFile({ ...options, path: `${path}.previous`, data: previous, recursive: true });
+        if ((await Filesystem.readFile({ ...options, path: `${path}.previous` })).data !== previous) throw new Error('Previous backup verification failed');
+      }
+    }
+    // Capacitor's Android implementation deletes the destination before moving.
+    // The verified previous copy provides recovery across a failed replacement.
+    await Filesystem.rename({ from: temporary, to: path, directory: Directory.Documents, toDirectory: Directory.Documents });
+    moved = true;
+    const result = await Filesystem.readFile({ ...options, path });
+    if (result.data !== json) throw new Error('Backup verification failed');
+    return result;
+  } finally {
+    if (!moved) {
+      try { await Filesystem.deleteFile({ ...options, path: temporary }); }
+      catch (error) {
+        if (!backupFileMissing(error)) console.warn('Could not remove temporary backup', error);
+      }
     }
   }
-  // Capacitor's Android implementation deletes the destination before moving.
-  // The verified previous copy provides recovery across a failed replacement.
-  await Filesystem.rename({ from: temporary, to: path, directory: Directory.Documents, toDirectory: Directory.Documents });
-  const result = await Filesystem.readFile({ ...options, path });
-  if (result.data !== json) throw new Error('Backup verification failed');
-  return result;
 }

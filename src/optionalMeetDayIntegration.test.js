@@ -59,7 +59,7 @@ test('Settings changes approach and retains it in backups and reload', async () 
     showWhatsNewAfterUpdates: false, prs: { Squat: 160, Bench: 100, Deadlift: 200 }, history: [] }));
   const view = render(<App />);
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 5000 }));
-  fireEvent.click(screen.getByRole('button', { name: /^Balanced SBD Route$/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Adjust (Training route)', description: 'Balanced SBD Route' }));
   fireEvent.change(screen.getByRole('combobox', { name: 'Training approach' }), { target: { value: 'powerbuilding' } });
   await waitFor(() => expect(readProfile(localStorage).workoutSetup.trainingApproach).toBe('powerbuilding'));
   const saved = readProfile(localStorage);
@@ -68,6 +68,8 @@ test('Settings changes approach and retains it in backups and reload', async () 
   expect(validateImportedBackup(invalid)).toBe(false);
   view.unmount(); render(<App />);
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 5000 }));
-  fireEvent.click(screen.getByRole('button', { name: /Balanced SBD Route.*Powerbuilding/ }));
+  const adjustRoute = screen.getByRole('button', { name: 'Adjust (Training route)', description: 'Balanced SBD Route · Powerbuilding' });
+  expect(adjustRoute).toHaveTextContent(/^Adjust$/);
+  fireEvent.click(adjustRoute);
   expect(screen.getByRole('combobox', { name: 'Training approach' })).toHaveValue('powerbuilding');
 }, 20000);

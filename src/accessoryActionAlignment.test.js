@@ -36,7 +36,9 @@ test('centers three accessory actions independently from the five-column set gri
   const setGrid = view.getByTestId('workout-accessory-group-grid');
   const actionGrid = view.getByTestId('workout-accessory-action-grid');
 
-  expect(setGrid.style.gridTemplateColumns).toBe('repeat(5, minmax(0, 1fr))');
+  expect(setGrid.style.gridTemplateColumns).toBe('repeat(10, minmax(0, 1fr))');
+  expect(view.getAllByTestId(/workout-accessory-set-item-/).map(item => item.style.gridColumn))
+    .toEqual(['3 / span 2', '5 / span 2', '7 / span 2']);
   expect(actionGrid.style.gridTemplateColumns)
     .toBe('repeat(3, clamp(50px, 12vw, 58px))');
   expect(actionGrid.style.columnGap).toBe('0px');

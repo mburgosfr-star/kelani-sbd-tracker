@@ -3,6 +3,10 @@ import React, { useMemo, useState } from 'react';
 const CHART_WIDTH = 360;
 const CHART_HEIGHT = 132;
 const CHART_MARGIN = Object.freeze({ top: 7, right: 5, bottom: 28, left: 31 });
+function isChartValue(value) {
+  return Number.isFinite(value) ||
+    (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value)));
+}
 
 function chooseDomainUnit(minimum, maximum) {
   const largest = Math.max(Math.abs(minimum), Math.abs(maximum));
@@ -43,8 +47,9 @@ export function prepareStatsLineChart(data = [], dataKeys = [], maximumPoints = 
     chartIndex: index + 1,
   }));
   const yValues = visibleData
-    .flatMap(item => dataKeys.map(key => Number(item[key])))
-    .filter(Number.isFinite);
+    .flatMap(item => dataKeys.map(key => item[key]))
+    .filter(isChartValue)
+    .map(Number);
 
   let yDomain = [0, 1];
   let yTicks = [0, 0.5, 1];
@@ -99,6 +104,24 @@ function chartCoordinates(point, pointCount, yDomain) {
   };
 }
 
+function oneRMGapPath(data, xPosition, yPosition) {
+  const sections = [];
+  for (let i = 1; i < data.length; i++) {
+    const start = data[i - 1];
+    const end = data[i];
+    if (![start.oneRM, start.e1rm, end.oneRM, end.e1rm].every(isChartValue)) continue;
+    if (Number(start.oneRM) === Number(start.e1rm) && Number(end.oneRM) === Number(end.e1rm)) continue;
+
+    const x1 = xPosition(start.chartIndex);
+    const x2 = xPosition(end.chartIndex);
+    sections.push(
+      `M ${x1} ${yPosition(start.oneRM)} L ${x2} ${yPosition(end.oneRM)} ` +
+      `L ${x2} ${yPosition(end.e1rm)} L ${x1} ${yPosition(start.e1rm)} Z`
+    );
+  }
+  return sections.join(' ');
+}
+
 function StatsLineChart({
   data,
   dataKeys,
@@ -114,6 +137,10 @@ function StatsLineChart({
   );
   const { visibleData, xTicks, yTicks, yDomain } = prepared;
   const pointCount = visibleData.length;
+  const series = dataKeys.map((key, index) => ({
+    key,
+    color: colors[index] || '#ff7a22',
+  }));
   const xLabels = Object.fromEntries(
     visibleData.map(point => [point.chartIndex, point.label])
   );
@@ -127,6 +154,10 @@ function StatsLineChart({
     pointCount,
     yDomain
   ).y;
+  const estimate = series.find(item => item.key === 'e1rm');
+  const gapPath = estimate && dataKeys.includes('oneRM')
+    ? oneRMGapPath(visibleData, xPosition, yPosition)
+    : '';
 
   function selectPoint(point) {
     setActivePoint(point);
@@ -168,7 +199,7 @@ function StatsLineChart({
         >
           <strong>{activePoint.label}</strong>
           {dataKeys.map(key => (
-            Number.isFinite(Number(activePoint[key])) && (
+            isChartValue(activePoint[key]) && (
               <div key={key}>
                 {getMetricLabel(key)}: {formatValue(activePoint[key])}
               </div>
@@ -193,13 +224,13 @@ function StatsLineChart({
               x2={CHART_WIDTH - CHART_MARGIN.right}
               y1={yPosition(tick)}
               y2={yPosition(tick)}
-              stroke="#5f4637"
+              stroke="#413a35"
               strokeWidth="1"
             />
             <text
               x={CHART_MARGIN.left - 5}
               y={yPosition(tick) + 3}
-              fill="#ffffff"
+              fill="#d4c9be"
               fontSize="13"
               textAnchor="end"
             >
@@ -213,7 +244,7 @@ function StatsLineChart({
             key={`x-${tick}`}
             x={xPosition(tick)}
             y={CHART_HEIGHT - 3}
-            fill="#ffffff"
+            fill="#d4c9be"
             fontSize="13"
             textAnchor={tick === 1 ? 'start' : tick === pointCount ? 'end' : 'middle'}
           >
@@ -221,10 +252,12 @@ function StatsLineChart({
           </text>
         ))}
 
-        {dataKeys.map((key, keyIndex) => {
-          const color = colors[keyIndex] || '#ff7a22';
+        {gapPath && (
+          <path d={gapPath} fill={estimate.color} fillOpacity="0.24" aria-hidden="true" pointerEvents="none" />
+        )}
+        {series.map(({ key, color }) => {
           const points = visibleData
-            .filter(point => Number.isFinite(Number(point[key])))
+            .filter(point => isChartValue(point[key]))
             .map(point => ({
               ...point,
               ...chartCoordinates(
@@ -238,27 +271,19 @@ function StatsLineChart({
             .join(' ');
 
           return (
-            <g key={key}>
+            <g key={key} color={color}>
               {path && (
                 <path
                   d={path}
                   fill="none"
-                  stroke={color}
+                  stroke="currentColor"
                   strokeWidth="2.5"
                   vectorEffect="non-scaling-stroke"
                 />
               )}
               {points.map(point => (
                 <g key={`${key}-${point.chartIndex}`}>
-                  <circle
-                    cx={point.x}
-                    cy={point.y}
-                    r="3"
-                    fill={color}
-                    stroke={color}
-                    strokeWidth="1"
-                    aria-hidden="true"
-                  />
+                  <circle cx={point.x} cy={point.y} r="2" fill="currentColor" aria-hidden="true" />
                   <circle
                     cx={point.x}
                     cy={point.y}
@@ -287,20 +312,15 @@ function StatsLineChart({
         columnGap: 14,
         rowGap: 2,
         minHeight: 18,
-        color: '#ffffff',
+        color: '#e3d9cf',
         fontSize: 13,
         lineHeight: 1.2,
+        fontWeight: 600,
+        whiteSpace: 'normal',
       }}>
-        {dataKeys.map((key, index) => (
-          <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span
-              aria-hidden="true"
-              style={{
-                width: 14,
-                height: 3,
-                background: colors[index] || '#ff7a22',
-              }}
-            />
+        {series.map(({ key, color }) => (
+          <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+            <span aria-hidden="true" style={{ width: 18, height: 2, flexShrink: 0, background: color }} />
             {getMetricLabel(key)}
           </span>
         ))}

@@ -5,12 +5,14 @@ vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => true } 
 vi.mock('@capacitor/filesystem', () => ({ Filesystem: { writeFile: vi.fn(), readFile: vi.fn(), rename: vi.fn(), readdir: vi.fn(), deleteFile: vi.fn() }, Directory: { Documents: 'DOCUMENTS' }, Encoding: { UTF8: 'utf8' } }));
 beforeEach(() => { vi.resetAllMocks(); });
 test('native writes verify the temporary file before replacing the existing backup', async () => {
-  const files = new Map([['backup.json', 'old']]);
+  const files = new Map([['backup.json', 'old'], ['backup.json.tmp', 'stale']]);
   Filesystem.writeFile.mockImplementation(async ({ path, data }) => files.set(path, data));
   Filesystem.readFile.mockImplementation(async ({ path }) => ({ data: files.get(path) }));
   Filesystem.rename.mockImplementation(async ({ from, to }) => { files.set(to, files.get(from)); files.delete(from); });
   await writeVerifiedNativeBackup('backup.json', 'new');
   expect(files.get('backup.json')).toBe('new');
+  expect(files.get('backup.json.tmp')).toBe('stale');
+  expect(Filesystem.writeFile.mock.calls[0][0].path).not.toBe('backup.json.tmp');
   Filesystem.readFile.mockResolvedValueOnce({ data: 'corrupt' });
   await expect(writeVerifiedNativeBackup('backup.json', 'other')).rejects.toThrow('verification');
   expect(files.get('backup.json')).toBe('new');

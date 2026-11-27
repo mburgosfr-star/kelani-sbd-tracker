@@ -8,6 +8,7 @@ import {
   normalizeWeightUnit,
   kgToDisplayWeight,
   formatDecimalDisplay,
+  formatWeightFromKg,
 } from './workoutUnits';
 import {
   LIFT_ORDER,
@@ -21,15 +22,15 @@ import {
 import { isSmartTrainingModel } from './programProfiles';
 
 const THEME = {
-  card: '#101010',
-  border: '#3a1f1f',
+  card: '#151413',
+  border: '#36312d',
   text: '#fff4e6',
   muted: '#fff4e6',
   primary: '#ff8a3d',
   red: '#ff5c45',
   yellow: '#ffd166',
-  meet: '#c62828',
-  brown: '#a67c52',
+  meet: '#ff7970',
+  brown: '#d7bda4',
 };
 
 const RESPONSIVE_SCREEN_PADDING = screenContentPadding();
@@ -44,7 +45,7 @@ const RESPONSIVE_STATS_UI = Object.freeze({
   tabFontSize: 'clamp(13px, 3.2vw, 16px)',
   tabMinHeight: 'var(--kelani-button-height)',
   cardGap: 'clamp(2px, 0.4dvh, 4px)',
-  cardPadding: 'clamp(1px, 0.7vw, 3px)',
+  cardPadding: '5px clamp(6px, 2vw, 10px)',
   chartTitleFontSize: adaptiveFontSize('clamp(18px, 4.4vw, 21px)'),
   chartTitleHeight: adaptiveFontSize('clamp(24px, 3.2dvh, 28px)'),
   chartMinHeight: 120,
@@ -55,7 +56,7 @@ function responsiveStatsChartGridStyle() {
     height: '100%',
     minHeight: 0,
     display: 'grid',
-    gridTemplateRows: 'repeat(3, minmax(0, 1fr))',
+    gridTemplateRows: 'repeat(3, minmax(min-content, 1fr))',
     gap: `var(--kelani-stats-card-gap, ${RESPONSIVE_STATS_UI.cardGap})`,
   };
 }
@@ -179,6 +180,7 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
   const neutralChartColor = THEME.brown;
   const preparedStats = useMemo(() => {
     const liftData = {};
+    const currentOneRMs = {};
     const totalData = [];
     const bodyData = [];
     const strengthData = [];
@@ -260,6 +262,7 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
 
     LIFT_ORDER.forEach(lift => {
       const currentOneRM = Number(best1RMs?.[lift]) || bestStats[lift].oneRM || 0;
+      currentOneRMs[lift] = currentOneRM;
       const currentE1RM = Math.max(
         currentOneRM,
         Number(bestE1RMs?.[lift]) || bestStats[lift].e1rm || 0
@@ -408,6 +411,7 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
 
     return {
       liftData,
+      currentOneRMs,
       totalChartData: totalData.map(entry => ({
         ...entry,
         oneRM: chartWeightFromKg(entry.oneRM),
@@ -435,6 +439,7 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
   ]);
   const {
     liftData,
+    currentOneRMs,
     totalChartData,
     bodyData,
     bodyMetricData,
@@ -521,26 +526,35 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
         key={chart.key}
         data-testid="stats-chart-card"
         style={{
-          background: 'transparent',
-          border: 'none',
+          background: THEME.card,
+          border: `1px solid ${THEME.border}`,
           borderRadius: 10,
           padding: RESPONSIVE_STATS_UI.cardPadding,
-          minHeight: 0,
+          minWidth: 0,
           display: 'grid',
-          gridTemplateRows: `${RESPONSIVE_STATS_UI.chartTitleHeight} minmax(0, 1fr)`,
+          gridTemplateRows: `auto minmax(${RESPONSIVE_STATS_UI.chartMinHeight}px, 1fr)`,
         }}
       >
-        <h3 style={{
+        <div style={{
           minHeight: RESPONSIVE_STATS_UI.chartTitleHeight,
-          margin: 0,
-          color: chart.color || neutralChartColor,
-          fontSize: RESPONSIVE_STATS_UI.chartTitleFontSize,
-          lineHeight: 1.15,
           display: 'flex',
           alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '2px 8px',
         }}>
-          {chart.title}
-        </h3>
+          <h3 style={{
+            margin: 0, color: chart.color || neutralChartColor,
+            fontSize: RESPONSIVE_STATS_UI.chartTitleFontSize, lineHeight: 1.15,
+            whiteSpace: 'normal', overflowWrap: 'anywhere',
+          }}>{chart.title}</h3>
+          {Number.isFinite(chart.oneRM) && chart.oneRM > 0 && (
+            <span style={{ fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>
+              <span style={{ fontWeight: 600 }}>{t.oneRM}</span>{' '}
+              <strong>{formatWeightFromKg(chart.oneRM, statsWeightUnit)}</strong>
+            </span>
+          )}
+        </div>
         {renderChart(chart.data, chart.dataKeys || [chart.key], chart.colors || [chart.color], chart.emptyMessage)}
       </section>
     );
@@ -574,6 +588,7 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
           <button
             key={tab.key}
             data-kelani-button-layout="selection"
+            aria-pressed={activescreen === tab.key}
             onClick={() => setActivescreen(tab.key)}
             style={{
               width: '100%',
@@ -581,14 +596,12 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
               padding: '8px clamp(3px, 1.5vw, 7px)',
               fontSize: RESPONSIVE_STATS_UI.tabFontSize,
               lineHeight: 1.2,
-              background: THEME.card,
-              color: activescreen === tab.key ? THEME.primary : THEME.text,
-              border: `1px solid ${activescreen === tab.key ? THEME.primary : THEME.border}`,
               borderRadius: 8,
               cursor: 'pointer',
               fontWeight: activescreen === tab.key ? 800 : 700,
               textAlign: 'center',
-              whiteSpace: 'nowrap',
+              whiteSpace: 'normal',
+              overflowWrap: 'break-word',
             }}
           >
             {tab.label}
@@ -608,6 +621,7 @@ export default function StatsScreen({ history, bodyWeights, currentCycle, curren
   return renderChartCard({
       key: lift,
       title: liftLabel,
+      oneRM: currentOneRMs[lift],
       color: COLORS[lift],
       data: liftData[lift] || [],
       dataKeys: STATS_LIFT_DATA_KEYS,

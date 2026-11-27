@@ -23,9 +23,9 @@ export default function WeightLimitsEditor({ value, onSave, onClose, bodyWeight,
     </label>)}
     <p>{t.weightLimitsBenchHelp}</p>
     {error && <p role="alert">{t.weightLimitsInvalid}</p>}
-    <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-      <button type="button" style={buttonStyle} onClick={onClose}>{t.cancel}</button>
-      <button type="submit" style={buttonStyle}>{t.save}</button>
+    <div className="kelani-button-grid">
+      <button type="button" style={buttonStyle('secondary', '0')} onClick={onClose}>{t.cancel}</button>
+      <button type="submit" style={buttonStyle('primary', '0')}>{t.save}</button>
     </div>
   </form>;
 }

@@ -12,7 +12,6 @@ import {
   formatLocalIsoTimestamp,
   isVerifiedAutomaticBackupStatus,
   isVerifiedManualBackupStatus,
-  isShareCancellation,
   removeLegacyBrowserAutomaticBackup,
   replaceBodyDataEntryForDay,
   shouldRetryAutomaticBackup,
@@ -39,12 +38,6 @@ test('keeps the Documents backup compatible with Android 10 and older only', () 
   expect(manifest).toMatch(
     /android\.permission\.WRITE_EXTERNAL_STORAGE"\s+android:maxSdkVersion="29"/
   );
-});
-
-test('recognizes only the explicit native share cancellation result', () => {
-  expect(isShareCancellation(new Error('Share canceled'))).toBe(true);
-  expect(isShareCancellation(new Error('Unsupported url'))).toBe(false);
-  expect(isShareCancellation(null)).toBe(false);
 });
 
 test('uses the local wall-clock time in manual backup filenames and records the offset', () => {

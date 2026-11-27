@@ -2,7 +2,7 @@ import { readProfile } from './workoutPersistence';
 import { screenContentPadding } from './appChromeLayout';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StatsScreen, capRunningBestChart, getStatsHistoricalOneRM, mergeStatsHistoricalMaxes, replaceCurrentChartEndpoint, statsScreenStyle, statsScrollableContentStyle, statsTabListStyle } from './StatsScreen';
-import App, { StartNewCycleSection, AllWorkouts, ProgramCompletedSetSummary, AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartWorkoutHeader, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getProgramWorkoutWindow, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, programWorkoutCardSpacingStyle, programWorkoutListContainerStyle, programWorkoutListVerticalSpacing, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
+import App, { StartNewCycleSection, AllWorkouts, ProgramCompletedSetSummary, AppHeader, BOTTOM_NAV_ICON_SIZE, BOTTOM_NAV_SPACE, BodyDataSection, BottomNav, CompletedScreenHeader, CurrentWorkout, DashboardCycleWorkoutLabel, DataSection, FAILED_SET_COLOR, MeetDayDashboardPlan, MeetPlanContent, MilestoneCelebrationModal, SetRow, SettingsListRow, SmartWorkoutHeader, WeightUnitSection, WorkoutCompletionButton, activeWorkoutLiftBlockStyle, activeWorkoutScreenStyle, appHeaderDividerStyle, appHeaderSecondaryStyle, appViewportStyle, bottomNavButtonStyle, bottomNavDividerStyle, bottomNavLabelStyle, bottomNavStyle, buildBodyRatioRecord, buildDashboardE1RMMetrics, buildDashboardRecentPrEvents, canSwitchClassicToSmart, compactModalActionButtonStyle, compactPrepLabelStyle, compactProgramActionButtonStyle, completedWorkoutScreenStyle, countDashboardRecentPrLines, fixedChromeScreenStyle, fixedScreenHeaderStyle, formatStrengthRatioWithMax, formatWorkoutSetPercentDisplay, getDashboardE1RMValue, getDashboardMeetState, getDashboardPrimaryBlockerLift, getDisplayedSmartIntensityRole, getLatestBodyDataValues, getSmartDecisionReasonDisplayText, getSmartModalDetailRows, getSmartProgramTitle, getWorkoutSetPhaseTag, isCompletedSuccessfulThirdAttempt, meetCompletedAchievedWeightStyle, meetDayDashboardContentStyle, meetDayDashboardScreenStyle, meetPlanModalBackButtonStyle, meetWorkoutLiftBlockStyle, meetWorkoutLiftCollectionStyle, meetWorkoutScreenStyle, preparationGridStyle, programHeaderStyle, programScreenStyle, regularDashboardContentStyle, regularDashboardScreenStyle, regularSettingsClusterStyle, resolveStoredWeightUnit, resolveWorkoutEffortForCompletion, restDayCompletedContentStyle, restDayCompletedScreenStyle, restWorkoutContentStyle, restWorkoutScreenStyle, screenContentNeedsScroll, scrollRegionNeedsScroll, scrollableScreenContentStyle, selectionModalButtonStyle, settingsContentLayoutStyle, settingsModalPanelStyle, shouldAllowAppVerticalScroll, shouldFocusWorkoutCompletion, shouldMeasureScreenMutations, shouldReserveWorkoutBottomNavSpace, shouldShowAutomaticBackupStatus, shouldShowCompletedWorkoutMetadata, shouldShowSmartDecisionReason, shouldUseCompactDashboardLayout, shouldUseExpandedDashboardLayout, shouldShowSmartReasonWithStructuredDetails, workoutCompletionButtonMargin, workoutCompletionButtonStyle, workoutSetupModalButtonStyle } from './App';
 import { translations } from './translations';
 import { createWorkoutSetup } from './workoutSetup';
 import { localDateKey } from './workoutScheduleDates';
@@ -177,6 +177,31 @@ test('dashboard shows only PRs created by the latest strength workout', () => {
     Deadlift: { oneRMGain: 0, e1RMGain: 0 },
   });
   expect(events.total).toEqual({ oneRMGain: 5, e1RMGain: 2.5 });
+});
+
+test('dashboard cards show each gain with its metric and open the matching statistics', async () => {
+  localStorage.clear();
+  localStorage.setItem('language', 'en');
+  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
+    version: 1, trainingModel: 'classic', currentCycle: 4, showWhatsNewAfterUpdates: false,
+    prs: { Squat: 147.5, Bench: 102.5, Deadlift: 180 },
+    history: dashboardPrHistory(),
+  }));
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Dashboard' }, { timeout: 3000 }));
+  const squat = screen.getByRole('button', { name: /^Squat 1RM/ });
+  expect(within(squat).getByText('New 1RM PR').parentElement).toHaveTextContent('+2.5 kg');
+  expect(within(squat).getByText('New e1RM PR').parentElement).toHaveTextContent('+2.5 kg');
+  expect(screen.getByRole('button', { name: /^Deadlift 1RM/ })).not.toHaveTextContent('PR');
+  fireEvent.click(squat);
+  expect(screen.getByRole('button', { name: 'Lifts', pressed: true })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Dashboard' }));
+  const total = screen.getByRole('button', { name: /^Total 1RM/ });
+  expect(within(total).getByText('New 1RM PR').parentElement).toHaveTextContent('+5 kg');
+  fireEvent.click(total);
+  expect(screen.getByRole('button', { name: 'Total', pressed: true })).toBeInTheDocument();
 });
 
 test('dashboard reports a total e1RM PR when one lift raises the e1RM total', () => {
@@ -576,10 +601,8 @@ test('a completed rest day keeps its disabled completion action visible', () => 
   const button = screen.getByTestId('complete-rest-day-button');
   expect(button).toBeDisabled();
   expect(button).toHaveTextContent(translations.en.restDayCompleted);
-  expect(button).toHaveStyle({
-    color: '#666',
-    cursor: 'not-allowed',
-  });
+  expect(button).toHaveAttribute('data-dynamic-focus', 'false');
+  expect(button).toHaveStyle({ cursor: 'not-allowed' });
 });
 
 test('workout completion becomes the final dynamic-focus action', () => {
@@ -733,64 +756,6 @@ test('Workout scroll content starts below the fixed header divider', async () =>
     minHeight: '0',
     overflowY: 'var(--kelani-screen-overflow-y, auto)',
   });
-});
-
-test('program workout cards tighten only when the compact list toggles are visible', () => {
-  expect(programWorkoutCardSpacingStyle({ compact: true })).toEqual({
-    padding: '4px clamp(12px, 3vw, 16px)',
-    marginBottom: 0,
-  });
-  expect(programWorkoutCardSpacingStyle()).toEqual({
-    padding: 'clamp(9px, 1.2dvh, 12px) clamp(12px, 3vw, 16px)',
-    marginBottom: 'clamp(6px, 0.8dvh, 9px)',
-  });
-});
-
-test('program list spacing is owned by the list rather than stacked toggle margins', () => {
-  expect(programWorkoutListVerticalSpacing({ compact: true })).toEqual({
-    listMarginTop: 0, topToggleMargin: 0, bottomToggleMargin: 0,
-  });
-  expect(programWorkoutListVerticalSpacing()).toEqual(programWorkoutListVerticalSpacing({ compact: true }));
-});
-
-test('program workout window keeps the current workout centered among at most seven cards', () => {
-  const entries = Array.from({ length: 15 }, (_, idx) => ({ idx }));
-
-  expect(getProgramWorkoutWindow({ entries, currentIndex: 8 }).map(entry => entry.idx))
-    .toEqual([5, 6, 7, 8, 9, 10, 11]);
-  expect(getProgramWorkoutWindow({ entries, currentIndex: 1 }).map(entry => entry.idx))
-    .toEqual([0, 1, 2, 3, 4, 5, 6]);
-  expect(getProgramWorkoutWindow({ entries, currentIndex: 14 }).map(entry => entry.idx))
-    .toEqual([8, 9, 10, 11, 12, 13, 14]);
-  expect(getProgramWorkoutWindow({ entries, currentIndex: 8, showAll: true }))
-    .toEqual(entries);
-});
-
-test('compact program list distributes spare height without large divider gaps', () => {
-  expect(programWorkoutListContainerStyle({ showAll: false, marginTop: 8 }))
-    .toMatchObject({
-      justifyContent: 'space-between',
-      rowGap: 4,
-      marginTop: 0,
-      paddingTop: 8,
-      paddingBottom: 8,
-      borderTop: 'none',
-      borderBottom: 'none',
-      overflowY: 'auto',
-      minHeight: 0,
-    });
-  expect(programWorkoutListContainerStyle({ showAll: true, marginTop: 8, expandedGap: 9 }))
-    .toMatchObject({
-      justifyContent: 'flex-start',
-      rowGap: 9,
-      marginTop: 0,
-      paddingTop: 8,
-      paddingBottom: 8,
-      borderTop: 'none',
-      borderBottom: 'none',
-      overflowY: 'auto',
-      minHeight: 0,
-    });
 });
 
 test('activeWorkoutLiftBlockStyle uses normal margins', () => {
@@ -1061,7 +1026,7 @@ test('bottom navigation combines large icons, visible labels and a subtle divide
     fontSize: 10,
     fontWeight: 800,
     lineHeight: 1.2,
-    whiteSpace: 'nowrap',
+    whiteSpace: 'normal',
   });
 });
 
@@ -1234,7 +1199,7 @@ test('stats tabs keep the same chart frame size, including empty charts', () => 
     stats: 'Stats', cycle: 'Cycle', workoutProgress: 'Workout',
     squat: 'Squat', bench: 'Bench', deadlift: 'Deadlift',
     statsTabLifts: 'Lifts', statsTabTotal: 'Total', statsTabBody: 'Body', statsTabHealth: 'Health',
-    totalSBD: 'Total SBD', strengthTotalBodyweight: 'Strength / bodyweight', strengthMax: 'Strength Max',
+    totalSBD: 'Total SBD', strengthTotalBodyweight: translations.en.strengthTotalBodyweight, strengthMax: 'Strength Max',
     noStatsData: 'No data', noMetricData: 'No metric data', e1RM: 'e1RM', bodyweight: 'Body weight',
   };
   const commonProps = {
@@ -1252,7 +1217,23 @@ test('stats tabs keep the same chart frame size, including empty charts', () => 
   const totalFrames = screen.getAllByTestId('stats-chart-frame');
 
   expect(totalFrames).toHaveLength(3);
+  expect(screen.getByRole('heading', { name: 'Relative Strength' })).toBeInTheDocument();
   expect(totalFrames.map(frame => frame.style.height)).toEqual(liftFrames.map(frame => frame.style.height));
+});
+
+test('lift chart headers show the current recorded 1RM in the selected unit', () => {
+  const props = {
+    history: [{ cycle: 1, workoutNumber: 1, lift: 'Bench', seedMax: true, topWeight: 60, e1rm: 60 }],
+    bodyWeights: [], currentCycle: 1, currentIndex: 0, t: translations.en,
+    best1RMs: { Squat: 100 }, bestE1RMs: { Squat: 110, Deadlift: 150 },
+  };
+  const header = lift => screen.getByRole('heading', { name: lift }).parentElement;
+  const view = render(<StatsScreen {...props} />);
+  expect(header('Squat')).toHaveTextContent('1RM 100 kg');
+  expect(header('Bench')).toHaveTextContent('1RM 60 kg');
+  expect(header('Deadlift')).not.toHaveTextContent('1RM');
+  view.rerender(<StatsScreen {...props} weightUnit="lb" />);
+  expect(header('Squat')).toHaveTextContent(/1RM 220[.,]46 lb/);
 });
 
 test('stats pairs strength totals with the bodyweight recorded for that workout', () => {
@@ -2180,7 +2161,7 @@ test('standalone modal, program and selection actions use compact centered butto
     maxWidth: '100%',
     margin: '0 auto',
   });
-  expect(selectionModalButtonStyle(false)).toMatchObject({
+  expect(selectionModalButtonStyle()).toMatchObject({
     display: 'block',
     width: 'fit-content',
     minWidth: 128,
@@ -2257,7 +2238,6 @@ test('three-step onboarding persists beginner squat focus and previews calculate
   expect(screen.getByText('Calculated starting level')).toBeInTheDocument();
   expect(screen.getByText('Beginner')).toBeInTheDocument();
   expect(screen.getByText('3 / 6')).toBeInTheDocument();
-  expect(screen.getByText(/Per 6 route days/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /Squat and legs focus/ }));
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
@@ -2395,9 +2375,9 @@ test('every Smart set has a phase label without breaking the five-column grid', 
   expect(Array.from(benchGrid.querySelectorAll('[data-testid="workout-phase-tag"]')).map(tag => tag.textContent))
     .toEqual(['TOP', 'BO', 'BO', 'BO']);
   const [warmup, top, backoff] = squatGrid.querySelectorAll('[data-workout-circle-item="true"]');
-  expect(warmup).toHaveStyle({ gridColumn: '5 / span 2', gridRow: '1' });
-  expect(top).toHaveStyle({ gridColumn: '4 / span 2', gridRow: '2' });
-  expect(backoff).toHaveStyle({ gridColumn: '6 / span 2', gridRow: '2' });
+  expect(warmup).toHaveStyle({ gridColumn: '3 / span 2', gridRow: '1' });
+  expect(top).toHaveStyle({ gridColumn: '5 / span 2', gridRow: '1' });
+  expect(backoff).toHaveStyle({ gridColumn: '7 / span 2', gridRow: '1' });
   expect(screen.queryByTestId('workout-warmup-label-0')).not.toBeInTheDocument();
   expect(screen.queryByTestId('workout-work-sets-label-0')).not.toBeInTheDocument();
 });
@@ -2539,7 +2519,7 @@ test('Smart squat priority is opt-in, persists, and changes the planned beginner
   expect(screen.getByText('Workout 1')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Experience level: Beginner' })).toBeInTheDocument();
   expect(screen.getByTestId('app-header')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Balanced SBD Route' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Adjust (Training route)', description: 'Balanced SBD Route' }));
   expect(screen.getByText('The standard route trains Squat, Bench and Deadlift in balance toward Meet Day.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Squat Priority' }));
 
@@ -2549,7 +2529,7 @@ test('Smart squat priority is opt-in, persists, and changes the planned beginner
     expect(saved.inProgress.workouts[2].lifts.map(block => block.lift))
       .toEqual(['Deadlift', 'Squat']);
   });
-  fireEvent.click(screen.getByRole('button', { name: 'Squat Priority' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Adjust (Training route)', description: 'Squat Priority' }));
   expect(screen.getByText(/replaces medium Bench with light Squat/)).toBeInTheDocument();
 });
 
@@ -2572,19 +2552,20 @@ test('Smart workout dates appear on Dashboard and in the Program completion-labe
   expect(screen.getByTestId('dashboard-expected-meet-date'))
     .toHaveTextContent(/^Expected meet: .+ · C\d+W\d+$/);
   expect(screen.getByTestId('dashboard-expected-meet-date')).toHaveStyle({
-    whiteSpace: 'nowrap',
+    overflowWrap: 'anywhere',
   });
 
   fireEvent.click(screen.getByRole('button', { name: 'Program' }));
-  expect(await screen.findByTestId('program-workout-schedule-date-1'))
-    .toHaveTextContent(/^Today$/);
-  expect(screen.getByTestId('program-workout-schedule-date-2'))
-    .toHaveTextContent(/^Tomorrow$/);
-  for (const number of [1, 2]) {
-    const badge = screen.getByTestId(`program-workout-schedule-date-${number}`);
+  for (const [number, date] of [[1, 'Today'], [2, 'Tomorrow']]) {
+    const card = await screen.findByTestId(`program-workout-${number}`);
+    const badge = within(card).getByTestId(`program-workout-schedule-date-${number}`);
+    expect(badge.textContent).toBe(date);
     expect(badge.tagName).toBe('SPAN');
     expect(badge).toHaveStyle({ textTransform: 'uppercase' });
+    expect(badge.previousElementSibling).toHaveTextContent(/\S/);
   }
+  expect(screen.getByTestId('program-workout-1')).toHaveAttribute('aria-current', 'step');
+  expect(screen.getByTestId('program-workout-2')).not.toHaveAttribute('aria-current');
   expect(screen.queryByText(translations.en.programNext)).not.toBeInTheDocument();
 });
 
@@ -2688,7 +2669,7 @@ test('Smart practical route is available above beginner and immediately replaces
   render(<App />);
 
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 }));
-  fireEvent.click(screen.getByRole('button', { name: 'Balanced SBD Route' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Adjust (Training route)', description: 'Balanced SBD Route' }));
   expect(screen.getByText(/standard route trains Squat, Bench and Deadlift in balance/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Practical SBD Route' }));
 
@@ -2705,7 +2686,7 @@ test('Smart practical route is available above beginner and immediately replaces
     ]);
   });
 
-  expect(screen.getByRole('button', { name: 'Practical SBD Route' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Adjust (Training route)', description: 'Practical SBD Route' })).toBeInTheDocument();
 });
 
 test('Smart squat priority is unavailable above beginner and stale focus is cleared', async () => {
@@ -2722,7 +2703,7 @@ test('Smart squat priority is unavailable above beginner and stale focus is clea
   render(<App />);
 
   fireEvent.click(await screen.findByRole('button', { name: 'Settings' }, { timeout: 3000 }));
-  fireEvent.click(screen.getByRole('button', { name: 'Balanced SBD Route' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Adjust (Training route)', description: 'Balanced SBD Route' }));
   expect(screen.getByText('The standard route trains Squat, Bench and Deadlift in balance toward Meet Day.')).toBeInTheDocument();
   expect(screen.queryByText('Squat priority currently applies only at beginner level. Higher levels keep the balanced route.')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Squat Priority (beginners only)' })).toBeDisabled();
@@ -2767,16 +2748,15 @@ test('settings combines About and Updates in one modal', async () => {
   expect(screen.getByRole('button', { name: 'Check now' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Support' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Share usage data' })).not.toBeInTheDocument();
-  const mainActionButtons = ['Share Kelani', 'Email Kelani', 'GitHub repo', 'IzzyOnDroid (NeoStore)']
+  const mainActionButtons = ['Share Kelani', 'Email Kelani', 'GitHub repo', 'IzzyOnDroid (NeoStore)',
+    'Support Kelani', 'View updates', 'Check now', 'Close']
     .map(name => screen.getByRole('button', { name }));
   expect(screen.queryByRole('button', { name: 'Feedback' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Share your experience' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Support Kelani' })).toBeInTheDocument();
   expect(new Set(mainActionButtons.map(button => button.style.minHeight)))
     .toEqual(new Set(['var(--kelani-button-height)']));
   mainActionButtons.forEach(button => {
-    expect(button.parentElement.style.gridColumn).toBe('');
-    expect(button.parentElement.style.width).toBe('');
+    expect(button.parentElement).toHaveClass('kelani-button-grid');
   });
   const openSpy = jest.spyOn(window, 'open').mockImplementation(() => {});
   fireEvent.click(screen.getByRole('button', { name: 'Email Kelani' }));
@@ -2830,10 +2810,12 @@ test('settings combines About and Updates in one modal', async () => {
   expect(screen.getByRole('button', { name: 'GitHub repo' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Close' }).style.width)
     .toBe(screen.getByRole('button', { name: 'Check now' }).style.width);
-  expect(screen.getByRole('button', { name: 'View updates' }).style.width)
-    .toBe('calc(0.5 * (100% - 8px))');
-  expect(screen.getByRole('button', { name: 'Check now' }).parentElement.style.gap)
-    .toBe('8px');
+  const updatesRow = screen.getByRole('button', { name: 'View updates' }).parentElement;
+  expect(updatesRow).toHaveClass('kelani-button-grid');
+  expect(updatesRow.children).toHaveLength(1);
+  const checkRow = screen.getByRole('button', { name: 'Check now' }).parentElement;
+  expect(checkRow).toHaveClass('kelani-button-grid');
+  expect(checkRow).toContainElement(screen.getByRole('button', { name: 'Close' }));
   fireEvent.click(screen.getByRole('button', { name: 'Close' }));
   expect(screen.queryByText(/com\.kelani\.sbdtracker/)).not.toBeInTheDocument();
 });
@@ -2855,7 +2837,6 @@ test.each(['training', 'rest', 'meet'])(
       i > before.inProgress.currentIndex && workout.type === type && workout.smartVisible !== false
     );
     expect(index).toBeGreaterThan(0);
-    fireEvent.click(screen.getAllByRole('button', { name: translations.en.showAllWorkouts })[0]);
     const card = screen.getByTestId(`program-workout-${before.inProgress.workouts[index].number}`);
     expect(card).toHaveAttribute('aria-disabled', 'false');
     if (type === 'rest') fireEvent.keyDown(card, { key: 'Enter' });
@@ -2929,49 +2910,56 @@ test('all main screens keep accessible names but only Workout retains its visibl
   }
 });
 
-test('Program keeps its accessible name outside the list without a visible title and retains both end controls', async () => {
-  localStorage.clear();
-  localStorage.setItem('kel-powerlifting-user-data-v1', JSON.stringify({
-    version: 1, trainingModel: 'smart', currentCycle: 1, trainingFocus: 'practical',
-    prs: { Squat: 100, Bench: 75, Deadlift: 125 }, history: [], showWhatsNewAfterUpdates: false,
-  }));
-  render(<App />);
-  fireEvent.click(await screen.findByRole('button', { name: 'Program' }, { timeout: 3000 }));
-  const title = screen.getByRole('heading', { level: 1 });
-  const list = screen.getByTestId('screen-scroll-content');
-  expect(list.previousElementSibling).toBe(title);
-  expect(list).not.toContainElement(title);
-  expect(list.parentElement).toHaveStyle({ minHeight: '0' });
-  expect(list.lastElementChild).toHaveTextContent('Show all workouts');
-  // CSS space-between can produce a fractional gap larger than its minimum.
-  // Expanding must keep that actual compact geometry, rather than a new gap.
-  Object.defineProperty(list, 'clientHeight', { configurable: true, value: 600 });
-  list.children[0].getBoundingClientRect = () => ({ top: 0, bottom: 52, height: 52 });
-  list.children[1].getBoundingClientRect = () => ({ top: 61.5, bottom: 161.5, height: 100 });
-  list.getBoundingClientRect = () => ({ top: 0, bottom: 600, height: 600 });
-  const saved = readProfile(localStorage);
-  const currentNumber = saved.inProgress.workouts[saved.inProgress.currentIndex].number;
-  const currentCard = screen.getByTestId(`program-workout-${currentNumber}`);
-  // Expanding inserts rows before the current workout. Simulate its new
-  // position; only the bounded list should scroll to reveal it again.
-  currentCard.getBoundingClientRect = () => list.firstElementChild.textContent === 'Show fewer workouts'
-    ? { top: 900, bottom: 1000, height: 100 }
-    : { top: 61.5, bottom: 161.5, height: 100 };
-  expect(list.scrollTop).toBe(0);
-  fireEvent.click(screen.getAllByRole('button', { name: 'Show all workouts' })[0]);
-  expect(list.scrollTop).toBe(650);
-  expect(screen.getByTestId('app-viewport').scrollTop).toBe(0);
-  expect(screen.getAllByRole('button', { name: 'Show fewer workouts' })).toHaveLength(2);
-  expect(list.lastElementChild).toHaveTextContent('Show fewer workouts');
-  expect(screen.getByTestId('program-top-actions')).toHaveStyle({ padding: '4px 0', flexShrink: 0 });
-  expect(screen.getByTestId('program-bottom-actions')).toHaveStyle({ padding: '4px 0', flexShrink: 0 });
-  expect(list).toHaveStyle({ overflowY: 'auto', rowGap: '9.5px', paddingBottom: '8px' });
-  expect(list.previousElementSibling).toBe(title);
-  currentCard.getBoundingClientRect = () => ({ top: -50, bottom: 50, height: 100 });
-  fireEvent.click(screen.getAllByRole('button', { name: 'Show fewer workouts' })[1]);
-  expect(list.scrollTop).toBe(350);
-  expect(list.previousElementSibling).toBe(title);
-  expect(list.lastElementChild).toHaveTextContent('Show all workouts');
+test('Program opens the whole timeline around the current workout and lets the user scroll away', () => {
+  let resize;
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(callback) { resize = callback; }
+    observe() {}
+    disconnect() {}
+  });
+  try {
+    const workouts = Array.from({ length: 12 }, (_, i) => ({ number: i + 1, type: 'rest' }));
+    const program = currentIndex => <AllWorkouts workouts={workouts}
+      currentIndex={currentIndex} trainingModel="smart" t={translations.en} />;
+    const view = render(program(4));
+    const list = screen.getByTestId('screen-scroll-content');
+    expect(list.previousElementSibling).toBe(screen.getByRole('heading', { level: 1 }));
+    expect(within(list).getAllByRole('button')).toHaveLength(12);
+    expect(screen.queryByRole('button', { name: /Show (all|fewer) workouts/i })).not.toBeInTheDocument();
+
+    Object.defineProperty(list, 'clientHeight', { configurable: true, value: 600 });
+    list.firstElementChild.getBoundingClientRect = () => ({ top: 50, height: 1000 });
+    const card = number => screen.getByTestId(`program-workout-${number}`);
+    card(5).getBoundingClientRect = () => ({ top: 450, height: 100 });
+    card(1).getBoundingClientRect = () => ({ top: 50, height: 80 });
+    card(3).getBoundingClientRect = () => ({ top: 220, height: 80 });
+    card(12).getBoundingClientRect = () => ({ top: 910, height: 140 });
+
+    // Even an already visible card moves to the middle when layout becomes available.
+    resize();
+    expect(list.scrollTop).toBe(158);
+    expect(list.parentElement.scrollTop).toBe(0);
+    list.scrollTop = 48;
+    fireEvent.scroll(list);
+    view.rerender(program(4));
+    resize();
+    expect(list.scrollTop).toBe(48);
+
+    view.rerender(program(0));
+    expect(list.style.paddingBlock).toBe('8px 8px');
+    expect(list.scrollTop).toBe(0);
+    view.rerender(program(2));
+    expect(list.style.paddingBlock).toBe('8px 8px');
+    expect(list.scrollTop).toBe(0);
+    expect(card(3)).toHaveAttribute('aria-current', 'step');
+    view.rerender(program(11));
+    expect(list.style.paddingBlock).toBe('8px 230px');
+    expect(list.scrollTop).toBe(638);
+    expect(card(12)).toHaveAttribute('aria-current', 'step');
+    view.unmount();
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });
 
 test('Settings replaces the reset row with New cycle without adding rows', async () => {
@@ -3056,12 +3044,13 @@ test('Program replaces only completed cards with results and keeps the next pres
     onSelect={() => {}} />);
   const finished = screen.getByTestId('program-workout-1');
   expect(within(finished).getByTestId('program-workout-results-1')).toHaveTextContent('✕ 1×3×100 kg');
-  expect(finished).toHaveTextContent('Squat: ✓ 1×3×100 kg (80%)');
-  expect(finished).toHaveTextContent('Squat: ✕ 1×3×100 kg (80%)');
+  const squatResults = within(finished).getByRole('group', { name: 'Squat' });
+  expect(squatResults).toHaveTextContent('✓ 1×3×100 kg (80%)');
+  expect(squatResults).toHaveTextContent('✕ 1×3×100 kg (80%)');
   expect(within(finished).getByLabelText(translations.en.programSetsSucceeded)).toHaveStyle({ color: '#2ecc71' });
-  expect(within(finished).getByLabelText(translations.en.programSetsMissed)).toHaveStyle({ color: FAILED_SET_COLOR });
+  expect(within(finished).getByLabelText(translations.en.programSetsMissed)).toHaveStyle({ color: '#ff5c45' });
   const planned = screen.getByTestId('program-workout-2');
-  expect(planned).toHaveTextContent('Bench: 1×5×60 kg (70%)');
+  expect(within(planned).getByRole('group', { name: 'Bench' })).toHaveTextContent('1×5×60 kg (70%)');
   expect(planned).not.toHaveTextContent('Bench ·');
   expect(within(planned).queryByTestId('program-workout-results-2')).not.toBeInTheDocument();
 });
@@ -3075,8 +3064,9 @@ test('completed Program groups preserve different recorded percentages instead o
     { weight: 60, reps: 3, done: true },
   ] }} t={translations.en} />);
   const results = screen.getByTestId('program-workout-results-1');
-  expect(results).toHaveTextContent('Bench: ✓ 1×3×60 kg (80%)');
-  expect(results).toHaveTextContent('Bench: ✓ 1×3×60 kg (75%)');
+  const bench = within(results).getByRole('group', { name: 'Bench' });
+  expect(bench).toHaveTextContent('✓ 1×3×60 kg (80%)');
+  expect(bench).toHaveTextContent('✓ 1×3×60 kg (75%)');
   expect(within(results).getAllByLabelText(translations.en.programSetsSucceeded)).toHaveLength(3);
   expect(results).not.toHaveTextContent('undefined');
   expect(results).not.toHaveTextContent('(0%)');
@@ -3153,10 +3143,9 @@ test('full reset is available only through Data and still requires a separate de
   const closeButton = screen.getByRole('button', { name: 'Close' });
   expect(deleteButton.parentElement).toBe(closeButton.parentElement);
   expect(deleteButton.parentElement).toBe(screen.getByRole('button', { name: 'Export' }).parentElement);
-  expect(deleteButton.parentElement.style.gap).toBe('8px');
+  expect(deleteButton.parentElement).toHaveClass('kelani-button-grid');
   expect(deleteButton.parentElement.style.borderTop).toBe('');
   expect(deleteButton.parentElement.style.paddingTop).toBe('');
-  expect(deleteButton.parentElement).toHaveStyle({ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' });
   expect(deleteButton.style.width).toBe(closeButton.style.width);
   expect(deleteButton.style.width).toBe(screen.getByRole('button', { name: 'Export' }).style.width);
   fireEvent.click(deleteButton);
@@ -3469,8 +3458,6 @@ test('Program opens earlier and next-cycle workouts read-only without replacing 
   render(<App />);
   fireEvent.click(await screen.findByRole('button', { name: 'Program' }, { timeout: 5000 }));
   const before = JSON.parse(localStorage.getItem(key));
-  fireEvent.click(screen.getAllByRole('button', { name: 'Show all workouts' })[0]);
-  expect(screen.getByTestId('program-bottom-actions')).toHaveStyle({ padding: '4px 0', flexShrink: 0 });
   expect(screen.getByText('C1W1')).toBeInTheDocument();
   fireEvent.click(screen.getByTestId('program-workout-C3W1'));
   expect(screen.getByTestId('app-header')).toHaveTextContent('Cycle 3');

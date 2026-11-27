@@ -5,6 +5,7 @@ import { BACKUP_HISTORY_DAYS_KEY, BACKUP_HISTORY_OPTIONS, BACKUP_SAFETY_FILE, ba
 export default function BackupHistoryModal({ t, Modal, buttonStyle, getHistory, onClose, onRestore }) {
   const [days, setDays] = useState(() => backupHistoryDays(localStorage));
   const [entries, setEntries] = useState([]);
+  const [selectedName, setSelectedName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [settingError, setSettingError] = useState('');
@@ -32,6 +33,12 @@ export default function BackupHistoryModal({ t, Modal, buttonStyle, getHistory, 
     try { localStorage.setItem(BACKUP_HISTORY_DAYS_KEY, String(value)); setDays(value); setSettingError(''); }
     catch { setSettingError(t.backupHistorySettingError); }
   }
+  const selected = entries.find(entry => entry.name === selectedName)
+    ?? entries.find(entry => entry.name === 'latest')
+    ?? entries[0];
+  const entryType = name => name === 'latest' ? t.backupHistoryLatest
+    : name === BACKUP_SAFETY_FILE ? t.backupHistorySafety : t.backupHistoryDaily;
+
   async function choose(name) {
     if (reading) return;
     setReading(true);
@@ -45,7 +52,7 @@ export default function BackupHistoryModal({ t, Modal, buttonStyle, getHistory, 
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={t.backupHistoryTitle} tabIndex={-1}
       style={{ outline: 'none' }} onKeyDown={event => {
         if (event.key !== 'Tab') return;
-        const controls = [...dialogRef.current.querySelectorAll('select, button:not(:disabled)')];
+        const controls = [...dialogRef.current.querySelectorAll('select:not(:disabled), button:not(:disabled)')];
         const first = controls[0]; const last = controls.at(-1);
         if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
@@ -57,27 +64,43 @@ export default function BackupHistoryModal({ t, Modal, buttonStyle, getHistory, 
         {BACKUP_HISTORY_OPTIONS.map(value => <option key={value} value={value}>{value === 0 ? t.backupHistoryLatestOnly : t.backupHistoryDays.replace('{days}', value)}</option>)}
       </select>
     </label>
-    <p style={{ fontSize: responsiveFontSize(14), lineHeight: 1.4 }}>{t.backupHistoryCleanup}</p>
     {!supported && <p role="status">{t.backupHistoryNativeOnly}</p>}
     {loading && <p role="status">{t.backupHistoryLoading}</p>}
     {(error || settingError) && <p role="alert">{error || settingError}</p>}
     {reading && <p role="status">{t.backupHistoryLoading}</p>}
     {supported && !loading && !error && !entries.length && <p>{t.backupHistoryEmpty}</p>}
-    <div style={{ display: 'grid', gap: 16, margin: '20px 0' }}>
-      {entries.map(entry => <div key={entry.name} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 12, alignItems: 'center' }}>
-        <div id={`backup-info-${entry.name}`} style={{ minWidth: 0 }}>
-          <strong>{entry.name === 'latest' ? t.backupHistoryLatest : entry.name === BACKUP_SAFETY_FILE ? t.backupHistorySafety : t.backupHistoryDaily}</strong>
-          {entry.backup && <>
-            <div>{new Date(entry.backup.exportedAt).toLocaleString()}</div>
-            <div style={{ fontSize: responsiveFontSize(14) }}>{t.cycle} {entry.backup.summary.currentCycle} · {t.workout} {entry.backup.summary.currentWorkout}</div>
-          </>}
-          {entry.error && <div role="alert">{t.backupHistoryReadError}</div>}
-        </div>
-        <button type="button" disabled={entry.error || reading} aria-describedby={`backup-info-${entry.name}`} onClick={() => choose(entry.name)}
-          style={{ ...buttonStyle('secondary', '0', 0), minHeight: 44 }}>{t.backupHistoryRestore}</button>
-      </div>)}
+    {selected && (
+      <div className="kelani-backup-selection">
+        <label>
+          <strong>{t.backupHistorySelect}</strong>
+          <select value={selected.name} disabled={reading} onChange={event => setSelectedName(event.target.value)}>
+            {entries.map(entry => (
+              <option key={entry.name} value={entry.name}>
+                {entry.backup && entry.name !== 'latest' && entry.name !== BACKUP_SAFETY_FILE
+                  ? new Date(entry.backup.exportedAt).toLocaleString()
+                  : entryType(entry.name)}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selected.backup && <div id="kelani-selected-backup">
+          <strong>{entryType(selected.name)}</strong>
+          <div>{new Date(selected.backup.exportedAt).toLocaleString()}</div>
+          <div style={{ fontSize: responsiveFontSize(14) }}>
+            {t.cycle} {selected.backup.summary.currentCycle} · {t.workout} {selected.backup.summary.currentWorkout}
+          </div>
+        </div>}
+        {selected.error && <div role="alert">{t.backupHistoryReadError}</div>}
+      </div>
+    )}
+    <div className="kelani-button-grid" style={{ marginTop: 14 }}>
+      {selected && <button type="button" disabled={selected.error || reading}
+        aria-describedby={selected.backup ? 'kelani-selected-backup' : undefined}
+        onClick={() => choose(selected.name)} style={buttonStyle('secondary', '0')}>
+        {t.backupHistoryRestore}
+      </button>}
+      <button type="button" onClick={onClose} style={buttonStyle('secondary', '0')}>{t.close}</button>
     </div>
-    <button type="button" onClick={onClose} style={buttonStyle('secondary', '0 auto')}>{t.close}</button>
     </div>
   </Modal>;
 }

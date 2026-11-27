@@ -77,8 +77,6 @@ test('Catalan interactive-action verbs use the imperative rather than the infini
     supportKelani: 'Dona suport a Kelani',
     shareAction: 'Comparteix',
     shareCopyLink: 'Copia l’enllaç de baixada',
-    showAllWorkouts: 'Mostra tots els entrenaments',
-    showFewerWorkouts: 'Mostra menys entrenaments',
     smartCopyDiagnosis: 'Copia el diagnòstic',
     smartWorkoutInfo: 'Obre la informació de l’entrenament',
     startFromScratch: 'Reinicia',

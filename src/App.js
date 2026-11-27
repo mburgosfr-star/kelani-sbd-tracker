@@ -221,7 +221,6 @@ import { translations } from './translations';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
-import { Share } from '@capacitor/share';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import StatsScreen from './StatsScreen';
 
@@ -245,6 +244,7 @@ const CALENDAR_SYNC_CONSENT_KEY = 'kelani-calendar-sync-consent-v1';
 const RESTORABLE_APP_SCREENS = new Set(['dashboard', 'all', 'current', 'stats', 'settings']);
 const DeviceAlertStatus = registerPlugin('DeviceAlertStatus');
 const RestTimerAlarm = registerPlugin('RestTimerAlarm');
+const BackupDocument = registerPlugin('BackupDocument');
 
 export function normalizePersistedRestTimerState(value, now = Date.now()) {
   let parsed = value;
@@ -752,6 +752,20 @@ export function formatLocalIsoTimestamp(value = new Date()) {
     `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
     `.${pad(date.getMilliseconds(), 3)}${offsetSign}${pad(offsetHours)}:${pad(offsetRemainder)}`
   );
+}
+
+function downloadJson(filename, json) {
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function buildManualBackupFilename(value = new Date()) {
@@ -1349,10 +1363,6 @@ export function validateImportedBackup(backup) {
   return true;
 }
 
-export function isShareCancellation(error) {
-  return error?.message === 'Share canceled';
-}
-
 export function isVerifiedAutomaticBackupStatus(status) {
   return Boolean(
     status?.ok === true &&
@@ -1839,6 +1849,26 @@ export function regularDashboardContentStyle() {
   };
 }
 
+function DashboardRecordGain({ label, gain }) {
+  return (
+    <span className="kelani-dashboard-record">
+      <span>{label}</span>{' '}<strong>+{gain}</strong>
+    </span>
+  );
+}
+
+function DashboardMaxMetric({ label, weight, unit, gain, recordLabel }) {
+  return (
+    <span className="kelani-dashboard-metric">
+      <span className="kelani-dashboard-weight-row">
+        <span>{label}</span>{' '}
+        <strong>{weight ? formatEstimatedWeightFromKg(weight, unit) : '-'}</strong>
+      </span>{' '}
+      {gain > 0 && <DashboardRecordGain label={recordLabel} gain={formatEstimatedWeightFromKg(gain, unit)} />}
+    </span>
+  );
+}
+
 export function shouldUseExpandedDashboardLayout({ workout, meetState, compact = false } = {}) {
   const liftCount = Array.isArray(workout?.lifts)
     ? workout.lifts.length
@@ -1898,66 +1928,6 @@ export function programHeaderStyle() {
   };
 }
 
-export function programWorkoutCardSpacingStyle({ compact = false } = {}) {
-  return {
-    padding: compact
-      // The list distributes spare height. Keep card padding independent
-      // of viewport height so it cannot consume the lower control's space.
-      ? '4px clamp(12px, 3vw, 16px)'
-      : 'clamp(9px, 1.2dvh, 12px) clamp(12px, 3vw, 16px)',
-    marginBottom: compact
-      ? 0
-      : 'clamp(6px, 0.8dvh, 9px)',
-  };
-}
-
-export function programWorkoutListVerticalSpacing() {
-  return { listMarginTop: 0, topToggleMargin: 0, bottomToggleMargin: 0 };
-}
-
-export function programWorkoutListContainerStyle({ showAll = false, marginTop = 0, expandedGap = 4 } = {}) {
-  return {
-    flex: '1 1 auto',
-    minHeight: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: showAll ? 'flex-start' : 'space-between',
-    // Retain the short window's actual distributed gap when adding rows.
-    rowGap: showAll ? expandedGap : 4,
-    marginTop: 0,
-    paddingTop: Math.max(8, marginTop),
-    paddingBottom: Math.max(8, marginTop),
-    borderTop: 'none',
-    borderBottom: 'none',
-    boxSizing: 'border-box',
-    overflowX: 'hidden',
-    overflowY: 'auto',
-    overscrollBehaviorY: 'none',
-  };
-}
-
-export function getProgramWorkoutWindow({
-  entries = [],
-  currentIndex = 0,
-  showAll = false,
-  maximumVisible = 7,
-} = {}) {
-  if (showAll || entries.length <= maximumVisible) return entries;
-
-  const currentPosition = Math.max(
-    entries.findIndex(entry => entry.idx === currentIndex),
-    0
-  );
-  const preferredStart = Math.max(
-    0,
-    currentPosition - Math.floor(maximumVisible / 2)
-  );
-  const end = Math.min(entries.length, preferredStart + maximumVisible);
-  const start = Math.max(0, end - maximumVisible);
-
-  return entries.slice(start, end);
-}
-
 export function meetDayDashboardContentStyle() {
   return {
     minHeight: 0,
@@ -1976,14 +1946,16 @@ function workoutDateColor(workout) {
   return getLiftThemeColor(workout.lift);
 }
 
-function WorkoutDateBadge({ color, children, testId, inline = false, fontSize = RESPONSIVE_CONTENT_UI.compactFontSize }) {
+function WorkoutDateBadge({ color, children, testId, compact = false }) {
   return <span data-testid={testId} style={{
-    fontSize,
+    fontSize: compact ? RESPONSIVE_CONTENT_UI.compactFontSize : 'clamp(1.0625rem, 4.6vw, 1.25rem)',
+    fontWeight: compact ? 700 : 800,
+    lineHeight: 1.3,
     background: color,
     color: '#000000',
-    padding: '1px 6px',
-    borderRadius: 3,
-    marginLeft: inline ? 8 : 0,
+    padding: compact ? '1px 6px' : '4px 12px',
+    borderRadius: compact ? 3 : 5,
+    marginTop: compact ? 3 : 0,
     display: 'inline-block',
     boxSizing: 'border-box',
     maxWidth: '100%',
@@ -2140,9 +2112,14 @@ export function CompletedScreenHeader({ title, message, compact = false }) {
       data-testid="completed-screen-header"
       style={compact ? { textAlign: 'center' } : fixedScreenHeaderStyle()}
     >
-      <div style={{ fontSize: responsiveFontSize(40), marginBottom: 6, textAlign: 'center' }}>🎉</div>
+      {compact ? (
+        <div className="rest-completion-photo">
+          <img src={restDayImage} alt="" />
+          <span aria-hidden="true">✓</span>
+        </div>
+      ) : <div style={{ fontSize: responsiveFontSize(40), marginBottom: 6, textAlign: 'center' }}>🎉</div>}
 
-      <h2 style={{ margin: '0 0 6px', color: THEME.brown, textAlign: 'center' }}>
+      <h2 style={{ margin: '0 0 6px', color: compact ? THEME.text : THEME.brown, textAlign: 'center' }}>
         {title}
       </h2>
 
@@ -2211,16 +2188,12 @@ export function workoutCompletionButtonStyle({ enabled = true, active = false } 
     padding: '10px 28px',
     fontSize: RESPONSIVE_WORKOUT_UI.textFontSize,
     fontWeight: 700,
-    background: THEME.card,
-    color: enabled ? 'white' : '#666',
-    border: `1px solid ${THEME.primary}`,
+    ...(isActive ? actionButtonColors('primary') : {}),
     borderRadius: 8,
     cursor: enabled ? 'pointer' : 'not-allowed',
     margin: '14px auto 0',
     opacity: 1,
-    boxShadow: isActive
-      ? '0 0 0 3px rgba(255, 138, 61, 0.30)'
-      : 'none',
+    boxShadow: isActive ? '0 0 0 3px rgba(255, 138, 61, 0.30)' : undefined,
     animation: isActive
       ? 'kelaniActiveWorkoutCompletionPulse 1.05s ease-in-out infinite'
       : 'none',
@@ -3042,7 +3015,7 @@ export function WorkoutLiftGrid({
   );
 }
 
-export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, compactGrid = false, showPhaseTags = false, gridSpan = null, centeredMeetRow = false, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard', onShowPlateCalculator }) {
+export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activeIndex, onToggle, renderTimer, followsPrep = false, compactGrid = false, showPhaseTags = false, gridSpan = null, centeredMeetRow = false, rowItemCount = warmups.length, t, weightUnit = WEIGHT_UNITS.KG, lift, benchPressVariant = 'standard', onShowPlateCalculator }) {
   if (!warmups.length) return null;
 
   return (
@@ -3096,7 +3069,7 @@ export function WarmupGrid({ warmups = [], referenceSets = [], isReadOnly, activ
               autoScrollActive={isActive}
               label={warmupDescription}
               gridSpan={gridSpan}
-              gridPosition={centeredMeetRow ? centeredMeetItemStyle(warmups.length, index) : null}
+              gridPosition={centeredMeetRow ? centeredMeetItemStyle(rowItemCount, index) : null}
             >
               <WorkoutCircle
                 done={isDone}
@@ -3520,13 +3493,14 @@ export function SetRow({ set, index, label, isWarmup = false, compactGrid = fals
   );
 }
 
-export function SettingsListRow({ label, description, value, valueColor = THEME.text, actionLabel, onAction, actionContent, danger = false, compact = false, compactAction = false, labelNowrap = false, valueNowrap = false, valueFontSize = RESPONSIVE_SETTINGS_UI.valueFontSize }) {
+export function SettingsListRow({ label, description, value, valueColor = THEME.text, actionLabel, onAction, actionContent, danger = false, compact = false, compactAction = false, valueFontSize = RESPONSIVE_SETTINGS_UI.valueFontSize }) {
+  const descriptionId = React.useId();
   return (
     <div style={{
       display: 'grid',
       gridTemplateColumns: compactAction
-        ? 'minmax(0, 1fr) auto'
-        : 'minmax(0, 1fr) minmax(150px, 42%)',
+        ? 'minmax(0, 1fr) fit-content(48%)'
+        : 'minmax(0, 1fr) min(42%, var(--kelani-button-width))',
       alignItems: 'center',
       gap: RESPONSIVE_SETTINGS_UI.rowGap,
       padding: compact ? '4px 0' : RESPONSIVE_SETTINGS_UI.rowPadding,
@@ -3540,17 +3514,18 @@ export function SettingsListRow({ label, description, value, valueColor = THEME.
           fontSize: RESPONSIVE_SETTINGS_UI.labelFontSize,
           fontWeight: 800,
           lineHeight: 1.2,
-          whiteSpace: labelNowrap ? 'nowrap' : 'normal',
+          overflowWrap: 'anywhere',
         }}>
           {label}
         </div>
 
         {description && (
-          <div style={{
-            color: THEME.muted,
+          <div id={descriptionId} style={{
+            color: '#cfbfb1',
             fontSize: RESPONSIVE_SETTINGS_UI.descriptionFontSize,
-            fontWeight: 700,
-            lineHeight: 1.25,
+            fontWeight: 500,
+            lineHeight: 1.35,
+            overflowWrap: 'anywhere',
             marginTop: 3
           }}>
             {description}
@@ -3559,6 +3534,8 @@ export function SettingsListRow({ label, description, value, valueColor = THEME.
       </div>
 
       <div style={{
+        minWidth: 0,
+        overflowWrap: 'anywhere',
         color: valueColor,
         fontSize: valueFontSize,
         fontWeight: 800,
@@ -3570,26 +3547,26 @@ export function SettingsListRow({ label, description, value, valueColor = THEME.
             <button
               type="button"
               onClick={onAction}
+              className="kelani-settings-action"
+              aria-label={description ? `${actionLabel} (${label})` : undefined}
+              aria-describedby={description ? descriptionId : undefined}
               style={{
                 width: '100%',
                 minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
                 padding: '8px 9px',
                 fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
                 fontWeight: 800,
-                background: danger ? '#8b1e1e' : THEME.card,
-                color: '#ffffff',
-                border: `1px solid ${danger ? THEME.red : THEME.primary}`,
-                borderRadius: 8,
+                ...(danger ? actionButtonColors('danger') : {}),
                 cursor: 'pointer',
                 whiteSpace: 'normal',
                 overflowWrap: 'anywhere',
                 lineHeight: 1.15,
               }}
             >
-              {actionLabel}
+              <span>{actionLabel}</span>
             </button>
           ) : (
-            <span style={{ whiteSpace: valueNowrap ? 'nowrap' : 'normal' }}>
+            <span>
               {value || '-'}
             </span>
           )
@@ -3665,7 +3642,7 @@ function SettingsModal({ title, onClose, children, zIndex = 650, inactive = fals
       overscrollBehavior: 'none',
     }}>
       <AdaptiveDialogPanel style={settingsModalPanelStyle()}>
-        <h3 style={{ margin: '0 0 var(--kelani-dialog-title-gap, 16px)', textAlign: 'center', fontSize: RESPONSIVE_SETTINGS_UI.modalTitleFontSize }}>{title}</h3>
+        <h3 style={{ margin: '0 0 var(--kelani-dialog-title-gap, 16px)', textAlign: 'center', overflowWrap: 'anywhere', fontSize: RESPONSIVE_SETTINGS_UI.modalTitleFontSize }}>{title}</h3>
         {children}
       </AdaptiveDialogPanel>
     </div>
@@ -3845,7 +3822,7 @@ export function CalendarSettingsModal({ t, settings, onChange, onSync, syncStatu
           {error && <p role="alert" style={{ color: THEME.red, fontSize: 13 }}>{t.calendarLoadError}</p>}
         </>
       )}
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'stretch', gap: 8 }}>
+      <div className="kelani-button-grid">
         {nativeAvailable && permission === 'granted' && (
           <button
             type="button"
@@ -3874,9 +3851,12 @@ export function WhatsNewModal({
   onClose,
 }) {
   const items = [
-    t.whatsNewWarmupLimitItem,
-    t.whatsNewBackoffCountItem,
-    t.whatsNewRestPhotoItem,
+    t.whatsNewWorkoutSetRowItem,
+    t.whatsNewAccessoryAlignmentItem,
+    t.whatsNewRestCompletionItem,
+    t.whatsNewLayoutItem,
+    t.whatsNewProgramStatsItem,
+    t.whatsNewBackupItem,
   ];
 
   return (
@@ -3991,14 +3971,11 @@ export function UpdatesSettingsModal({
         <strong>{currentVersion}</strong>
       </div>
 
-      <button type="button" onClick={onOpenWhatsNew} style={{
-        ...modalActionButtonStyle('secondary'),
-        display: 'block',
-        width: `calc((100% - ${MODAL_ACTION_ROW_GAP}px) / 2)`,
-        margin: '0 auto 14px',
-      }}>
-        {t.whatsNewView}
-      </button>
+      <div className="kelani-button-grid" style={{ marginBottom: 14 }}>
+        <button type="button" onClick={onOpenWhatsNew} style={modalActionButtonStyle()}>
+          {t.whatsNewView}
+        </button>
+      </div>
 
       {directUpdates && <label style={{
         display: 'flex',
@@ -4033,7 +4010,7 @@ export function UpdatesSettingsModal({
       </p>
 
       {directUpdates && checkStatus === 'available' && (
-        <div style={modalActionRowStyle()}>
+        <div className="kelani-button-grid" style={{ marginTop: 14 }}>
           <button type="button" onClick={() => onOpenLink(GITHUB_RELEASES_URL)} style={modalActionButtonStyle()}>
             {t.updateDownloadGitHub}
           </button>
@@ -4043,7 +4020,7 @@ export function UpdatesSettingsModal({
         </div>
       )}
 
-      <div style={modalActionRowStyle()}>
+      <div className="kelani-button-grid" style={{ marginTop: 14 }}>
         <button
           type="button"
           onClick={directUpdates ? onCheck : () => onOpenLink(GOOGLE_PLAY_URL)}
@@ -4119,18 +4096,17 @@ export function UpdateAvailableModal({
         <span>{t.updateCheckAutomatically}</span>
       </label>
 
-      <div style={modalActionRowStyle()}>
+      <div className="kelani-button-grid" style={{ marginTop: 14 }}>
         <button type="button" onClick={() => onOpenLink(GITHUB_RELEASES_URL)} style={modalActionButtonStyle('primary')}>
           {t.updateDownloadGitHub}
         </button>
         <button type="button" onClick={() => onOpenLink(IZZY_ON_DROID_URL)} style={modalActionButtonStyle()}>
           {t.updateDownloadIzzy}
         </button>
+        <button type="button" onClick={onClose} style={compactModalActionButtonStyle('secondary', '0')}>
+          {t.later}
+        </button>
       </div>
-
-      <button type="button" onClick={onClose} style={compactModalActionButtonStyle('secondary', '8px auto 0')}>
-        {t.later}
-      </button>
     </SettingsModal>
   );
 }
@@ -4149,30 +4125,23 @@ function modalInputStyle() {
   };
 }
 
-const MODAL_ACTION_ROW_GAP = 8;
-
-function modalActionRowStyle() {
+function actionButtonColors(variant) {
+  if (variant === 'secondary') return {};
   return {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-    gap: MODAL_ACTION_ROW_GAP,
-    marginTop: 14
+    '--kelani-action-fill': `var(--kelani-${variant}-fill)`,
+    '--kelani-action-ink': `var(--kelani-${variant}-ink)`,
+    '--kelani-action-edge': `var(--kelani-${variant}-edge)`,
   };
 }
 
 function modalActionButtonStyle(variant = 'secondary') {
-  const isDanger = variant === 'danger';
-  const isPrimary = variant === 'primary';
-
   return {
     width: '100%',
     minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
     padding: '10px 12px',
     fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
     fontWeight: 800,
-    background: isDanger ? THEME.red : isPrimary ? THEME.card : 'transparent',
-    color: THEME.text,
-    border: `1px solid ${isDanger ? THEME.red : THEME.primary}`,
+    ...actionButtonColors(variant),
     borderRadius: 8,
     cursor: 'pointer',
     boxSizing: 'border-box'
@@ -4218,13 +4187,15 @@ function Toast({ message }) {
 }
 
 
-export function DataSection({ t, importOnly = false, triggerOnly = false, onReset }) {
+export function DataSection({ t, importOnly = false, triggerOnly = false, onReset, profileForExport }) {
   const [notice, setNotice] = useState('');
+  const [canShareSavedBackup, setCanShareSavedBackup] = useState(false);
   const [pendingImport, setPendingImport] = useState(null);
   const [showDataManager, setShowDataManager] = useState(false);
   const [showBackupHistory, setShowBackupHistory] = useState(false);
   const [restoringBackup, setRestoringBackup] = useState(false);
   const [restoreError, setRestoreError] = useState('');
+  const exportingRef = useRef(false);
   const importInputRef = useRef(null);
   useEffect(() => {
     if (!showDataManager && !showBackupHistory && !pendingImport) return;
@@ -4245,20 +4216,6 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
   }, [showDataManager, showBackupHistory, pendingImport, restoringBackup]);
 
 
-  const downloadJson = (filename, json) => {
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-
   const buildDataSectionBackupSummary = data => {
     const currentCycle = data?.currentCycle || 1;
     const totalWorkouts = data?.inProgress?.workouts?.length || 28;
@@ -4278,19 +4235,21 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
   };
 
   const exportData = async () => {
+    if (exportingRef.current) return;
+    exportingRef.current = true;
     setNotice('');
+    let stagedName;
 
     try {
-      const saved = readProfile(localStorage);
+      const data = profileForExport ?? readProfile(localStorage);
 
-      if (!saved) {
+      if (!data) {
         setNotice(t.exportDataNoData);
         return;
       }
 
       const exportedAtDate = new Date();
       const filename = buildManualBackupFilename(exportedAtDate);
-      const data = saved;
       const backup = buildBackupPayload(data, {
         now: exportedAtDate,
         appName: t.appName,
@@ -4305,15 +4264,16 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
         const result = await getDesktopBridge().exportBackup({ filename, json, title: t.exportData });
         if (!result.saved) return;
       } else if (Capacitor.isNativePlatform()) {
-        const result = await Filesystem.writeFile({
-          path: filename,
+        stagedName = `kelani-export-${crypto.randomUUID()}.json`;
+        await Filesystem.writeFile({
+          path: stagedName,
           data: json,
           directory: Directory.Cache,
           encoding: Encoding.UTF8,
         });
 
         const readResult = await Filesystem.readFile({
-          path: filename,
+          path: stagedName,
           directory: Directory.Cache,
           encoding: Encoding.UTF8,
         });
@@ -4326,12 +4286,9 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
           throw new Error('Manual backup verification failed');
         }
 
-        await Share.share({
-          title: t.exportData,
-          text: t.exportDataDescription,
-          files: [result.uri],
-          dialogTitle: t.exportData,
-        });
+        const result = await BackupDocument.save({ filename, stagedName });
+        if (!result.saved) return;
+        setCanShareSavedBackup(true);
       } else {
         downloadJson(filename, json);
       }
@@ -4346,10 +4303,20 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
         summary: backup.summary,
       }));
       setNotice(t.exportDataSuccess);
-    } catch (e) {
-      if (isShareCancellation(e)) return;
+    } catch {
       setNotice(t.exportDataError);
+    } finally {
+      if (stagedName) {
+        try { await Filesystem.deleteFile({ path: stagedName, directory: Directory.Cache }); }
+        catch (error) { console.warn('Could not remove staged export', error); }
+      }
+      exportingRef.current = false;
     }
+  };
+
+  const shareSavedBackup = async () => {
+    try { await BackupDocument.share({ title: t.shareAction }); }
+    catch { setNotice(t.shareError); }
   };
 
   const importData = async event => {
@@ -4459,12 +4426,10 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
             padding: '11px 8px',
             fontSize: 14,
             fontWeight: 800,
-            background: THEME.card,
-            color: THEME.text,
-            border: `1px solid ${THEME.primary}`,
             borderRadius: 6,
             cursor: 'pointer',
-            whiteSpace: 'nowrap',
+            whiteSpace: 'normal',
+            overflowWrap: 'anywhere',
             boxSizing: 'border-box',
           }}
         >
@@ -4475,7 +4440,6 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
           label={t.migrationImportBackup}
           compact={true}
           compactAction={true}
-          labelNowrap={true}
           actionContent={(
             <button
               type="button"
@@ -4486,9 +4450,6 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
                 padding: '8px 12px',
                 fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
                 fontWeight: 800,
-                background: THEME.card,
-                color: THEME.text,
-                border: `1px solid ${THEME.primary}`,
                 borderRadius: 8,
                 cursor: 'pointer',
                 whiteSpace: 'normal',
@@ -4622,10 +4583,15 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
             <button type="button" style={compactModalActionButtonStyle('secondary', '0 auto')}
               onClick={() => setShowBackupHistory(true)}>{t.backupHistoryTitle}</button>
 
-            <div style={modalActionRowStyle()}>
+            <div className="kelani-button-grid" style={{ marginTop: 14 }}>
               <button type="button" onClick={exportData} style={modalActionButtonStyle('primary')}>
-                {t.exportDataShort || t.exportData}
+                {Capacitor.isNativePlatform() && !isDesktopRuntime() ? t.save : (t.exportDataShort || t.exportData)}
               </button>
+              {canShareSavedBackup && (
+                <button type="button" onClick={shareSavedBackup} style={modalActionButtonStyle()}>
+                  {t.shareAction}
+                </button>
+              )}
               <button type="button" onClick={() => importInputRef.current?.click()} style={modalActionButtonStyle()}>
                 {t.importDataShort || t.importData}
               </button>
@@ -4636,7 +4602,7 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
                     setShowDataManager(false);
                     onReset();
                   }}
-                  style={{ ...modalActionButtonStyle(), color: THEME.red, borderColor: THEME.red }}
+                  style={modalActionButtonStyle('danger')}
                 >
                   {t.deleteAllData}
                 </button>
@@ -4644,9 +4610,7 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
               <button
                 type="button"
                 onClick={() => setShowDataManager(false)}
-                style={onReset ? modalActionButtonStyle() : {
-                  ...compactModalActionButtonStyle('secondary', '0 auto'), gridColumn: '1 / -1',
-                }}
+                style={modalActionButtonStyle()}
               >
                 {t.close}
               </button>
@@ -4719,7 +4683,7 @@ export function DataSection({ t, importOnly = false, triggerOnly = false, onRese
           </div>
 
           {restoreError && <p role="alert">{restoreError}</p>}
-          <div style={modalActionRowStyle()}>
+          <div className="kelani-button-grid" style={{ marginTop: 14 }}>
             <button
               onClick={confirmImport}
               disabled={restoringBackup}
@@ -4751,9 +4715,6 @@ function SupportActionButton({ children, onClick, compact = false }) {
         padding: '9px 11px',
         fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
         fontWeight: 800,
-        background: THEME.card,
-        color: '#ffffff',
-        border: `1px solid ${THEME.primary}`,
         borderRadius: 8,
         cursor: 'pointer',
         minHeight: RESPONSIVE_SETTINGS_UI.buttonMinHeight,
@@ -5008,15 +4969,13 @@ function AboutSupportModals({
 
           <div className="kelani-button-grid">
             {actions.map(item => (
-              <div key={item.label} style={{ display: 'grid', minWidth: 0 }}>
-                <SupportActionButton onClick={item.onClick}>
-                  {item.label}
-                </SupportActionButton>
-              </div>
+              <SupportActionButton key={item.label} onClick={item.onClick}>
+                {item.label}
+              </SupportActionButton>
             ))}
           </div>
 
-          <button data-kelani-button-layout="selection" type="button" onClick={onProjectOpen} style={{
+          <button data-kelani-button-size="contextual" type="button" onClick={onProjectOpen} style={{
               display: 'flex',
               alignItems: 'center',
               gap: 6,
@@ -5078,12 +5037,13 @@ export function WeightUnitSection({ weightUnit, setWeightUnit, weightRounding, s
               <button
                 type="button"
                 key={unit}
+                aria-pressed={normalizedWeightUnit === unit}
                 data-kelani-button-layout="selection"
                 onClick={() => {
                   setWeightUnit(unit);
                 }}
                 style={{
-                  ...selectionModalButtonStyle(normalizedWeightUnit === unit),
+                  ...selectionModalButtonStyle(),
                   margin: '0 auto',
                   width: '100%', minWidth: 0, boxSizing: 'border-box',
                 }}
@@ -5099,7 +5059,7 @@ export function WeightUnitSection({ weightUnit, setWeightUnit, weightRounding, s
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 140px))', gap: 10, justifyContent: 'center' }}>
             {[0.5, 2.5].map(step => <button key={step} type="button" data-kelani-button-layout="selection"
               aria-pressed={rounding.training === step && rounding.meet === step}
-              style={{ ...selectionModalButtonStyle(rounding.training === step && rounding.meet === step),
+              style={{ ...selectionModalButtonStyle(),
                 width: '100%', minWidth: 0, boxSizing: 'border-box', margin: '0 auto' }}
               onClick={() => setWeightRounding?.(uniformWeightRounding(step))}>
               {formatDecimalDisplay(step)} kg
@@ -5107,16 +5067,16 @@ export function WeightUnitSection({ weightUnit, setWeightUnit, weightRounding, s
           </div>
           <p style={{ lineHeight: 1.4 }}>{t.weightRoundingHelp}</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 160px))', justifyContent: 'center', gap: 8, marginTop: 14 }}>
-            <button type="button" style={{ ...selectionModalButtonStyle(false), width: '100%', minWidth: 0, boxSizing: 'border-box', margin: 0 }}
+            <button type="button" style={{ ...selectionModalButtonStyle(), width: '100%', minWidth: 0, boxSizing: 'border-box', margin: 0 }}
               onClick={() => { setIsEditing(false); setEditingLimits(true); }}>{t.weightLimitsAction}</button>
             <button type="button" onClick={() => setIsEditing(false)}
-              style={{ ...selectionModalButtonStyle(false), width: '100%', minWidth: 0, boxSizing: 'border-box', margin: 0 }}>{t.close}</button>
+              style={{ ...selectionModalButtonStyle(), width: '100%', minWidth: 0, boxSizing: 'border-box', margin: 0 }}>{t.close}</button>
           </div>
         </SettingsModal>
       )}
       {editingLimits && <SettingsModal title={t.weightLimitsTitle} onClose={() => setEditingLimits(false)}>
         <WeightLimitsEditor value={weightLimits} onSave={setWeightLimits} onClose={() => setEditingLimits(false)}
-          bodyWeight={bodyWeight} weightUnit={normalizedWeightUnit} t={t} buttonStyle={selectionModalButtonStyle(false)} />
+          bodyWeight={bodyWeight} weightUnit={normalizedWeightUnit} t={t} buttonStyle={compactModalActionButtonStyle} />
       </SettingsModal>}
     </>
   );
@@ -5273,7 +5233,7 @@ export function BodyDataSection({ bodyData, onSave, t, weightUnit = WEIGHT_UNITS
             </div>
           ))}
 
-          <div style={modalActionRowStyle()}>
+          <div className="kelani-button-grid" style={{ marginTop: 14 }}>
             <button onClick={() => setIsEditing(false)} style={modalActionButtonStyle('secondary')}>
               {t.cancel}
             </button>
@@ -5309,7 +5269,7 @@ export function DesktopRestTimeSection({ t }) {
       {open && <SettingsModal title={t.restTimerAlerts} onClose={() => setOpen(false)}>
         <p style={{ textAlign: 'center', lineHeight: 1.4 }}>{t.desktopTimerHelp}</p>
         <p role="status" style={{ textAlign: 'center' }}>{status}</p>
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'stretch', gap: 8 }}>
+        <div className="kelani-button-grid">
           <button type="button" style={{ ...compactModalActionButtonStyle('primary', '0'), flex: '0 1 auto', minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }} onClick={testAlert}>{t.desktopTestNotification}</button>
           <button type="button" style={{ ...compactModalActionButtonStyle('secondary', '0'), flex: '0 1 auto', minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }} onClick={() => setOpen(false)}>{t.close}</button>
         </div>
@@ -5572,7 +5532,6 @@ function MobileRestTimeSection({ t }) {
                 style={{
                   ...compactModalActionButtonStyle('primary', '0 auto'),
                   justifySelf: 'center',
-                  color: alertTestKind === 'scheduled' ? THEME.muted : THEME.text,
                   cursor: alertTestKind === 'scheduled' ? 'default' : 'pointer'
                 }}
               >
@@ -5587,9 +5546,6 @@ function MobileRestTimeSection({ t }) {
                 fontSize: 14,
                 fontWeight: 800,
                 borderRadius: 8,
-                border: `1px solid ${THEME.primary}`,
-                background: THEME.card,
-                color: THEME.text,
                 cursor: 'pointer'
               }}
             >
@@ -5603,9 +5559,6 @@ function MobileRestTimeSection({ t }) {
                 padding: 10,
                 fontSize: 14,
                 fontWeight: 700,
-                background: 'transparent',
-                color: THEME.text,
-                border: `1px solid ${THEME.primary}`,
                 borderRadius: 8,
                 cursor: 'pointer'
               }}
@@ -5621,7 +5574,7 @@ function MobileRestTimeSection({ t }) {
 
 
 
-export function selectionModalButtonStyle(active) {
+export function selectionModalButtonStyle() {
   return {
     display: 'block',
     width: 'fit-content',
@@ -5631,9 +5584,6 @@ export function selectionModalButtonStyle(active) {
     padding: 12,
     fontSize: RESPONSIVE_SETTINGS_UI.buttonFontSize,
     fontWeight: 700,
-    background: active ? THEME.primary : THEME.card,
-    color: '#ffffff',
-    border: `1px solid ${THEME.primary}`,
     borderRadius: 8,
     cursor: 'pointer',
     margin: '0 auto 6px'
@@ -5667,11 +5617,12 @@ function LanguageSection({ language, setLanguage, t }) {
               <button
                 type="button"
                 key={l}
+                aria-pressed={language === l}
                 onClick={() => {
                   setLanguage(l);
                   setIsEditing(false);
                 }}
-                style={selectionModalButtonStyle(language === l)}
+                style={selectionModalButtonStyle()}
               >
                 {languageNames[l]}
               </button>
@@ -5798,7 +5749,6 @@ function NewCycleModal({ prs, onStart, t, weightUnit = WEIGHT_UNITS.KG }) {
             ...compactModalActionButtonStyle('primary', '0 auto', 160),
             padding: 14,
             fontSize: 16,
-            color: '#ffffff',
             fontWeight: 600
           }}
         >
@@ -6200,7 +6150,7 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
         data-testid="workout-accessory-group-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: WORKOUT_CIRCLE_ITEM_GRID_TEMPLATE,
+          gridTemplateColumns: `repeat(${WORKOUT_GRID_COLUMNS * 2}, minmax(0, 1fr))`,
           justifyItems: 'center',
           columnGap: RESPONSIVE_WORKOUT_UI.circleColumnGap,
           rowGap: RESPONSIVE_WORKOUT_UI.circleGap,
@@ -6236,6 +6186,7 @@ export function AccessoryGroup({ acc, accIndex, isActiveGroup, isReadOnly, hasMo
             <WorkoutCircleItem
               key={index}
               testId={`workout-accessory-set-item-${index}`}
+              gridPosition={centeredMeetItemStyle(acc.done.length, index)}
               autoScrollActive={isActiveGroup && index === firstOpenIndex}
               label={(
                 <WorkoutWeightCalculatorTrigger
@@ -7461,12 +7412,10 @@ export function CurrentWorkout({
             type="button"
             onClick={() => setShowActivateConfirm(true)}
             style={{
+              ...actionButtonColors('primary'),
               marginTop: 8,
               padding: '7px 11px',
               borderRadius: 6,
-              border: `1px solid ${THEME.primary}`,
-              background: THEME.primary,
-              color: THEME.bg,
               fontSize: 14,
               fontWeight: 800,
               cursor: 'pointer'
@@ -7518,9 +7467,6 @@ export function CurrentWorkout({
                 style={{
                   padding: `8px ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
                   borderRadius: 6,
-                  border: `1px solid ${THEME.primary}`,
-                  background: 'transparent',
-                  color: THEME.text,
                   fontSize: 15,
                   fontWeight: 800,
                   cursor: 'pointer'
@@ -7536,11 +7482,9 @@ export function CurrentWorkout({
                   onActivateWorkout();
                 }}
                 style={{
+                  ...actionButtonColors('primary'),
                   padding: `8px ${RESPONSIVE_WORKOUT_UI.rowPaddingX}`,
                   borderRadius: 6,
-                  border: `1px solid ${THEME.primary}`,
-                  background: THEME.primary,
-                  color: THEME.bg,
                   fontSize: 14,
                   fontWeight: 900,
                   cursor: 'pointer'
@@ -7576,7 +7520,7 @@ export function CurrentWorkout({
           <div data-testid="workout-header-secondary" style={{ textAlign: 'center' }}>
             <ScreenTitle fontSize="clamp(26px, 7vw, 34px)" title={<WorkoutTitle workout={workout} t={t} benchPressVariant={effectiveBenchPressVariant} />} />
             {!isReadOnly && scheduledLabel && (
-              <WorkoutDateBadge fontSize="0.875rem" testId="rest-workout-schedule-badge" color={THEME.primary}>{scheduledLabel}</WorkoutDateBadge>
+              <WorkoutDateBadge testId="rest-workout-schedule-badge" color={THEME.primary}>{scheduledLabel}</WorkoutDateBadge>
             )}
           </div>
 
@@ -7734,7 +7678,12 @@ export function CurrentWorkout({
           const firstIncompleteSet = (liftBlock.sets || []).findIndex(s => !s.done);
           const allWarmupsDone = (liftBlock.warmups || []).every(w => w.done);
           const separateSetRows = isMeetDay || Boolean(liftBlock.smartPrescription?.idealRouteStage);
-          const workSetPosition = index => separateSetRows ? centeredMeetItemStyle(
+          const warmupCount = liftBlock.warmups?.length || 0;
+          const totalSets = warmupCount + (liftBlock.sets?.length || 0);
+          const sharedRow = !isMeetDay && totalSets <= WORKOUT_GRID_COLUMNS;
+          const workSetPosition = index => sharedRow
+            ? centeredMeetItemStyle(totalSets, warmupCount + index)
+            : separateSetRows ? centeredMeetItemStyle(
               liftBlock.sets.length, index, Math.ceil((liftBlock.warmups || []).length / WORKOUT_GRID_COLUMNS) + 1
             ) : undefined;
           const hasActionInLaterLift = hasActionAfterMainLift(workout, li);
@@ -7816,13 +7765,14 @@ export function CurrentWorkout({
 
               <WorkoutLiftGrid
                 testId={`workout-lift-grid-${li}`}
-                columnCount={separateSetRows ? WORKOUT_GRID_COLUMNS * 2 : WORKOUT_GRID_COLUMNS}
+                columnCount={sharedRow || separateSetRows ? WORKOUT_GRID_COLUMNS * 2 : WORKOUT_GRID_COLUMNS}
               >
                 <WarmupGrid
                   compactGrid
                   showPhaseTags
                   warmups={liftBlock.warmups || []}
-                  centeredMeetRow={separateSetRows}
+                  centeredMeetRow={sharedRow || separateSetRows}
+                  rowItemCount={sharedRow ? totalSets : warmupCount}
                   gridSpan={null}
                   referenceSets={liftBlock.sets || []}
                   onShowPlateCalculator={onShowPlateCalculator}
@@ -8724,9 +8674,7 @@ function programActionButtonStyle(accentColor = THEME.primary, margin = '0') {
     padding: 12,
     fontSize: 14,
     fontWeight: 800,
-    background: THEME.card,
-    color: '#ffffff',
-    border: `1px solid ${accentColor}`,
+    '--kelani-action-edge': accentColor === THEME.primary ? undefined : accentColor,
     borderRadius: 8,
     cursor: 'pointer',
   };
@@ -8871,7 +8819,7 @@ function WorkoutSetupSection({ workoutSetup, onSave, t, trainingModel = TRAINING
     {open && <SettingsModal title={t.workoutSetup} onClose={() => setOpen(false)}>
       {isSmartTrainingModel(trainingModel) && <MeetDayOption enabled={draft.meetDayEnabled}
         onChange={meetDayEnabled => setDraft(current => ({ ...current, meetDayEnabled }))} t={t} />}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginTop: 14 }}>
+      <div className="kelani-button-grid" style={{ marginTop: 14 }}>
         {[['preparation', t.preparation], ['accessories', t.accessories]].map(([section, title]) => (
           <button key={section} type="button" aria-pressed={Boolean(draft[section]?.enabled)}
             onClick={() => toggleSection(section)}
@@ -8883,7 +8831,7 @@ function WorkoutSetupSection({ workoutSetup, onSave, t, trainingModel = TRAINING
       </div>
       {renderSection('preparation', PREPARATION_CATALOG, t.preparation)}
       {renderSection('accessories', ACCESSORY_CATALOG, t.accessories)}
-      <button type="button" onClick={() => { onSave(normalizeWorkoutSetup(draft)); setOpen(false); }} style={workoutSetupModalButtonStyle(THEME.primary, '14px auto 0')}>{t.save}</button>
+      <button type="button" onClick={() => { onSave(normalizeWorkoutSetup(draft)); setOpen(false); }} style={compactModalActionButtonStyle('primary', '14px auto 0')}>{t.save}</button>
     </SettingsModal>}
   </>;
 }
@@ -8914,7 +8862,8 @@ function TrainingFocusSection({ trainingFocus, onChange, athleteLevel, t, traini
   return <>
     <SettingsListRow
       label={t.trainingFocus}
-      actionLabel={trainingApproach === 'powerbuilding' ? `${activeContent.label} · ${t.powerbuildingApproach}` : activeContent.label}
+      description={trainingApproach === 'powerbuilding' ? `${activeContent.label} · ${t.powerbuildingApproach}` : activeContent.label}
+      actionLabel={t.adjust}
       onAction={() => setOpen(true)}
     />
     {open && <SettingsModal title={t.trainingFocus} onClose={() => setOpen(false)}>
@@ -8931,10 +8880,11 @@ function TrainingFocusSection({ trainingFocus, onChange, athleteLevel, t, traini
       ].map(([value, label], index) => <button
         type="button"
         key={value}
+        aria-pressed={activeFocus === value}
         disabled={!beginner && value === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT}
         onClick={() => { onChange(value); setOpen(false); }}
         style={{
-          ...selectionModalButtonStyle(activeFocus === value),
+          ...selectionModalButtonStyle(),
           margin: 0,
           ...(index === 2 ? { gridColumn: '1 / -1' } : {}),
           opacity: !beginner && value === SMART_TRAINING_FOCUSES.BEGINNER_SQUAT ? 0.5 : 1,
@@ -9032,6 +8982,7 @@ function ProgramProfileSection({
         type="button"
         onClick={onClick}
         autoFocus={active}
+        aria-pressed={active}
         style={{
           width: '100%',
           padding: 12,
@@ -9039,9 +8990,6 @@ function ProgramProfileSection({
           fontWeight: 800,
           textAlign: 'left',
           borderRadius: 8,
-          border: `1px solid ${THEME.primary}`,
-          background: active ? THEME.primary : THEME.card,
-          color: active ? THEME.bg : THEME.text,
           cursor: 'pointer'
         }}
       >
@@ -9049,7 +8997,7 @@ function ProgramProfileSection({
         {text && (
           <div style={{
             marginTop: 4,
-            color: active ? THEME.bg : THEME.muted,
+            color: 'inherit',
             fontSize: 12,
             fontWeight: 700,
             lineHeight: 1.35
@@ -9215,7 +9163,7 @@ export function StartNewCycleSection({ onStartNewCycle, t, hasProgress = false, 
                 {t.startNewCycleProgressWarning}
               </p>
             )}
-            <div style={modalActionRowStyle()}>
+            <div className="kelani-button-grid" style={{ marginTop: 14 }}>
               <button type="button" autoFocus onClick={close} style={modalActionButtonStyle()}>{t.cancel}</button>
               <button type="button" onClick={() => {
                 onClose();
@@ -9304,29 +9252,6 @@ function WorkoutTitle({ workout, t, benchPressVariant = 'standard' }) {
   );
 }
 
-function ensureProgramPlanLineLift(line, workout, t, benchPressVariant = 'standard') {
-  const text = String(line || '').trim();
-
-  if (/^(Squat|Bench|Deadlift)\b/i.test(text)) {
-    return text;
-  }
-
-  const liftBlocks = Array.isArray(workout?.lifts) && workout.lifts.length > 0
-    ? workout.lifts
-    : workout?.lift
-      ? [{ lift: workout.lift }]
-      : [];
-
-  if (liftBlocks.length !== 1) {
-    return text;
-  }
-
-  const lift = liftBlocks[0]?.lift;
-  if (!lift) return text;
-
-  return `${workoutLiftBlockLabel(liftBlocks[0], t, benchPressVariant)}: ${text}`;
-}
-
 export function getHistoricalSmartIntensityRole(liftBlock = {}) {
   const explicit = String(liftBlock.intensityRole || '').toLowerCase();
   if (['heavy', 'medium', 'light'].includes(explicit)) return explicit;
@@ -9378,36 +9303,25 @@ function ProgramWorkoutTitleRows({
     ? workout.lifts
     : [{ lift: workout.lift }];
 
-  const compactLiftLabel = liftBlock =>
-    workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant);
-
   return (
     <>
       {liftBlocks.map((liftBlock, index) => (
-        <div
-          key={`program-workout-title-${liftBlock.lift}-${index}`}
-          style={{
-            color: getLiftThemeColor(liftBlock.lift),
-            lineHeight: 1.15,
-          }}
-        >
-          {compactLiftLabel(liftBlock)}
-        </div>
+        <React.Fragment key={`program-workout-title-${liftBlock.lift}-${index}`}>
+          {index > 0 && <span className="kelani-program-plus"> + </span>}
+          <span style={{ color: getLiftThemeColor(liftBlock.lift) }}>
+            {workoutLiftBlockLabel(liftBlock, t, effectiveBenchPressVariant)}
+          </span>
+        </React.Fragment>
       ))}
     </>
   );
 }
 
-function compactProgramPlanLine(line) {
-  return String(line || '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function compactWorkoutPlanLines(planLines = []) {
-  return (planLines || [])
-    .map(compactProgramPlanLine)
-    .filter(Boolean);
+function ProgramLiftSets({ lift, label, children }) {
+  return <div className="kelani-program-lift-sets" role="group" aria-label={label}>
+    <span style={{ color: getLiftThemeColor(lift) }}>{label}</span>
+    <div className="kelani-program-loads">{children}</div>
+  </div>;
 }
 
 export function ProgramCompletedSetSummary({ workout, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard' }) {
@@ -9429,42 +9343,33 @@ export function ProgramCompletedSetSummary({ workout, t, weightUnit = WEIGHT_UNI
       if (previous?.key === key) previous.count += 1;
       else groups.push({ key, status, reps: set.reps, weightText, pctText, count: 1 });
     });
-    return groups.map((group, index) => {
-      const label = group.status === 'done' ? t.programSetsSucceeded
-        : group.status === 'missed' ? t.programSetsMissed : t.programSetsUnrecorded;
-      return (
-        <div key={`${blockIndex}-${index}`} style={{ whiteSpace: 'nowrap' }}>
-          {block.lift && <>
-            <span style={{ color: getLiftThemeColor(block.lift) }}>
-              {workoutLiftBlockLabel(block, t, workout.type === 'meet' ? 'standard' : benchPressVariant)}
-            </span>
-            <span style={{ color: THEME.text }}>:{' '}</span>
-          </>}
-          <span aria-label={label} title={label} style={{ color: group.status === 'missed' ? FAILED_SET_COLOR : group.status === 'done' ? THEME.green : THEME.text }}>
-            <span style={{ display: 'inline-block', whiteSpace: 'nowrap' }}>
-              <span aria-hidden="true">{group.status === 'done' ? '✓' : group.status === 'missed' ? '✕' : '?'}</span>{' '}
-              {group.count}×{group.reps}×{group.weightText}
-            </span>
-            {group.pctText && <> <span style={{ display: 'inline-block', whiteSpace: 'nowrap' }}>({group.pctText}%)</span></>}
-          </span>
-        </div>
-      );
-    });
+    if (!groups.length) return [];
+    return <ProgramLiftSets key={blockIndex} lift={block.lift}
+      label={workoutLiftBlockLabel(block, t, workout.type === 'meet' ? 'standard' : benchPressVariant)}>
+      {groups.map((group, index) => {
+        const label = group.status === 'done' ? t.programSetsSucceeded
+          : group.status === 'missed' ? t.programSetsMissed : t.programSetsUnrecorded;
+        const color = group.status === 'missed' ? THEME.red : group.status === 'done' ? THEME.green : THEME.text;
+        return (
+          <div key={index} aria-label={label} title={label} style={{ color }}>
+            <span aria-hidden="true">{group.status === 'done' ? '✓' : group.status === 'missed' ? '✕' : '?'}</span>{' '}
+            {group.count}×{group.reps}×{group.weightText}{group.pctText && ` (${group.pctText}%)`}
+          </div>
+        );
+      })}
+    </ProgramLiftSets>;
   });
-  return rows.length ? <div data-testid={`program-workout-results-${workout.number}`} aria-label={t.programSetResults}
-    style={{ display: 'grid', gap: 'clamp(2px, 0.35dvh, 4px)', lineHeight: 1.2 }}>{rows}</div> : null;
+  return rows.length ? <div data-testid={`program-workout-results-${workout.number}`} aria-label={t.programSetResults}>{rows}</div> : null;
 }
 
-function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard') {
+function getWorkoutPlanGroups(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPressVariant = 'standard') {
   const effectiveBenchPressVariant = workout?.type === 'meet' ? 'standard' : benchPressVariant;
   if (!workout || workout.type === 'rest') return [];
 
   const liftBlocks = (workout.lifts || []).length > 0
     ? workout.lifts
     : [{ lift: workout.lift, sets: workout.sets || [] }];
-  const showLiftName = liftBlocks.length > 1;
-
-  return liftBlocks.flatMap(liftBlock => {
+  return liftBlocks.map(liftBlock => {
     const groups = [];
 
     (liftBlock.sets || []).forEach(set => {
@@ -9497,7 +9402,7 @@ function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPres
       effectiveBenchPressVariant
     );
 
-    return groups.map(group => {
+    const lines = groups.map(group => {
       const weightText = formatWorkoutWeightFromKg(
         group.weight,
         weightUnit,
@@ -9506,13 +9411,17 @@ function getWorkoutPlanLines(workout, t, weightUnit = WEIGHT_UNITS.KG, benchPres
         liftBlock.benchPressVariant || effectiveBenchPressVariant
       );
       const pctText = formatSetPercentDisplay(group.pct);
-      const prescription = `${group.count}×${group.reps}×${weightText}${pctText ? ` (${pctText}%)` : ''}`;
-
-      return showLiftName
-        ? `${liftName}: ${prescription}`
-        : prescription;
+      return `${group.count}×${group.reps}×${weightText}${pctText ? ` (${pctText}%)` : ''}`;
     });
+    return { lift: liftBlock.lift, label: liftName, lines };
   });
+}
+
+function getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant) {
+  const groups = getWorkoutPlanGroups(workout, t, weightUnit, benchPressVariant);
+  return groups.flatMap(({ label, lines }) => groups.length > 1
+    ? lines.map(line => `${label}: ${line}`)
+    : lines);
 }
 
 function isCompletedWorkoutNewCycleBoundary(workout) {
@@ -9964,42 +9873,17 @@ export function getSmartProgramTitle(trainingFocus, t) {
 }
 
 export function AllWorkouts({ workouts, timeline = null, planningUnavailable = false, currentIndex, completedWorkoutNumbers = [], currentCycle = 1, onSelect, programProfile, trainingModel = TRAINING_MODELS.CLASSIC, trainingFocus = SMART_TRAINING_FOCUSES.STANDARD, preparationMode = 'off', accessoryMode = 'off', cooldownMode = 'off', squatVariant = 'standard', benchPressVariant = 'standard', deadliftVariant = 'standard', onChangeProgramProfile, onApplyProgramSettings, t, language = 'en', scheduleDateKeys = [], scheduleToday = new Date(), weightUnit = WEIGHT_UNITS.KG, athleteLevel, eStrengthRatio, eStrengthMax, latestBodyWeight }) {
-  const currentWorkoutRef = useRef(null);
+  const [currentCard, setCurrentCard] = useState(null);
   const programListRef = useRef(null);
-  const [showAllWorkouts, setShowAllWorkouts] = useState(false);
-  const [expandedProgramGap, setExpandedProgramGap] = useState(4);
+  const programEntriesRef = useRef(null);
   const [showProgramInfo, setShowProgramInfo] = useState(false);
   const smartModel = isSmartTrainingModel(trainingModel);
   const completedWorkoutNumberSet = new Set(completedWorkoutNumbers.map(Number));
   const programSummary = summarizeProgramWorkouts(workouts);
 
-  const hasSmartVisibilityMetadata = smartModel && workouts.some(workout =>
-    Object.prototype.hasOwnProperty.call(workout || {}, 'smartVisible')
-  );
-
-  const smartAllowedCurrentIndex = Math.max(Number(currentIndex) || 0, 0);
-  const allowedWorkoutEntries = timeline || (smartModel
-    ? workouts
-      .map((workout, idx) => ({ workout, idx }))
-      .filter(({ workout, idx }) => {
-        if (!hasSmartVisibilityMetadata) return idx <= smartAllowedCurrentIndex;
-
-        return workout.smartVisible !== false;
-      })
-    : workouts.map((workout, idx) => ({ workout, idx })));
-  const compactVisibleCount = 7;
-  const visibleWorkoutEntries = getProgramWorkoutWindow({
-    entries: allowedWorkoutEntries,
-    currentIndex,
-    showAll: showAllWorkouts,
-    maximumVisible: compactVisibleCount,
-  });
-  const hasHiddenWorkouts = allowedWorkoutEntries.length > compactVisibleCount;
-  // Expanding changes the number of rows, not the spacing within each row.
-  const useCompactWorkoutCardSpacing = hasHiddenWorkouts;
-  const workoutListVerticalSpacing = programWorkoutListVerticalSpacing({
-    compact: useCompactWorkoutCardSpacing,
-  });
+  const workoutEntries = timeline ?? workouts
+    .map((workout, idx) => ({ workout, idx }))
+    .filter(({ workout }) => !smartModel || workout.smartVisible !== false);
 
   function formatCompletedAt(value, fallbackDate = null) {
     if (!value && fallbackDate) return fallbackDate;
@@ -10018,53 +9902,38 @@ export function AllWorkouts({ workouts, timeline = null, planningUnavailable = f
 
   useLayoutEffect(() => {
     const region = programListRef.current;
-    const card = currentWorkoutRef.current;
-    if (!region || !card || !region.clientHeight) return;
-    const regionRect = region.getBoundingClientRect();
-    const cardRect = card.getBoundingClientRect();
-    if (cardRect.top >= regionRect.top && cardRect.bottom <= regionRect.bottom) return;
-    // Scroll only the list. scrollIntoView can also move overflow-hidden
-    // ancestors, hiding the content title or pushing actions below navigation.
-    region.scrollTop = Math.max(0, region.scrollTop + cardRect.top - regionRect.top
-      - (region.clientHeight - cardRect.height) / 2);
-  }, [currentIndex, workouts.length, showAllWorkouts]);
+    const entries = programEntriesRef.current;
+    if (!region || !entries || !currentCard) return;
 
-  function renderWorkoutListToggleButton(position = 'top') {
-    if (!hasHiddenWorkouts) return null;
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          if (!showAllWorkouts) {
-            const region = programListRef.current;
-            const [first, second] = region?.children || [];
-            if (region?.clientHeight && first && second) {
-              const gap = second.getBoundingClientRect().top - first.getBoundingClientRect().bottom;
-              setExpandedProgramGap(Math.max(4, gap));
-            }
-          }
-          setShowAllWorkouts(value => !value);
-        }}
-        style={{
-          ...programActionButtonStyle(
-            THEME.primary,
-            position === 'top'
-              ? workoutListVerticalSpacing.topToggleMargin
-              : workoutListVerticalSpacing.bottomToggleMargin
-          ),
-          display: 'block',
-          alignSelf: 'center',
-          flexShrink: 0,
-          marginLeft: 'auto',
-          marginRight: 'auto',
-          padding: 'clamp(12px, 1.6dvh, 15px)',
-          fontSize: RESPONSIVE_CONTENT_UI.bodyFontSize,
-        }}
-      >
-        {showAllWorkouts ? t.showFewerWorkouts : t.showAllWorkouts}
-      </button>
-    );
-  }
+    let lastCenteredTop;
+    function centerCurrentWorkout() {
+      if (!region.clientHeight) return;
+      // Once the user scrolls away, layout changes should leave their place alone.
+      if (lastCenteredTop !== undefined && Math.abs(region.scrollTop - lastCenteredTop) > 1) return;
+
+      const listBounds = entries.getBoundingClientRect();
+      const cardBounds = currentCard.getBoundingClientRect();
+      const cardCenter = cardBounds.top - listBounds.top + cardBounds.height / 2;
+      const halfHeight = region.clientHeight / 2;
+      const startSpace = 8;
+      const endSpace = Math.max(8, halfHeight - (listBounds.height - cardCenter));
+      region.style.paddingBlock = `${startSpace}px ${endSpace}px`;
+      // Keep the first workout at the top when there is too little history to center the current one.
+      region.scrollTop = Math.max(0, startSpace + cardCenter - halfHeight);
+      lastCenteredTop = region.scrollTop;
+    }
+
+    centerCurrentWorkout();
+    if (typeof ResizeObserver === 'function') {
+      const observer = new ResizeObserver(centerCurrentWorkout);
+      observer.observe(region, { box: 'border-box' });
+      observer.observe(entries);
+      observer.observe(currentCard);
+      return () => observer.disconnect();
+    }
+    window.addEventListener('resize', centerCurrentWorkout);
+    return () => window.removeEventListener('resize', centerCurrentWorkout);
+  }, [currentCard]);
 
   return (
     <div style={programScreenStyle()}>
@@ -10180,221 +10049,112 @@ export function AllWorkouts({ workouts, timeline = null, planningUnavailable = f
         : getProgramProfileTitle(programProfile, t)} />
 
       {planningUnavailable && <p role="alert" style={{ color: THEME.red, fontSize: responsiveFontSize(14), margin: '4px 0 12px' }}>{t.programPlanningError}</p>}
-      <div ref={programListRef} data-testid="screen-scroll-content" data-kelani-program-list-spacer style={programWorkoutListContainerStyle({
-        showAll: showAllWorkouts,
-        expandedGap: expandedProgramGap,
-        marginTop: workoutListVerticalSpacing.listMarginTop,
-      })}>
+      <div ref={programListRef} data-testid="screen-scroll-content" className="kelani-program-list">
+        <div ref={programEntriesRef} className="kelani-program-entries">
+          {!smartModel && (
+            <button type="button" data-kelani-button-layout="selection"
+              aria-label={t.programTrainingFactors} onClick={() => setShowProgramInfo(true)}
+              style={{ justifySelf: 'center', minHeight: 52, minWidth: 44, padding: 8, borderRadius: 8,
+                color: THEME.primary }}>i</button>
+          )}
 
-      {(hasHiddenWorkouts || !smartModel) && <div data-testid="program-top-actions" style={{ display: 'flex', justifyContent: 'center', gap: 8, flexShrink: 0, padding: '4px 0' }}>
-        {renderWorkoutListToggleButton('top')}
-        {!smartModel && (
-          <button type="button" data-kelani-button-size="contextual"
-            aria-label={t.programTrainingFactors} onClick={() => setShowProgramInfo(true)}
-            style={{ minHeight: 52, minWidth: 44, padding: 8, borderRadius: 8,
-              border: `1px solid ${THEME.primary}`, background: THEME.card,
-              color: THEME.primary, cursor: 'pointer' }}>i</button>
-        )}
-      </div>}
+          {workoutEntries.map(entry => {
+            const { workout, idx } = entry;
+            const entryCycle = entry.cycle || currentCycle;
+            const isCurrent = entryCycle === currentCycle && idx === currentIndex;
+            const isFuture = Boolean(entry.projected) || (smartModel && idx > currentIndex);
+            // Future plans can be inspected without activating their training slot.
+            const isSelectable = entry.projected || entryCycle !== currentCycle || !smartModel || (
+              isFuture || workout.smartSelectable !== false
+            );
+            const isDone = (entryCycle === currentCycle && completedWorkoutNumberSet.has(Number(workout.number))) || Boolean(workout.completed);
+            const completedAtLabel = isDone ? formatCompletedAt(workout.completedAt, workout.completedDate || workout.date) : null;
+            const scheduleDateLabel = smartModel && !isDone
+              ? formatWorkoutScheduleDate(entry.dateKey || scheduleDateKeys[idx], {
+                  language,
+                  today: scheduleToday,
+                  todayLabel: t.today,
+                  tomorrowLabel: t.tomorrow,
+                  compact: true,
+                  omitTomorrowDate: true,
+                  omitTodayDate: true,
+                })
+              : '';
+            const todayKey = localDateKey(scheduleToday);
+            const relativeDateBadge = Boolean(scheduleDateLabel &&
+              [todayKey, addLocalDays(todayKey, 1)].includes(entry.dateKey || scheduleDateKeys[idx]));
+            const focusColor = workoutDateColor(workout);
+            const planGroups = isDone || workout.type === 'meet'
+              ? []
+              : getWorkoutPlanGroups(workout, t, weightUnit, benchPressVariant).filter(group => group.lines.length);
 
-{visibleWorkoutEntries.map(entry => {
-        const { workout, idx } = entry;
-        const entryCycle = entry.cycle || currentCycle;
-        const isCurrent = entryCycle === currentCycle && idx === currentIndex;
-        const isFuture = Boolean(entry.projected) || (smartModel && idx > currentIndex);
-        // Future plans can be inspected without activating their training slot.
-        const isSelectable = entry.projected || entryCycle !== currentCycle || !smartModel || (
-          isFuture || workout.smartSelectable !== false
-        );
-        const isDone = (entryCycle === currentCycle && completedWorkoutNumberSet.has(Number(workout.number))) || Boolean(workout.completed);
-        const completedAtLabel = isDone ? formatCompletedAt(workout.completedAt, workout.completedDate || workout.date) : null;
-        const scheduleDateLabel = smartModel && !isDone
-          ? formatWorkoutScheduleDate(entry.dateKey || scheduleDateKeys[idx], {
-              language,
-              today: scheduleToday,
-              todayLabel: t.today,
-              tomorrowLabel: t.tomorrow,
-              compact: true,
-              omitTomorrowDate: true,
-              omitTodayDate: true,
-            })
-          : '';
-        const todayKey = localDateKey(scheduleToday);
-        const relativeDateBadge = Boolean(scheduleDateLabel &&
-          [todayKey, addLocalDays(todayKey, 1)].includes(entry.dateKey || scheduleDateKeys[idx]));
-        const focusColor = workoutDateColor(workout);
-        const titleColor = workout.type === 'meet' ? THEME.meet : THEME.text;
-        const rawPlanLines = isDone || workout.type === 'meet'
-          ? []
-          : getWorkoutPlanLines(workout, t, weightUnit, benchPressVariant)
-            .map(line => ensureProgramPlanLineLift(line, workout, t, benchPressVariant));
-        const planLines = compactWorkoutPlanLines(rawPlanLines);
-
-        return (
-          <div
-            key={entry.key || `C${entryCycle}W${workout.number}`}
-            ref={isCurrent ? currentWorkoutRef : null}
-            data-testid={entryCycle === currentCycle ? `program-workout-${workout.number}` : `program-workout-C${entryCycle}W${workout.number}`}
-            role="button"
-            title={entry.projected ? t.programProjectedHelp : undefined}
-            tabIndex={isSelectable ? 0 : -1}
-            aria-disabled={!isSelectable}
-            onKeyDown={event => {
-              if (!isSelectable || !['Enter', ' '].includes(event.key)) return;
-              event.preventDefault();
-              if (timeline) onSelect(idx, entry);
-              else onSelect(idx);
-              window.scrollTo({ top: 0, behavior: 'auto' });
-            }}
-            onClick={() => {
-              if (!isSelectable) return;
-              if (timeline) onSelect(idx, entry);
-              else onSelect(idx);
-              window.scrollTo({ top: 0, behavior: 'auto' });
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              ...programWorkoutCardSpacingStyle({
-                compact: useCompactWorkoutCardSpacing,
-              }),
-              // Preserve natural row height when the full list overflows.
-              flexShrink: 0,
-              borderRadius: 8,
-              border: isCurrent
-                ? `2px solid ${focusColor}`
-                : 'none',
-              background: 'transparent',
-              cursor: isSelectable ? 'pointer' : 'default',
-              opacity: isFuture ? 0.62 : 1,
-              ...(isCurrent ? {
-                '--kelani-pulse-color': `${focusColor}52`,
-                animation: 'kelaniRowGlow 2s ease-in-out infinite',
-              } : null),
-            }}
-          >
-            <div style={{
-              width: 'clamp(54px, 14vw, 66px)',
-              height: 'clamp(38px, 9vw, 44px)',
-              borderRadius: 8,
-              background: '#000000',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#ffffff',
-              fontWeight: 700,
-              fontSize: 'clamp(12px, 3.3vw, 15px)',
-              overflowWrap: 'anywhere',
-              marginRight: 8,
-              flexShrink: 0
-            }}>
-              {`C${entryCycle}W${workout.number}`}
-            </div>
-
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontWeight: isCurrent ? 800 : 700,
-                color: titleColor,
-                fontSize: 'clamp(16px, 3.8vw, 19px)',
-                ...(workout.type === 'meet' ? {
-                  display: 'flex',
-                  alignItems: 'center',
-                  flexWrap: 'nowrap',
-                  whiteSpace: 'nowrap',
-                } : null),
-              }}>
-                <ProgramWorkoutTitleRows
-                  workout={workout}
-                  t={t}
-                  benchPressVariant={benchPressVariant}
-                />
-                {relativeDateBadge && (
-                  <WorkoutDateBadge testId={`program-workout-schedule-date-${workout.number}`} color={focusColor} inline>
-                    {scheduleDateLabel}
-                  </WorkoutDateBadge>
+            return (
+              <div
+                key={entry.key || `C${entryCycle}W${workout.number}`}
+                ref={isCurrent ? setCurrentCard : null}
+                data-testid={entryCycle === currentCycle ? `program-workout-${workout.number}` : `program-workout-C${entryCycle}W${workout.number}`}
+                role="button"
+                title={entry.projected ? t.programProjectedHelp : undefined}
+                aria-current={isCurrent ? 'step' : undefined}
+                tabIndex={isSelectable ? 0 : -1}
+                aria-disabled={!isSelectable}
+                onKeyDown={event => {
+                  if (!isSelectable || !['Enter', ' '].includes(event.key)) return;
+                  event.preventDefault();
+                  if (timeline) onSelect(idx, entry);
+                  else onSelect(idx);
+                  window.scrollTo({ top: 0, behavior: 'auto' });
+                }}
+                onClick={() => {
+                  if (!isSelectable) return;
+                  if (timeline) onSelect(idx, entry);
+                  else onSelect(idx);
+                  window.scrollTo({ top: 0, behavior: 'auto' });
+                }}
+                className="kelani-program-card"
+                data-future={isFuture || undefined}
+                style={{ '--workout-accent': focusColor }}
+              >
+                <div className="kelani-program-card-header">
+                  <div className="kelani-program-workout-name">
+                    <ProgramWorkoutTitleRows workout={workout} t={t} benchPressVariant={benchPressVariant} />
+                  </div>
+                  {relativeDateBadge && (
+                    <WorkoutDateBadge testId={`program-workout-schedule-date-${workout.number}`} color={focusColor} compact>
+                      {scheduleDateLabel}
+                    </WorkoutDateBadge>
+                  )}
+                  <span className="kelani-program-workout-code">{`C${entryCycle}W${workout.number}`}</span>
+                  {isDone && (
+                    <div className="kelani-program-date">
+                      <span className="kelani-program-completed-mark" role="img" aria-label={t.workoutCompleted}>✓</span>
+                      {completedAtLabel && ` ${completedAtLabel}`}
+                    </div>
+                  )}
+                  {scheduleDateLabel && !relativeDateBadge && (
+                    <div className="kelani-program-date" data-testid={`program-workout-schedule-date-${workout.number}`}>
+                      {scheduleDateLabel}
+                    </div>
+                  )}
+                  {entry.projected && entryCycle !== currentCycle && (
+                    <div className="kelani-program-date" title={t.programProjectedHelp}>{t.programProjected}</div>
+                  )}
+                </div>
+                {workout.type !== 'rest' && (isDone || planGroups.length > 0) && (
+                  <div className="kelani-program-details">
+                    {isDone ? <ProgramCompletedSetSummary
+                      workout={workout} t={t} weightUnit={weightUnit} benchPressVariant={benchPressVariant}
+                    /> : planGroups.map(({ lift, label, lines }, index) => (
+                      <ProgramLiftSets key={index} lift={lift} label={label}>
+                        {lines.map((line, lineIndex) => <div key={lineIndex}>{line}</div>)}
+                      </ProgramLiftSets>
+                    ))}
+                  </div>
                 )}
               </div>
-
-              {entry.projected && entryCycle !== currentCycle && <div title={t.programProjectedHelp} style={{ color: THEME.muted,
-                fontSize: RESPONSIVE_CONTENT_UI.compactFontSize, marginTop: 3 }}>{t.programProjected}</div>}
-              {completedAtLabel && (
-                <div style={{
-                  fontSize: RESPONSIVE_CONTENT_UI.compactFontSize,
-                  color: THEME.muted,
-                  fontWeight: 700,
-                  marginTop: 3
-                }}>
-                  ✓ {completedAtLabel}
-                </div>
-              )}
-              {scheduleDateLabel && !relativeDateBadge && (
-                <div
-                  data-testid={`program-workout-schedule-date-${workout.number}`}
-                  style={{
-                    fontSize: RESPONSIVE_CONTENT_UI.compactFontSize,
-                    color: THEME.muted,
-                    fontWeight: 700,
-                    marginTop: 3,
-                  }}
-                >
-                  {scheduleDateLabel}
-                </div>
-              )}
-            </div>
-
-            {(isDone || planLines.length > 0) && (
-              <div style={{
-                marginLeft: 'clamp(10px, 2.5vw, 14px)',
-                display: 'grid',
-                gap: 'clamp(2px, 0.35dvh, 4px)',
-                color: THEME.text,
-                fontSize: RESPONSIVE_CONTENT_UI.compactFontSize,
-                lineHeight: 1.2,
-                textAlign: 'right',
-                maxWidth: 'clamp(210px, 45vw, 240px)',
-                minWidth: 0,
-                flexShrink: 0
-              }}>
-                {isDone ? <ProgramCompletedSetSummary
-                  workout={workout} t={t} weightUnit={weightUnit} benchPressVariant={benchPressVariant}
-                /> : planLines.map((line, lineIndex) => {
-                  const text = String(line);
-                  const match =
-                    text.startsWith('Bench') ? { lift: 'Bench', label: 'Bench' } :
-                    text.startsWith('Deadlift') ? { lift: 'Deadlift', label: 'Deadlift' } :
-                    text.startsWith('Squat') ? { lift: 'Squat', label: 'Squat' } :
-                    null;
-
-                  return (
-                    <div
-                      key={lineIndex}
-                      style={{
-                        whiteSpace: 'nowrap',
-                        overflow: 'visible',
-                        textOverflow: 'clip'
-                      }}
-                    >
-                      {match ? (
-                        <>
-                          <span style={{ color: getLiftThemeColor(match.lift) }}>{match.label}</span>
-                          <span style={{ color: THEME.text }}>{text.slice(match.label.length)}</span>
-                        </>
-                      ) : (
-                        text
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {isDone && !completedAtLabel && <span style={{ color: THEME.primary, fontSize: 'clamp(18px, 4.2vw, 21px)', marginLeft: 8 }}>✅</span>}
-          </div>
-        );
-      })}
-
-      {hasHiddenWorkouts && <div data-testid="program-bottom-actions" style={{ flexShrink: 0, display: 'flex', justifyContent: 'center', padding: '4px 0' }}>{renderWorkoutListToggleButton('bottom')}</div>}
-
+            );
+          })}
+        </div>
       </div>
 
       {!smartModel && (
@@ -10551,7 +10311,7 @@ function Onboarding({ onStart, t }) {
           src="/icons/icon-512.webp"
           alt={t.appName}
           style={{
-            width: 'clamp(64px, 9dvh, 80px)',
+            width: 'clamp(40px, 6.5dvh, 64px)',
             height: 'auto',
             display: 'block',
             margin: '0 auto 4px',
@@ -10568,7 +10328,7 @@ function Onboarding({ onStart, t }) {
         </div>
       </div>
 
-      <div style={{ width: '100%', maxWidth: 400, margin: '0 auto' }}>
+      <div className="onboarding-step-heading" style={{ width: '100%', maxWidth: 400, margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 7 }}>
           <strong style={{ color: THEME.primary, fontSize: 13 }}>
             {t.onboardingStepOf.replace('{step}', step).replace('{total}', 3)}
@@ -10582,7 +10342,7 @@ function Onboarding({ onStart, t }) {
         </div>
         <h2 style={{
           margin: 'clamp(8px, 1.2dvh, 12px) 0 0',
-          color: THEME.red,
+          color: THEME.text,
           fontSize: 'clamp(21px, 5.5vw, 27px)',
           fontWeight: 700,
           lineHeight: 1.2,
@@ -10597,14 +10357,15 @@ function Onboarding({ onStart, t }) {
         minHeight: 0,
         overflowY: 'auto',
         overflowX: 'hidden',
-        alignContent: 'space-between',
-        gridTemplateRows: step === 1 ? undefined : 'minmax(min-content, 1fr)',
+        alignContent: 'stretch',
+        paddingBlock: step === 1 ? 'clamp(12px, 2.5dvh, 24px)' : 'clamp(6px, 1.2dvh, 12px)',
+        gridTemplateRows: step === 1
+          ? `auto ${onboardingError ? 'auto ' : ''}minmax(max-content, 0.6fr) minmax(max-content, 0.6fr) minmax(max-content, 3fr)`
+          : 'minmax(min-content, 1fr)',
         rowGap: step === 1 ? 'clamp(10px, 2dvh, 20px)' : 'clamp(5px, 0.8dvh, 8px)',
       }}>
 
         {step === 1 && <div style={{ display: 'contents' }}>
-            <div aria-hidden="true" />
-
             <p style={{
               margin: '0 auto',
               maxWidth: 'none',
@@ -10690,8 +10451,8 @@ function Onboarding({ onStart, t }) {
             </div>
           </div>
 
-          <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gap: 16 }}>
-          <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateColumns: '76px minmax(0, 1fr) 68px', gap: 8, color: THEME.muted, fontSize: 14, fontWeight: 800, textAlign: 'center' }}>
+          <div className="onboarding-strength-inputs" style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', rowGap: 'clamp(12px, 2.7dvh, 24px)', columnGap: 8 }}>
+          <div style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', gridTemplateColumns: 'subgrid', gap: 8, color: THEME.muted, fontSize: 14, fontWeight: 800, textAlign: 'center' }}>
             <span />
             <span>{t.weight}</span>
             <span>{t.reps}</span>
@@ -10716,7 +10477,7 @@ function Onboarding({ onStart, t }) {
               width: '100%',
               maxWidth: 400,
               margin: '0 auto',
-              gridTemplateColumns: '76px minmax(0, 1fr) 68px',
+              gridTemplateColumns: 'subgrid',
               alignItems: 'center',
               gap: 8,
             }}
@@ -10781,10 +10542,8 @@ function Onboarding({ onStart, t }) {
           </div>
         </div>}
 
-        {/* The final grid gap separates the lift fields from the fixed action row. */}
-        {step === 1 && <div aria-hidden="true" />}
 
-        {step === 2 && startingProfile && <section style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', alignContent: 'space-between', minHeight: '100%' }}>
+        {step === 2 && startingProfile && <section style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', alignContent: 'space-evenly', rowGap: 6 }}>
           <TrainingApproachChoice value={onboardingTrainingApproach} onChange={setOnboardingTrainingApproach} t={t} />
           <div role="group" aria-label={t.onboardingGoalLabel} style={{ display: 'grid', gap: 8 }}>
             {[
@@ -10797,11 +10556,11 @@ function Onboarding({ onStart, t }) {
               return <button
                 type="button"
                 key={focus}
-                data-kelani-button-size="contextual"
+                data-kelani-button-layout="selection"
                 disabled={!available}
                 aria-pressed={selected}
                 onClick={() => setSelectedTrainingFocus(focus)}
-                style={{ minHeight: 58, padding: '6px 12px', textAlign: 'left', borderRadius: 8, border: `1px solid ${selected ? THEME.primary : THEME.muted}`, background: selected ? THEME.primary : THEME.bg, color: THEME.text, opacity: available ? 1 : 0.55, cursor: available ? 'pointer' : 'not-allowed' }}
+                className="onboarding-route-option"
               >
                 <strong style={{ display: 'block', fontSize: 15 }}>{label}</strong>
                 <span style={{ display: 'block', fontSize: 14, lineHeight: 1.3, marginTop: 2 }}>{description}</span>
@@ -10809,7 +10568,7 @@ function Onboarding({ onStart, t }) {
             })}
           </div>
           <MeetDayOption enabled={onboardingMeetDayEnabled} onChange={setOnboardingMeetDayEnabled} t={t} />
-          <div>
+          <div className="onboarding-route-summary">
           <dl style={{ display: 'grid', gap: 8, margin: '6px 0 0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
               <dt style={{ color: THEME.muted, fontWeight: 700 }}>{t.onboardingCalculatedLevel}</dt>
@@ -10824,24 +10583,20 @@ function Onboarding({ onStart, t }) {
               </dd>
             </div>
           </dl>
-          <details style={{ marginTop: 8 }}>
-            <summary style={{ cursor: 'pointer', color: THEME.primary, padding: '8px 0' }}>{t.onboardingCalculationHelp}</summary>
-            <p style={{ margin: '4px 0', fontSize: 15, lineHeight: 1.4 }}>{t.onboardingDaysExplanation.replace('{days}', startingProfile.periodDays)}</p>
-          </details>
           </div>
         </section>}
 
-        {step === 3 && <section style={{ width: '100%', maxWidth: 400, margin: '0 auto', display: 'grid', minHeight: '100%' }}>
-          <ol style={{ paddingLeft: 25, margin: 0, display: 'grid', margin: 0, paddingBlock: 8, alignContent: 'space-between', gap: 12 }}>
+        {step === 3 && <section className="onboarding-guide">
+          <ol>
             {[
               [t.onboardingGuidePlanTitle, t.onboardingGuidePlanText],
               [t.onboardingGuideLogTitle, t.onboardingGuideLogText],
               [t.onboardingGuideFeedbackTitle, t.onboardingGuideFeedbackText],
               [t.onboardingGuideProgressTitle, t.onboardingGuideProgressText],
               [t.onboardingGuideSettingsTitle, t.onboardingGuideSettingsText],
-            ].map(([title, description]) => <li key={title} style={{ paddingLeft: 3, lineHeight: 1.35 }}>
-              <strong style={{ color: THEME.primary, display: 'block', fontSize: 'clamp(16px, 2dvh, 18px)' }}>{title}</strong>
-              <span style={{ fontSize: 'clamp(14px, 1.85dvh, 16px)', lineHeight: 1.45 }}>{description}</span>
+            ].map(([title, description]) => <li key={title}>
+              <strong>{title}</strong>
+              <span>{description}</span>
             </li>)}
           </ol>
         </section>}
@@ -10856,18 +10611,16 @@ function Onboarding({ onStart, t }) {
         }}>
           {step === 1
             ? <DataSection t={t} importOnly={true} triggerOnly={true} />
-            : <button type="button" onClick={() => setStep(current => Math.max(current - 1, 1))} style={{ width: 'var(--kelani-button-width)', minHeight: 'var(--kelani-button-height)', background: THEME.bg, color: THEME.text, border: `1px solid ${THEME.primary}`, borderRadius: 4, fontWeight: 700, cursor: 'pointer' }}>{t.onboardingBack}</button>}
+            : <button type="button" onClick={() => setStep(current => Math.max(current - 1, 1))} style={{ width: 'var(--kelani-button-width)', minHeight: 'var(--kelani-button-height)', fontWeight: 700 }}>{t.onboardingBack}</button>}
           <button
             type="button"
             onClick={step === 3 ? handleStart : handleNext}
             style={{
+              ...actionButtonColors('primary'),
               width: 'var(--kelani-button-width)',
               minHeight: 'var(--kelani-button-height)',
               padding: '9px 16px',
               fontSize: 16,
-              background: THEME.primary,
-              color: '#ffffff',
-              border: `1px solid ${THEME.primary}`,
               borderRadius: 4,
               cursor: 'pointer',
               fontWeight: 700
@@ -11014,9 +10767,8 @@ export function bottomNavLabelStyle(active = false) {
     maxWidth: '100%',
     minHeight: 14,
     paddingBottom: 2,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
+    whiteSpace: 'normal',
+    overflowWrap: 'break-word',
     fontSize: 10,
     fontWeight: active ? 800 : 600,
     lineHeight: 1.2,
@@ -11040,6 +10792,8 @@ export function BottomNav({ screen, onChange, t }) {
         <button
           key={item.key}
           aria-label={item.label}
+          className="kelani-nav-action"
+          aria-current={screen === item.key ? 'page' : undefined}
           data-kelani-button-size="contextual"
           title={item.label}
           onClick={() => {
@@ -11253,6 +11007,7 @@ function App() {
   }
 
   useEffect(() => {
+    document.documentElement.lang = language;
     localStorage.setItem('language', language);
   }, [language]);
 
@@ -15272,7 +15027,9 @@ if (screen === 'profileLoadError') return (
   </main>
 );
 
-if (screen === 'onboarding') return <Onboarding onStart={handleStart} t={t}/>;
+if (screen === 'onboarding') {
+  return <Onboarding onStart={handleStart} t={t} />;
+}
 
 if (screen !== 'onboarding' && !workouts.length) {
   return <Onboarding onStart={handleStart} t={t}/>;
@@ -15860,7 +15617,7 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
                 fontWeight: 800,
                 marginBottom: 6,
                 lineHeight: 1.35,
-                whiteSpace: 'nowrap',
+                overflowWrap: 'anywhere',
               }}
             >
               {dashboardMeetProjection?.available ? (
@@ -15889,15 +15646,12 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
         </>
       );
     })()}
-    {!dashboardMeetState.isMeetDay && (
-    <div style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: '2px 6px' }}>
-      {(() => {
+    {!dashboardMeetState.isMeetDay && (() => {
         const cards = [
           {
             key: 'Squat',
             label: t.squat,
             color: THEME.red,
-            background: 'rgba(255, 92, 69, 0.12)',
             ...dashboardE1RMMetrics.lifts.Squat,
             recentPr: dashboardRecentPrEvents.lifts.Squat,
             statsTab: 'lifts',
@@ -15906,7 +15660,6 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
             key: 'Bench',
             label: t.bench,
             color: THEME.primary,
-            background: 'rgba(255, 138, 61, 0.12)',
             ...dashboardE1RMMetrics.lifts.Bench,
             recentPr: dashboardRecentPrEvents.lifts.Bench,
             statsTab: 'lifts',
@@ -15915,7 +15668,6 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
             key: 'Deadlift',
             label: t.deadlift,
             color: THEME.yellow,
-            background: 'rgba(255, 209, 102, 0.12)',
             ...dashboardE1RMMetrics.lifts.Deadlift,
             recentPr: dashboardRecentPrEvents.lifts.Deadlift,
             statsTab: 'lifts',
@@ -15923,127 +15675,41 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
           {
             key: 'Total',
             label: t.total,
-            color: THEME.meet,
-            background: `${THEME.meet}20`,
+            color: '#ff7970',
             ...dashboardE1RMMetrics.total,
             recentPr: dashboardRecentPrEvents.total,
             statsTab: 'totaal',
           },
         ];
 
-        const value = weight => weight ? formatEstimatedWeightFromKg(weight, weightUnit) : '-';
-        const estimatedValue = weight => weight ? formatEstimatedWeightFromKg(weight, weightUnit) : '-';
-        const openStatsTab = tab => {
-          setStatsTab(tab);
-          changeScreen('stats');
-        };
-
         return (
-          <>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              gap: 'calc(var(--kelani-dashboard-card-gap, 8px) + var(--dashboard-extra, 0px) * 0.6) clamp(12px, 3vw, 16px)'
-            }}>
-              {cards.map(card => (
-                <div
-                  key={card.key}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => openStatsTab(card.statsTab)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' || e.key === ' ') openStatsTab(card.statsTab);
-                  }}
-                  style={{
-                    padding: 'calc(var(--kelani-dashboard-card-padding, 2px) + var(--dashboard-extra, 0px) * 0.6) 2px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div style={{
-                    color: card.color,
-                    fontSize: adaptiveFontSize('clamp(21px, 5vw, 25px)'),
-                    fontWeight: 900,
-                    marginBottom: 'calc(var(--kelani-dashboard-text-gap, 4px) + var(--dashboard-extra, 0px) * 0.6)',
-                    lineHeight: 1.1
-                  }}>
-                    {card.label}
-                  </div>
-
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'auto 1fr',
-                    gap: 'calc(var(--kelani-dashboard-text-gap, 3px) + var(--dashboard-extra, 0px) * 0.6) 10px',
-                    alignItems: 'baseline'
-                  }}>
-                    <span style={{
-                      color: THEME.muted,
-                      fontSize: adaptiveFontSize('clamp(14px, 3.4vw, 17px)'),
-                      fontWeight: 900
-                    }}>
-                      {t.oneRM}
-                    </span>
-                    <div style={{ textAlign: 'right', minWidth: 0 }}>
-                      <strong style={{
-                        display: 'block',
-                        color: card.color,
-                        fontSize: adaptiveFontSize('clamp(19px, 4.6vw, 23px)'),
-                        fontWeight: 900,
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {value(card.oneRM)}
-                      </strong>
-                      {card.recentPr?.oneRMGain > 0 && (
-                        <div style={{
-                          color: THEME.green,
-                          fontSize: adaptiveFontSize('clamp(11px, 2.7vw, 14px)'),
-                          fontWeight: 900,
-                          marginTop: 2,
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {t.new1RMPR} +{formatEstimatedWeightFromKg(card.recentPr.oneRMGain, weightUnit)}
-                        </div>
-                      )}
-                    </div>
-
-                    <span style={{
-                      color: THEME.muted,
-                      fontSize: adaptiveFontSize('clamp(14px, 3.4vw, 17px)'),
-                      fontWeight: 900
-                    }}>
-                      {t.e1RM}
-                    </span>
-                    <div style={{ textAlign: 'right', minWidth: 0 }}>
-                      <strong style={{
-                        display: 'block',
-                        color: card.color,
-                        fontSize: adaptiveFontSize('clamp(19px, 4.6vw, 23px)'),
-                        fontWeight: 900,
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {estimatedValue(card.e1RM)}
-                      </strong>
-                      {card.recentPr?.e1RMGain > 0 && (
-                        <div style={{
-                          color: THEME.green,
-                          fontSize: adaptiveFontSize('clamp(11px, 2.7vw, 14px)'),
-                          fontWeight: 900,
-                          marginTop: 2,
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {t.newE1RMPR} +{formatEstimatedWeightFromKg(card.recentPr.e1RMGain, weightUnit)}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-          </>
+          <div className="kelani-dashboard-maxes">
+            {cards.map(card => (
+              <button
+                key={card.key}
+                type="button"
+                data-kelani-button-size="contextual"
+                className="kelani-dashboard-max-card"
+                style={{ '--lift-color': card.color }}
+                onClick={() => {
+                  setStatsTab(card.statsTab);
+                  changeScreen('stats');
+                }}
+              >
+                <span className="kelani-dashboard-max-title">{card.label}</span>{' '}
+                <DashboardMaxMetric
+                  label={t.oneRM} weight={card.oneRM} unit={weightUnit}
+                  gain={card.recentPr?.oneRMGain} recordLabel={t.new1RMPR}
+                />{' '}
+                <DashboardMaxMetric
+                  label={t.e1RM} weight={card.e1RM} unit={weightUnit}
+                  gain={card.recentPr?.e1RMGain} recordLabel={t.newE1RMPR}
+                />
+              </button>
+            ))}
+          </div>
         );
-      })()}
-    </div>
-    )}
+    })()}
 
     {!dashboardMeetState.isMeetDay && (() => {
       const dashboardBodyRowTabs = { bodyWeight: 'lichaam', strength: 'totaal', eStrength: 'totaal' };
@@ -16106,21 +15772,11 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
                   }}>
                     {row.value}
                   </strong>
-                  {row.recentPrGain > 0 && (
-                    <div style={{
-                      color: THEME.green,
-                      fontSize: adaptiveFontSize('clamp(11px, 2.7vw, 14px)'),
-                      fontWeight: 900,
-                      marginTop: 2,
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {row.recentPrLabel} +{formatDecimalDisplay(row.recentPrGain, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}x
-                    </div>
-                  )}
                 </div>
+                {row.recentPrGain > 0 && (
+                  <DashboardRecordGain label={row.recentPrLabel}
+                    gain={formatDecimalDisplay(row.recentPrGain, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'x'} />
+                )}
               </div>
             ))
           ) : (
@@ -16267,8 +15923,10 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
 
       <DataSection
         t={t}
+        profileForExport={hasLoadedData ? storedData : undefined}
         onReset={() => setShowResetConfirm(true)}
       />
+
 
       <SettingsListRow
         label={t.calendarTitle}
@@ -16824,9 +16482,6 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
             style={{
               padding: 12,
               borderRadius: 8,
-              border: `1px solid ${THEME.primary}`,
-              background: THEME.card,
-              color: THEME.text,
               fontSize: 14,
               fontWeight: 800,
               cursor: 'pointer'
@@ -16891,37 +16546,17 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
         {t.resetConfirmText}
       </p>
 
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div className="kelani-button-grid">
         <button
           onClick={() => setShowResetConfirm(false)}
-          style={{
-            flex: 1,
-            padding: 12,
-            fontSize: 14,
-            fontWeight: 700,
-            background: 'transparent',
-            color: THEME.text,
-            border: `1px solid ${THEME.primary}`,
-            borderRadius: 8,
-            cursor: 'pointer'
-          }}
+          style={modalActionButtonStyle('secondary')}
         >
           {t.resetConfirmCancel}
         </button>
 
         <button
           onClick={handleResetApp}
-          style={{
-            flex: 1,
-            padding: 12,
-            fontSize: 14,
-            fontWeight: 800,
-            background: THEME.red,
-            color: '#ffffff',
-            border: `1px solid ${THEME.red}`,
-            borderRadius: 8,
-            cursor: 'pointer'
-          }}
+          style={modalActionButtonStyle('danger')}
         >
           {t.resetConfirmConfirm}
         </button>
