@@ -4,9 +4,15 @@
 
 **Plan your Squat, Bench Press and Deadlift training, log your sets and follow your strength progress offline.**
 
-Kelani is an open-source Android app for independent lifters. It is free through GitHub and IzzyOnDroid, with no Kelani account, ads or subscription. Available in **English, Dutch and Catalan**.
+Kelani is an open-source powerlifting app for independent lifters, available on Android and Windows. There is no Kelani account, advertising or subscription. Available in **English, Dutch and Catalan**.
 
 ## Download
+
+### Windows
+
+[Get Kelani from the Microsoft Store](https://apps.microsoft.com/detail/9P8L4HZD8BFD). One-time purchase (€4.99 in the Netherlands).
+
+### Android
 
 Requires **Android 7.0 or later**.
 
@@ -58,7 +64,7 @@ Core training works offline. Kelani has no automatic analytics or cloud sync. Op
 
 [Volunteer for the upcoming Google Play test](docs/user-guide.md#google-play-testing) or [support development through GitHub Sponsors](https://github.com/sponsors/mburgosfr-star?frequency=one-time). Contributions are optional and unlock no app features.
 
-Experimental desktop versions have separate data: [Ubuntu](docs/ubuntu-prototype.md) · [Windows](docs/windows-prototype.md).
+The [experimental Ubuntu version](https://github.com/mburgosfr-star/kelani-sbd-tracker/blob/main/docs/ubuntu-prototype.md) has a separate training profile.
 
 ## Development
 
