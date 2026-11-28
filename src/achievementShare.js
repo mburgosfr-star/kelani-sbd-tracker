@@ -6,7 +6,7 @@ const colors = { Squat: '#ff5c45', Bench: '#ff8a3d', Deadlift: '#ffd166' };
 const success = set => set.done && !set.failed && !set.skipped && Number(set.weight) > 0 && Number(set.reps) > 0;
 
 // Explicit allowlist: no names, body measurements, dates, notes or backup data.
-export function buildAchievementCard({ kind = 'about', workout, celebration, history = [], cycle = 1, athleteLevel, workoutNumber, dashboard, t, weightUnit = 'kg' }) {
+export function buildAchievementCard({ kind = 'about', workout, celebration, history = [], cycle = 1, athleteLevel, workoutNumber, dashboard, dashboardRecentPrEvents, t, weightUnit = 'kg' }) {
   const label = lift => ({ Squat: t.squat, Bench: t.bench, Deadlift: t.deadlift, Total: t.total })[lift] || '';
   const weight = value => formatWeightFromKg(value, weightUnit, { recorded: true });
   const rows = [];
@@ -17,12 +17,16 @@ export function buildAchievementCard({ kind = 'about', workout, celebration, his
     // the source object, personal fields, or body measurements to a card.
     const value = number => Number.isFinite(Number(number)) && Number(number) > 0
       ? formatEstimatedWeightFromKg(Number(number), weightUnit) : t.cycleReviewUnavailable;
+    const record = (label, gain) => Number.isFinite(gain) && gain > 0
+      ? { label, gain: `+${formatEstimatedWeightFromKg(gain, weightUnit)}` } : null;
     dashboardSummary = {
       columns: [t.oneRM, t.e1RM],
       tiles: ['Squat', 'Bench', 'Deadlift', 'Total'].map(lift => {
         const metrics = lift === 'Total' ? dashboard?.total : dashboard?.lifts?.[lift];
-        return { label: label(lift), color: colors[lift] || '#c62828',
-          values: [value(metrics?.oneRM), value(metrics?.e1RM)] };
+        const recent = lift === 'Total' ? dashboardRecentPrEvents?.total : dashboardRecentPrEvents?.lifts?.[lift];
+        return { label: label(lift), color: colors[lift] || '#ff7970',
+          values: [value(metrics?.oneRM), value(metrics?.e1RM)],
+          records: [record(t.new1RMPR, recent?.oneRMGain), record(t.newE1RMPR, recent?.e1RMGain)] };
       }),
     };
   }
@@ -31,17 +35,20 @@ export function buildAchievementCard({ kind = 'about', workout, celebration, his
   let subtitle = kind === 'about' ? '' : t.shareAboutSubtitle;
   if (kind === 'milestone') {
     title = t.milestoneStrengthTitle;
-    subtitle = t.shareMilestoneSubtitle;
+    subtitle = '';
+    const addResult = (label, value, gain, color = '#ffd166') => rows.push({ label, value, gain: `+${gain}`, color });
     for (const item of celebration?.achievements || []) {
       if (item.type === 'level') {
         add(t.milestoneNewLevel, ({ beginner: t.athleteLevelBeginner, intermediate: t.athleteLevelIntermediate, advanced: t.athleteLevelAdvanced, elite: t.athleteLevelElite })[item.value] || '', '#ffd166');
       } else if (['oneRM', 'e1RM'].includes(item.type) && Number(item.value) > 0) {
         const format = formatEstimatedWeightFromKg;
-        add(`${label(item.lift)} ${item.type === 'oneRM' ? '1RM' : 'e1RM'}`, `${format(item.value, weightUnit)} (+${format(item.gain, weightUnit)})`, colors[item.lift]);
+        addResult(`${label(item.lift)} ${item.type === 'oneRM' ? '1RM' : 'e1RM'}`,
+          format(item.value, weightUnit), format(item.gain, weightUnit), colors[item.lift]);
       }
       else if (['strengthMax', 'eStrengthMax'].includes(item.type) && Number(item.value) > 0) {
-        add(item.type === 'strengthMax' ? t.strengthMax : t.eStrengthMax,
-          `${formatDecimalDisplay(item.value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x (+${formatDecimalDisplay(item.gain, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`, '#ffd166');
+        const format = value => formatDecimalDisplay(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        addResult(item.type === 'strengthMax' ? t.strengthMax : t.eStrengthMax,
+          `${format(item.value)}x`, format(item.gain));
       }
     }
   } else if (kind === 'cycle') {
@@ -166,7 +173,96 @@ export async function renderAchievementCard(card) {
   function rule(top) {
     rect(left, top, width, 2, '#493321');
   }
-  // The same compact brand/context header across every kind of shared result.
+  function box(x, top, w, h, radius, fill, border) {
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, top, w, h, radius);
+    else ctx.rect(x, top, w, h);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    if (border) {
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = border;
+      ctx.stroke();
+    }
+  }
+  const green = '#46e597';
+  if (card.kind === 'milestone') {
+    const center = canvas.width / 2;
+    const contentLeft = 84;
+    const contentWidth = canvas.width - contentLeft * 2;
+    commands.push(() => {
+      const glow = ctx.createRadialGradient(center, 36, 0, center, 36, 620);
+      glow.addColorStop(0, '#43271a');
+      glow.addColorStop(1, '#141110');
+      box(24, 24, canvas.width - 48, canvas.height - 48, 40, glow, '#98603c');
+      box(center - 65, 66, 130, 130, 38, '#322218', '#bd7645');
+      // A rising arrow and confetti drawn at export resolution on every platform.
+      ctx.beginPath();
+      ctx.moveTo(center - 29, 151);
+      ctx.lineTo(center + 25, 107);
+      ctx.moveTo(center - 1, 107);
+      ctx.lineTo(center + 25, 107);
+      ctx.lineTo(center + 25, 133);
+      ctx.lineCap = ctx.lineJoin = 'round';
+      ctx.lineWidth = 9;
+      ctx.strokeStyle = '#ffae70';
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+      ctx.lineJoin = 'miter';
+      const confetti = [
+        [-124, 105, 6, '#ffd166'], [-98, 161, 5, green], [-156, 153, 4, orange],
+        [124, 103, 5, green], [101, 161, 6, '#ffd166'], [156, 151, 4, orange],
+      ];
+      confetti.forEach(([offset, top, radius, color]) => {
+        ctx.beginPath();
+        ctx.arc(center + offset, top, radius, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      });
+    });
+
+    let top = 222;
+    top += text(card.title, center, top, 64, ink, contentWidth);
+    if (card.context?.length) {
+      top += 10 + text(card.context.join(' · '), center, top + 10, 36, '#dbc0aa', contentWidth);
+    }
+    top += 36;
+
+    card.rows.forEach(row => {
+      const labelWidth = 360, valueWidth = 410;
+      const labelHeight = wrap(row.label, 43, labelWidth).length * 43 * 1.25;
+      const valueHeight = wrap(row.value, 56, valueWidth).length * 56 * 1.25;
+      const gainHeight = row.gain ? wrap(row.gain, 40, valueWidth).length * 40 * 1.25 : 0;
+      const metricsHeight = valueHeight + gainHeight;
+      const rowHeight = Math.max(labelHeight, metricsHeight) + 36;
+      const rowTop = top;
+      commands.push(() => {
+        box(contentLeft, rowTop, contentWidth, rowHeight, 24, '#211a16', '#574134');
+        box(contentLeft + 20, rowTop + (rowHeight - 44) / 2, 5, 44, 2.5, row.color);
+      });
+      text(row.label, contentLeft + 46, rowTop + (rowHeight - labelHeight) / 2, 43, ink, labelWidth, 'left');
+      const valueX = contentLeft + contentWidth - 28;
+      const valueTop = rowTop + (rowHeight - metricsHeight) / 2;
+      text(row.value, valueX, valueTop, 56, ink, valueWidth, 'right');
+      if (row.gain) text(row.gain, valueX, valueTop + valueHeight, 40, green, valueWidth, 'right');
+      top += rowHeight + 14;
+    });
+
+    const brand = 'Kelani SBD Tracker';
+    ctx.font = '700 38px sans-serif';
+    const brandWidth = ctx.measureText(brand).width;
+    const brandLeft = center - (58 + 14 + brandWidth) / 2;
+    const brandTop = top + 12;
+    commands.push(() => ctx.drawImage(logo, brandLeft, brandTop, 58, 58));
+    text(brand, brandLeft + 72, brandTop + 9, 38, '#dbc0aa', contentWidth, 'left');
+    canvas.height = Math.ceil(brandTop + 110);
+    ctx.fillStyle = '#0b0908';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    commands.forEach(draw => draw());
+    return canvas.toDataURL('image/png');
+  }
+
+  // The same compact brand/context header across the other shared results.
   commands.push(() => ctx.drawImage(logo, 484, 32, 112, 112));
   text('Kelani SBD Tracker', 540, 160, 44, ink, width);
   let y = 232;
@@ -179,32 +275,44 @@ export async function renderAchievementCard(card) {
   }
 
   if (card.dashboardSummary) {
-    // Same 2 x 2 lift/total structure and label/value alignment as Dashboard.
-    const tileWidth = (width - 40) / 2;
-    const valueWidth = tileWidth - 172;
-    const valueSize = value => {
-      let size = 54;
-      ctx.font = `700 ${size}px sans-serif`;
-      while (size > 42 && ctx.measureText(value).width > valueWidth) {
-        size -= 2; ctx.font = `700 ${size}px sans-serif`;
-      }
-      return size;
-    };
-    const rowHeights = card.dashboardSummary.columns.map((_, row) => Math.max(78,
-      ...card.dashboardSummary.tiles.map(tile => wrap(tile.values[row], valueSize(tile.values[row]), valueWidth).length * 68 + 14)));
-    const tileHeight = 106 + rowHeights.reduce((sum, height) => sum + height, 0);
-    card.dashboardSummary.tiles.forEach((tile, index) => {
-      const x = left + index % 2 * (tileWidth + 40);
-      const top = y + Math.floor(index / 2) * (tileHeight + 38);
-      text(tile.label, x + tileWidth / 2, top, 54, tile.color, tileWidth);
-      let rowTop = top + 100;
-      card.dashboardSummary.columns.forEach((label, row) => {
-        text(label, x + 72, rowTop + 4, 42, ink, 145);
-        text(tile.values[row], x + tileWidth - valueWidth / 2, rowTop, valueSize(tile.values[row]), tile.color, valueWidth);
-        rowTop += rowHeights[row];
+    const { columns, tiles } = card.dashboardSummary;
+    const gap = 24, padding = 24, tileWidth = (width - gap) / 2;
+    const innerWidth = tileWidth - padding * 2;
+    const valueWidth = innerWidth - 116, gainWidth = 150, recordLabelWidth = innerWidth - gainWidth - 12;
+    const lineHeight = (value, size, available) => wrap(value, size, available).length * size * 1.25;
+    const recordHeight = record => record
+      ? Math.max(lineHeight(record.label, 30, recordLabelWidth), lineHeight(record.gain, 30, gainWidth))
+      : 0;
+    for (let index = 0; index < tiles.length; index += 2) {
+      const pair = tiles.slice(index, index + 2);
+      const top = y;
+      const headerHeight = Math.max(...pair.map(tile => lineHeight(tile.label, 55, innerWidth))) + 20;
+      const valueHeights = columns.map((_, row) => Math.max(64,
+        ...pair.map(tile => lineHeight(tile.values[row], 50, valueWidth))));
+      const recordHeights = columns.map((_, row) => Math.max(...pair.map(tile => recordHeight(tile.records[row]))));
+      const tileHeight = padding * 2 + headerHeight
+        + valueHeights.reduce((sum, valueHeight, row) => sum + valueHeight + recordHeights[row], 0) + 16;
+      pair.forEach((tile, column) => {
+        const x = left + column * (tileWidth + gap);
+        commands.push(() => box(x, top, tileWidth, tileHeight, 26, '#211a16', '#574134'));
+        text(tile.label, x + padding, top + padding, 55, tile.color, innerWidth, 'left');
+        let rowTop = top + padding + headerHeight;
+        columns.forEach((label, row) => {
+          const right = x + tileWidth - padding;
+          text(label, x + padding, rowTop + 9, 36, muted, 104, 'left');
+          text(tile.values[row], right, rowTop, 50, tile.color, valueWidth, 'right');
+          const record = tile.records[row];
+          if (record) {
+            const recordTop = rowTop + valueHeights[row];
+            text(record.label, x + padding, recordTop, 30, green, recordLabelWidth, 'left');
+            text(record.gain, right, recordTop, 30, green, gainWidth, 'right');
+          }
+          rowTop += valueHeights[row] + recordHeights[row] + 16;
+        });
       });
-    });
-    y += tileHeight * 2 + 38;
+      y += tileHeight + gap;
+    }
+    y -= gap;
   } else if (card.cycleSummary) {
     const review = card.cycleSummary;
     const statWidth = (width - 24) / 2;

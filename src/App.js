@@ -16356,7 +16356,10 @@ const shareContext = { athleteLevel, cycle: currentCycle, workoutNumber: display
 
       <AboutSupportModals
         t={t}
-        onShare={() => setShareCard(buildAchievementCard({ ...shareContext, cycle: currentCycle, workoutNumber: workouts[currentIndex]?.number || currentIndex + 1, dashboard: dashboardE1RMMetrics, weightUnit, t }))}
+        onShare={() => setShareCard(buildAchievementCard({
+          ...shareContext, cycle: currentCycle, workoutNumber: workouts[currentIndex]?.number || currentIndex + 1,
+          dashboard: dashboardE1RMMetrics, dashboardRecentPrEvents, weightUnit, t,
+        }))}
         shareOpen={Boolean(shareCard)}
         currentVersion={installedUpdateVersion}
         updateChannel={updateChannel}
