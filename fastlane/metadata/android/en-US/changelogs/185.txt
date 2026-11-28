@@ -1,0 +1,3 @@
+- Milestone share cards have a new design. The shared dashboard shows recent record gains.
+- Program shows the full training route. Statistics shades the gap between 1RM and e1RM.
+- On Android, choose where to save a backup. You can also share the file after saving it.

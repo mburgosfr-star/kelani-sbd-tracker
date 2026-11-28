@@ -1,0 +1,3 @@
+- La imatge per compartir fites té un disseny nou. El tauler compartit mostra quant han millorat els rècords recents.
+- El programa mostra tota la ruta d’entrenament. A les estadístiques, una franja de color mostra la diferència entre l’1RM i l’e1RM.
+- A Android, tria on desar la còpia de seguretat. També pots compartir el fitxer després de desar-lo.

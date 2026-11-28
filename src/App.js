@@ -3855,6 +3855,7 @@ export function WhatsNewModal({
     t.whatsNewAccessoryAlignmentItem,
     t.whatsNewRestCompletionItem,
     t.whatsNewLayoutItem,
+    t.whatsNewShareCardsItem,
     t.whatsNewProgramStatsItem,
     t.whatsNewBackupItem,
   ];

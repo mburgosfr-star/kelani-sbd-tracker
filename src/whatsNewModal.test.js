@@ -23,11 +23,12 @@ describe('WhatsNewModal', () => {
 
     expect(screen.getByText(t.whatsNewTitle)).toBeInTheDocument();
     expect(screen.getByText(`v${LATEST_WHATS_NEW_VERSION}`)).toBeInTheDocument();
-    expect(screen.getAllByRole('listitem')).toHaveLength(6);
+    expect(screen.getAllByRole('listitem')).toHaveLength(7);
     expect(screen.getByText(t.whatsNewWorkoutSetRowItem)).toBeInTheDocument();
     expect(screen.getByText(t.whatsNewAccessoryAlignmentItem)).toBeInTheDocument();
     expect(screen.getByText(t.whatsNewRestCompletionItem)).toBeInTheDocument();
     expect(screen.getByText(t.whatsNewLayoutItem)).toBeInTheDocument();
+    expect(screen.getByText(t.whatsNewShareCardsItem)).toBeInTheDocument();
     expect(screen.getByText(t.whatsNewProgramStatsItem)).toBeInTheDocument();
     expect(screen.getByText(t.whatsNewBackupItem)).toBeInTheDocument();
 

@@ -1,0 +1,3 @@
+- De deelbare mijlpaalkaart heeft een nieuw ontwerp. Het deelbare dashboard toont hoeveel je recente records zijn verbeterd.
+- Programma toont de hele trainingsroute. Statistieken maakt het verschil tussen 1RM en e1RM zichtbaar met een kleurvlak.
+- Op Android kies je zelf waar je een back-up opslaat. Daarna kun je het bestand ook delen.
